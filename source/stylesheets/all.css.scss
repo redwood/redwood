@@ -1,0 +1,230 @@
+@charset "utf-8";
+@import 'compass';
+@import 'variables';
+
+/*
+ * jquery.tocify.css 1.7.0
+ * Author: @gregfranko
+ */
+
+
+html, body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: $main-text-color;
+  padding: 0;
+  margin: 0;
+}
+
+.page-wrapper {
+  margin-left: $nav-width;
+  min-width: 700px;
+  position: relative;
+  z-index: 10;
+  background-color: #fff;
+  padding-top: 10px;
+  padding-bottom: 10px;
+
+  .dark-box {
+    width: 50%;
+    background: $examples-bg;
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+  }
+
+  #lang-selector {
+    position: fixed;
+    width: 100%;
+    z-index: 50;
+    font-weight: bold;
+    background-color: $lang-select-bg;
+    border-bottom: 1px solid #000;
+    a {
+      background-color: $lang-select-bg;
+      display: block;
+      float:left;
+      color: $lang-select-text;
+      text-decoration: none;
+      padding: 0 10px;
+      border-right: 1px solid $lang-select-border;
+      line-height: 30px;
+
+      &:hover {
+        background-color: $lang-select-hover-bg;
+      }
+
+      &:active, &.active {
+        background-color: $examples-bg;
+        border-top: 1px solid $examples-bg;
+        border-right-color: $examples-bg;
+        margin-bottom: -1px;
+        position: relative;
+        z-index: 70;
+      }
+    }
+
+    &:after {
+      content: '';
+      clear: both;
+      display: block;
+    }
+  }
+}
+
+.content {
+  // to place content above the dark box
+  position: relative;
+  z-index: 30;
+
+  pre, code {
+    font-family: Monaco, "Courier New", monospace;
+    font-size: 12px;
+  }
+
+  code {
+    background-color: #ebf2f4;
+    border-radius: 5px;
+    padding: 3px;
+  }
+
+  &>h1, &>h2, &>h3, &>p, &>table {
+    margin-right: 50%;
+    @include box-sizing(border-box);
+    padding: 0 $main-padding;
+    display: block;
+  }
+
+  &>h1, &>h2, &>div { // the div is the tocify hidden div for placeholding stuff
+    clear:both;
+  }
+
+  th,td {
+    text-align: left;
+    padding: 10px;
+    border-bottom: 1px solid $line-color;
+    vertical-align: top;
+    line-height: 1.6;
+  }
+
+  th {
+    padding-top: 0; // so that there isn't an awk space above tables
+  }
+
+  h1#bigtitle {
+    margin-top: 0.5em;
+    font-size: 35px;
+  }
+
+  h1 {
+    font-size: 30px;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+
+  h2 {
+    font-size: 20px;
+    margin-top: 2em;
+    margin-bottom: 1em;
+  }
+
+  h3 {
+    font-size: 15px;
+    margin-top: 1.2em;
+    margin-bottom: 1.2em;
+  }
+
+  h1,h2,h3 {
+    font-weight: bold;
+  }
+
+  p {
+    line-height: 1.6;
+  }
+
+  pre, blockquote {
+    float:right;
+    width: 50%;
+    clear:right;
+    @include box-sizing(border-box);
+    padding: 0 $main-padding;
+    margin: 0;
+    color: #fff;
+  }
+
+  pre {
+    padding: $main-padding/2 $main-padding;
+    background-color: $code-bg;
+    @include fancy-inset-border-top;
+    @include fancy-inset-border-bottom;
+  }
+}
+
+/* The Table of Contents container element */
+.tocify {
+  overflow: auto;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: $nav-width;
+  background-color: $nav-bg;
+  font-size: 13px;
+}
+
+.tocify-item>a {
+  padding: 0 $nav-padding 0 $nav-padding;
+  display:block;
+  overflow-x:hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  @include text-shadow(0px -1px 1px rgba(0,0,0,0.3));
+}
+
+/* The Table of Contents is composed of multiple nested unordered lists.  These styles remove the default styling of an unordered list because it is ugly. */
+.tocify ul, .tocify li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  line-height: 28px;
+  @include transition-property('background-color');
+  @include transition-timing-function('linear');
+  @include transition-duration(230ms);
+}
+
+.tocify li {
+  background-color: rgba(#1d82c6,0);
+  color: #fff;
+}
+
+.tocify .tocify-focus {
+  background-color: #1d82c6;
+  @include box-shadow(0px 1px 0px #000);
+}
+
+/* Top level header elements */
+.tocify-header {
+}
+
+/* Top level subheader elements.  These are the first nested items underneath a header element. */
+.tocify-subheader {
+    display: none;
+    background-color: $nav-subitem-bg;
+    .tocify-item>a {
+      padding-left: $nav-padding + $nav-indent;
+      font-size: 12px;
+    }
+    &>li:first-child {
+      @include fancy-inset-border-top;
+    }
+
+    &>li:last-child {
+      @include fancy-inset-border-bottom;
+    }
+}
+
+/* Makes the font smaller for all subheader elements. */
+.tocify-subheader li {
+}
+

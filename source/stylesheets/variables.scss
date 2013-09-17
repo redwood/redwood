@@ -1,0 +1,47 @@
+// width of the navbar
+$nav-width: 230px;
+
+// default padding of the navbar
+$nav-padding: 20px;
+
+// background colors
+$nav-bg: #393939;
+$examples-bg: #393939;
+$code-bg: #262626;
+$nav-subitem-bg: #262626;
+$lang-select-bg: #1d82c6;
+$lang-select-hover-bg: #175fa1;
+
+// border colors
+$lang-select-border: #113a6f;
+
+// text colors
+// $nav-bg: #393939;
+// $examples-bg: #393939;
+// $code-bg: #262626;
+// $nav-subitem-bg: #262626;
+$lang-select-text: #fff;
+
+// indentation amount for sub-items
+$nav-indent: 10px;
+
+// padding to the left of the main content, to the right of the navbar
+$main-padding: 40px;
+
+// primary text color
+$main-text-color: #333;
+
+// currently just the color of table borders
+$line-color: #cfcfcf;
+
+
+// these are for the code blocks on the right, and the
+// subheader navbar thing that swoops in
+@mixin fancy-inset-border-top {
+  border-top: 1px solid #000;
+}
+
+@mixin fancy-inset-border-bottom {
+  border-bottom: 1px solid #404040;
+  box-shadow: none;
+}

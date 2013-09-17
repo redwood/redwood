@@ -4,6 +4,7 @@ GEM
     activesupport (3.2.14)
       i18n (~> 0.6, >= 0.6.4)
       multi_json (~> 1.0)
+    charlock_holmes (0.6.9.4)
     chunky_png (1.2.8)
     coffee-script (2.2.0)
       coffee-script-source
@@ -16,11 +17,17 @@ GEM
     em-websocket (0.5.0)
       eventmachine (>= 0.12.9)
       http_parser.rb (~> 0.5.3)
+    escape_utils (0.3.2)
     eventmachine (1.0.3)
     execjs (1.4.0)
       multi_json (~> 1.0)
     ffi (1.9.0)
     fssm (0.2.10)
+    github-linguist (2.9.4)
+      charlock_holmes (~> 0.6.6)
+      escape_utils (~> 0.3.1)
+      mime-types (~> 1.19)
+      pygments.rb (~> 0.5.2)
     haml (4.0.3)
       tilt
     hike (1.2.3)
@@ -65,7 +72,15 @@ GEM
       sprockets (~> 2.1)
       sprockets-helpers (~> 1.0.0)
       sprockets-sass (~> 1.0.0)
+    middleman-syntax (1.2.1)
+      middleman-core (~> 3.0)
+      rouge (~> 0.3.0)
+    mime-types (1.25)
     multi_json (1.8.0)
+    posix-spawn (0.3.6)
+    pygments.rb (0.5.2)
+      posix-spawn (~> 0.3.6)
+      yajl-ruby (~> 1.1.0)
     rack (1.5.2)
     rack-livereload (0.3.15)
       rack
@@ -77,6 +92,9 @@ GEM
       ffi (>= 0.5.0)
     rb-kqueue (0.2.0)
       ffi (>= 0.5.0)
+    redcarpet (3.0.0)
+    rouge (0.3.10)
+      thor
     ruby18_source_location (0.2)
     sass (3.2.10)
     sprockets (2.10.0)
@@ -94,13 +112,17 @@ GEM
     uglifier (2.1.2)
       execjs (>= 0.3.0)
       multi_json (~> 1.0, >= 1.0.2)
+    yajl-ruby (1.1.0)
 
 PLATFORMS
   ruby
 
 DEPENDENCIES
+  github-linguist
   middleman (~> 3.1.5)
   middleman-gh-pages
   middleman-livereload (~> 3.1.0)
+  middleman-syntax
+  redcarpet
   ruby18_source_location
   wdm (~> 0.1.0)

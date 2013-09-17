@@ -40,9 +40,6 @@
 
 # Methods defined in the helpers block are available in templates
 # helpers do
-#   def some_helper
-#     "Helping"
-#   end
 # end
 
 set :css_dir, 'stylesheets'
@@ -51,13 +48,20 @@ set :js_dir, 'javascripts'
 
 set :images_dir, 'images'
 
+set :markdown_engine, :redcarpet
+
+set :markdown, :fenced_code_blocks => true, :smartypants => true, :disable_indented_code_blocks => true, :prettify => true, :with_toc_data => true, :tables => true
+
+# Activate the syntax highlighter
+activate :syntax
+
 # Build-specific configuration
 configure :build do
   # For example, change the Compass output style for deployment
-  # activate :minify_css
+  activate :minify_css
 
   # Minify Javascript on build
-  # activate :minify_javascript
+  activate :minify_javascript
 
   # Enable cache buster
   # activate :asset_hash
