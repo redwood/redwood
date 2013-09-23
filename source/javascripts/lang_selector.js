@@ -19,7 +19,7 @@ function setupLanguages(l) {
   }
 
   $("#lang-selector a").bind("click", function() {
-    activateLanguage($(this).data("language-name"));
+    window.location.replace("?" + $(this).data("language-name") + window.location.hash);
     return false;
   });
 
