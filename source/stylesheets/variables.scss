@@ -11,6 +11,7 @@ $code-bg: #262626;
 $nav-subitem-bg: #262626;
 $lang-select-bg: #1d82c6;
 $lang-select-hover-bg: #175fa1;
+$main-bg: #eaf2f6;
 
 // border colors
 $lang-select-border: #113a6f;
@@ -21,6 +22,8 @@ $lang-select-border: #113a6f;
 // $code-bg: #262626;
 // $nav-subitem-bg: #262626;
 $lang-select-text: #fff;
+
+$examples-width: 40%;
 
 // indentation amount for sub-items
 $nav-indent: 10px;
@@ -34,6 +37,9 @@ $main-text-color: #333;
 // currently just the color of table borders
 $line-color: #cfcfcf;
 
+// margin between nav items and logo
+$logo-margin: 0px;
+
 
 // these are for the code blocks on the right, and the
 // subheader navbar thing that swoops in
@@ -44,4 +50,8 @@ $line-color: #cfcfcf;
 @mixin fancy-inset-border-bottom {
   border-bottom: 1px solid #404040;
   box-shadow: none;
+}
+
+@mixin embedded-text($opacity: 1) {
+  @include text-shadow(0px 1px 0px rgba(#fff,$opacity));
 }

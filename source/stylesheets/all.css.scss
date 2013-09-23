@@ -14,6 +14,7 @@ html, body {
   color: $main-text-color;
   padding: 0;
   margin: 0;
+  -webkit-font-smoothing: antialiased;
 }
 
 .page-wrapper {
@@ -21,12 +22,11 @@ html, body {
   min-width: 700px;
   position: relative;
   z-index: 10;
-  background-color: #fff;
-  padding-top: 10px;
-  padding-bottom: 10px;
+  background-color: $main-bg;
 
+  padding-top: 10px; // prevent headers margin from overflowing
   .dark-box {
-    width: 50%;
+    width: $examples-width;
     background: $examples-bg;
     position: absolute;
     right: 0;
@@ -40,6 +40,7 @@ html, body {
     z-index: 50;
     font-weight: bold;
     background-color: $lang-select-bg;
+    @include background-image(linear-gradient(top, #1d82c6, #1864ab));
     border-bottom: 1px solid #000;
     a {
       background-color: $lang-select-bg;
@@ -50,6 +51,7 @@ html, body {
       padding: 0 10px;
       border-right: 1px solid $lang-select-border;
       line-height: 30px;
+      @include background-image(linear-gradient(top, #1d82c6, #1864ab));
 
       &:hover {
         background-color: $lang-select-hover-bg;
@@ -60,6 +62,7 @@ html, body {
         border-top: 1px solid $examples-bg;
         border-right-color: $examples-bg;
         margin-bottom: -1px;
+        background-image: none;
         position: relative;
         z-index: 70;
       }
@@ -84,73 +87,117 @@ html, body {
   }
 
   code {
-    background-color: #ebf2f4;
-    border-radius: 5px;
+    background-color: rgba(0,0,0,0.05);
     padding: 3px;
+    border-radius: 3px;
   }
 
-  &>h1, &>h2, &>h3, &>p, &>table {
-    margin-right: 50%;
+  &>h1, &>h2, &>h3, &>p, &>table, &>ul, &>ol {
+    margin-right: $examples-width;
     @include box-sizing(border-box);
     padding: 0 $main-padding;
     display: block;
+    @include embedded-text;
+  }
+
+  &>ul, &>ol {
+    padding-left: $main-padding + 15px;
+  }
+
+  li {
+
   }
 
   &>h1, &>h2, &>div { // the div is the tocify hidden div for placeholding stuff
     clear:both;
   }
 
-  th,td {
-    text-align: left;
-    padding: 10px;
-    border-bottom: 1px solid $line-color;
-    vertical-align: top;
-    line-height: 1.6;
-  }
+  table {
+    th,td {
+      text-align: left;
+      vertical-align: top;
+      line-height: 1.6;
+    }
 
-  th {
-    padding-top: 0; // so that there isn't an awk space above tables
+    th {
+      padding: 5px 10px;
+      border-bottom: 1px solid #666;
+      vertical-align: bottom;
+      // @include background-image(linear-gradient(bottom, darken($main-bg, 3%), $main-bg));
+      @include embedded-text;
+    }
+
+    td {
+      padding: 10px;
+    }
+
+    tr:nth-child(even) {
+      background-color: lighten($main-bg,4.2%);
+    }
   }
 
   h1#bigtitle {
-    margin-top: 0.5em;
+    margin-top: 0;
+    margin-bottom: 0;
     font-size: 35px;
+    text-align: center;
   }
 
   h1 {
     font-size: 30px;
-    margin-top: 1.5em;
-    margin-bottom: 0.5em;
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
+    margin-top: 2em;
+    margin-bottom: 0;
+    border-top: 1px solid #bbb;
+    @include background-image(linear-gradient(top, #fff, #f9f9f9));
+    @include embedded-text;
   }
 
   h2 {
     font-size: 20px;
     margin-top: 2em;
-    margin-bottom: 1em;
+    margin-bottom: 0;
+    padding-bottom: 1.2em;
+  }
+
+  h2, h1 + p {
+    border-top: 1px solid #ccc;
+    padding-top: 1.2em;
+    @include background-image(linear-gradient(top, rgba(#fff,0.75), rgba(#fff, 0)));
+    @include embedded-text;
+  }
+
+  h1 + h2, h1 + div + h2 {
+    margin-top: 0;
   }
 
   h3 {
-    font-size: 15px;
-    margin-top: 1.2em;
-    margin-bottom: 1.2em;
+    font-size: 12px;
+    margin-top: 2.5em;
+    margin-bottom: 0.8em;
+    text-transform: uppercase;
+    @include embedded-text;
   }
 
   h1,h2,h3 {
     font-weight: bold;
   }
 
-  p {
+  p, li {
     line-height: 1.6;
+    margin-top: 0;
   }
 
   pre, blockquote {
     float:right;
-    width: 50%;
+    width: $examples-width;
     clear:right;
     @include box-sizing(border-box);
     padding: 0 $main-padding;
     margin: 0;
     color: #fff;
+    @include text-shadow(0px 1px 2px rgba(0,0,0,0.4));
   }
 
   pre {
@@ -159,6 +206,7 @@ html, body {
     @include fancy-inset-border-top;
     @include fancy-inset-border-bottom;
   }
+
 }
 
 /* The Table of Contents container element */
@@ -171,6 +219,12 @@ html, body {
   width: $nav-width;
   background-color: $nav-bg;
   font-size: 13px;
+  font-weight: bold;
+
+  &>img {
+    display: block;
+    margin-bottom: $logo-margin;
+  }
 }
 
 .tocify-item>a {
@@ -179,7 +233,7 @@ html, body {
   overflow-x:hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  @include text-shadow(0px -1px 1px rgba(0,0,0,0.3));
+  @include text-shadow(0px -1px 1px rgba(0,0,0,0.5));
 }
 
 /* The Table of Contents is composed of multiple nested unordered lists.  These styles remove the default styling of an unordered list because it is ugly. */
@@ -199,8 +253,8 @@ html, body {
 }
 
 .tocify .tocify-focus {
-  background-color: #1d82c6;
   @include box-shadow(0px 1px 0px #000);
+  @include background-image(linear-gradient(top, #1d82c6, #1864ab));
 }
 
 /* Top level header elements */
@@ -211,6 +265,8 @@ html, body {
 .tocify-subheader {
     display: none;
     background-color: $nav-subitem-bg;
+    font-weight: 500;
+    @include background-image(linear-gradient(top, darken($nav-subitem-bg,2%),$nav-subitem-bg 10%, $nav-subitem-bg 90%, darken($nav-subitem-bg,2%)));
     .tocify-item>a {
       padding-left: $nav-padding + $nav-indent;
       font-size: 12px;

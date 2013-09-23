@@ -1,6 +1,11 @@
 /* jquery Tocify - v1.8.0 - 2013-09-16
 * http://www.gregfranko.com/jquery.tocify.js/
-* Copyright (c) 2013 Greg Franko; Licensed MIT */
+* Copyright (c) 2013 Greg Franko; Licensed MIT
+* Modified lightly by Robert Lord to fix a bug I found,
+* and also so it adds ids to headers
+* also because I want height caching, since the
+* height lookup for h1s and h2s was causing serious
+* lag spikes below 30 fps */
 
 // Immediately-Invoked Function Expression (IIFE) [Ben Alman Blog Post](http://benalman.com/news/2010/11/immediately-invoked-function-expression/) that calls another IIFE that contains all of the plugin logic.  I used this pattern so that anyone viewing this code would not have to scroll to the bottom of the page to view the local parameters that were passed to the main IIFE.
 (function(tocify) {
@@ -148,6 +153,10 @@
 
             // Generates the HTML for the dynamic table of contents
             self._generateToc();
+
+            // Caches heights and anchors
+            self.cachedHeights = [],
+            self.cachedAnchors = [];
 
             // Adds CSS classes to the newly generated table of contents HTML
             self._addCSSClasses();
@@ -377,6 +386,10 @@
 
             hashValue = this._generateHashValue(arr, self, index);
 
+            // ADDED BY ROBERT
+            // actually add the hash value to the element's id
+            self.attr("id", "link-" + hashValue);
+
             // Appends a list item HTML element to the last unordered list HTML element found within the HTML element calling the plugin
             item = $("<li/>", {
 
@@ -414,9 +427,15 @@
                 hashGeneratorOption = this.options.hashGenerator;
 
             if (hashGeneratorOption === "pretty") {
+                // remove weird characters
+
 
                 // prettify the text
                 hashValue = self.text().toLowerCase().replace(/\s/g, "-");
+
+                // ADDED BY ROBERT
+                // remove weird characters
+                hashValue = hashValue.replace(/[^\x00-\x7F]/g, "");
 
                 // fix double hyphens
                 while (hashValue.indexOf("--") > -1) {
@@ -645,28 +664,22 @@
                         // _Local variables_
 
                         // Stores the distance to the closest anchor
-                        var closestAnchorDistance = null,
-
-                            // Stores the index of the closest anchor
+                        var // Stores the index of the closest anchor
                             closestAnchorIdx = null,
-
-                            // Keeps a reference to all anchors
-                            anchors = $(self.options.context).find("div[data-unique]"),
-
                             anchorText;
 
+                        self.calculateHeights();
+
                         // Determines the index of the closest anchor
-                        anchors.each(function(idx) {
-                            var distance = /*Math.abs*/(($(this).next().length ? $(this).next() : $(this)).offset().top - winScrollTop - self.options.highlightOffset);
-                            if (distance < 0) {
-                                closestAnchorDistance = distance;
+                        self.cachedAnchors.each(function(idx) {
+                            if (self.cachedHeights[idx] - $(window).scrollTop() < 0) {
                                 closestAnchorIdx = idx;
                             } else {
                                 return false;
                             }
                         });
 
-                        anchorText = $(anchors[closestAnchorIdx]).attr("data-unique");
+                        anchorText = $(self.cachedAnchors[closestAnchorIdx]).attr("data-unique");
 
                         // Stores the list item HTML element that corresponds to the currently traversed anchor tag
                         elem = $('li[data-unique="' + anchorText + '"]');
@@ -684,9 +697,9 @@
 
                         if(self.options.scrollHistory) {
 
-                            if(window.location.hash !== anchorText) {
+                            if(window.location.hash !== "#" + anchorText) {
 
-                                window.location.hash = anchorText;
+                                window.location.replace("#" + anchorText);
 
                             }
 
@@ -705,6 +718,23 @@
 
             });
 
+        },
+
+        // calculateHeights
+        // ----
+        //      ADDED BY ROBERT
+        calculateHeights: function() {
+            var self = this;
+            if (self.cachedHeights.length == 0) {
+                self.cachedHeights = [];
+                self.cachedAnchors = [];
+                var anchors = $(self.options.context).find("div[data-unique]");
+                anchors.each(function(idx) {
+                    var distance = (($(this).next().length ? $(this).next() : $(this)).offset().top - self.options.highlightOffset);
+                    self.cachedHeights[idx] = distance;
+                });
+                self.cachedAnchors = anchors;
+            }
         },
 
         // Show
@@ -956,7 +986,7 @@
                 $("html, body").animate({
 
                     // Sets the jQuery `scrollTop` to the top offset of the HTML div tag that matches the current list item's `data-unique` tag
-                    "scrollTop": $('div[data-unique="' + elem.attr("data-unique") + '"]').offset().top - ($.isFunction(scrollTo) ? scrollTo.call() : scrollTo) + "px"
+                    "scrollTop": $('div[data-unique="' + elem.attr("data-unique") + '"]').next().offset().top - ($.isFunction(scrollTo) ? scrollTo.call() : scrollTo) + "px"
 
                 }, {
 
