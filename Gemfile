@@ -13,7 +13,8 @@ gem 'middleman-gh-pages'
 # Live-reloading plugin
 gem "middleman-livereload", "~> 3.1.0"
 
-gem "redcarpet"
+gem 'redcarpet', git: 'https://github.com/vmg/redcarpet.git'
+
 gem "github-linguist"
 
 # For faster file watcher updates on Windows:

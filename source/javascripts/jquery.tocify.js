@@ -388,7 +388,7 @@
 
             // ADDED BY ROBERT
             // actually add the hash value to the element's id
-            self.attr("id", "link-" + hashValue);
+            // self.attr("id", "link-" + hashValue);
 
             // Appends a list item HTML element to the last unordered list HTML element found within the HTML element calling the plugin
             item = $("<li/>", {
@@ -710,7 +710,16 @@
 
                             if(window.location.hash !== "#" + anchorText) {
 
-                                window.location.replace("#" + anchorText);
+                                if(history.replaceState) { 
+                                    history.replaceState({}, "", "#" + anchorText);
+                                // provide a fallback
+                                } else { 
+                                    scrollV = document.body.scrollTop;
+                                    scrollH = document.body.scrollLeft;
+                                    location.hash = "#" + anchorText;
+                                    document.body.scrollTop = scrollV;
+                                    document.body.scrollLeft = scrollH;
+                                }
 
                             }
 

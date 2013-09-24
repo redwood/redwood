@@ -123,7 +123,7 @@ html, body {
 
     th {
       padding: 5px 10px;
-      border-bottom: 1px solid #666;
+      border-bottom: 1px solid #999;
       vertical-align: bottom;
       // @include background-image(linear-gradient(bottom, darken($main-bg, 3%), $main-bg));
       @include embedded-text;
@@ -134,8 +134,12 @@ html, body {
       padding: 10px;
     }
 
+    tr:last-child {
+      border-bottom: 1px solid #999;
+    }
+
     tr:nth-child(even) {
-      background-color: lighten($main-bg,4.2%);
+      background-color: lighten($main-bg,4.7%);
     }
   }
 
@@ -283,8 +287,3 @@ html, body {
       @include fancy-inset-border-bottom;
     }
 }
-
-/* Makes the font smaller for all subheader elements. */
-.tocify-subheader li {
-}
-
