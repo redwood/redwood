@@ -591,6 +591,14 @@
                 }
             });
 
+            // Reset height cache on scroll
+
+            $(window).on('resize', function() {
+                console.log("resizing" + self.cachedHeights);
+                self.calculateHeights();
+                console.log("done" + self.cachedHeights);
+            });
+
             // Window scroll event handler
             $(window).on("scroll.tocify", function() {
 
@@ -668,7 +676,10 @@
                             closestAnchorIdx = null,
                             anchorText;
 
-                        self.calculateHeights();
+                        // if never calculated before, calculate and cache the heights
+                        if (self.cachedHeights.length == 0) {
+                            self.calculateHeights();
+                        }
 
                         // Determines the index of the closest anchor
                         self.cachedAnchors.each(function(idx) {
@@ -725,16 +736,14 @@
         //      ADDED BY ROBERT
         calculateHeights: function() {
             var self = this;
-            if (self.cachedHeights.length == 0) {
-                self.cachedHeights = [];
-                self.cachedAnchors = [];
-                var anchors = $(self.options.context).find("div[data-unique]");
-                anchors.each(function(idx) {
-                    var distance = (($(this).next().length ? $(this).next() : $(this)).offset().top - self.options.highlightOffset);
-                    self.cachedHeights[idx] = distance;
-                });
-                self.cachedAnchors = anchors;
-            }
+            self.cachedHeights = [];
+            self.cachedAnchors = [];
+            var anchors = $(self.options.context).find("div[data-unique]");
+            anchors.each(function(idx) {
+                var distance = (($(this).next().length ? $(this).next() : $(this)).offset().top - self.options.highlightOffset);
+                self.cachedHeights[idx] = distance;
+            });
+            self.cachedAnchors = anchors;
         },
 
         // Show
