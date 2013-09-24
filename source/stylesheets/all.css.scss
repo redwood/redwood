@@ -114,6 +114,7 @@ html, body {
 
   table {
     margin-bottom: 1em;
+    overflow: auto;
     th,td {
       text-align: left;
       vertical-align: top;
@@ -126,6 +127,7 @@ html, body {
       vertical-align: bottom;
       // @include background-image(linear-gradient(bottom, darken($main-bg, 3%), $main-bg));
       @include embedded-text;
+      max-width: 100%;
     }
 
     td {
@@ -212,7 +214,8 @@ html, body {
 
 /* The Table of Contents container element */
 .tocify {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   position: fixed;
   top: 0;
   left: 0;
