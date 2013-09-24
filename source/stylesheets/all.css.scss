@@ -141,6 +141,10 @@ html, body {
     tr:nth-child(even) {
       background-color: lighten($main-bg,4.7%);
     }
+
+    tr:nth-child(2n+3) {
+      background-color: lighten($main-bg,1.7%);
+    }
   }
 
   h1#bigtitle {
