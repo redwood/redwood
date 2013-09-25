@@ -209,10 +209,11 @@ html, body {
     margin: 0;
     color: #fff;
     @include text-shadow(0px 1px 2px rgba(0,0,0,0.4));
+    padding: $main-padding/2 $main-padding;
+    &>p { margin: 0; }
   }
 
   pre {
-    padding: $main-padding/2 $main-padding;
     background-color: $code-bg;
     @include fancy-inset-border-top;
     @include fancy-inset-border-bottom;
