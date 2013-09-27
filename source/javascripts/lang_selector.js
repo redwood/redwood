@@ -24,4 +24,3 @@ function setupLanguages(l) {
   });
 
 }
-

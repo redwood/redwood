@@ -32,8 +32,14 @@
           }
         });
         setupLanguages([
-          <% current_page.data.languages.each do |lang| %>
-            ['<%= lang[0] %>'],
+          <% if current_page.data.language_tabs %>
+            <% current_page.data.language_tabs.each do |lang| %>
+              <% if lang.is_a? Hash %>
+                ['<%= lang.keys[0] %>'],
+              <% else %>
+                ['<%= lang %>'],
+              <% end %>
+            <% end %>
           <% end %>
         ]);
       });
@@ -47,13 +53,18 @@
     </div>
     <div class="page-wrapper">
       <div class="content">
-        <!-- <h1 id="bigtitle" class="bigtitle toc-ignore"><%= current_page.data.title || "API Documentation" %></h1> -->
         <%= yield %>
       </div>
       <div class="dark-box">
         <div id="lang-selector">
-          <% current_page.data.languages.each do |lang| %>
-            <a href="#" data-language-name="<%= lang[0] %>"><%= lang[1] %></a>
+          <% if current_page.data.language_tabs %>
+            <% current_page.data.language_tabs.each do |lang| %>
+              <% if lang.is_a? Hash %>
+                <a href="#" data-language-name="<%= lang.keys[0] %>"><%= lang.values[0] %></a>
+              <% else %>
+                <a href="#" data-language-name="<%= lang %>"><%= lang %></a>
+              <% end %>
+            <% end %>
           <% end %>
         </div>
       </div>
