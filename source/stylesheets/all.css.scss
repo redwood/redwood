@@ -24,7 +24,8 @@ html, body {
   z-index: 10;
   background-color: $main-bg;
 
-  padding-top: 10px; // prevent headers margin from overflowing
+  padding: 1px 0; // prevent headers margin from overflowing
+  
   .dark-box {
     width: $examples-width;
     background: $examples-bg;
@@ -52,10 +53,6 @@ html, body {
       border-right: 1px solid $lang-select-border;
       line-height: 30px;
       @include background-image(linear-gradient(top, #1d82c6, #1864ab));
-
-      &:hover {
-        background-color: $lang-select-hover-bg;
-      }
 
       &:active, &.active {
         background-color: $examples-bg;
@@ -125,8 +122,6 @@ html, body {
       padding: 5px 10px;
       border-bottom: 1px solid #999;
       vertical-align: bottom;
-      // @include background-image(linear-gradient(bottom, darken($main-bg, 3%), $main-bg));
-      @include embedded-text;
       max-width: 100%;
     }
 
@@ -138,20 +133,13 @@ html, body {
       border-bottom: 1px solid #999;
     }
 
-    tr:nth-child(even) {
-      background-color: lighten($main-bg,4.7%);
+    tr:nth-child(even)>td {
+      background-color: lighten($main-bg,4.2%);
     }
 
-    tr:nth-child(2n+3) {
-      background-color: lighten($main-bg,1.7%);
+    tr:nth-child(odd)>td {
+      background-color: lighten($main-bg,2.4%);
     }
-  }
-
-  h1#bigtitle {
-    margin-top: 0;
-    margin-bottom: 0;
-    font-size: 35px;
-    text-align: center;
   }
 
   h1 {
@@ -162,7 +150,10 @@ html, body {
     margin-bottom: 0;
     border-top: 1px solid #bbb;
     @include background-image(linear-gradient(top, #fff, #f9f9f9));
-    @include embedded-text;
+  }
+
+  h1:first-child, div:first-child + h1 {
+    margin-top: 0;
   }
 
   h2 {
@@ -172,11 +163,10 @@ html, body {
     padding-bottom: 1.2em;
   }
 
-  h2, h1 + p {
+  h2, h1 + p, h1 + table, h1 + ul, h1 + ol {
     border-top: 1px solid #ccc;
     padding-top: 1.2em;
     @include background-image(linear-gradient(top, rgba(#fff,0.75), rgba(#fff, 0)));
-    @include embedded-text;
   }
 
   h1 + h2, h1 + div + h2 {
@@ -188,7 +178,6 @@ html, body {
     margin-top: 2.5em;
     margin-bottom: 0.8em;
     text-transform: uppercase;
-    @include embedded-text;
   }
 
   h1,h2,h3 {
@@ -211,6 +200,11 @@ html, body {
     @include text-shadow(0px 1px 2px rgba(0,0,0,0.4));
     padding: $main-padding/2 $main-padding;
     &>p { margin: 0; }
+    a {
+      color: #fff;
+      text-decoration: none;
+      border-bottom: dashed 1px #ccc;
+    }
   }
 
   pre {
@@ -255,19 +249,20 @@ html, body {
   margin: 0;
   padding: 0;
   line-height: 28px;
-  @include transition-property('background-color');
-  @include transition-timing-function('linear');
-  @include transition-duration(230ms);
 }
 
 .tocify li {
   background-color: rgba(#1d82c6,0);
   color: #fff;
+  @include transition-property('background');
+  @include transition-timing-function('linear');
+  @include transition-duration(230ms);
 }
 
 .tocify .tocify-focus {
   @include box-shadow(0px 1px 0px #000);
-  @include background-image(linear-gradient(top, #1d82c6, #1864ab));
+  // @include background-image(linear-gradient(top, #1d82c6, #1864ab));
+  background-color: rgba(#1d82c6,1);
 }
 
 /* Top level header elements */
