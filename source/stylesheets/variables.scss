@@ -2,19 +2,21 @@
 $nav-width: 230px;
 
 // default padding of the navbar
-$nav-padding: 20px;
+$nav-padding: 15px;
 
 // background colors
 $nav-bg: #393939;
 $examples-bg: #393939;
-$code-bg: #262626;
+$code-bg: #292929;
+$code-annotation-bg: #1c1c1c;
 $nav-subitem-bg: #262626;
-$lang-select-bg: #1d82c6;
-$lang-select-hover-bg: #175fa1;
+$nav-select-bg: #2467af;
+$lang-select-border: #000;
+$lang-select-bg: #222222;
 $main-bg: #eaf2f6;
 
 // border colors
-$lang-select-border: #113a6f;
+// $lang-select-border: #113a6f;
 
 // text colors
 // $nav-bg: #393939;
@@ -23,13 +25,15 @@ $lang-select-border: #113a6f;
 // $nav-subitem-bg: #262626;
 $lang-select-text: #fff;
 
-$examples-width: 45%;
+$examples-width: 50%;
+
+$code-annotation-padding: 13px;
 
 // indentation amount for sub-items
 $nav-indent: 10px;
 
 // padding to the left of the main content, to the right of the navbar
-$main-padding: 40px;
+$main-padding: 28px;
 
 // primary text color
 $main-text-color: #333;
@@ -38,7 +42,7 @@ $main-text-color: #333;
 $line-color: #cfcfcf;
 
 // margin between nav items and logo
-$logo-margin: 0px;
+$logo-margin: 20px;
 
 
 // these are for the code blocks on the right, and the
@@ -54,4 +58,17 @@ $logo-margin: 0px;
 
 @mixin embedded-text($opacity: 1) {
   @include text-shadow(0px 1px 0px rgba(#fff,$opacity));
+}
+
+@mixin break-words {
+
+ -ms-word-break: break-all;
+     word-break: break-all;
+
+     /* Non standard for webkit */
+     word-break: break-word;
+
+-webkit-hyphens: auto;
+   -moz-hyphens: auto;
+        hyphens: auto;
 }

@@ -1,6 +1,8 @@
 @charset "utf-8";
+@import 'normalize';
 @import 'compass';
 @import 'variables';
+@import 'syntax';
 
 /*
  * jquery.tocify.css 1.7.0
@@ -24,11 +26,11 @@ html, body {
   z-index: 10;
   background-color: $main-bg;
 
-  padding: 1px 0; // prevent headers margin from overflowing
+  padding-bottom: 1px; // prevent margin overflow
   
   .dark-box {
     width: $examples-width;
-    background: $examples-bg;
+    background-color: $examples-bg;
     position: absolute;
     right: 0;
     top: 0;
@@ -41,27 +43,28 @@ html, body {
     z-index: 50;
     font-weight: bold;
     background-color: $lang-select-bg;
-    @include background-image(linear-gradient(top, #1d82c6, #1864ab));
-    border-bottom: 1px solid #000;
+    // @include background-image(linear-gradient(top, #1d82c6, #1864ab));
+    border-bottom: 5px solid $examples-bg;
+    // box-shadow: 0 10px 5px $code-bg;
     a {
-      background-color: $lang-select-bg;
+      // background-color: $lang-select-bg;
       display: block;
       float:left;
       color: $lang-select-text;
       text-decoration: none;
       padding: 0 10px;
-      border-right: 1px solid $lang-select-border;
+      // border-right: 1px solid $lang-select-border;
       line-height: 30px;
-      @include background-image(linear-gradient(top, #1d82c6, #1864ab));
 
-      &:active, &.active {
+      &.active {
         background-color: $examples-bg;
-        border-top: 1px solid $examples-bg;
-        border-right-color: $examples-bg;
-        margin-bottom: -1px;
-        background-image: none;
-        position: relative;
+        top: 1px;
         z-index: 70;
+      }
+
+      &:active {
+        background-color: #000;
+        border-color: #000;
       }
     }
 
@@ -87,12 +90,15 @@ html, body {
     background-color: rgba(0,0,0,0.05);
     padding: 3px;
     border-radius: 3px;
+    @include break-words;
   }
 
   &>h1, &>h2, &>h3, &>p, &>table, &>ul, &>ol {
     margin-right: $examples-width;
-    @include box-sizing(border-box);
+  }
+  &>h1, &>h2, &>h3, &>p, &>table, &>ul, &>ol {
     padding: 0 $main-padding;
+    @include box-sizing(border-box);
     display: block;
     @include embedded-text;
   }
@@ -120,9 +126,8 @@ html, body {
 
     th {
       padding: 5px 10px;
-      border-bottom: 1px solid #999;
+      border-bottom: 1px solid #ccc;
       vertical-align: bottom;
-      max-width: 100%;
     }
 
     td {
@@ -130,14 +135,14 @@ html, body {
     }
 
     tr:last-child {
-      border-bottom: 1px solid #999;
-    }
-
-    tr:nth-child(even)>td {
-      background-color: lighten($main-bg,4.2%);
+      border-bottom: 1px solid #ccc;
     }
 
     tr:nth-child(odd)>td {
+      background-color: lighten($main-bg,4.2%);
+    }
+
+    tr:nth-child(even)>td {
       background-color: lighten($main-bg,2.4%);
     }
   }
@@ -158,15 +163,15 @@ html, body {
 
   h2 {
     font-size: 20px;
-    margin-top: 2em;
+    margin-top: 4em;
     margin-bottom: 0;
     padding-bottom: 1.2em;
+    @include background-image(linear-gradient(top, rgba(#fff,0.4), rgba(#fff, 0)));
   }
 
   h2, h1 + p, h1 + table, h1 + ul, h1 + ol {
     border-top: 1px solid #ccc;
     padding-top: 1.2em;
-    @include background-image(linear-gradient(top, rgba(#fff,0.75), rgba(#fff, 0)));
   }
 
   h1 + h2, h1 + div + h2 {
@@ -189,16 +194,20 @@ html, body {
     margin-top: 0;
   }
 
+  img {
+    max-width: 100%;
+  }
+
   pre, blockquote {
+    background-color: $code-bg;
     float:right;
     width: $examples-width;
     clear:right;
     @include box-sizing(border-box);
-    padding: 0 $main-padding;
     margin: 0;
     color: #fff;
     @include text-shadow(0px 1px 2px rgba(0,0,0,0.4));
-    padding: $main-padding/2 $main-padding;
+    padding: 2em $main-padding;
     &>p { margin: 0; }
     a {
       color: #fff;
@@ -207,10 +216,15 @@ html, body {
     }
   }
 
-  pre {
-    background-color: $code-bg;
-    @include fancy-inset-border-top;
-    @include fancy-inset-border-bottom;
+  blockquote {
+    &>p {
+      background-color: $code-annotation-bg;
+      border-radius: 5px;
+      padding: $code-annotation-padding;
+      color: #ccc;
+      @include fancy-inset-border-top;
+      @include fancy-inset-border-bottom;
+    }
   }
 
 }
@@ -229,6 +243,7 @@ html, body {
   font-weight: bold;
 
   &>img {
+    background-color: #f29a3c;
     display: block;
     margin-bottom: $logo-margin;
   }
@@ -240,7 +255,7 @@ html, body {
   overflow-x:hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  @include text-shadow(0px -1px 1px rgba(0,0,0,0.5));
+  // @include text-shadow(0px 0px 3px rgba(0,0,0,0.7));
 }
 
 /* The Table of Contents is composed of multiple nested unordered lists.  These styles remove the default styling of an unordered list because it is ugly. */
@@ -252,7 +267,6 @@ html, body {
 }
 
 .tocify li {
-  background-color: rgba(#1d82c6,0);
   color: #fff;
   @include transition-property('background');
   @include transition-timing-function('linear');
@@ -262,7 +276,9 @@ html, body {
 .tocify .tocify-focus {
   @include box-shadow(0px 1px 0px #000);
   // @include background-image(linear-gradient(top, #1d82c6, #1864ab));
-  background-color: rgba(#1d82c6,1);
+  // background-color: #1d82c6;
+  background-color: $nav-select-bg;
+  color: #fff;
 }
 
 /* Top level header elements */

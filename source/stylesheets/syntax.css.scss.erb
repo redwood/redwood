@@ -1,5 +1,10 @@
 <%= Rouge::Themes::Base16::Monokai.render(:scope => '.highlight') %>
+@import 'variables';
 
 .highlight .c, .highlight .cm, .highlight .c1, .highlight .cs {
   color: #909090;
+}
+
+.highlight, .highlight .w {
+  background-color: $code-bg;
 }
