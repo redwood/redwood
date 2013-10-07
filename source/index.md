@@ -6,92 +6,163 @@ language_tabs:
   - python
 ---
 
-# This is a Major Section Header
+# Introduction
 
-This is a bunch of text that will appear in the light-background section to the left of your docs.
+Welcome to the Kittn API! You can use our API to access Kittn API endpoints, which can get information on various cats, kittens, and breeds in our database.
 
-## This is a Header of One of Your API Endpoints
+We have language bindings in Shell, Ruby, and Python! You can view code examples in the dark area to the right, and you can switch the programming language of the examples with the tabs in the top right.
 
-Blah blah blah blah blah blah blah
+This example API documentation page was created with [Slate](http://github.com/tripit/slate). Feel free to edit it and use it as a base for your own API's documentation.
 
-## Another Endpoint Header
+# Authentication
 
-More text here. This all appears in the area on the left.
-
-### This is a Subheader (won't appear in the table of contents)
+> To authorize, use this code:
 
 ```ruby
-# this is a ruby code block that will appear in the dark area on the right
-def say_hello
-  puts "hello"
-end
+require 'kittn'
+
+api = Kittn::APIClient.authorize!('meowmeowmeow')
 ```
 
 ```python
-// this is a python code block that will appear in the dark area on the right
-print "hello, world"
+import 'kittn'
+
+api = Kittn.authorize('meowmeowmeow')
 ```
 
 ```shell
-# this is a shell code block that will appear in the dark area on the right
-echo "hello, world"
+# With shell, you can just pass the correct header with each request
+curl "api_endpoint_here"
+  -H "Authorization: meowmeowmeow"
 ```
 
+> Make sure to replace `meowmeowmeow` with your API key.
+
+Kittn uses API keys to allow access to the API. You can register a new Kittn API key at our [developer portal](http://example.com/developers).
+
+Kittn expects for the API key to be included in all API requests to the server in a header that looks like the following:
+
+`Authorization: meowmeowmeow`
+
+You must replace `meowmeowmeow` with your personal API key from our developer portal.
+
+# Kittens
+
+## Get All Kittens
+
+```ruby
+require 'kittn'
+
+api = Kittn::APIClient.authorize!('meowmeowmeow')
+api.kittens.get
 ```
-This is a generic text block that will appear in the dark area on the right
+
+```python
+import 'kittn'
+
+api = Kittn.authorize('meowmeowmeow')
+api.kittens.get()
 ```
 
-> This is a code annotation that will appear in the dark area on the right
+```shell
+curl "http://example.com/api/kittens"
+  -H "Authorization: meowmeowmeow"
+```
 
-This is a bunch of text that will appear in the light-background section to the left of your docs. This is [an internal link to one of the headers above](#another-endpoint-header).
+> The above command returns JSON structured like this:
 
-This is [an external link to google](http://google.com).
+```json
+[
+  {
+    "id": 1,
+    "name": "Fluffums",
+    "breed": "calico",
+    "fluffiness": 6,
+    "cuteness": 7
+  },
+  {
+    "id": 2,
+    "name": "Isis",
+    "breed": "unknown",
+    "fluffiness": 5,
+    "cuteness": 10
+  }
+]
+```
 
-This | Is  | A   | Table
----- | --- | --- | -----
-which will appear | in the area | to the left | of the code
-you can add | more rows | like this | (the vertical pipes don't need to line up)
+This endpoint retrieves all kittens.
 
-# Major Header 2
+### HTTP Request
 
-The following sections are so you can check out the sweet table of contents to the left.
+`GET http://example.com/kittens`
 
-## Endpoint 1
+### Query Parameters
 
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-
-## Endpoint 2
-
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-
-## Endpoint 3
-
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Mollitia, itaque, in, pariatur sed commodi dolore aut facilis voluptas magnam asperiores ratione adipisci repudiandae accusamus ipsa suscipit tempore unde molestiae nulla.
-
-# Major Header 2
-
-## Endpoint 4
-
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aspernatur, deserunt, natus, autem, soluta saepe accusantium ad aut cupiditate voluptatem ducimus labore minus commodi odio nihil dignissimos magnam accusamus eveniet esse.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aspernatur, deserunt, natus, autem, soluta saepe accusantium ad aut cupiditate voluptatem ducimus labore minus commodi odio nihil dignissimos magnam accusamus eveniet esse.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aspernatur, deserunt, natus, autem, soluta saepe accusantium ad aut cupiditate voluptatem ducimus labore minus commodi odio nihil dignissimos magnam accusamus eveniet esse.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aspernatur, deserunt, natus, autem, soluta saepe accusantium ad aut cupiditate voluptatem ducimus labore minus commodi odio nihil dignissimos magnam accusamus eveniet esse.
-
-## Endpoint 5
+Parameter | Default | Description
+--------- | ------- | -----------
+include_cats | false | If set to true, the result will also include cats.
+available | true | If set to false, the result will include kittens that have already been adopted.
 
 
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aspernatur, deserunt, natus, autem, soluta saepe accusantium ad aut cupiditate voluptatem ducimus labore minus commodi odio nihil dignissimos magnam accusamus eveniet esse.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aspernatur, deserunt, natus, autem, soluta saepe accusantium ad aut cupiditate voluptatem ducimus labore minus commodi odio nihil dignissimos magnam accusamus eveniet esse.
-Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aspernatur, deserunt, natus, autem, soluta saepe accusantium ad aut cupiditate voluptatem ducimus labore minus commodi odio nihil dignissimos magnam accusamus eveniet esse.
+## Get a Specific Kitten
+
+```ruby
+require 'kittn'
+
+api = Kittn::APIClient.authorize!('meowmeowmeow')
+api.kittens.get(2)
+```
+
+```python
+import 'kittn'
+
+api = Kittn.authorize('meowmeowmeow')
+api.kittens.get(2)
+```
+
+```shell
+curl "http://example.com/api/kittens/3"
+  -H "Authorization: meowmeowmeow"
+```
+
+> The above command returns JSON structured like this:
+
+```json
+{
+  "id": 2,
+  "name": "Isis",
+  "breed": "unknown",
+  "fluffiness": 5,
+  "cuteness": 10
+}
+```
+
+This endpoint retrieves all kittens.
+
+### HTTP Request
+
+`GET http://example.com/kittens/<ID>`
+
+### URL Parameters
+
+Parameter | Description
+--------- | -----------
+ID | The ID of the cat to retrieve
+
+# Errors
+
+The Kittn API uses the following error codes:
+
+Error Code | Meaning
+---------- | -------
+400 | Bad Request -- Your request sucks
+401 | Unauthorized -- Your API key is wrong
+403 | Forbidden -- The kitten requested is hidden for administrators only
+404 | Not Found -- The specified kitten could not be found
+405 | Method Not Allowed -- You tried to access a kitten with an invalid method
+406 | Not Acceptable -- You requested a format that isn't json
+410 | Gone -- The kitten requested has been removed from our servers
+418 | I'm a teapot
+429 | Too Many Requests -- You're requesting too many kittens! Slown down!
+500 | Internal Server Error -- We had a problem with our server. Try again later.
+503 | Service Unavailable -- We're temporarially offline for maintanance. Please try again later.
