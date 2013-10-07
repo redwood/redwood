@@ -30,15 +30,15 @@ You can now see the docs at <http://localhost:4567>. Whoa! That was fast!
 
 Just edit the markdown file `source/index.md`! Super easy. If you know markdown, we think that the Kittn example in `source/index.md` is mostly self explanatory, but be sure to check out `syntax.md` if you need a better explanation.
 
-### Pushing Your Changes
+### Publishing Your Docs
 
-Publishing your changes couldn't be more simple.
+Publishing your API documentation couldn't be more simple.
 
  1. Commit your changes to the markdown source: `git commit -a`
  2. Push source changes to Github: `git push` (Note that at this point, we've only updated the ''markdown source'' on Github. We still haven't published the generated HTML to the `gh-pages` branch.)
  3. Build the site, commit, and push the `gh-pages` branch: `rake publish`
 
-Done! Your changes should now be live on [http://yourusername.github.io/slate], and the main branch should be updated with your edited markdown.
+Done! Your changes should now be live on <http://yourusername.github.io/slate>, and the main branch should be updated with your edited markdown.
 
 ### Don't Want to Use Github Pages?
 
@@ -59,17 +59,17 @@ If you delete `language-tabs` altogether, we'll just completely hide the languag
 
 Let's say your language tabs are like this:
 
-  language_tabs:
-    - shell
-    - ruby
-    - python
+    language_tabs:
+      - shell
+      - ruby
+      - python
 
 But you want "shell" to actually look like "cURL" in the tabs. You can't just change the titles of all the language blocks, since the syntax highlighter won't know what language it is. Instead, just change your `language_tabs` to look like this:
 
-  language_tabs:
-    - shell:cURL
-    - ruby
-    - python
+    language_tabs:
+      - shell:cURL
+      - ruby
+      - python
 
 Done! Language renamed. You can keep all your codeblocks for shell, but it'll look in the language bar like "cURL".
 
