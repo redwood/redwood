@@ -1,9 +1,13 @@
 Slate
 ========
 
-Slate turns a markdown file into a beautiful API documentation page for your service.
+Slate turns a markdown file into a beautiful API documentation page for your service. Think of it as a documentation template on steroids.
 
-This is much easier to show rather than explain, so as an example please see [TripIt's API Documentation page](http://tripit.github.io/docs), which we generated with Slate. You can also view the source of the [markdown file used to generate it](http://github.com/tripit/docs/blob/master/source/index.md).
+Slate puts all your API's descriptions and definitions on left half of the screen, and all your code examples on the right half. Inspired by [Stripe's](https://stripe.com/docs/api) and [Paypal's](https://developer.paypal.com/webapps/developer/docs/api/) API docs.
+
+If you have API bindings in multiple programming languages, you can easily make tabs at the top of the page to switch the code examples between those languages.
+
+As an example, you can check out our [API docs](http://tripit.github.io/docs), which we create with Slate. You can also view the source of the [markdown file used to generate it](http://github.com/tripit/docs/blob/master/source/index.md).
 
 ### Prerequisites
 
@@ -24,55 +28,7 @@ You can now see the docs at <http://localhost:4567>. Whoa! That was fast!
 
 ### Making Edits
 
-Just edit the markdown file `source/index.md`! Super easy. Here's an example of some markdown:
-
-    # This is a Major Section Header
-    
-    This is a bunch of text that will appear in the light-background section to the left of your docs.
-    
-    ## This is a Header of One of Your API Endpoints
-    
-    Blah blah blah blah blah blah blah
-    
-    ## Another Endpoint Header
-    
-    More text here. This all appears in the area on the left.
-    
-    ### This is a Subheader (won't appear in the table of contents)
-    
-    ```ruby
-    # this is a ruby code block that will appear in the dark area on the right
-    def say_hello
-      puts "hello"
-    end
-    ```
-    
-    ```python
-    // this is a python code block that will appear in the dark area on the right
-    print "hello, world"
-    ```
-    
-    ```shell
-    # this is a shell code block that will appear in the dark area on the right
-    echo "hello, world"
-    ```
-    
-    ```
-    This is a generic text block that will appear in the dark area on the right
-    ```
-    
-    > This is a code annotation that will appear in the dark area on the right
-    
-    This is [an internal link to one of the headers above](#another-endpoint-header).
-    
-    This is [an external link to google](http://google.com).
-    
-    This | Is  | A   | Table
-    ---- | --- | --- | -----
-    which will appear | in the area | to the left | of the code
-    you can add | more rows | like this | (the vertical pipes don't need to line up)
-    
-You can view the rendered version of the above example at [http://tripit.github.io/slate]
+Just edit the markdown file `source/index.md`! Super easy. If you know markdown, we think that the Kittn example in `source/index.md` is mostly self explanatory, but be sure to check out `syntax.md` if you need a better explanation.
 
 ### Pushing Your Changes
 
@@ -82,7 +38,7 @@ Publishing your changes couldn't be more simple.
  2. Push source changes to Github: `git push` (Note that at this point, we've only updated the ''markdown source'' on Github. We still haven't published the generated HTML to the `gh-pages` branch.)
  3. Build the site, commit, and push the `gh-pages` branch: `rake publish`
 
-Done! Your changes should now be live on [http://yourusername.github.io/slate] TODO CHANGE URL, and the main branch should be updated with your edited markdown.
+Done! Your changes should now be live on [http://yourusername.github.io/slate], and the main branch should be updated with your edited markdown.
 
 ### Don't Want to Use Github Pages?
 
