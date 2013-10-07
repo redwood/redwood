@@ -151,9 +151,10 @@ html, body {
     font-size: 30px;
     padding-top: 0.5em;
     padding-bottom: 0.5em;
+    border-bottom: 1px solid #ccc;
     margin-top: 2em;
-    margin-bottom: 0;
-    border-top: 1px solid #bbb;
+    margin-bottom: 21px;
+    border-top: 1px solid #ddd;
     @include background-image(linear-gradient(top, #fff, #f9f9f9));
   }
 
@@ -165,17 +166,15 @@ html, body {
     font-size: 20px;
     margin-top: 4em;
     margin-bottom: 0;
+    border-top: 1px solid #ccc;
+    padding-top: 1.2em;
     padding-bottom: 1.2em;
     @include background-image(linear-gradient(top, rgba(#fff,0.4), rgba(#fff, 0)));
   }
 
-  h2, h1 + p, h1 + table, h1 + ul, h1 + ol {
-    border-top: 1px solid #ccc;
-    padding-top: 1.2em;
-  }
-
   h1 + h2, h1 + div + h2 {
-    margin-top: 0;
+    margin-top: -21px;
+    border-top: none;
   }
 
   h3 {
