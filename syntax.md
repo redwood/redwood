@@ -54,10 +54,12 @@ Code annotations are essentially the same thing as paragraphs, but they'll appea
 
 Slate uses PHP Markdown Extra style tables:
 
-    Table Header 1 | Table Header 2 | Table Header 3
-    -------------- | -------------- | --------------
-    Row 1 col 1 | Row 1 col 2 | Row 1 col 3
-    Row 2 col 1 | Row 2 col 2 | Row 2 col 3
+```markdown
+Table Header 1 | Table Header 2 | Table Header 3
+-------------- | -------------- | --------------
+Row 1 col 1 | Row 1 col 2 | Row 1 col 3
+Row 2 col 1 | Row 2 col 2 | Row 2 col 3
+```
 
 Note that the pipes do not need to line up with each other on each line.
 
