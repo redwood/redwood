@@ -14,7 +14,7 @@ Note that only level 1 and 2 headers will appear in the table of contents.
 
 For normal text, just type your paragraph on a single line.
 
-  This is some paragraph text. Exciting, no?
+    This is some paragraph text. Exciting, no?
 
 Make sure the lines above below your paragraph are empty.
 
