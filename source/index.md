@@ -137,7 +137,7 @@ curl "http://example.com/api/kittens/3"
 }
 ```
 
-This endpoint retrieves all kittens.
+This endpoint retrieves a specific kitten.
 
 ### HTTP Request
 
