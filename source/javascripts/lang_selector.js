@@ -1,5 +1,5 @@
 /*
-Copyright 2008-2012 Concur Technologies, Inc.
+Copyright 2008-2013 Concur Technologies, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may
 not use this file except in compliance with the License. You may obtain
