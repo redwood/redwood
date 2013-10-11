@@ -20,14 +20,106 @@ License for the specific language governing permissions and limitations
 under the License.
 */
 
+////////////////////////////////////////////////////////////////////////////////
+// GENERAL STUFF
+////////////////////////////////////////////////////////////////////////////////
+
 html, body {
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 13px;
-  color: $main-text-color;
+  color: $main-text;
   padding: 0;
   margin: 0;
   -webkit-font-smoothing: antialiased;
+  @extend %default-font;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// TABLE OF CONTENTS
+////////////////////////////////////////////////////////////////////////////////
+
+.tocify {
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: $nav-width;
+  background-color: $nav-bg;
+  font-size: 13px;
+  font-weight: bold;
+
+  // This is the logo at the top of the ToC
+  &>img {
+    display: block;
+    margin-bottom: $logo-margin;
+  }
+
+  .tocify-item>a {
+    padding: 0 $nav-padding 0 $nav-padding;
+    display:block;
+    overflow-x:hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  // The Table of Contents is composed of multiple nested
+  // unordered lists.  These styles remove the default
+  // styling of an unordered list because it is ugly.
+  ul, li {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    line-height: 28px;
+  }
+
+  li {
+    color: $nav-text;
+    @include transition-property('background');
+    @include transition-timing-function('linear');
+    @include transition-duration(230ms);
+  }
+
+  // This is the currently selected ToC entry
+  .tocify-focus {
+    @include box-shadow(0px 1px 0px $nav-active-shadow);
+    background-color: $nav-active-bg;
+    color: $nav-active-text;
+  }
+
+  // Subheaders are the submenus that slide open
+  // in the table of contents.
+  .tocify-subheader {
+    display: none; // tocify will override this when needed
+    background-color: $nav-subitem-bg;
+    font-weight: 500;
+    @include background-image(
+      linear-gradient(top,
+                      darken($nav-subitem-bg,2%),
+                      $nav-subitem-bg 10%,
+                      $nav-subitem-bg 90%,
+                      darken($nav-subitem-bg,2%))
+    );
+    .tocify-item>a {
+      padding-left: $nav-padding + $nav-indent;
+      font-size: 12px;
+    }
+    // These items make for a slight embossed look for the subheader.
+    // "Why not put the borders in the subheader?" you ask.
+    // "Because then the animation isn't as smooth," I reply.
+    &>li:first-child {
+      border-top: $nav-embossed-border-top;
+    }
+    &>li:last-child {
+      border-bottom: $nav-embossed-border-bottom;
+      box-shadow: none; // otherwise it'll overflow out of the subheader
+    }
+  }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// PAGE LAYOUT AND CODE SAMPLE BACKGROUND
+////////////////////////////////////////////////////////////////////////////////
 
 .page-wrapper {
   margin-left: $nav-width;
@@ -38,6 +130,11 @@ html, body {
 
   padding-bottom: 1px; // prevent margin overflow
   
+  // The dark box is what gives the code samples their dark background.
+  // It sits essentially under the actual content block, which has a
+  // transparent background.
+  // I know, it's hackish, but it's the simplist way to make the left
+  // half of the content always this background color.
   .dark-box {
     width: $examples-width;
     background-color: $examples-bg;
@@ -53,28 +150,23 @@ html, body {
     z-index: 50;
     font-weight: bold;
     background-color: $lang-select-bg;
-    // @include background-image(linear-gradient(top, #1d82c6, #1864ab));
-    border-bottom: 5px solid $examples-bg;
-    // box-shadow: 0 10px 5px $code-bg;
+    border-bottom: 5px solid $lang-select-active-bg;
     a {
-      // background-color: $lang-select-bg;
       display: block;
       float:left;
       color: $lang-select-text;
       text-decoration: none;
       padding: 0 10px;
-      // border-right: 1px solid $lang-select-border;
       line-height: 30px;
 
       &.active {
-        background-color: $examples-bg;
-        top: 1px;
-        z-index: 70;
+        background-color: $lang-select-active-bg;
+        color: $lang-select-active-text;
       }
 
       &:active {
-        background-color: #000;
-        border-color: #000;
+        background-color: $lang-select-pressed-bg;
+        color: $lang-select-pressed-text;
       }
     }
 
@@ -86,22 +178,16 @@ html, body {
   }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// CONTENT STYLES
+////////////////////////////////////////////////////////////////////////////////
+// This is all the stuff with the light background in the left half of the page
+
 .content {
   // to place content above the dark box
   position: relative;
   z-index: 30;
 
-  pre, code {
-    font-family: Monaco, "Courier New", monospace;
-    font-size: 12px;
-  }
-
-  code {
-    background-color: rgba(0,0,0,0.05);
-    padding: 3px;
-    border-radius: 3px;
-    @include break-words;
-  }
 
   &>h1, &>h2, &>h3, &>p, &>table, &>ul, &>ol {
     margin-right: $examples-width;
@@ -110,20 +196,67 @@ html, body {
     padding: 0 $main-padding;
     @include box-sizing(border-box);
     display: block;
-    @include embedded-text;
+    @include text-shadow($main-embossed-text-shadow);
   }
 
   &>ul, &>ol {
     padding-left: $main-padding + 15px;
   }
 
-  li {
-
-  }
-
-  &>h1, &>h2, &>div { // the div is the tocify hidden div for placeholding stuff
+  // the div is the tocify hidden div for placeholding stuff
+  &>h1, &>h2, &>div { 
     clear:both;
   }
+
+  h1 {
+    @extend %header-font;
+    font-size: 30px;
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
+    border-bottom: 1px solid #ccc;
+    margin-top: 2em;
+    margin-bottom: $h1-margin-bottom;
+    border-top: 1px solid #ddd;
+    @include background-image(
+      linear-gradient(top, #fff, #f9f9f9)
+    );
+  }
+
+  // The header at the very top of the page
+  // shouldn't have top margin.
+  // (the div is because of tocify)
+  h1:first-child, div:first-child + h1 {
+    margin-top: 0;
+  }
+
+  h2 {
+    @extend %header-font;
+    font-size: 20px;
+    margin-top: 4em;
+    margin-bottom: 0;
+    border-top: 1px solid #ccc;
+    padding-top: 1.2em;
+    padding-bottom: 1.2em;
+    @include background-image(
+      linear-gradient(top, rgba(#fff,0.4), rgba(#fff, 0))
+    );
+  }
+
+  // h2s right after h1s should bump right up
+  // against the h1s.
+  h1 + h2, h1 + div + h2 {
+    margin-top: $h1-margin-bottom * -1;
+    border-top: none;
+  }
+
+  h3 {
+    @extend %header-font;
+    font-size: 12px;
+    margin-top: 2.5em;
+    margin-bottom: 0.8em;
+    text-transform: uppercase;
+  }
+
 
   table {
     margin-bottom: 1em;
@@ -157,46 +290,6 @@ html, body {
     }
   }
 
-  h1 {
-    font-size: 30px;
-    padding-top: 0.5em;
-    padding-bottom: 0.5em;
-    border-bottom: 1px solid #ccc;
-    margin-top: 2em;
-    margin-bottom: 21px;
-    border-top: 1px solid #ddd;
-    @include background-image(linear-gradient(top, #fff, #f9f9f9));
-  }
-
-  h1:first-child, div:first-child + h1 {
-    margin-top: 0;
-  }
-
-  h2 {
-    font-size: 20px;
-    margin-top: 4em;
-    margin-bottom: 0;
-    border-top: 1px solid #ccc;
-    padding-top: 1.2em;
-    padding-bottom: 1.2em;
-    @include background-image(linear-gradient(top, rgba(#fff,0.4), rgba(#fff, 0)));
-  }
-
-  h1 + h2, h1 + div + h2 {
-    margin-top: -21px;
-    border-top: none;
-  }
-
-  h3 {
-    font-size: 12px;
-    margin-top: 2.5em;
-    margin-bottom: 0.8em;
-    text-transform: uppercase;
-  }
-
-  h1,h2,h3 {
-    font-weight: bold;
-  }
 
   p, li {
     line-height: 1.6;
@@ -207,17 +300,39 @@ html, body {
     max-width: 100%;
   }
 
+  code {
+    background-color: rgba(0,0,0,0.05);
+    padding: 3px;
+    border-radius: 3px;
+    @extend %break-words;
+    @extend %code-font;
+  }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// CODE SAMPLE STYLES
+////////////////////////////////////////////////////////////////////////////////
+// This is all the stuff that appears in the right half of the page
+
+.content {
   pre, blockquote {
     background-color: $code-bg;
-    float:right;
-    width: $examples-width;
-    clear:right;
-    @include box-sizing(border-box);
-    margin: 0;
     color: #fff;
-    @include text-shadow(0px 1px 2px rgba(0,0,0,0.4));
+
     padding: 2em $main-padding;
+    margin: 0;
+    width: $examples-width;
+
+    float:right;
+    clear:right;
+
+    @extend %code-font;
+    @include box-sizing(border-box);
+    @include text-shadow(0px 1px 2px rgba(0,0,0,0.4));
+
     &>p { margin: 0; }
+
     a {
       color: #fff;
       text-decoration: none;
@@ -231,81 +346,8 @@ html, body {
       border-radius: 5px;
       padding: $code-annotation-padding;
       color: #ccc;
-      @include fancy-inset-border-top;
-      @include fancy-inset-border-bottom;
+      border-top: 1px solid #000;
+      border-bottom: 1px solid #404040;
     }
   }
-
-}
-
-.tocify {
-  overflow-y: auto;
-  overflow-x: hidden;
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: $nav-width;
-  background-color: $nav-bg;
-  font-size: 13px;
-  font-weight: bold;
-
-  &>img {
-    background-color: #f29a3c;
-    display: block;
-    margin-bottom: $logo-margin;
-  }
-}
-
-.tocify-item>a {
-  padding: 0 $nav-padding 0 $nav-padding;
-  display:block;
-  overflow-x:hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  // @include text-shadow(0px 0px 3px rgba(0,0,0,0.7));
-}
-
-/* The Table of Contents is composed of multiple nested unordered lists.  These styles remove the default styling of an unordered list because it is ugly. */
-.tocify ul, .tocify li {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  line-height: 28px;
-}
-
-.tocify li {
-  color: #fff;
-  @include transition-property('background');
-  @include transition-timing-function('linear');
-  @include transition-duration(230ms);
-}
-
-.tocify .tocify-focus {
-  @include box-shadow(0px 1px 0px #000);
-  // @include background-image(linear-gradient(top, #1d82c6, #1864ab));
-  // background-color: #1d82c6;
-  background-color: $nav-select-bg;
-  color: #fff;
-}
-
-.tocify-header {
-}
-
-.tocify-subheader {
-    display: none;
-    background-color: $nav-subitem-bg;
-    font-weight: 500;
-    @include background-image(linear-gradient(top, darken($nav-subitem-bg,2%),$nav-subitem-bg 10%, $nav-subitem-bg 90%, darken($nav-subitem-bg,2%)));
-    .tocify-item>a {
-      padding-left: $nav-padding + $nav-indent;
-      font-size: 12px;
-    }
-    &>li:first-child {
-      @include fancy-inset-border-top;
-    }
-
-    &>li:last-child {
-      @include fancy-inset-border-bottom;
-    }
 }
