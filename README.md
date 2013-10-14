@@ -7,7 +7,7 @@ Slate puts all your API's descriptions and definitions on left half of the scree
 
 If you have API bindings in multiple programming languages, you can easily make tabs at the top of the page to switch the code examples between those languages.
 
-As an example, you can check out the [TripIt API docs](http://tripit.github.io/docs), which we create with Slate. You can also view the source of the [markdown file used to generate it](http://github.com/tripit/docs/blob/master/source/index.md).
+<!--As an example, you can check out the [TripIt API docs](http://tripit.github.io/docs), which we create with Slate. You can also view the source of the [markdown file used to generate it](http://github.com/tripit/docs/blob/master/source/index.md).-->
 
 ### Prerequisites
 
