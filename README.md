@@ -1,13 +1,33 @@
 Slate
 ========
 
-Slate turns a markdown file into a beautiful API documentation page for your service. Think of it as a documentation template on steroids.
+Slate helps you create beautiful single-page API documentation. Think of it as an intelligent, modern documentation template for your API.
 
-Slate puts all your API's descriptions and definitions on left half of the screen, and all your code examples on the right half. Inspired by [Stripe's](https://stripe.com/docs/api) and [Paypal's](https://developer.paypal.com/webapps/developer/docs/api/) API docs.
+<img src="https://dl.dropboxusercontent.com/u/95847291/github%20images/slate/slate_screenshot.png" width=700 alt="Screenshot of Example Documentation created with Slate">
 
-If you have API bindings in multiple programming languages, you can easily make tabs at the top of the page to switch the code examples between those languages.
+*The example above was created with Slate. Check it out at [tripit.github.io/slate](http://tripit.github.io/slate).*
+
+Features
+------------
+
+* **Clean, intuitive design** — with Slate, the description of your API is on the left side of your documentation, and all the code examples are on the right side. Inspired by [Stripe's](https://stripe.com/docs/api) and [Paypal's](https://developer.paypal.com/webapps/developer/docs/api/) API docs.
+
+* **Everything on a single page** — gone are the days where your users had to search through a million pages to find what they wanted. Slate puts the entire documentation on a single page. We haven't sacrificed linkability, though. As you scroll, your browser's hash will update to the nearest header, so it's insanely easy to link to a particular point in the documentation.
+
+* **Slate is just Markdown** — when you write docs with Slate, you're just writing Markdown, which makes it simple to edit and understand. Everything is written in Markdown — even the code samples are just Markdown code blocks!
+
+* **Write code samples in multiple languages** — if your API has bindings in multiple programming languages, you easily put in tabs to switch between them. In your document, you'll distinguish different languages by specifying the language name at the top of each code block, just like with Github Flavored Markdown!
+
+* **Out-of-the-box syntax highlighting** for [almost 60 languages](http://rouge.jayferd.us/demo), no configuration required.
+
+* **Automatic, smoothly scrolling table of contents** on the far left of the page. As you scroll, it displays your current position in the document. It's fast, too. We're using Slate at TripIt to build documentation for our new API, where our table of contents has over 180 entries. We've made sure that the performance remains excellent, even for larger documents.
+
+Getting starting with Slate is super easy! Simply fork this repository, and then follow the instructions below. Or, if you'd like to check out what Slate is capable of, take a look at the [sample docs](http://tripit.github.io/slate).
 
 <!--As an example, you can check out the [TripIt API docs](http://tripit.github.io/docs), which we create with Slate. You can also view the source of the [markdown file used to generate it](http://github.com/tripit/docs/blob/master/source/index.md).-->
+
+Getting Started with Slate
+------------------------------
 
 ### Prerequisites
 
@@ -30,9 +50,9 @@ You can now see the docs at <http://localhost:4567>. Whoa! That was fast!
 
 Just edit the markdown file `source/index.md`! If your middleman server is running, all you need to do is save `index.md` and reload the page in your browser to see the changes. Super easy.
 
-Syntax-wise, if you know markdown, we think that the Kittn example in `source/index.md` is mostly self explanatory, but be sure to check out [the syntax documentation](http://github.com/tripit/slate/blob/master/syntax.md) if you need a better explanation.
+Syntax-wise, if you know markdown, we think that the Kittn example in `source/index.md` is mostly self explanatory, but be sure to check out [the syntax documentation](http://github.com/tripit/slate/blob/master/syntax.md) if you need a better explanation. Just remember — quotes and code samples appear on the right, everything else appears on the left.
 
-### Publishing Your Docs
+### Publishing Your Docs to Github Pages
 
 Publishing your API documentation couldn't be more simple.
 
@@ -40,7 +60,7 @@ Publishing your API documentation couldn't be more simple.
  2. Push the *markdown source* changes to Github: `git push`
  3. Compile to HTML, and push the HTML to Github pages: `rake publish`
 
-Done! Your changes should now be live on <http://yourusername.github.io/slate>, and the main branch should be updated with your edited markdown. Note that if this is your first time publishing Slate, it can sometimes take ten minutes or so before your content is available online.
+Done! Your changes should now be live on http://yourusername.github.io/slate, and the main branch should be updated with your edited markdown. Note that if this is your first time publishing Slate, it can sometimes take ten minutes or so before your content is available online.
 
 ### Don't Want to Use Github Pages?
 
@@ -109,11 +129,11 @@ Try putting code blocks and annotations right after headers. See the default `so
 
 ### You guys recently uploaded Slate. How can I incorporate your new changes into my fork?
 
-Add the remote, call it "upstream":
+Add the remote, call it `upstream`:
 
     git remote add upstream git@github.com:tripit/slate.git
 
-Fetch all the branches of that remote into remote-tracking branches, such as upstream/master:
+Fetch all the branches of that remote into remote-tracking branches, such as `upstream/master`:
 
     git fetch upstream
 
@@ -135,10 +155,10 @@ Publish the new changes to Github pages:
 
 (Thanks to [Mark Longair on StackOverflow](http://stackoverflow.com/questions/7244321/how-to-update-github-forked-repository) for the upsteam explanation.)
 
-Need Help?
+Need Help? Found a bug?
 --------------------
 
-Just submit a issue to the Slate Github if you need any help. And feel free to submit pull requests with bug fixes or changes!
+Just [submit a issue](https://github.com/tripit/slate/issues) to the Slate Github if you need any help. And, of course, feel free to submit pull requests with bug fixes or changes.
 
 
 Special Thanks
