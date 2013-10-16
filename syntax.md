@@ -67,7 +67,7 @@ If you don't like that syntax, feel free to use normal html `<table>`s directly 
 
 ## Formatting Text:
 
-    This text is ***bold***, this is **italic**, this is an `inline code block`.
+    This text is **bold**, this is *italic*, this is an `inline code block`.
 
 You can use those formatting rules in code annotations, tables, paragraphs, lists, wherever.
 
