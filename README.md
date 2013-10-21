@@ -125,6 +125,19 @@ Done! Language renamed. You can keep all your codeblocks for shell, but it'll lo
 
 Just replace `source/images/logo.png` with your logo.
 
+
+### How do I change the links that appear below the Table of Contents?
+
+Just edit, at the top of `index.md`,
+
+    toc_footers:
+     - <a href='#'>Sign Up for a Developer Key</a>
+     - <a href='http://github.com/tripit/slate'>Documentation Powered by Slate</a>
+
+Add more lines or remove lines as needed. Just make sure they start with the dash. If you don't want any footer links at all, just remove `toc_footers` altogether, and the link section should just disappear.
+
+Feel free to remove the "Documentation Powered by Slate" if you'd like, although we appreciate having that there since it helps more people discover Slate!
+
 ### How do I get my code samples to line up with the content I want them next to?
 
 Try putting code blocks and annotations right after headers. See the default `source/index.md` for an example, or file an issue if you're having trouble.

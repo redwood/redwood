@@ -62,9 +62,17 @@ under the License.
   </head>
 
   <body class="<%= page_classes %>">
-    <div id="toc">
+    <div class="tocify-wrapper">
       <%= image_tag "logo.png" %>
-      <!-- table of contents will be inserted here -->
+      <div id="toc">
+      </div>
+      <% if current_page.data.toc_footers %>
+      <ul class="toc-footer">
+        <% current_page.data.toc_footers.each do |footer| %>
+          <li><%= footer %></li>
+        <% end %>
+      </ul>
+      <% end %>
     </div>
     <div class="page-wrapper">
       <div class="content">
