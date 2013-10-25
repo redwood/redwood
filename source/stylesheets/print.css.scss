@@ -24,7 +24,7 @@ $print-color-light: #ccc;
 $print-font-size: 12px;
 
 body {
-  @extend %body-font;
+  @extend %default-font;
 }
 
 .tocify, .toc-footer {

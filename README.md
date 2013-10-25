@@ -10,7 +10,7 @@ Slate helps you create beautiful single-page API documentation. Think of it as a
 Features
 ------------
 
-* **Clean, intuitive design** — with Slate, the description of your API is on the left side of your documentation, and all the code examples are on the right side. Inspired by [Stripe's](https://stripe.com/docs/api) and [Paypal's](https://developer.paypal.com/webapps/developer/docs/api/) API docs. In addition to the design you see on screen, Slate comes with a print stylesheet, so your users can easily print out your documentation as a hard copy for reference.
+* **Clean, intuitive design** — with Slate, the description of your API is on the left side of your documentation, and all the code examples are on the right side. Inspired by [Stripe's](https://stripe.com/docs/api) and [Paypal's](https://developer.paypal.com/webapps/developer/docs/api/) API docs. In addition to the design you see on screen, Slate comes with a print stylesheet, so your docs look great on paper.
 
 * **Everything on a single page** — gone are the days where your users had to search through a million pages to find what they wanted. Slate puts the entire documentation on a single page. We haven't sacrificed linkability, though. As you scroll, your browser's hash will update to the nearest header, so it's insanely easy to link to a particular point in the documentation.
 
