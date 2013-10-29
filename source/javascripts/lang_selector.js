@@ -21,18 +21,29 @@ function activateLanguage(language) {
     $(".highlight." + languages[i]).hide();
   }
   $(".highlight." + language).show();
+
 }
 
 function setupLanguages(l) {
   languages = l;
   currentLanguage = languages[0];
+  defaultLanguage = localStorage.getItem("language");
 
-  if (location.search.substr(1) != "") {
+  if ((location.search.substr(1) != "") && (jQuery.inArray(location.search.substr(1), languages)) != -1) {
+    // the language is in the URL, so use that language!
     activateLanguage(location.search.substr(1));
+
+    // set this language as the default for next time, if the URL has no language
+    localStorage.setItem("language", location.search.substr(1));
+  } else if ((defaultLanguage !== null) && (jQuery.inArray(defaultLanguage, languages) != -1)) {
+    // the language was the last selected one saved in localstorage, so use that language!
+    activateLanguage(defaultLanguage);
   } else {
+    // no language selected, so use the default
     activateLanguage(languages[0]);
   }
 
+  // if we click on a language tab, reload the page with that language in the URL
   $("#lang-selector a").bind("click", function() {
     window.location.replace("?" + $(this).data("language-name") + window.location.hash);
     return false;

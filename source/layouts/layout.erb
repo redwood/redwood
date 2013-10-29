@@ -51,9 +51,9 @@ under the License.
           <% if current_page.data.language_tabs %>
             <% current_page.data.language_tabs.each do |lang| %>
               <% if lang.is_a? Hash %>
-                ['<%= lang.keys[0] %>'],
+                '<%= lang.keys[0] %>',
               <% else %>
-                ['<%= lang %>'],
+                '<%= lang %>',
               <% end %>
             <% end %>
           <% end %>
