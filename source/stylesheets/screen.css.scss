@@ -3,6 +3,7 @@
 @import 'compass';
 @import 'variables';
 @import 'syntax';
+@import 'icon-font';
 
 /*
 Copyright 2008-2013 Concur Technologies, Inc.
@@ -29,6 +30,7 @@ html, body {
   padding: 0;
   margin: 0;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   @extend %default-font;
   background-color: $main-bg;
 }
@@ -212,10 +214,8 @@ html, body {
   z-index: 30;
 
 
-  &>h1, &>h2, &>h3, &>p, &>table, &>ul, &>ol {
+  &>h1, &>h2, &>h3, &>p, &>table, &>ul, &>ol, &>aside {
     margin-right: $examples-width;
-  }
-  &>h1, &>h2, &>h3, &>p, &>table, &>ul, &>ol {
     padding: 0 $main-padding;
     @include box-sizing(border-box);
     display: block;
@@ -330,6 +330,49 @@ html, body {
     @extend %break-words;
     @extend %code-font;
   }
+
+  aside {
+    padding-top: 1em;
+    padding-bottom: 1em;
+    text-shadow: 0 1px 0 lighten($aside-notice-bg, 15%);
+    margin-top: 1.5em;
+    margin-bottom: 1.5em;
+    background: $aside-notice-bg;
+    line-height: 1.6;
+
+    &.warning {
+      background-color: $aside-warning-bg;
+      text-shadow: 0 1px 0 lighten($aside-warning-bg, 15%);
+    }
+
+    &.success {
+      background-color: $aside-success-bg;
+      text-shadow: 0 1px 0 lighten($aside-success-bg, 15%);
+    }
+  }
+
+
+  aside.warning {
+  }
+
+  aside:before {
+    vertical-align: middle;
+    padding-right: 0.5em;
+    font-size: 14px;
+  }
+
+  aside.notice:before {
+    @extend %icon-info-sign;
+  }
+
+  aside.warning:before {
+    @extend %icon-exclamation-sign;
+  }
+
+  aside.success:before {
+    @extend %icon-ok-sign;
+  }
+
 }
 
 

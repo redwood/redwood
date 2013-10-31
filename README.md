@@ -185,3 +185,4 @@ Special Thanks
 - [jquery.tocify.js](https://github.com/gfranko/jquery.tocify.js)
 - [middleman-syntax](https://github.com/middleman/middleman-syntax)
 - [middleman-gh-pages](https://github.com/neo/middleman-gh-pages)
+- [Font Awesome](http://fortawesome.github.io/Font-Awesome/)
