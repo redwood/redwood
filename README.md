@@ -123,8 +123,7 @@ Done! Language renamed. You can keep all your codeblocks for shell, but it'll lo
 
 ### How do I change the logo in the upper left?
 
-Just replace `source/images/logo.png` with your logo.
-
+Just replace `source/images/logo.png` with your logo. We recommend a width of 230px and a height of around 50-100px. You can adjust the padding below the logo in `source/stylesheets/variables.scss`.
 
 ### How do I change the links that appear below the Table of Contents?
 
