@@ -141,6 +141,10 @@ Feel free to remove the "Documentation Powered by Slate" if you'd like, although
 
 Try putting code blocks and annotations right after headers. See the default `source/index.md` for an example, or file an issue if you're having trouble.
 
+### I want to change the colors!!!1
+
+That's not exactly a *question*, but you can change the colors of various parts of the design, as well as some paddings, in `variables.scss`. This is also a great way to keep your changes to Slate's design in one place, so it will be easier to update Slate.
+
 ### You guys recently uploaded Slate. How can I incorporate your new changes into my fork?
 
 Add the remote, call it `upstream`:
