@@ -36,7 +36,7 @@ under the License.
           extendPage: false,
           theme: "none",
           smoothScroll: false,
-          showEffectSpeed: 180,
+          showEffectSpeed: 0,
           hideEffectSpeed: 180,
           ignoreSelector: ".toc-ignore",
           hashGenerator: 'pretty',
@@ -46,7 +46,12 @@ under the License.
           hashGenerator: function(text, element) {
             return element[0].getAttribute('id');
           }
-        });
+        }).data("toc-tocify");
+        // Hack to make already open sections to start opened,
+        // instead of displaying an ugly animation
+        setTimeout(function() {
+          toc.setOption("showEffectSpeed", 180);
+        },50);
         setupLanguages([
           <% if current_page.data.language_tabs %>
             <% current_page.data.language_tabs.each do |lang| %>
