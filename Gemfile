@@ -13,7 +13,7 @@ gem 'middleman-gh-pages'
 # Live-reloading plugin
 gem "middleman-livereload", "~> 3.1.0"
 
-gem 'redcarpet', git: 'https://github.com/vmg/redcarpet.git'
+gem 'redcarpet', :git => 'https://github.com/vmg/redcarpet.git'
 
 gem "github-linguist", "~> 2.9.5"
 
