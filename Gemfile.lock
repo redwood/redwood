@@ -125,6 +125,7 @@ DEPENDENCIES
   middleman-gh-pages
   middleman-livereload (~> 3.1.0)
   middleman-syntax
+  rake (~> 10.1.0)
   redcarpet!
   ruby18_source_location
   wdm (~> 0.1.0)
