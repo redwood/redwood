@@ -88,3 +88,17 @@ You can use those formatting rules in code annotations, tables, paragraphs, list
 ## Links
 
     This is an [internal link](#error-code-definitions), this is an [external link](http://google.com).
+
+## Notes and Warnings
+
+You can add little highlighted warnings and notes with just a little HTML embedded in your markdown document:
+
+    <aside class="notice">
+    You must replace `meowmeowmeow` with your personal API key.
+    </aside>
+
+Use `class="notice"` for blue notes, `class="warning"` for red warnings, and `class="success"` for green notes.
+
+## Need Help?
+
+If you have trouble with any of the syntax, or if it's confusing, let us know by filing an issue. Thanks!
