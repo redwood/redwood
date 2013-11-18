@@ -1,4 +1,4 @@
-Slate
+Slate [![Dependency Status](https://gemnasium.com/tripit/slate.png)](https://gemnasium.com/tripit/slate)
 ========
 
 Slate helps you create beautiful single-page API documentation. Think of it as an intelligent, modern documentation template for your API.
