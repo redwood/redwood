@@ -57,6 +57,7 @@ Examples of Slate in the Wild
 
 * [Orchestrate.io API docs](https://docs.orchestrate.io/)
 * [ChaiOne Gameplan API docs](http://chaione.github.io/gameplanb2b/#introduction)
+* [Drcaban's Build a Quine tutorial](http://drcabana.github.io/build-a-quine/#introduction)
 
 Need Help? Found a bug?
 --------------------
