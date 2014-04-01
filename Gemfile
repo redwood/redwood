@@ -11,7 +11,7 @@ gem "middleman-syntax"
 gem 'middleman-gh-pages'
 
 # Live-reloading plugin
-gem "middleman-livereload", "~> 3.2.0"
+gem "middleman-livereload", "~> 3.3.0"
 
 gem 'redcarpet', '~> 3.1.1'
 
@@ -25,5 +25,4 @@ end
 
 gem "rake", "~> 10.2.0"
 
-gem 'execjs'
 gem 'therubyracer', :platforms => :ruby

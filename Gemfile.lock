@@ -54,10 +54,9 @@ GEM
       tilt (~> 1.4.1)
     middleman-gh-pages (0.0.3)
       rake (> 0.9.3)
-    middleman-livereload (3.2.1)
+    middleman-livereload (3.3.0)
       em-websocket (~> 0.5.0)
       middleman-core (~> 3.2)
-      multi_json (~> 1.8.4)
       rack-livereload (~> 0.3.15)
     middleman-sprockets (3.3.1)
       middleman-core (>= 3.2)
@@ -67,7 +66,7 @@ GEM
     middleman-syntax (2.0.0)
       middleman-core (~> 3.2)
       rouge (~> 1.0)
-    multi_json (1.8.4)
+    multi_json (1.9.2)
     rack (1.5.2)
     rack-livereload (0.3.15)
       rack
@@ -107,10 +106,9 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  execjs
   middleman (~> 3.2.0)
   middleman-gh-pages
-  middleman-livereload (~> 3.2.0)
+  middleman-livereload (~> 3.3.0)
   middleman-syntax
   rake (~> 10.2.0)
   redcarpet (~> 3.1.1)
