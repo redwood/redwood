@@ -20,5 +20,5 @@ $(function() {
   // instead of displaying an ugly animation
   setTimeout(function() {
     toc.setOption("showEffectSpeed", 180);
-  },50);
+  }, 50);
 });
