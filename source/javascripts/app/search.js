@@ -1,40 +1,44 @@
 (function (global) {
 
-  window.topic = topic;
-
   var index = lunr(function () {
-    this.field('title', { boost: 10 });
-    this.field('tags', { boost: 100 });
-    this.field('body');
     this.ref('id');
+    this.field('title', { boost: 10 });
+    // this.field('tags', { boost: 100 });
+    this.field('body');
   });
 
-  $(bindSearch);
+  $(populate);
+  $(bind);
 
-  function bindSearch () {
-    $('#search').on('keyup', function () {
-      if (this.value) {
-        var items = index.search(this.value);
-        $('article, nav li').hide();
-        items.forEach(function (item) {
-          $('#' + item.ref + ', #' + item.ref + '-nav').show();
-        });
-      } else {
-        $('article, nav li').show();
-      }
-    });
+  function populate () {
+    $('h1').each(function () {
+      var title = $(this);
+      var body = title.nextUntil('h1');
+      var wrapper = $('<section id="section-' + title.prop('id') + '"></section>');
 
-    $('form').on('submit', function (event) {
-      event.preventDefault();
+      title.after(wrapper.append(body));
+      wrapper.prepend(title);
+
+      index.add({
+        id: title.prop('id'),
+        title: title.text(),
+        // tags: tags,
+        body: body.text()
+      });
     });
   }
 
-  function topic (title, tags, handle) {
-    index.add({
-      id: handle,
-      title: title,
-      tags: tags,
-      body: $('#' + handle + '-body').text()
+  function bind () {
+    $('#search').on('keyup', function () {
+      if (this.value) {
+        var items = index.search(this.value);
+        $('section, #toc .tocify-item').hide();
+        items.forEach(function (item) {
+          $('#section-' + item.ref + ', .tocify-item[data-unique=' + item.ref).show();
+        });
+      } else {
+        $('section, #toc .tocify-item').show();
+      }
     });
   }
 
