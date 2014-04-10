@@ -1,5 +1,6 @@
 (function (global) {
 
+  var $global = $(global);
   var index = lunr(function () {
     this.ref('id');
     this.field('title', { boost: 10 });
@@ -29,17 +30,26 @@
   }
 
   function bind () {
-    $('#input-search').on('keyup', function () {
-      if (this.value) {
-        var items = index.search(this.value);
-        $('section, #toc .tocify-item').hide();
-        items.forEach(function (item) {
-          $('#section-' + item.ref + ', .tocify-item[data-unique=' + item.ref).show();
-        });
-      } else {
-        $('section, #toc .tocify-item').show();
-      }
-    });
+    $('#input-search').on('keyup', search);
+  }
+
+  function search () {
+    var sections = $('section, #toc .tocify-header');
+
+    if (this.value) {
+      var items = index.search(this.value);
+      sections.hide();
+      items.forEach(function (item) {
+        $('#section-' + item.ref).show();
+        $('.tocify-item[data-unique=' + item.ref + ']').closest('.tocify-header').show();
+      });
+    } else {
+      sections.show();
+    }
+
+    // HACK trigger tocify height recalculation
+    $global.triggerHandler('scroll.tocify');
+    $global.triggerHandler('resize');
   }
 
 })(window);
