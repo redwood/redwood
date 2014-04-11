@@ -29,7 +29,7 @@
   }
 
   function bind () {
-    $('#search').on('keyup', function () {
+    $('#input-search').on('keyup', function () {
       if (this.value) {
         var items = index.search(this.value);
         $('section, #toc .tocify-item').hide();

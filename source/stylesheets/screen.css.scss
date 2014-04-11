@@ -54,13 +54,37 @@ html, body {
   // This is the logo at the top of the ToC
   &>img {
     display: block;
-    margin-bottom: $logo-margin;
+  }
+
+  &>.search {
+    position: relative;
+
+    input {
+      background: $nav-bg;
+      border-width: 0 0 1px 0;
+      border-color: $nav-footer-border-color;
+      padding: 6px 0 6px 20px;
+      box-sizing: border-box;
+      margin: 10px 15px;
+      width: $nav-width - 30;
+      outline: none;
+      color: $nav-text;
+      letter-spacing: 0.07em;
+    }
+
+    &:before {
+      @extend %icon-search;
+      position: absolute;
+      top: 16px;
+      left: 15px;
+      color: $nav-text;
+    }
   }
 
   .tocify-item>a, .toc-footer li {
     padding: 0 $nav-padding 0 $nav-padding;
-    display:block;
-    overflow-x:hidden;
+    display: block;
+    overflow-x: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
