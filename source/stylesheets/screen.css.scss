@@ -243,6 +243,28 @@ html, body {
 ////////////////////////////////////////////////////////////////////////////////
 // This is all the stuff with the light background in the left half of the page
 
+.search-info {
+  margin-top: 0;
+  min-height: 52px;
+  padding: 1em 1.75em;
+  font-size: 1.2em;
+  font-weight: bold;
+  text-shadow: 0 1px 0 lighten($aside-notice-bg, 15%);
+  background: $aside-notice-bg; // TODO: color
+  position: fixed;
+  z-index: 75;
+  display: none;
+
+  @include box-sizing(border-box);
+
+  &:before {
+    @extend %icon-search;
+    vertical-align: middle;
+    padding-right: 0.5em;
+    font-size: 1.2em;
+  }
+}
+
 .content {
   // to place content above the dark box
   position: relative;
@@ -418,20 +440,6 @@ html, body {
 
     aside.success:before {
       @extend %icon-ok-sign;
-    }
-
-    aside.search-info {
-      font-size: 1.2em;
-      margin-top: 0;
-      height: 52px;
-      &:before {
-        @extend %icon-search;
-        font-size: 1.2em;
-      }
-    }
-
-    .search-nothing-found {
-      display: none;
     }
   }
 }

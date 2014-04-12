@@ -52,16 +52,12 @@ under the License.
       <% end %>
     </div>
     <div class="page-wrapper">
+      <div class="search-info"></div>
       <div class="content">
         <%= yield %>
         <% current_page.data.includes && current_page.data.includes.each do |include| %>
           <%= partial "includes/#{include}" %>
         <% end %>
-        <section class="search-nothing-found">
-          <aside class="search-info">
-            No results found
-          </aside>
-        </section>
       </div>
       <div class="dark-box">
         <% if language_tabs %>

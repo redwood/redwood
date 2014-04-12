@@ -1,6 +1,8 @@
 (function (global) {
 
   var $global = $(global);
+  var content, searchInfo;
+  var highlightOpts = { element: 'span', className: 'search-highlight' };
   var index = lunr(function () {
     this.ref('id');
     this.field('title', { boost: 10 });
@@ -14,7 +16,7 @@
   function populate () {
     $('h1').each(function () {
       var title = $(this);
-      var body = title.nextUntil('h1, .search-nothing-found');
+      var body = title.nextUntil('h1');
       var wrapper = $('<section id="section-' + title.prop('id') + '"></section>');
 
       title.after(wrapper.append(body));
@@ -30,38 +32,60 @@
   }
 
   function bind () {
-    $('#input-search').on('keyup', search);
+    content = $('.content');
+    searchInfo = $('.search-info');
+    $('#input-search')
+      .on('keyup', search)
+      .on('focus', active)
+      .on('blur', inactive);
   }
 
   function search (event) {
-    var $sections = $('section, #toc .tocify-header');
-    var $content = $('.content');
-    var opts = { element: 'span', className: 'search-highlight' };
+    var sections = $('section, #toc .tocify-header');
 
-    $content.unhighlight(opts);
+    searchInfo.hide();
+    unhighlight();
 
-    // esc clears the field
+    // ESC clears the field
     if (event.keyCode === 27) this.value = '';
 
     if (this.value) {
-      var items = index.search(this.value);
-      $sections.hide();
-      if (items.length) {
-        items.forEach(function (item) {
+      sections.hide();
+      var results = index.search(this.value);
+      if (results.length) {
+        $.each(results, function (index, item) {
           $('#section-' + item.ref).show();
           $('.tocify-item[data-unique=' + item.ref + ']').closest('.tocify-header').show();
         });
-        $content.highlight(this.value, opts);
+        highlight.call(this);
       } else {
-        $sections.filter('.search-nothing-found').show();
+        sections.show();
+        searchInfo.text('No Results Found for "' + this.value + '"').show();
       }
     } else {
-      $sections.show();
+      sections.show();
     }
 
     // HACK trigger tocify height recalculation
     $global.triggerHandler('scroll.tocify');
     $global.triggerHandler('resize');
+  }
+
+  function active () {
+    search.call(this, {});
+  }
+
+  function inactive () {
+    unhighlight();
+    searchInfo.hide();
+  }
+
+  function highlight () {
+    if (this.value) content.highlight(this.value, highlightOpts);
+  }
+
+  function unhighlight () {
+    content.unhighlight(highlightOpts);
   }
 
 })(window);
