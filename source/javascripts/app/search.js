@@ -14,7 +14,7 @@
   function populate () {
     $('h1').each(function () {
       var title = $(this);
-      var body = title.nextUntil('h1');
+      var body = title.nextUntil('h1, .search-nothing-found');
       var wrapper = $('<section id="section-' + title.prop('id') + '"></section>');
 
       title.after(wrapper.append(body));
@@ -33,18 +33,30 @@
     $('#input-search').on('keyup', search);
   }
 
-  function search () {
-    var sections = $('section, #toc .tocify-header');
+  function search (event) {
+    var $sections = $('section, #toc .tocify-header');
+    var $content = $('.content');
+    var opts = { element: 'span', className: 'search-highlight' };
+
+    $content.unhighlight(opts);
+
+    // esc clears the field
+    if (event.keyCode === 27) this.value = '';
 
     if (this.value) {
       var items = index.search(this.value);
-      sections.hide();
-      items.forEach(function (item) {
-        $('#section-' + item.ref).show();
-        $('.tocify-item[data-unique=' + item.ref + ']').closest('.tocify-header').show();
-      });
+      $sections.hide();
+      if (items.length) {
+        items.forEach(function (item) {
+          $('#section-' + item.ref).show();
+          $('.tocify-item[data-unique=' + item.ref + ']').closest('.tocify-header').show();
+        });
+        $content.highlight(this.value, opts);
+      } else {
+        $sections.filter('.search-nothing-found').show();
+      }
     } else {
-      sections.show();
+      $sections.show();
     }
 
     // HACK trigger tocify height recalculation

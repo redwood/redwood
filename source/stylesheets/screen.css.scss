@@ -33,10 +33,16 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   @extend %default-font;
   background-color: $main-bg;
+  height: 100%;
 }
 
-.highlight {
-  background-color: #FFFF88;
+.search-highlight {
+  background-image: linear-gradient(to bottom right, #F7E633 0%, #F1D32F 100%);
+  padding: 2px;
+  margin: -2px;
+  border-radius: 4px;
+  border: 1px solid #F7E633;
+  text-shadow: 1px 1px 0 #666;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -180,6 +186,7 @@ html, body {
   position: relative;
   z-index: 10;
   background-color: $main-bg;
+  min-height: 100%;
 
   padding-bottom: 1px; // prevent margin overflow
 
@@ -411,6 +418,20 @@ html, body {
 
     aside.success:before {
       @extend %icon-ok-sign;
+    }
+
+    aside.search-info {
+      font-size: 1.2em;
+      margin-top: 0;
+      height: 52px;
+      &:before {
+        @extend %icon-search;
+        font-size: 1.2em;
+      }
+    }
+
+    .search-nothing-found {
+      display: none;
     }
   }
 }

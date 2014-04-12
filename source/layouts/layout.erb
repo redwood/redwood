@@ -23,7 +23,7 @@ under the License.
 
     <%= stylesheet_link_tag :screen, media: :screen %>
     <%= stylesheet_link_tag :print, media: :print %>
-    <script src="https://code.jquery.com/jquery-1.10.1.min.js"></script>
+    <script src="https://code.jquery.com/javascripts/jquery-1.11.0.min.js"></script>
     <%= javascript_include_tag  "all" %>
 
     <% if language_tabs %>
@@ -57,6 +57,11 @@ under the License.
         <% current_page.data.includes && current_page.data.includes.each do |include| %>
           <%= partial "includes/#{include}" %>
         <% end %>
+        <section class="search-nothing-found">
+          <aside class="search-info">
+            No results found
+          </aside>
+        </section>
       </div>
       <div class="dark-box">
         <% if language_tabs %>
