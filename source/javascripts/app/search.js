@@ -3,12 +3,13 @@
   var $global = $(global);
   var content, searchInfo;
   var highlightOpts = { element: 'span', className: 'search-highlight' };
-  var index = lunr(function () {
-    this.ref('id');
-    this.field('title', { boost: 10 });
-    // this.field('tags', { boost: 100 });
-    this.field('body');
-  });
+
+  var index = new lunr.Index;
+
+  index.ref('id');
+  index.field('title', { boost: 10 });
+  index.field('body');
+  index.pipeline.add(lunr.trimmer, lunr.stopWordFilter);
 
   $(populate);
   $(bind);
@@ -25,7 +26,6 @@
       index.add({
         id: title.prop('id'),
         title: title.text(),
-        // tags: tags,
         body: body.text()
       });
     });
