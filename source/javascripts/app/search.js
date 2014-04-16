@@ -1,7 +1,7 @@
 (function (global) {
 
   var $global = $(global);
-  var content, searchInfo;
+  var content, darkBox, searchInfo;
   var highlightOpts = { element: 'span', className: 'search-highlight' };
 
   var index = new lunr.Index;
@@ -33,11 +33,16 @@
 
   function bind () {
     content = $('.content');
+    darkBox = $('.dark-box');
     searchInfo = $('.search-info');
+
     $('#input-search')
       .on('keyup', search)
       .on('focus', active)
       .on('blur', inactive);
+
+    $global.on('resize', resize);
+    resize();
   }
 
   function search (event) {
@@ -86,6 +91,10 @@
 
   function unhighlight () {
     content.unhighlight(highlightOpts);
+  }
+
+  function resize () {
+    searchInfo.innerWidth(content.innerWidth() - darkBox.innerWidth());
   }
 
 })(window);
