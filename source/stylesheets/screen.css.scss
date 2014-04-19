@@ -241,6 +241,11 @@ html, body {
 
   section {
     padding-bottom: 6em;
+    &:after {
+      content: '';
+      display: block;
+      clear: both;
+    }
 
     &>h1, &>h2, &>h3, &>h4, &>h5, &>h6, &>p, &>table, &>ul, &>ol, &>aside, &>dl {
       margin-right: $examples-width;
