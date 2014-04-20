@@ -40,9 +40,6 @@
       .on('keyup', search)
       .on('focus', active)
       .on('blur', inactive);
-
-    $global.on('resize', resize);
-    resize();
   }
 
   function search (event) {
@@ -91,10 +88,6 @@
 
   function unhighlight () {
     content.unhighlight(highlightOpts);
-  }
-
-  function resize () {
-    searchInfo.innerWidth(content.innerWidth() - darkBox.innerWidth());
   }
 
 })(window);
