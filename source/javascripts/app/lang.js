@@ -55,4 +55,21 @@ under the License.
     });
 
   }
+
+  // if we click on a language tab, activate that language
+  $(function() {
+    $("#lang-selector a").on("click", function() {
+      var lang = $(this).data("language-name");
+      var hash = window.location.hash;
+      if (hash) hash = hash.replace(/^#+/, '');
+      // do not reload the page every time the language is changed
+      if (history) history.pushState({}, '', '?' + lang + '#' + hash);
+
+      activateLanguage(lang);
+      return false;
+    });
+    window.onpopstate = function(event) {
+      activateLanguage(window.location.search.substr(1));
+    };
+  });
 })(window);
