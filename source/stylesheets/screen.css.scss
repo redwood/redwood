@@ -251,7 +251,7 @@ html, body {
   position: relative;
   z-index: 30;
 
-  section {
+  &, section {
     padding-bottom: 6em;
     &:after {
       content: '';
