@@ -81,6 +81,10 @@ html, body {
     }
   }
 
+  img+.tocify {
+    margin-top: $logo-margin;
+  }
+
   .search-info {
     margin-top: 0;
     padding: 1em $nav-padding;

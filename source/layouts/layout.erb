@@ -38,10 +38,12 @@ under the License.
   <body class="<%= page_classes %>">
     <div class="tocify-wrapper">
       <%= image_tag "logo.png" %>
-      <div class="search">
-        <input type="text" class="search" id="input-search">
-      </div>
-      <div class="search-info"></div>
+      <% if current_page.data.search %>
+        <div class="search">
+          <input type="text" class="search" id="input-search">
+        </div>
+        <div class="search-info"></div>
+      <% end %>
       <div id="toc">
       </div>
       <% if current_page.data.toc_footers %>
