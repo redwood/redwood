@@ -20,6 +20,7 @@ under the License.
   global.activateLanguage = activateLanguage;
 
   function activateLanguage(language) {
+    if (!language) return;
     $("#lang-selector a").removeClass('active');
     $("#lang-selector a[data-language-name='" + language + "']").addClass('active');
     for (var i=0; i < languages.length; i++) {
