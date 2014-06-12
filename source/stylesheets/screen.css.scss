@@ -42,7 +42,7 @@ html, body {
 ////////////////////////////////////////////////////////////////////////////////
 
 .tocify-wrapper {
-  @include transition(width ease-in-out 0.3s);
+  @include transition(left ease-in-out 0.3s);
   overflow-y: auto;
   overflow-x: hidden;
   position: fixed;
@@ -54,6 +54,10 @@ html, body {
   background-color: $nav-bg;
   font-size: 13px;
   font-weight: bold;
+
+  .lang-selector {
+    display: none; // only on mobile
+  }
 
   // This is the logo at the top of the ToC
   &>img {
@@ -244,37 +248,40 @@ html, body {
     bottom: 0;
   }
 
-  #lang-selector {
+  .lang-selector {
     position: fixed;
-    width: 100%;
     z-index: 50;
-    font-weight: bold;
-    background-color: $lang-select-bg;
     border-bottom: 5px solid $lang-select-active-bg;
-    a {
-      display: block;
-      float:left;
-      color: $lang-select-text;
-      text-decoration: none;
-      padding: 0 10px;
-      line-height: 30px;
+  }
+}
 
-      &:active {
-        background-color: $lang-select-pressed-bg;
-        color: $lang-select-pressed-text;
-      }
+.lang-selector {
+  background-color: $lang-select-bg;
+  width: 100%;
+  font-weight: bold;
+  a {
+    display: block;
+    float:left;
+    color: $lang-select-text;
+    text-decoration: none;
+    padding: 0 10px;
+    line-height: 30px;
 
-      &.active {
-        background-color: $lang-select-active-bg;
-        color: $lang-select-active-text;
-      }
+    &:active {
+      background-color: $lang-select-pressed-bg;
+      color: $lang-select-pressed-text;
     }
 
-    &:after {
-      content: '';
-      clear: both;
-      display: block;
+    &.active {
+      background-color: $lang-select-active-bg;
+      color: $lang-select-active-text;
     }
+  }
+
+  &:after {
+    content: '';
+    clear: both;
+    display: block;
   }
 }
 
@@ -534,10 +541,10 @@ html, body {
 
 @media (max-width: $tablet-width) {
   .tocify-wrapper {
-    width: 0;
+    left: -$nav-width;
 
     &.open {
-      width: $nav-width;
+      left: 0;
     }
   }
 
@@ -557,6 +564,14 @@ html, body {
 
   %left-col {
     margin-right: 0;
+  }
+
+  .tocify-wrapper .lang-selector {
+    display: block;
+  }
+
+  .page-wrapper .lang-selector {
+    display: none;
   }
 
   %right-col {
