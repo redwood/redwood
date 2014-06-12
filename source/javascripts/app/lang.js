@@ -22,17 +22,25 @@ under the License.
   function activateLanguage(language) {
     if (!language) return;
 
-    var hash = window.location.hash;
-    if (hash) hash = hash.replace(/^#+/, '');
-    // do not reload the page every time the language is changed
-    if (history) history.pushState({}, '', '?' + language + '#' + hash);
-
     $("#lang-selector a").removeClass('active');
     $("#lang-selector a[data-language-name='" + language + "']").addClass('active');
     for (var i=0; i < languages.length; i++) {
       $(".highlight." + languages[i]).hide();
     }
     $(".highlight." + language).show();
+
+    // scroll to the new location of the position
+    $(window.location.hash).get(0).scrollIntoView(true);
+  }
+
+  // if a button is clicked, add the state to the history
+  function pushURL(language) {
+    if (!history) { return; }
+    var hash = window.location.hash;
+    if (hash) {
+      hash = hash.replace(/^#+/, '');
+    }
+    history.pushState({}, '', '?' + language + '#' + hash);
   }
 
   function setupLanguages(l) {
@@ -60,6 +68,7 @@ under the License.
   $(function() {
     $("#lang-selector a").on("click", function() {
       var language = $(this).data("language-name");
+      pushURL(language);
       activateLanguage(language);
       return false;
     });
