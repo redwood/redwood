@@ -722,12 +722,14 @@
 
                         if(self.options.scrollHistory) {
 
-                            if(window.location.hash !== "#" + anchorText) {
+                            // IF STATEMENT ADDED BY ROBERT
 
-                                if(history.replaceState) { 
+                            if(window.location.hash !== "#" + anchorText && anchorText !== undefined) {
+
+                                if(history.replaceState) {
                                     history.replaceState({}, "", "#" + anchorText);
                                 // provide a fallback
-                                } else { 
+                                } else {
                                     scrollV = document.body.scrollTop;
                                     scrollH = document.body.scrollLeft;
                                     location.hash = "#" + anchorText;
