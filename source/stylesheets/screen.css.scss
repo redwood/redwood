@@ -294,6 +294,10 @@ html, body {
       );
     }
 
+    h1:first-child, div:first-child + h1 {
+      border-top-width: 0;
+    }
+
     h2 {
       @extend %header-font;
       font-size: 20px;
