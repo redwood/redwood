@@ -192,6 +192,7 @@ html, body {
   position: fixed;
   top: $main-padding / 2 - 8px;
   left: $main-padding / 2 - 8px;
+  padding: 0 1.5em 5em 0; // increase touch area size
   z-index: 100;
   color: #000;
   text-decoration: none;
