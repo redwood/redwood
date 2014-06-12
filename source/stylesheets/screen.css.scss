@@ -34,6 +34,7 @@ html, body {
   @extend %default-font;
   background-color: $main-bg;
   height: 100%;
+  -webkit-text-size-adjust: none; /* Never autoresize text */
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -41,9 +42,11 @@ html, body {
 ////////////////////////////////////////////////////////////////////////////////
 
 .tocify-wrapper {
+  @include transition(width ease-in-out 0.3s);
   overflow-y: auto;
   overflow-x: hidden;
   position: fixed;
+  z-index: 30;
   top: 0;
   left: 0;
   bottom: 0;
@@ -70,6 +73,7 @@ html, body {
       width: $nav-width - 30;
       outline: none;
       color: $nav-text;
+      border-radius: 0; /* ios has a default border radius */
     }
 
     &:before {
@@ -182,6 +186,35 @@ html, body {
 
 }
 
+// button to show navigation on mobile devices
+#nav-button {
+  display: none;
+  position: fixed;
+  top: $main-padding / 2 - 8px;
+  left: $main-padding / 2 - 8px;
+  z-index: 100;
+  color: #000;
+  text-decoration: none;
+  font-weight: bold;
+  opacity: 0.7;
+  line-height: 16px;
+  img {
+    height: 16px;
+  }
+  span {
+    position: absolute;
+    top: 30px;
+    left: -0.4em;
+    line-height: 1;
+    @include transform(rotate(-90deg));
+  }
+
+  @include transition(left ease-in-out 0.3s);
+
+  &:hover { opacity: 1; }
+  &.open {left: $main-padding / 2 - 8px + $nav-width}
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // PAGE LAYOUT AND CODE SAMPLE BACKGROUND
@@ -189,7 +222,6 @@ html, body {
 
 .page-wrapper {
   margin-left: $nav-width;
-  min-width: 700px;
   position: relative;
   z-index: 10;
   background-color: $main-bg;
@@ -486,5 +518,28 @@ html, body {
       border-top: 1px solid #000;
       border-bottom: 1px solid #404040;
     }
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// RESPONSIVE DESIGN
+////////////////////////////////////////////////////////////////////////////////
+// These are the styles for phones and tablets
+
+@media (max-width: $tablet-width) {
+  .tocify-wrapper {
+    width: 0;
+
+    &.open {
+      width: $nav-width;
+    }
+  }
+
+  .page-wrapper {
+    margin-left: 0;
+  }
+
+  #nav-button {
+    display: block;
   }
 }
