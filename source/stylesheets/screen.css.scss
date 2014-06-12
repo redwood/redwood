@@ -55,8 +55,13 @@ html, body {
   font-size: 13px;
   font-weight: bold;
 
+  // language selector for mobile devices
   .lang-selector {
-    display: none; // only on mobile
+    display: none;
+    a {
+      padding-top: 0.5em;
+      padding-bottom: 0.5em;
+    }
   }
 
   // This is the logo at the top of the ToC
@@ -555,6 +560,11 @@ html, body {
 
   #nav-button {
     display: block;
+  }
+
+  .tocify-wrapper .tocify-item > a {
+    padding-top: 0.3em;
+    padding-bottom: 0.3em;
   }
 }
 
