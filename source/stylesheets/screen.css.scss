@@ -226,14 +226,14 @@ html, body {
       padding: 0 10px;
       line-height: 30px;
 
-      &.active {
-        background-color: $lang-select-active-bg;
-        color: $lang-select-active-text;
-      }
-
       &:active {
         background-color: $lang-select-pressed-bg;
         color: $lang-select-pressed-text;
+      }
+
+      &.active {
+        background-color: $lang-select-active-bg;
+        color: $lang-select-active-text;
       }
     }
 
