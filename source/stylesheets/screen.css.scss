@@ -294,8 +294,10 @@ html, body {
       );
     }
 
-    h1:first-child, div:first-child + h1 {
-      border-top-width: 0;
+    &:first-child {
+      h1:first-child, div:first-child + h1 {
+        border-top-width: 0;
+      }
     }
 
     h2 {
