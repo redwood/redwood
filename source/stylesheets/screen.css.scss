@@ -588,11 +588,9 @@ html, body {
   %right-col {
     width: auto;
     float: none;
+  }
 
-    margin-bottom: $main-padding;
-
-    &+blockquote, &+pre {
-      margin-top: -$main-padding;
-    }
+  %right-col + %left-col {
+    margin-top: $main-padding;
   }
 }
