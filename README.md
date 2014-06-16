@@ -77,6 +77,8 @@ Special Thanks
 - [middleman-gh-pages](https://github.com/neo/middleman-gh-pages)
 - [Font Awesome](http://fortawesome.github.io/Font-Awesome/)
 
+Also, thanks to [Sauce Labs](http://saucelabs.com) for helping sponsor the project.
+
 Contributors
 --------------------
 
