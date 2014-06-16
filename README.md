@@ -55,6 +55,8 @@ Now that Slate is all set up your machine, you'll probably want to learn more ab
 Examples of Slate in the Wild
 ---------------------------------
 
+* [Travis-CI's API docs](http://docs.travis-ci.com/api/)
+* [Mozilla's localForage docs](http://mozilla.github.io/localForage/)
 * [Orchestrate.io API docs](https://docs.orchestrate.io/)
 * [ChaiOne Gameplan API docs](http://chaione.github.io/gameplanb2b/#introduction)
 * [Drcaban's Build a Quine tutorial](http://drcabana.github.io/build-a-quine/#introduction)
