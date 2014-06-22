@@ -4,7 +4,7 @@
   var content, darkBox, searchInfo;
   var highlightOpts = { element: 'span', className: 'search-highlight' };
 
-  var index = new lunr.Index;
+  var index = new lunr.Index();
 
   index.ref('id');
   index.field('title', { boost: 10 });
@@ -92,7 +92,7 @@
         // position first element. it wasn't positioned above if len > 1
         if (results.length > 1) {
           var firstRef = results[0].ref;
-          var secondRef = results[1].ref
+          var secondRef = results[1].ref;
           refToHeader(firstRef).insertBefore(refToHeader(secondRef));
         }
 
