@@ -14,8 +14,8 @@
   $(populate);
   $(bind);
 
-  function populate () {
-    $('h1').each(function () {
+  function populate() {
+    $('h1').each(function() {
       var title = $(this);
       var body = title.nextUntil('h1');
       var wrapper = $('<section id="section-' + title.prop('id') + '"></section>');
@@ -31,7 +31,7 @@
     });
   }
 
-  function bind () {
+  function bind() {
     content = $('.content');
     darkBox = $('.dark-box');
     searchInfo = $('.search-info');
@@ -42,24 +42,24 @@
       .on('blur', inactive);
   }
 
-  function refToHeader (itemRef) {
+  function refToHeader(itemRef) {
     return $('.tocify-item[data-unique=' + itemRef + ']').closest('.tocify-header');
   }
 
-  function sortDescending (obj2, obj1) {
+  function sortDescending(obj2, obj1) {
     var s1 = parseInt(obj1.id.replace(/[^\d]/g, ''), 10);
     var s2 = parseInt(obj2.id.replace(/[^\d]/g, ''), 10);
     return s1 === s2 ? 0 : s1 < s2 ? -1 : 1;
   }
 
-  function resetHeaderLocations () {
+  function resetHeaderLocations() {
     var headers = $(".tocify-header").sort(sortDescending);
     $.each(headers, function (index, item) {
       $(item).insertBefore($("#toc ul:first-child"));
     });
   }
 
-  function search (event) {
+  function search(event) {
     var sections = $('section, #toc .tocify-header');
 
     searchInfo.hide();
@@ -110,20 +110,20 @@
     $global.triggerHandler('resize');
   }
 
-  function active () {
+  function active() {
     search.call(this, {});
   }
 
-  function inactive () {
+  function inactive() {
     unhighlight();
     searchInfo.hide();
   }
 
-  function highlight () {
+  function highlight() {
     if (this.value) content.highlight(this.value, highlightOpts);
   }
 
-  function unhighlight () {
+  function unhighlight() {
     content.unhighlight(highlightOpts);
   }
 
