@@ -681,9 +681,11 @@
                             self.calculateHeights();
                         }
 
+                        var scrollTop = $(window).scrollTop();
+
                         // Determines the index of the closest anchor
                         self.cachedAnchors.each(function(idx) {
-                            if (self.cachedHeights[idx] - $(window).scrollTop() < 0) {
+                            if (self.cachedHeights[idx] - scrollTop < 0) {
                                 closestAnchorIdx = idx;
                             } else {
                                 return false;
@@ -696,7 +698,7 @@
                         elem = $('li[data-unique="' + anchorText + '"]');
 
                         // If the `highlightOnScroll` option is true and a next element is found
-                        if(self.options.highlightOnScroll && elem.length) {
+                        if(self.options.highlightOnScroll && elem.length && !elem.hasClass(self.focusClass)) {
 
                             // Removes highlighting from all of the list item's
                             self.element.find("." + self.focusClass).removeClass(self.focusClass);
