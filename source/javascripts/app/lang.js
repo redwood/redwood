@@ -21,6 +21,7 @@ under the License.
 
   function activateLanguage(language) {
     if (!language) return;
+    if (language === "") return;
 
     $(".lang-selector a").removeClass('active');
     $(".lang-selector a[data-language-name='" + language + "']").addClass('active');
