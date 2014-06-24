@@ -74,7 +74,7 @@ Just [submit a issue](https://github.com/tripit/slate/issues) to the Slate Githu
 Contributors
 --------------------
 
-Slate was built by [Robert Lord](http://lord.io) ([gh](https://github.com/lord), [tw](http://twitter.com/rlordio)) while at [TripIt](http://tripit.com).
+Slate was built by [Robert Lord](http://lord.io) while at [TripIt](http://tripit.com).
 
 Also, thanks to the following people who have submitted major pull requests:
 
