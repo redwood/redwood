@@ -71,6 +71,18 @@ Need Help? Found a bug?
 Just [submit a issue](https://github.com/tripit/slate/issues) to the Slate Github if you need any help. And, of course, feel free to submit pull requests with bug fixes or changes.
 
 
+Contributors
+--------------------
+
+Slate was built by [Robert Lord](http://lord.io) ([gh](https://github.com/lord), [tw](http://twitter.com/rlordio)) while at [TripIt](http://tripit.com).
+
+Also, thanks to the following people who have submitted major pull requests:
+
+- [@chrissrogers](https://github.com/chrissrogers)
+- [@bootstraponline](https://github.com/bootstraponline)
+
+Also, thanks to [Sauce Labs](http://saucelabs.com) for helping sponsor the project.
+
 Special Thanks
 --------------------
 - [Middleman](https://github.com/middleman/middleman)
@@ -78,13 +90,3 @@ Special Thanks
 - [middleman-syntax](https://github.com/middleman/middleman-syntax)
 - [middleman-gh-pages](https://github.com/neo/middleman-gh-pages)
 - [Font Awesome](http://fortawesome.github.io/Font-Awesome/)
-
-Also, thanks to [Sauce Labs](http://saucelabs.com) for helping sponsor the project.
-
-Contributors
---------------------
-
-Thanks to the following people who have submitted pull requests:
-
-- [@chrissrogers](https://github.com/chrissrogers)
-- [@bootstraponline](https://github.com/bootstraponline)
