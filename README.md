@@ -76,7 +76,7 @@ Contributors
 
 Slate was built by [Robert Lord](http://lord.io) while at [TripIt](http://tripit.com).
 
-Also, thanks to the following people who have submitted major pull requests:
+Thanks to the following people who have submitted major pull requests:
 
 - [@chrissrogers](https://github.com/chrissrogers)
 - [@bootstraponline](https://github.com/bootstraponline)
