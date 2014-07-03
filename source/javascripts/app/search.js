@@ -15,9 +15,9 @@
   $(bind);
 
   function populate() {
-    $('h1').each(function() {
+    $('h1, h2').each(function() {
       var title = $(this);
-      var body = title.nextUntil('h1');
+      var body = title.nextUntil('h1, h2');
       index.add({
         id: title.prop('id'),
         title: title.text(),
@@ -31,13 +31,7 @@
     darkBox = $('.dark-box');
     searchResults = $('.search-results');
 
-    $('#input-search').on('keyup', function(e) {
-      if ($(this).val() === "") {
-        inactive(e);
-      } else {
-        search(e);
-      }
-    });
+    $('#input-search').on('keyup', search);
   }
 
   function search(event) {
@@ -48,23 +42,23 @@
     if (event.keyCode === 27) this.value = '';
 
     if (this.value) {
-      var results = index.search(this.value);
+      var results = index.search(this.value).filter(function(r) {
+        return r.score > 0.0001;
+      });
+
       if (results.length) {
+        searchResults.empty();
         $.each(results, function (index, result) {
-          var header = $('.tocify-item[data-unique=' + result.ref + ']').closest('.tocify-header');
-          if (header.length > 0) header = header[0];
-          if (header) $("#" + header.id + " li a").append("<span>" + result.score + "</span>");
+          searchResults.append("<li><a href='#" + result.ref + "'>" + $('#'+result.ref).text() + "</a></li>");
         });
         highlight.call(this);
       } else {
-        searchResults.text('No Results Found for "' + this.value + '"').show();
+        searchResults.html('<li>No Results Found for "' + this.value + '"</li>');
       }
+    } else {
+      unhighlight();
+      searchResults.removeClass('visible');
     }
-  }
-
-  function inactive() {
-    unhighlight();
-    searchResults.removeClass('visible');
   }
 
   function highlight() {
