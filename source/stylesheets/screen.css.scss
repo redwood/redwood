@@ -127,7 +127,8 @@ html, body {
     margin-top: 0;
     @include box-sizing(border-box);
     height: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     @include transition-property(height margin);
     @include transition-duration(180ms);
     @include transition-timing-function(ease-in-out);
