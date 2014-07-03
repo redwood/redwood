@@ -48,6 +48,24 @@ html, body {
   width: 20px;
 }
 
+@mixin embossed-bg {
+  @include background(
+    linear-gradient(top,
+                    rgba(#000, 0.2),
+                    rgba(#000, 0) 8px),
+    linear-gradient(bottom,
+                    rgba(#000, 0.2),
+                    rgba(#000, 0) 8px),
+    linear-gradient(top,
+                    rgba($nav-embossed-border-top, 1),
+                    rgba($nav-embossed-border-top, 0) 1.5px),
+    linear-gradient(bottom,
+                    rgba($nav-embossed-border-bottom, 1),
+                    rgba($nav-embossed-border-bottom, 0) 1.5px),
+    $nav-subitem-bg
+  );
+}
+
 .tocify-wrapper {
   @include transition(left ease-in-out 0.3s);
   overflow-y: auto;
@@ -85,7 +103,7 @@ html, body {
       border-color: $search-box-border-color;
       padding: 6px 0 6px 20px;
       @include box-sizing(border-box);
-      margin: 10px 15px;
+      margin: $nav-v-padding $nav-padding;
       width: $nav-width - 30;
       outline: none;
       color: $nav-text;
@@ -95,7 +113,7 @@ html, body {
     &:before {
       position: absolute;
       top: 17px;
-      left: 15px;
+      left: $nav-padding;
       color: $nav-text;
       @extend %icon-search;
     }
@@ -107,14 +125,32 @@ html, body {
 
   .search-results {
     margin-top: 0;
-    padding: 1em $nav-padding;
-    font-size: 0.9em;
-    font-weight: bold;
-    text-shadow: 0 1px 0 lighten($search-notice-bg, 15%);
-    background: $search-notice-bg;
-    display: none;
-
     @include box-sizing(border-box);
+    height: 0;
+    overflow: hidden;
+    @include transition-property(height margin);
+    @include transition-duration(180ms);
+    @include transition-timing-function(ease-in-out);
+    &.visible {
+      height: 30%;
+      margin-bottom: 1em;
+    }
+
+    @include embossed-bg;
+
+    li {
+      margin: 1em $nav-padding;
+      line-height: 1;
+    }
+
+    a {
+      color: $nav-text;
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
   }
 
 
@@ -156,25 +192,14 @@ html, body {
     display: none; // tocify will override this when needed
     background-color: $nav-subitem-bg;
     font-weight: 500;
-    @include background-image(
-      linear-gradient(top,
-                      darken($nav-subitem-bg,2%),
-                      $nav-subitem-bg 10%,
-                      $nav-subitem-bg 90%,
-                      darken($nav-subitem-bg,2%))
-    );
     .tocify-item>a {
       padding-left: $nav-padding + $nav-indent;
       font-size: 12px;
     }
-    // These items make for a slight embossed look for the subheader.
-    // "Why not put the borders in the subheader?" you ask.
-    // "Because then the animation isn't as smooth," I reply.
-    &>li:first-child {
-      border-top: $nav-embossed-border-top;
-    }
+
+    // for embossed look:
+    @include embossed-bg;
     &>li:last-child {
-      border-bottom: $nav-embossed-border-bottom;
       box-shadow: none; // otherwise it'll overflow out of the subheader
     }
   }
