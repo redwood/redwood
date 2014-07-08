@@ -21,9 +21,10 @@ under the License.
 
   function activateLanguage(language) {
     if (!language) return;
+    if (language === "") return;
 
-    $("#lang-selector a").removeClass('active');
-    $("#lang-selector a[data-language-name='" + language + "']").addClass('active');
+    $(".lang-selector a").removeClass('active');
+    $(".lang-selector a[data-language-name='" + language + "']").addClass('active');
     for (var i=0; i < languages.length; i++) {
       $(".highlight." + languages[i]).hide();
     }
@@ -41,6 +42,9 @@ under the License.
       hash = hash.replace(/^#+/, '');
     }
     history.pushState({}, '', '?' + language + '#' + hash);
+
+    // save language as next default
+    localStorage.setItem("language", language);
   }
 
   function setupLanguages(l) {
@@ -53,7 +57,6 @@ under the License.
       // the language is in the URL, so use that language!
       activateLanguage(location.search.substr(1));
 
-      // set this language as the default for next time, if the URL has no language
       localStorage.setItem("language", location.search.substr(1));
     } else if ((defaultLanguage !== null) && (jQuery.inArray(defaultLanguage, languages) != -1)) {
       // the language was the last selected one saved in localstorage, so use that language!
@@ -66,7 +69,7 @@ under the License.
 
   // if we click on a language tab, activate that language
   $(function() {
-    $("#lang-selector a").on("click", function() {
+    $(".lang-selector a").on("click", function() {
       var language = $(this).data("language-name");
       pushURL(language);
       activateLanguage(language);
