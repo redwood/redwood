@@ -1,6 +1,6 @@
 module RedcarpetHeaderFix
-  def header(text, level, id)
-    clean_id = id.gsub(/[\.]/, '-').gsub(/[^a-zA-Z0-9\-_]/, '')
+  def header(text, level)
+    clean_id = text.downcase.gsub(/( +|\.+)/, '-').gsub(/[^a-zA-Z0-9\-_]/, '')
     "<h#{level} id='#{clean_id}'>#{text}</h#{level}>"
   end
 end
