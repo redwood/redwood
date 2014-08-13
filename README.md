@@ -62,6 +62,7 @@ Examples of Slate in the Wild
 * [Drcaban's Build a Quine tutorial](http://drcabana.github.io/build-a-quine/#introduction)
 * [PricePlow API docs](https://www.priceplow.com/api/documentation)
 * [Emerging Threats API docs](http://apidocs.emergingthreats.net/)
+* [Appium docs](http://appium.io/slate/en/master)
 
 (Feel free to add your site to this list in a pull request!)
 
