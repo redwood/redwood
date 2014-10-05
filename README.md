@@ -64,6 +64,7 @@ Examples of Slate in the Wild
 * [PricePlow API docs](https://www.priceplow.com/api/documentation)
 * [Emerging Threats API docs](http://apidocs.emergingthreats.net/)
 * [Appium docs](http://appium.io/slate/en/master)
+* [Golazon Developer](http://developer.golazon.com)
 
 (Feel free to add your site to this list in a pull request!)
 
