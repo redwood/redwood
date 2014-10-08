@@ -53,7 +53,7 @@
         });
         highlight.call(this);
       } else {
-        searchResults.html('<li>No Results Found for "' + this.value + '"</li>');
+        searchResults.html('<li>No Results Found for "' + this.value.escapeHTML() + '"</li>');
       }
     } else {
       unhighlight();
@@ -67,6 +67,21 @@
 
   function unhighlight() {
     content.unhighlight(highlightOpts);
+  }
+
+  var __entityMap = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': '&quot;',
+    "'": '&#39;',
+    "/": '&#x2F;'
+  };
+
+  String.prototype.escapeHTML = function() {
+      return String(this).replace(/[&<>"'\/]/g, function (s) {
+        return __entityMap[s];
+      });
   }
 
 })(window);
