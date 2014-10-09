@@ -53,7 +53,8 @@
         });
         highlight.call(this);
       } else {
-        searchResults.html('<li>No Results Found for "' + this.value.escapeHTML() + '"</li>');
+        searchResults.html('<li></li>');
+	$('.search-results li').text('No Results Found for "' + this.value + '"');
       }
     } else {
       unhighlight();
@@ -67,21 +68,6 @@
 
   function unhighlight() {
     content.unhighlight(highlightOpts);
-  }
-
-  var __entityMap = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': '&quot;',
-    "'": '&#39;',
-    "/": '&#x2F;'
-  };
-
-  String.prototype.escapeHTML = function() {
-      return String(this).replace(/[&<>"'\/]/g, function (s) {
-        return __entityMap[s];
-      });
   }
 
 })(window);
