@@ -35,9 +35,9 @@ api = Kittn::APIClient.authorize!('meowmeowmeow')
 ```
 
 ```python
-import 'kittn'
+import kittn
 
-api = Kittn.authorize('meowmeowmeow')
+api = kittn.authorize('meowmeowmeow')
 ```
 
 ```shell
@@ -70,9 +70,9 @@ api.kittens.get
 ```
 
 ```python
-import 'kittn'
+import kittn
 
-api = Kittn.authorize('meowmeowmeow')
+api = kittn.authorize('meowmeowmeow')
 api.kittens.get()
 ```
 
@@ -129,9 +129,9 @@ api.kittens.get(2)
 ```
 
 ```python
-import 'kittn'
+import kittn
 
-api = Kittn.authorize('meowmeowmeow')
+api = kittn.authorize('meowmeowmeow')
 api.kittens.get(2)
 ```
 
