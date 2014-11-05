@@ -475,6 +475,11 @@ html, body {
     @extend %code-font;
   }
 
+  pre>code {
+    background-color: transparent;
+    padding: 0;
+  }
+
   aside {
     padding-top: 1em;
     padding-bottom: 1em;
