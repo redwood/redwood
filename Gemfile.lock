@@ -1,7 +1,7 @@
 GEM
   remote: http://rubygems.org/
   specs:
-    activesupport (4.1.7)
+    activesupport (4.1.8)
       i18n (~> 0.6, >= 0.6.9)
       json (~> 1.7, >= 1.7.7)
       minitest (~> 5.1)
@@ -33,7 +33,7 @@ GEM
     eventmachine (1.0.3)
     execjs (2.2.2)
     ffi (1.9.6)
-    haml (4.0.5)
+    haml (4.0.6)
       tilt
     hike (1.2.3)
     hitimes (1.2.2)
@@ -44,22 +44,22 @@ GEM
     json (1.8.1)
     kramdown (1.5.0)
     libv8 (3.16.14.7)
-    listen (2.7.11)
+    listen (2.8.3)
       celluloid (>= 0.15.2)
       rb-fsevent (>= 0.9.3)
       rb-inotify (>= 0.9)
-    middleman (3.3.6)
+    middleman (3.3.7)
       coffee-script (~> 2.2)
       compass (>= 1.0.0, < 2.0.0)
       compass-import-once (= 1.0.5)
       execjs (~> 2.0)
       haml (>= 4.0.5)
       kramdown (~> 1.2)
-      middleman-core (= 3.3.6)
+      middleman-core (= 3.3.7)
       middleman-sprockets (>= 3.1.2)
       sass (>= 3.4.0, < 4.0)
       uglifier (~> 2.5)
-    middleman-core (3.3.6)
+    middleman-core (3.3.7)
       activesupport (~> 4.1.0)
       bundler (~> 1.1)
       erubis
@@ -85,7 +85,7 @@ GEM
     middleman-syntax (2.0.0)
       middleman-core (~> 3.2)
       rouge (~> 1.0)
-    minitest (5.4.2)
+    minitest (5.4.3)
     multi_json (1.10.1)
     padrino-helpers (0.12.4)
       i18n (~> 0.6, >= 0.6.7)
@@ -98,15 +98,15 @@ GEM
       rack
     rack-test (0.6.2)
       rack (>= 1.0)
-    rake (10.3.2)
+    rake (10.4.2)
     rb-fsevent (0.9.4)
     rb-inotify (0.9.5)
       ffi (>= 0.5.0)
-    redcarpet (3.1.2)
+    redcarpet (3.2.1)
     ref (1.0.5)
-    rouge (1.7.2)
+    rouge (1.7.4)
     ruby18_source_location (0.2)
-    sass (3.4.7)
+    sass (3.4.9)
     sprockets (2.12.3)
       hike (~> 1.2)
       multi_json (~> 1.0)
@@ -127,7 +127,7 @@ GEM
       hitimes
     tzinfo (1.2.2)
       thread_safe (~> 0.1)
-    uber (0.0.10)
+    uber (0.0.11)
     uglifier (2.5.3)
       execjs (>= 0.3.0)
       json (>= 1.8.0)
@@ -140,8 +140,8 @@ DEPENDENCIES
   middleman-gh-pages
   middleman-livereload (~> 3.3.0)
   middleman-syntax
-  rake (~> 10.3.0)
-  redcarpet (~> 3.1.1)
+  rake (~> 10.4.0)
+  redcarpet (~> 3.2.1)
   ruby18_source_location
   therubyracer
   wdm (~> 0.1.0)
