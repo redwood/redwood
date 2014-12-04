@@ -30,6 +30,8 @@ under the License.
     }
     $(".highlight." + language).parent().show();
 
+    global.toc.calculateHeights();
+
     // scroll to the new location of the position
     $(window.location.hash).get(0).scrollIntoView(true);
   }
