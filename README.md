@@ -65,6 +65,7 @@ Examples of Slate in the Wild
 * [Appium docs](http://appium.io/slate/en/master)
 * [Golazon Developer](http://developer.golazon.com)
 * [Dwolla API docs](https://docs.dwolla.com/)
+* [RozpisyZapasu API docs](http://www.rozpisyzapasu.cz/dev/api/)
 
 (Feel free to add your site to this list in a pull request!)
 
