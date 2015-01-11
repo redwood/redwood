@@ -66,6 +66,7 @@ Examples of Slate in the Wild
 * [Golazon Developer](http://developer.golazon.com)
 * [Dwolla API docs](https://docs.dwolla.com/)
 * [RozpisyZapasu API docs](http://www.rozpisyzapasu.cz/dev/api/)
+* [Codestar Framework Docs](http://codestarframework.com/documentation/)
 
 (Feel free to add your site to this list in a pull request!)
 
