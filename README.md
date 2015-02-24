@@ -97,6 +97,7 @@ Thanks to the following people who have submitted major pull requests:
 
 - [@chrissrogers](https://github.com/chrissrogers)
 - [@bootstraponline](https://github.com/bootstraponline)
+- [@realityking](https://github.com/realityking)
 
 Also, thanks to [Sauce Labs](http://saucelabs.com) for helping sponsor the project.
 
