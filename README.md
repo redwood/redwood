@@ -79,6 +79,7 @@ Examples of Slate in the Wild
 * [RozpisyZapasu API docs](http://www.rozpisyzapasu.cz/dev/api/)
 * [Codestar Framework Docs](http://codestarframework.com/documentation/)
 * [Buddycloud API](http://buddycloud.com/api)
+* [Crafty Clicks API](https://craftyclicks.co.uk/api/)
 
 (Feel free to add your site to this list in a pull request!)
 
