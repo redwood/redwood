@@ -81,6 +81,7 @@ Examples of Slate in the Wild
 * [Buddycloud API](http://buddycloud.com/api)
 * [Crafty Clicks API](https://craftyclicks.co.uk/api/)
 * [Paracel API Reference](http://paracel.io/docs/api_reference.html)
+* [Switch Payments Documentation](http://switchpayments.com/docs/) & [API](http://switchpayments.com/developers/)
 
 (Feel free to add your site to this list in a pull request!)
 
