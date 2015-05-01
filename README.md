@@ -84,8 +84,10 @@ Examples of Slate in the Wild
 * [Switch Payments Documentation](http://switchpayments.com/docs/) & [API](http://switchpayments.com/developers/)
 * [Coinbase API Reference](https://developers.coinbase.com/api)
 * [Whispir.io API](https://whispir.github.io/api)
-* [Nasa API](https://data.nasa.gov/developer/external/planetary/)
+* [NASA API](https://data.nasa.gov/developer/external/planetary/)
 * [CardPay API](https://developers.cardpay.com/)
+* [IBM Cloudant](https://docs-testb.cloudant.com/content-review/_design/couchapp/index.html)
+* [Bitrix basis components](http://bbc.bitrix.expert/)
 
 (Feel free to add your site to this list in a pull request!)
 

@@ -1,4 +1,5 @@
 (function (global) {
+  'use strict';
 
   var $global = $(global);
   var content, darkBox, searchResults;
@@ -49,7 +50,8 @@
       if (results.length) {
         searchResults.empty();
         $.each(results, function (index, result) {
-          searchResults.append("<li><a href='#" + result.ref + "'>" + $('#'+result.ref).text() + "</a></li>");
+          var elem = document.getElementById(result.ref);
+          searchResults.append("<li><a href='#" + result.ref + "'>" + $(elem).text() + "</a></li>");
         });
         highlight.call(this);
       } else {
