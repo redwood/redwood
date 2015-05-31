@@ -7,6 +7,9 @@ GEM
       minitest (~> 5.1)
       thread_safe (~> 0.1)
       tzinfo (~> 1.1)
+    autoprefixer-rails (5.2.0)
+      execjs
+      json
     celluloid (0.16.0)
       timers (~> 4.0.0)
     chunky_png (1.3.4)
@@ -54,6 +57,9 @@ GEM
       middleman-sprockets (>= 3.1.2)
       sass (>= 3.4.0, < 4.0)
       uglifier (~> 2.5)
+    middleman-autoprefixer (2.4.4)
+      autoprefixer-rails (~> 5.2.0)
+      middleman-core (>= 3.3.3)
     middleman-core (3.3.11)
       activesupport (~> 4.1.0)
       bundler (~> 1.1)
@@ -125,6 +131,7 @@ PLATFORMS
 
 DEPENDENCIES
   middleman (~> 3.3.10)
+  middleman-autoprefixer (~> 2.4.4)
   middleman-gh-pages (~> 0.0.3)
   middleman-syntax (~> 2.0.0)
   rake (~> 10.4.2)
