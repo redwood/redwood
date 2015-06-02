@@ -54,7 +54,6 @@ under the License.
   }
 
   function setupLanguages(l) {
-    var currentLanguage = l[0];
     var defaultLanguage = localStorage.getItem("language");
 
     languages = l;
@@ -81,7 +80,7 @@ under the License.
       activateLanguage(language);
       return false;
     });
-    window.onpopstate = function(event) {
+    window.onpopstate = function() {
       activateLanguage(window.location.search.substr(1));
     };
   });
