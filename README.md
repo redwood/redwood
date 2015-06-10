@@ -88,6 +88,7 @@ Examples of Slate in the Wild
 * [CardPay API](https://developers.cardpay.com/)
 * [IBM Cloudant](https://docs-testb.cloudant.com/content-review/_design/couchapp/index.html)
 * [Bitrix basis components](http://bbc.bitrix.expert/)
+* [viagogo API Documentation](http://developer.viagogo.net/)
 
 (Feel free to add your site to this list in a pull request!)
 
