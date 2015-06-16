@@ -89,6 +89,7 @@ Examples of Slate in the Wild
 * [IBM Cloudant](https://docs-testb.cloudant.com/content-review/_design/couchapp/index.html)
 * [Bitrix basis components](http://bbc.bitrix.expert/)
 * [viagogo API Documentation](http://developer.viagogo.net/)
+* [Fidor Bank API Documentation](http://docs.fidor.de/)
 
 (Feel free to add your site to this list in a pull request!)
 
