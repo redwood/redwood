@@ -106,15 +106,12 @@ under the License.
 
   // returns a new query string with the new language in it
   function generateNewQueryString(language) {
-    if (location.search.length >= 1) {
-      var url = parseURL(location.search);
-      if (url.language) {
-        url.language = language;
-        return stringifyURL(url);
-      } else {
-        return language
-      }
+    var url = parseURL(location.search);
+    if (url.language) {
+      url.language = language;
+      return stringifyURL(url);
     }
+    return language;
   }
 
   // if a button is clicked, add the state to the history
