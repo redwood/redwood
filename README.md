@@ -93,6 +93,7 @@ Examples of Slate in the Wild
 * [Market Prophit API Documentation](http://developer.marketprophit.com/)
 * [OAuth.io API Documentation](http://docs.oauth.io/)
 * [Aircall for Developers](http://developer.aircall.io/)
+* [SupportKit API Docs](http://docs.supportkit.io/)
 
 (Feel free to add your site to this list in a pull request!)
 
