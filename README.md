@@ -43,23 +43,27 @@ You're going to need:
 
 ### Getting Set Up
 
- 1. Fork this repository on Github.
- 2. Clone *your forked repository* (not our original one) to your hard drive with `git clone https://github.com/YOURUSERNAME/slate.git`
- 3. `cd slate`
- 4. Install all dependencies: `bundle install`
- 5. Start the test server: `bundle exec middleman server`
-
-Or use the included Dockerfile! (must install Docker first)
-
+1. Fork this repository on Github.
+2. Clone *your forked repository* (not our original one) to your hard drive with `git clone https://github.com/YOURUSERNAME/slate.git`
+3. `cd slate`
+4. Initialize and start
+  * Manually:
+```shell
+bundle install
+bundle exec middleman server
+```    
+  * Or via Docker (must install Docker first)
 ```shell
 docker build -t slate .
 docker run -d -p 4567:4567 --name slate -v $(pwd)/source:/app/source slate
+```    
+  You can now see the docs at http://localhost:4567. Whoa! That was fast! Note: if you're using the Docker setup on OSX, the docs will be
+  availalable at the output of `boot2docker ip` instead of `localhost:4567`.
+  * Or via Vagrant
+```shell
+vagrant up
 ```
-
-You can now see the docs at <http://localhost:4567>. Whoa! That was fast!
-
-*Note: if you're using the Docker setup on OSX, the docs will be
-availalable at the output of `boot2docker ip` instead of `localhost:4567`.*
+  You can now see the docs at http://localhost:4567.
 
 Now that Slate is all set up your machine, you'll probably want to learn more about [editing Slate markdown](https://github.com/tripit/slate/wiki/Markdown-Syntax), or [how to publish your docs](https://github.com/tripit/slate/wiki/Deploying-Slate).
 
@@ -97,6 +101,7 @@ Examples of Slate in the Wild
 * [SocialRadar's LocationKit Docs](https://docs.locationkit.io/)
 * [SafetyCulture API Documentation](https://developer.safetyculture.io/)
 * [hosting.de API Documentation](https://www.hosting.de/docs/api/)
+* [CheddarGetter API Documentation](http://docs.cheddargetter.com)
 
 (Feel free to add your site to this list in a pull request!)
 
