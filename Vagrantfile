@@ -9,7 +9,7 @@ Vagrant.configure(2) do |config|
     type: "shell",
     inline: <<-SHELL
       sudo apt-get update
-      sudo apt-get install -yq ruby ruby-dev build-essential nodejs
+      sudo apt-get install -yq ruby ruby-dev build-essential nodejs git
       sudo apt-get autoremove -yq
       gem install --no-ri --no-rdoc bundler
     SHELL
