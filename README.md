@@ -98,6 +98,7 @@ Examples of Slate in the Wild
 * [hosting.de API Documentation](https://www.hosting.de/docs/api/)
 * [BlockCypher's API Documentation](http://dev.blockcypher.com)
 * [InterServer API Documentation](https://my.interserver.net/apidoc/)
+* [ActionHeroJS's API Documentation](http://www.actionherojs.com/docs)
 
 (Feel free to add your site to this list in a pull request!)
 
