@@ -109,6 +109,7 @@ Examples of Slate in the Wild
 * [SafetyCulture API Documentation](https://developer.safetyculture.io/)
 * [hosting.de API Documentation](https://www.hosting.de/docs/api/)
 * [CheddarGetter API Documentation](http://docs.cheddargetter.com)
+* [Invoiced API](https://invoiced.com/docs/api)
 
 (Feel free to add your site to this list in a pull request!)
 
