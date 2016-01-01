@@ -47,23 +47,28 @@ You're going to need:
 2. Clone *your forked repository* (not our original one) to your hard drive with `git clone https://github.com/YOURUSERNAME/slate.git`
 3. `cd slate`
 4. Initialize and start (there are a few options for this):
- 
+
 #### Manual/local
 
 ```shell
 bundle install
 bundle exec middleman server
-```    
-#### Via Docker (must install Docker first)
+```
+
+#### Via Docker (must install it first)
 
 ```shell
-docker build -t slate .
-docker run -d -p 4567:4567 --name slate -v $(pwd)/source:/app/source slate
-```    
+docker-compose up
+```
 
-You can now see the docs at http://localhost:4567. Whoa! That was fast! 
+will spin an environment for you, with the `source` directory mapped to the
+container, so you can see your edits instantly after refreshing your browser.
 
-*Note: if you're using the Docker setup on OSX, the docs will be availalable at the output of `boot2docker ip` instead of `localhost:4567`.*
+You can now see the docs at http://localhost:4567. Whoa! That was fast!
+
++*Note: if you're not using Docker natively (i.e. on Linux), the docs will be
++available at the IP of your docker host. If you're using docker-machine you can
++retrieve it with `docker-machine ip <your_machine_name>`*
 
 #### Via Vagrant
 ```shell
