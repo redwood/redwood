@@ -94,7 +94,7 @@ curl "http://example.com/api/kittens"
   },
   {
     "id": 2,
-    "name": "Isis",
+    "name": "Max",
     "breed": "unknown",
     "fluffiness": 5,
     "cuteness": 10
@@ -145,7 +145,7 @@ curl "http://example.com/api/kittens/2"
 ```json
 {
   "id": 2,
-  "name": "Isis",
+  "name": "Max",
   "breed": "unknown",
   "fluffiness": 5,
   "cuteness": 10

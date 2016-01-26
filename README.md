@@ -70,12 +70,16 @@ You can now see the docs at http://localhost:4567. Whoa! That was fast!
 +available at the IP of your docker host. If you're using docker-machine you can
 +retrieve it with `docker-machine ip <your_machine_name>`*
 
+*Note: if you're using the Docker setup on OSX, the docs will be
+available at the output of `docker-machine ip <machine-name>` (port: 4567) instead of `localhost:4567`.*
+
 #### Via Vagrant
 ```shell
 vagrant up
 ```
 
 You can now see the docs at http://localhost:4567.
+
 
 Now that Slate is all set up your machine, you'll probably want to learn more about [editing Slate markdown](https://github.com/tripit/slate/wiki/Markdown-Syntax), or [how to publish your docs](https://github.com/tripit/slate/wiki/Deploying-Slate).
 
@@ -85,7 +89,6 @@ Examples of Slate in the Wild
 * [Travis-CI's API docs](https://docs.travis-ci.com/api/)
 * [Mozilla's localForage docs](http://mozilla.github.io/localForage/)
 * [Mozilla Recroom](http://mozilla.github.io/recroom/)
-* [ChaiOne Gameplan API docs](http://chaione.github.io/gameplanb2b/#introduction)
 * [Drcaban's Build a Quine tutorial](http://drcabana.github.io/build-a-quine/#introduction)
 * [PricePlow API docs](https://www.priceplow.com/api/documentation)
 * [Emerging Threats API docs](http://apidocs.emergingthreats.net/)
@@ -102,7 +105,7 @@ Examples of Slate in the Wild
 * [Whispir.io API](https://whispir.github.io/api)
 * [NASA API](https://data.nasa.gov/developer/external/planetary/)
 * [CardPay API](https://developers.cardpay.com/)
-* [IBM Cloudant](https://docs-testb.cloudant.com/content-review/_design/couchapp/index.html)
+* [IBM Cloudant](https://docs.cloudant.com/api.html)
 * [Bitrix basis components](http://bbc.bitrix.expert/)
 * [viagogo API Documentation](http://developer.viagogo.net/)
 * [Fidor Bank API Documentation](http://docs.fidor.de/)
@@ -115,6 +118,10 @@ Examples of Slate in the Wild
 * [hosting.de API Documentation](https://www.hosting.de/docs/api/)
 * [CheddarGetter API Documentation](http://docs.cheddargetter.com)
 * [Invoiced API](http://invoiced.com/docs/api/)
+* [BlockCypher's API Documentation](http://dev.blockcypher.com)
+* [InterServer API Documentation](https://my.interserver.net/apidoc/)
+* [ActionHeroJS's API Documentation](http://www.actionherojs.com/docs)
+* [Augur API Documentation](http://docs.augur.net)
 
 (Feel free to add your site to this list in a pull request!)
 
