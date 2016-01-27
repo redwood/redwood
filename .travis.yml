@@ -7,3 +7,4 @@ rvm:
   - 2.1.0
 
 cache: bundler
+script: bundle exec middleman build
