@@ -49,22 +49,16 @@ You're going to need:
 3. `cd slate`
 4. Initialize and start Slate. You can either do this locally, or with Vagrant:
 
-#### Locally
-
 ```shell
+# either run this to run locally
 bundle install
 bundle exec middleman server
-```
 
-You can now see the docs at http://localhost:4567. Whoa! That was fast!
-
-#### Via Vagrant
-```shell
+# OR run this to run with vagrant
 vagrant up
 ```
 
-You can now see the docs at http://localhost:4567.
-
+You can now see the docs at http://localhost:4567. Whoa! That was fast!
 
 Now that Slate is all set up your machine, you'll probably want to learn more about [editing Slate markdown](https://github.com/tripit/slate/wiki/Markdown-Syntax), or [how to publish your docs](https://github.com/tripit/slate/wiki/Deploying-Slate).
 
