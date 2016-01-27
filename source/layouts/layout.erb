@@ -13,7 +13,7 @@ WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 License for the specific language governing permissions and limitations
 under the License.
 %>
-<% language_tabs = current_page.data.language_tabs %>
+<% language_tabs = current_page.data.language_tabs || [] %>
 <!doctype html>
 <html>
   <head>
@@ -32,17 +32,9 @@ under the License.
     <% else %>
       <%= javascript_include_tag  "all_nosearch" %>
     <% end %>
-
-    <% if language_tabs %>
-      <script>
-        $(function() {
-          setupLanguages(<%= language_tabs.map{ |lang| lang.is_a?(Hash) ? lang.keys.first : lang }.to_json %>);
-        });
-      </script>
-    <% end %>
   </head>
 
-  <body class="<%= page_classes %>">
+  <body class="<%= page_classes %>" data-languages="<%=h language_tabs.map{ |lang| lang.is_a?(Hash) ? lang.keys.first : lang }.to_json %>">
     <a href="#" id="nav-button">
       <span>
         NAV
