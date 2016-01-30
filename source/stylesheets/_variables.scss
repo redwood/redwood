@@ -101,6 +101,7 @@ $search-box-border-color: #666;
 
 %break-words {
      word-break: break-all;
+     white-space: normal;
 
      /* Non standard for webkit */
      word-break: break-word;
