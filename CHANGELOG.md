@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 1.3.1
+
+*January 31, 2016*
+
+A small bugfix for incorrect whitespace in code blocks.
+
 ## Version 1.3
 
 *January 27th, 2016*
