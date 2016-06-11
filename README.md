@@ -1,14 +1,14 @@
 <p align="center">
   <img src="https://raw.githubusercontent.com/lord/img/master/logo-slate.png" alt="Slate: API Documentation Generator" width="226">
   <br>
-  <a href="https://travis-ci.org/tripit/slate"><img src="https://travis-ci.org/tripit/slate.svg?branch=master" alt="Build Status"></a>
+  <a href="https://travis-ci.org/lord/slate"><img src="https://travis-ci.org/lord/slate.svg?branch=master" alt="Build Status"></a>
 </p>
 
 <p align="center">Slate helps you create beautiful, intelligent, responsive API documentation.</p>
 
 <p align="center"><img src="https://dl.dropboxusercontent.com/u/95847291/github%20images/slate/slate_screenshot_new.png" width=700 alt="Screenshot of Example Documentation created with Slate"></p>
 
-<p align="center"><em>The example above was created with Slate. Check it out at <a href="https://tripit.github.io/slate">tripit.github.io/slate</a>.</em></p>
+<p align="center"><em>The example above was created with Slate. Check it out at <a href="https://lord.github.io/slate">lord.github.io/slate</a>.</em></p>
 
 Features
 ------------
@@ -27,9 +27,7 @@ Features
 
 * **Let your users update your documentation for you** — By default, your Slate-generated documentation is hosted in a public Github repository. Not only does this mean you get free hosting for your docs with Github Pages, but it also makes it simple for other developers to make pull requests to your docs if they find typos or other problems. Of course, if you don't want to use GitHub, you're also welcome to host your docs elsewhere.
 
-Getting started with Slate is super easy! Simply fork this repository and follow the instructions below. Or, if you'd like to check out what Slate is capable of, take a look at the [sample docs](http://tripit.github.io/slate).
-
-<!--As an example, you can check out the [TripIt API docs](http://tripit.github.io/api), which we create with Slate. You can also view the source of the [markdown file used to generate it](http://github.com/tripit/api/blob/master/source/index.md).-->
+Getting started with Slate is super easy! Simply fork this repository and follow the instructions below. Or, if you'd like to check out what Slate is capable of, take a look at the [sample docs](http://lord.github.io/slate).
 
 Getting Started with Slate
 ------------------------------
@@ -60,9 +58,9 @@ vagrant up
 
 You can now see the docs at http://localhost:4567. Whoa! That was fast!
 
-Now that Slate is all set up your machine, you'll probably want to learn more about [editing Slate markdown](https://github.com/tripit/slate/wiki/Markdown-Syntax), or [how to publish your docs](https://github.com/tripit/slate/wiki/Deploying-Slate).
+Now that Slate is all set up your machine, you'll probably want to learn more about [editing Slate markdown](https://github.com/lord/slate/wiki/Markdown-Syntax), or [how to publish your docs](https://github.com/lord/slate/wiki/Deploying-Slate).
 
-If you'd prefer to use Docker, instructions are available [in the wiki](https://github.com/tripit/slate/wiki/Docker).
+If you'd prefer to use Docker, instructions are available [in the wiki](https://github.com/lord/slate/wiki/Docker).
 
 Companies Using Slate
 ---------------------------------
@@ -78,23 +76,24 @@ Companies Using Slate
 * [Parrot Drones](http://developer.parrot.com/docs/bebop/)
 * [Fidor Bank](http://docs.fidor.de/)
 
-You can view more in [the list on the wiki](https://github.com/tripit/slate/wiki/Slate-in-the-Wild).
+You can view more in [the list on the wiki](https://github.com/lord/slate/wiki/Slate-in-the-Wild).
 
 Need Help? Found a bug?
 --------------------
 
-Read our [contribution guidelines](https://github.com/tripit/slate/blob/master/CONTRIBUTING.md), and then [submit an issue](https://github.com/tripit/slate/issues) to the Slate Github if you need any help. And, of course, feel free to submit pull requests with bug fixes or changes.
+[Submit an issue](https://github.com/lord/slate/issues) to the Slate Github if you need any help. And, of course, feel free to submit pull requests with bug fixes or changes.
 
 Contributors
 --------------------
 
-Slate was built by [Robert Lord](https://lord.io) while at [TripIt](https://www.tripit.com/).
+Slate was built by [Robert Lord](https://lord.io) while interning at [TripIt](https://www.tripit.com/).
 
 Thanks to the following people who have submitted major pull requests:
 
 - [@chrissrogers](https://github.com/chrissrogers)
 - [@bootstraponline](https://github.com/bootstraponline)
 - [@realityking](https://github.com/realityking)
+- [@cvkef](https://github.com/cvkef)
 
 Also, thanks to [Sauce Labs](http://saucelabs.com) for helping sponsor the project.
 
