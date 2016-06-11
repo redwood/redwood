@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 1.3.3
+
+*June 11, 2016*
+
+Documentation and example changes.
+
 ## Version 1.3.2
 
 *February 3, 2016*
