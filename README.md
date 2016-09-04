@@ -37,7 +37,7 @@ Getting Started with Slate
 You're going to need:
 
  - **Linux or OS X** — Windows may work, but is unsupported.
- - **Ruby, version 2.0 or newer**
+ - **Ruby, version 2.2.5 or newer**
  - **Bundler** — If Ruby is already installed, but the `bundle` command doesn't work, just run `gem install bundler` in a terminal.
 
 ### Getting Set Up
