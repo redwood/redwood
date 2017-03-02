@@ -17,7 +17,7 @@
   };
 
   var closeToc = function() {
-    $(".tocify-wrapper").removeClass('open');
+    $(".toc-wrapper").removeClass('open');
     $("#nav-button").removeClass('open');
   };
 
@@ -83,7 +83,7 @@
         return false;
       });
       $(".page-wrapper").click(closeToc);
-      $(".tocify-item").click(closeToc);
+      $(".toc-link").click(closeToc);
 
       // reload immediately after scrolling on toc click
       $toc.find(tocLinkSelector).click(function() {
