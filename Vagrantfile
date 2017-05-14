@@ -1,28 +1,23 @@
 Vagrant.configure(2) do |config|
-  config.vm.box = "debian/jessie64"
+  config.vm.box = "ubuntu/trusty64"
   config.vm.network :forwarded_port, guest: 4567, host: 4567
-  config.vm.synced_folder ".", "/vagrant", type: "rsync"
 
-  # Download and install ruby from sources and other tools
-  config.vm.provision "shell",
+  config.vm.provision "bootstrap",
+    type: "shell",
     inline: <<-SHELL
-        apt-get -yq install zlib1g-dev libssl-dev libreadline-dev libgdbm-dev openssl git libxml2-dev libxslt-dev build-essential nodejs
-        wget https://cache.ruby-lang.org/pub/ruby/2.4/ruby-2.4.0.tar.gz
-        tar xvfz ruby-2.4.0.tar.gz
-        cd ruby-2.4.0
-        ./configure
-        make
-        make install
-        gem install --no-ri --no-rdoc bundler
-        rm -rf ruby-2.4.0.tar.gz ruby-2.4.0
-        apt-get autoremove -yq
+      sudo apt-add-repository ppa:brightbox/ruby-ng
+      sudo apt-get update
+      sudo apt-get install -yq ruby2.2 ruby2.2-dev
+      sudo apt-get install -yq pkg-config build-essential nodejs git libxml2-dev libxslt-dev
+      sudo apt-get autoremove -yq
+      gem2.2 install --no-ri --no-rdoc bundler
     SHELL
 
   # add the local user git config to the vm
   config.vm.provision "file", source: "~/.gitconfig", destination: ".gitconfig"
 
-  # Install project dependencies (gems)
-  config.vm.provision "shell",
+  config.vm.provision "install",
+    type: "shell",
     privileged: false,
     inline: <<-SHELL
       echo "=============================================="
@@ -32,8 +27,8 @@ Vagrant.configure(2) do |config|
       bundle install
     SHELL
 
-  # Exec server
-  config.vm.provision "shell",
+  config.vm.provision "run",
+    type: "shell",
     privileged: false,
     run: "always",
     inline: <<-SHELL
