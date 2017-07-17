@@ -14,8 +14,11 @@
   - New default colors!
   - New spacings and sizes!
   - System-default typefaces, just like GitHub
+- Added search input delay on large corpuses to reduce lag
 - We even bumped the major version cause hey, why not?
 - Various small bug fixes
+
+Thanks to everyone who helped debug or wrote code for this version! It was a serious community effort, and I couldn't have done it alone.
 
 ## Version 1.5.0
 
