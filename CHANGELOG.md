@@ -1,5 +1,22 @@
 # Changelog
 
+## Version 2.0.0
+
+*July 17, 2017*
+
+- All-new statically generated table of contents
+  - Should be much faster loading and scrolling for large pages
+  - Smaller Javascript file sizes
+  - Avoids the problem with the last link in the ToC not ever highlighting if the section was shorter than the page
+  - Fixes control-click not opening in a new page
+  - Automatically updates the HTML title as you scroll
+- Updated design
+  - New default colors!
+  - New spacings and sizes!
+  - System-default typefaces, just like GitHub
+- We even bumped the major version cause hey, why not?
+- Various small bug fixes
+
 ## Version 1.5.0
 
 *February 23, 2017*
