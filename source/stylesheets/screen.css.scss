@@ -72,9 +72,10 @@ html, body {
   }
 
   // This is the logo at the top of the ToC
-  &>img {
+  .logo {
     display: block;
     max-width: 100%;
+    margin-bottom: $logo-margin;
   }
 
   &>.search {
@@ -100,10 +101,6 @@ html, body {
       color: $nav-text;
       @extend %icon-search;
     }
-  }
-
-  .logo {
-    margin-bottom: $logo-margin;
   }
 
   .search-results {
