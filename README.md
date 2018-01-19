@@ -88,10 +88,12 @@ Companies Using Slate
 
 You can view more in [the list on the wiki](https://github.com/lord/slate/wiki/Slate-in-the-Wild).
 
-Need Help? Found a bug?
+Questions? Need Help? Found a bug?
 --------------------
 
-[Submit an issue](https://github.com/lord/slate/issues) to the Slate GitHub if you need any help. And, of course, feel free to submit pull requests with bug fixes or changes.
+If you've got questions about setup, deploying, special feature implementation in your fork, or just want to chat with the developer, please feel free to [start a thread in our Spectrum community](https://spectrum.chat/slate)!
+
+Found a bug with upstream Slate? Go ahead and [submit an issue](https://github.com/lord/slate/issues). And, of course, feel free to submit pull requests with bug fixes or changes to the `dev` branch.
 
 Contributors
 --------------------
