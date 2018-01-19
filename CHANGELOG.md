@@ -1,6 +1,16 @@
 # Changelog
 
-## Version 2.1.0
+## Version 2.2
+
+*January 19, 2018*
+
+- Fixes bugs with some non-roman languages not generating unique headers
+- Adds editorconfig, thanks to [Jay Thomas](https://github.com/jaythomas)
+- Adds optional `NestingUniqueHeadCounter`, thanks to [Vladimir Morozov](https://github.com/greenhost87)
+- Small fixes to typos and language, thx [Emir Ribić](https://github.com/ribice), [Gregor Martynus](https://github.com/gr2m), and [Martius](https://github.com/martiuslim)!
+- Adds links to Spectrum chat for questions in README and ISSUE_TEMPLATE
+
+## Version 2.1
 
 *October 30, 2017*
 
@@ -10,7 +20,7 @@
 
 Thanks to everyone who submitted PRs for this version!
 
-## Version 2.0.0
+## Version 2.0
 
 *July 17, 2017*
 
@@ -30,7 +40,7 @@ Thanks to everyone who submitted PRs for this version!
 
 Thanks to everyone who helped debug or wrote code for this version! It was a serious community effort, and I couldn't have done it alone.
 
-## Version 1.5.0
+## Version 1.5
 
 *February 23, 2017*
 
@@ -39,7 +49,7 @@ Thanks to everyone who helped debug or wrote code for this version! It was a ser
 - Switch default code highlighting color scheme to better highlight JSON
 - Various small typo and bug fixes
 
-## Version 1.4.0
+## Version 1.4
 
 *November 24, 2016*
 
