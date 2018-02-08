@@ -78,6 +78,9 @@
         $best.siblings(tocListSelector).addClass("active");
         $toc.find(tocListSelector).filter(":not(.active)").slideUp(150);
         $toc.find(tocListSelector).filter(".active").slideDown(150);
+        if (window.history.replaceState) {
+          window.history.replaceState(null, "", best);
+        }
         // TODO remove classnames
         document.title = joinedTitle.replace(htmlPattern, '');
       }
