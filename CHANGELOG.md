@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 2.3.1
+
+*July 5, 2018*
+
+- Update `sprockets` in `Gemfile.lock` to fix security warnings
+
 ## Version 2.3
 
 *July 5, 2018*
