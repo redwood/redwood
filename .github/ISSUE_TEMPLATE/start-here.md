@@ -1,3 +1,12 @@
+---
+name: Start Here
+about: Help improve Slate!
+title: "✍️ TODO"
+labels: ''
+assignees: ''
+
+---
+
 <!--
 ⚠️  READ THIS BEFORE SUBMITTING ⚠️
 
@@ -9,7 +18,7 @@ If you've found a bug with Slate upstream that you're still encountering even in
 -->
 
 Operating system: ✍️ TODO
-Last upstream version (check `CHANGELOG.md` for the latest version): ✍️ TODO
+Last upstream commit (run `git log --author="Robert Lord" | head -n 1`): ✍️ TODO
 Browser version(s): ✍️ TODO
 Ruby version (run `ruby -v`):  ✍️ TODO
 
