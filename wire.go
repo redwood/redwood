@@ -3,28 +3,24 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
+	"strconv"
 
 	"github.com/lunixbochs/struc"
 	"github.com/pkg/errors"
 )
 
 type (
-	ID [32]byte
-
-	Patch struct {
-		TextLen int `struc:"sizeof=Text"`
-		Text    string
+	EncodeToWirer interface {
+		EncodeToWire() error
 	}
 
-	Transaction struct {
-		ID         ID
-		ParentsLen int `struc:"sizeof=Parents"`
-		Parents    []ID
-		PatchesLen int `struc:"sizeof=Patches"`
-		Patches    []Patch
+	DecodeFromWirer interface {
+		DecodeFromWire() error
 	}
 )
 
@@ -52,6 +48,13 @@ func WriteUint64(w io.Writer, n uint64) error {
 }
 
 func WriteMsg(w io.Writer, obj interface{}) error {
+	if asEncodable, ok := obj.(EncodeToWirer); ok {
+		err = asEncodable.EncodeToWire()
+		if err != nil {
+			return err
+		}
+	}
+
 	buf := &bytes.Buffer{}
 
 	err := struc.Pack(buf, obj)
@@ -90,10 +93,13 @@ func ReadMsg(r io.Reader, obj interface{}) error {
 	if err != nil {
 		return err
 	}
+
+	if asDecodable, ok := obj.(DecodeFromWirer); ok {
+		err = asDecodable.DecodeFromWire()
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
-
-type blankValidator struct{}
-
-func (blankValidator) Validate(_ string, _ []byte) error        { return nil }
-func (blankValidator) Select(_ string, _ [][]byte) (int, error) { return 0, nil }

@@ -13,9 +13,19 @@ type Store interface {
 }
 
 type store struct {
-	mu        sync.RWMutex
-	txs       map[ID]Tx
-	resolvers map[string]Resolver
+	mu           sync.RWMutex
+	txs          map[ID]Tx
+	resolvers    map[string]Resolver
+	currentState map[string]interface{}
+}
+
+func NewStore() Store {
+	return &store{
+		mu:           sync.Mutex{},
+		txs:          map[ID]Tx{},
+		resolvers:    map[string]Resolver{},
+		currentState: map[string]interface{}{},
+	}
 }
 
 func (s *store) RegisterResolverForKey(key string, resolver Resolver) {
