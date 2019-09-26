@@ -1,15 +1,15 @@
 package main
 
-import (
-	"context"
+// import (
+// 	"context"
 
-	peer "github.com/libp2p/go-libp2p-peer"
-)
+// 	peer "github.com/libp2p/go-libp2p-peer"
+// )
 
-type Host interface {
-	AddPeer(ctx context.Context, multiaddrString string) error
-	RemovePeer(peerID peer.ID) error
-	Peers() []pstore.PeerInfo
+// type Host interface {
+// 	AddPeer(ctx context.Context, multiaddrString string) error
+// 	RemovePeer(peerID peer.ID) error
+// 	Peers() []pstore.PeerInfo
 
-	BroadcastTx(ctx context.Context, tx Tx) error
-}
+// 	BroadcastTx(ctx context.Context, tx Tx) error
+// }

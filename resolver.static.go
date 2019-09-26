@@ -4,17 +4,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-type dumbResolver struct {
+type staticResolver struct {
 	state interface{}
 }
 
-func NewDumbResolver() Resolver {
-	return &dumbResolver{
+func NewStaticResolver() Resolver {
+	return &staticResolver{
 		state: nil,
 	}
 }
 
-func (r *dumbResolver) ResolveState(p Patch) (interface{}, error) {
+func (r *staticResolver) ResolveState(p Patch) (interface{}, error) {
 	setval := func(val interface{}) { r.state = val }
 	getval := func() interface{} { return r.state }
 
@@ -101,7 +101,7 @@ func (r *dumbResolver) ResolveState(p Patch) (interface{}, error) {
 
 	}
 
-	setval(p.Val)
+	setval("xyzzy")
 
 	return r.state, nil
 }

@@ -1,5 +1,14 @@
 package main
 
+import (
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strconv"
+
+	"github.com/pkg/errors"
+)
+
 type (
 	ID [32]byte
 
@@ -31,7 +40,7 @@ func (tx *Tx) EncodeToWire() error {
 }
 
 func (tx *Tx) DecodeFromWire() error {
-	tx.Patches = make([]string, len(tx.PatchStrings))
+	tx.Patches = make([]Patch, len(tx.PatchStrings))
 	for i, patchStr := range tx.PatchStrings {
 		patch, err := ParsePatch(patchStr)
 		if err != nil {
@@ -39,6 +48,7 @@ func (tx *Tx) DecodeFromWire() error {
 		}
 		tx.Patches[i] = patch
 	}
+	return nil
 }
 
 var (
@@ -56,7 +66,7 @@ func ParsePatch(txt string) (Patch, error) {
 			patch.Keys = append(patch.Keys, m[1])
 
 		case len(m[2]) > 0 && len(m[4]) > 0:
-			start, err := strconv.ParseInt(m[2], 10, 64)
+			start, err := strconv.ParseInt(m[3], 10, 64)
 			if err != nil {
 				return Patch{}, errors.Wrap(ErrBadPatch, err.Error())
 			}
@@ -65,7 +75,7 @@ func ParsePatch(txt string) (Patch, error) {
 				return Patch{}, errors.Wrap(ErrBadPatch, err.Error())
 			}
 
-			patch.Range = &Range{start, end}
+			patch.Range = &[2]int64{start, end}
 
 		case len(m[2]) > 0:
 			patch.Keys = append(patch.Keys, m[2][1:len(m[2])-1])

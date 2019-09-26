@@ -3,12 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
-	"regexp"
-	"sort"
-	"strconv"
 
 	"github.com/lunixbochs/struc"
 	"github.com/pkg/errors"
@@ -49,7 +45,7 @@ func WriteUint64(w io.Writer, n uint64) error {
 
 func WriteMsg(w io.Writer, obj interface{}) error {
 	if asEncodable, ok := obj.(EncodeToWirer); ok {
-		err = asEncodable.EncodeToWire()
+		err := asEncodable.EncodeToWire()
 		if err != nil {
 			return err
 		}

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"sync"
 )
 
@@ -9,30 +11,41 @@ type Store interface {
 	RemoveTx(txID ID) error
 	FetchTxs() ([]Tx, error)
 
-	RegisterResolverForKey(key string, resolver Resolver)
+	State() interface{}
+	StateJSON() ([]byte, error)
+
+	RegisterResolverForKeypath(keypath []string, resolver Resolver)
 }
 
 type store struct {
 	mu           sync.RWMutex
 	txs          map[ID]Tx
-	resolvers    map[string]Resolver
-	currentState map[string]interface{}
+	resolverTree resolverTree
+	currentState interface{}
 }
 
 func NewStore() Store {
 	return &store{
-		mu:           sync.Mutex{},
+		mu:           sync.RWMutex{},
 		txs:          map[ID]Tx{},
-		resolvers:    map[string]Resolver{},
-		currentState: map[string]interface{}{},
+		resolverTree: resolverTree{},
+		currentState: nil,
 	}
 }
 
-func (s *store) RegisterResolverForKey(key string, resolver Resolver) {
+func (s *store) State() interface{} {
+	return s.currentState
+}
+
+func (s *store) StateJSON() ([]byte, error) {
+	return json.MarshalIndent(s.currentState, "", "    ")
+}
+
+func (s *store) RegisterResolverForKeypath(keypath []string, resolver Resolver) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.resolvers[key] = resolver
+	s.resolverTree.addResolver(keypath, resolver)
 }
 
 func (s *store) AddTx(tx Tx) error {
@@ -40,6 +53,33 @@ func (s *store) AddTx(tx Tx) error {
 	defer s.mu.Unlock()
 
 	s.txs[tx.ID] = tx
+
+	for _, p := range tx.Patches {
+		fmt.Println("patch:", p.String())
+
+		var patch Patch = p
+		var newState interface{}
+		var err error
+		for {
+			resolver, parentResolverKeypath := s.resolverTree.resolverForKeypath(patch.Keys)
+			fmt.Printf("resolver for keypath %v = %T\n", patch.Keys, resolver)
+
+			patchCopy := patch
+			patchCopy.Keys = patchCopy.Keys[len(parentResolverKeypath):]
+
+			newState, err = resolver.ResolveState(patchCopy)
+			if err != nil {
+				return err
+			}
+
+			if len(parentResolverKeypath) == 0 {
+				break
+			}
+
+			patch = Patch{Keys: parentResolverKeypath, Val: newState}
+		}
+		s.currentState = newState
+	}
 
 	return nil
 }
@@ -62,5 +102,5 @@ func (s *store) FetchTxs() ([]Tx, error) {
 		txs = append(txs, tx)
 	}
 
-	return cp
+	return txs, nil
 }
