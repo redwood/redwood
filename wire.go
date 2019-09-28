@@ -9,8 +9,8 @@ import (
 )
 
 type Msg struct {
-	Type    string
-	Payload interface{}
+	Type    string      `json:"type"`
+	Payload interface{} `json:"payload"`
 }
 
 const (
@@ -31,7 +31,7 @@ func ReadMsg(r io.Reader, msg *Msg) error {
 
 func (msg *Msg) UnmarshalJSON(bs []byte) error {
 	var m struct {
-		Type         string
+		Type         string          `json:"type"`
 		PayloadBytes json.RawMessage `json:"payload"`
 	}
 

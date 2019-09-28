@@ -16,10 +16,9 @@ type (
 	ID [32]byte
 
 	Tx struct {
-		ID           ID
-		Parents      []ID
-		PatchStrings []string
-		Patches      []Patch `json:"-"`
+		ID      ID      `json:"id"`
+		Parents []ID    `json:"parents"`
+		Patches []Patch `json:"patches"`
 	}
 
 	Patch struct {
@@ -28,6 +27,16 @@ type (
 		Val   interface{}
 	}
 )
+
+func (p *Patch) UnmarshalJSON(bs []byte) error {
+	var err error
+	*p, err = ParsePatch(string(bs[1 : len(bs)-1]))
+	return err
+}
+
+func (p Patch) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + p.String() + `"`), nil
+}
 
 func RandomID() ID {
 	var id ID
@@ -47,42 +56,6 @@ func (id ID) String() string {
 func (tx *Tx) PrettyJSON() string {
 	j, _ := json.MarshalIndent(tx, "", "    ")
 	return string(j)
-}
-
-func (tx Tx) MarshalJSON() ([]byte, error) {
-	type TxMsg Tx
-	var txmsg TxMsg
-
-	txmsg.ID = tx.ID
-	txmsg.Parents = tx.Parents
-	txmsg.PatchStrings = make([]string, len(tx.Patches))
-	for i, patch := range tx.Patches {
-		txmsg.PatchStrings[i] = patch.String()
-	}
-	return json.Marshal(txmsg)
-}
-
-func (tx *Tx) UnmarshalJSON(bs []byte) error {
-	type TxMsg Tx
-	var txmsg TxMsg
-	err := json.Unmarshal(bs, &txmsg)
-	if err != nil {
-		return err
-	}
-
-	tx.ID = txmsg.ID
-	tx.Parents = txmsg.Parents
-	tx.PatchStrings = txmsg.PatchStrings
-
-	tx.Patches = make([]Patch, len(tx.PatchStrings))
-	for i, patchStr := range tx.PatchStrings {
-		patch, err := ParsePatch(patchStr)
-		if err != nil {
-			return err
-		}
-		tx.Patches[i] = patch
-	}
-	return nil
 }
 
 var (

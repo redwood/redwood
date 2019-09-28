@@ -86,6 +86,8 @@ func NewLibp2pTransport(ctx context.Context, id ID, port uint) (Transport, error
 
 const (
 	PROTO_MAIN protocol.ID = "/redwood/main/1.0.0"
+	// PROTO_READ  protocol.ID = "/redwood/read/1.0.0"
+	// PROTO_WRITE protocol.ID = "/redwood/write/1.0.0"
 )
 
 func obtainP2PKey(id ID) (crypto.PrivKey, error) {
