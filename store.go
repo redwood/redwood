@@ -2,8 +2,9 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"sync"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type Store interface {
@@ -18,19 +19,29 @@ type Store interface {
 }
 
 type store struct {
+	ID           ID
 	mu           sync.RWMutex
 	txs          map[ID]Tx
 	resolverTree resolverTree
 	currentState interface{}
+	timeDAG      map[ID]map[ID]bool
+	leaves       map[ID]bool
 }
 
-func NewStore() Store {
-	return &store{
+func NewStore(id ID) Store {
+	s := &store{
+		ID:           id,
 		mu:           sync.RWMutex{},
 		txs:          map[ID]Tx{},
 		resolverTree: resolverTree{},
 		currentState: nil,
+		timeDAG:      make(map[ID]map[ID]bool),
+		leaves:       make(map[ID]bool),
 	}
+
+	s.RegisterResolverForKeypath([]string{}, NewDumbResolver())
+
+	return s
 }
 
 func (s *store) State() interface{} {
@@ -52,17 +63,28 @@ func (s *store) AddTx(tx Tx) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	log.Infof("[store %v] new tx %v", s.ID, tx.ID)
+
+	// Ignore duplicates
+	if _, exists := s.txs[tx.ID]; exists {
+		return nil
+	}
+
+	// Unmark parents as leaves
+	for _, parentID := range tx.Parents {
+		delete(s.leaves, parentID)
+	}
+
+	// Store the tx
 	s.txs[tx.ID] = tx
 
+	// Apply its changes to the state tree
 	for _, p := range tx.Patches {
-		fmt.Println("patch:", p.String())
-
 		var patch Patch = p
 		var newState interface{}
 		var err error
 		for {
 			resolver, parentResolverKeypath := s.resolverTree.resolverForKeypath(patch.Keys)
-			fmt.Printf("resolver for keypath %v = %T\n", patch.Keys, resolver)
 
 			patchCopy := patch
 			patchCopy.Keys = patchCopy.Keys[len(parentResolverKeypath):]
@@ -80,6 +102,12 @@ func (s *store) AddTx(tx Tx) error {
 		}
 		s.currentState = newState
 	}
+
+	j, err := s.StateJSON()
+	if err != nil {
+		return err
+	}
+	log.Infof("[store %v] state = %v", s.ID, string(j))
 
 	return nil
 }
@@ -103,4 +131,23 @@ func (s *store) FetchTxs() ([]Tx, error) {
 	}
 
 	return txs, nil
+}
+
+func (s *store) getAncestors(vids map[ID]bool) map[ID]bool {
+	ancestors := map[ID]bool{}
+
+	var mark_ancestors func(id ID)
+	mark_ancestors = func(id ID) {
+		if !ancestors[id] {
+			ancestors[id] = true
+			for parentID := range s.timeDAG[id] {
+				mark_ancestors(parentID)
+			}
+		}
+	}
+	for parentID := range vids {
+		mark_ancestors(parentID)
+	}
+
+	return ancestors
 }
