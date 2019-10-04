@@ -1,7 +1,11 @@
 package main
 
+import (
+// log "github.com/sirupsen/logrus"
+)
+
 type Resolver interface {
-	ResolveState(p Patch) (interface{}, error)
+	ResolveState(state interface{}, patch Patch) (interface{}, error)
 }
 
 type resolverTree struct {
@@ -9,11 +13,22 @@ type resolverTree struct {
 }
 
 type resolverTreeNode struct {
-	resolver Resolver
-	subkeys  map[string]*resolverTreeNode
+	resolver  Resolver
+	validator Validator
+	subkeys   map[string]*resolverTreeNode
 }
 
 func (t *resolverTree) addResolver(keypath []string, resolver Resolver) {
+	node := t.ensureNodeExists(keypath)
+	node.resolver = resolver
+}
+
+func (t *resolverTree) addValidator(keypath []string, validator Validator) {
+	node := t.ensureNodeExists(keypath)
+	node.validator = validator
+}
+
+func (t *resolverTree) ensureNodeExists(keypath []string) *resolverTreeNode {
 	if t.root == nil {
 		t.root = &resolverTreeNode{subkeys: map[string]*resolverTreeNode{}}
 	}
@@ -22,8 +37,7 @@ func (t *resolverTree) addResolver(keypath []string, resolver Resolver) {
 
 	for {
 		if len(keypath) == 0 {
-			current.resolver = resolver
-			return
+			return current
 		}
 
 		key := keypath[0]
@@ -36,30 +50,41 @@ func (t *resolverTree) addResolver(keypath []string, resolver Resolver) {
 	}
 }
 
-func (t *resolverTree) resolverForKeypath(keypath []string) (Resolver, []string) {
-	currentKeypath := keypath
+func (t *resolverTree) closestAncestorOfKeypathWhere(keypath []string, condition func(*resolverTreeNode) bool) (*resolverTreeNode, int) {
+	remaining := keypath
 	current := t.root
-	currentResolver := current.resolver
-	currentResolverKeypathStartsAt := 0
+	ancestor := (*resolverTreeNode)(nil)
+	closestAncestorKeypathIdx := -1
 	i := 0
 
 	for {
-		key := currentKeypath[0]
-		currentKeypath = currentKeypath[1:]
-
-		current = current.subkeys[key]
 		if current == nil {
 			break
-		} else if len(currentKeypath) == 0 {
+		} else if len(remaining) == 0 {
 			break
-		} else if current.resolver != nil {
-			currentResolver = current.resolver
-			currentResolverKeypathStartsAt = i
 		}
+		if condition(current) == true {
+			closestAncestorKeypathIdx = i
+			ancestor = current
+		}
+
+		key := remaining[0]
+		remaining = remaining[1:]
+
+		current = current.subkeys[key]
 
 		i++
 	}
 
-	parentResolverKeys := keypath[:currentResolverKeypathStartsAt]
-	return currentResolver, parentResolverKeys
+	return ancestor, closestAncestorKeypathIdx
+}
+
+func (t *resolverTree) resolverForKeypath(keypath []string) (Resolver, int) {
+	node, idx := t.closestAncestorOfKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.resolver != nil })
+	return node.resolver, idx
+}
+
+func (t *resolverTree) validatorForKeypath(keypath []string) (Validator, int) {
+	node, idx := t.closestAncestorOfKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.validator != nil })
+	return node.validator, idx
 }

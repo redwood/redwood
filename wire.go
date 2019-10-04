@@ -16,7 +16,7 @@ type Msg struct {
 const (
 	MsgType_Subscribe   = "subscribe"
 	MsgType_Unsubscribe = "unsubscribe"
-	MsgType_Tx          = "tx"
+	MsgType_Put         = "put"
 	MsgType_Ack         = "ack"
 	MsgType_Error       = "error"
 )
@@ -47,7 +47,7 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		url := string(m.PayloadBytes)
 		msg.Payload = url[1 : len(url)-1] // remove quotes
 
-	case MsgType_Tx:
+	case MsgType_Put:
 		var tx Tx
 		err := json.Unmarshal(m.PayloadBytes, &tx)
 		if err != nil {

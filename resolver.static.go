@@ -14,7 +14,7 @@ func NewStaticResolver() Resolver {
 	}
 }
 
-func (r *staticResolver) ResolveState(p Patch) (interface{}, error) {
+func (r *staticResolver) ResolveState(state interface{}, p Patch) (interface{}, error) {
 	setval := func(val interface{}) { r.state = val }
 	getval := func() interface{} { return r.state }
 

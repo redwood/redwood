@@ -1,55 +1,214 @@
 package main
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"io/ioutil"
-// 	"os"
-// 	"sync"
-// 	"time"
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
 
-// 	"github.com/pkg/errors"
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+)
 
-// 	"github.com/libp2p/go-libp2p-peerstore"
-// 	ma "github.com/multiformats/go-multiaddr"
-// )
+type httpTransport struct {
+	ackHandler AckHandler
+	putHandler PutHandler
 
-// type httpTransport struct {
-// 	libp2pHost host.Host
-// 	*metrics.BandwidthCounter
-// }
+	subscriptionsIn  map[string][]*httpSubscriptionIn
+	subscriptionsOut map[string]subscriptionOut
+}
 
-// func NewHTTPTransport(ctx context.Context, port uint, onRecvTxHandler func(Tx)) (Transport, error) {
-// 	t := &httpTransport{
-// 		onRecvTxHandler: onRecvTxHandler,
-// 	}
+func NewHTTPTransport(ctx context.Context, port uint) (Transport, error) {
+	t := &httpTransport{}
 
-// 	return t, nil
-// }
+	http.Handle("/", t)
+	// http.ListenAndServe
 
-// func (t *httpTransport) handlePeerStream(stream netp2p.Stream) {
-// 	defer stream.Close()
+	return t, nil
+}
 
-// 	tx, err := handleIncomingTx(stream)
-// 	if err != nil {
-// 		panic(err)
-// 	}
+type httpSubscriptionIn struct {
+	io.Writer
+	http.Flusher
+	chDone chan struct{}
+}
 
-// 	t.onRecvTxHandler(tx)
-// }
+func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 
-// func (t *httpTransport) OpenStream(ctx context.Context, multiaddr ma.Multiaddr) (io.ReadWriteCloser, error) {
-// 	peerinfo, err := peerstore.InfoFromP2pAddr(multiaddr)
-// 	if err != nil {
-// 		return nil, errors.Wrapf(err, "could not parse PeerInfo from multiaddr '%v'", multiaddr.String())
-// 	}
+	switch r.Method {
+	case "GET":
+		// Make sure that the writer supports flushing.
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
 
-// 	if len(h.libp2pHost.Network().ConnsToPeer(peerinfo.ID)) == 0 {
-// 		err = t.libp2pHost.Connect(ctx, *peerinfo)
-// 		if err != nil {
-// 			return nil, errors.Wrapf(err, "could not connect to peer '%v'", multiaddr.String())
-// 		}
-// 	}
+		// Listen to the closing of the http connection via the CloseNotifier
+		notify := w.(http.CloseNotifier).CloseNotify()
+		go func() {
+			<-notify
+			log.Println("http connection closed")
+		}()
 
-// 	return t.libp2pHost.NewStream(ctx, peerinfo.ID, MAIN_PROTO)
-// }
+		// Set the headers related to event streaming.
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Transfer-Encoding", "chunked")
+
+		url := r.URL.String()
+		sub := &httpSubscriptionIn{w, f, make(chan struct{})}
+		t.subscriptionsIn[url] = append(t.subscriptionsIn[url], sub)
+
+		// Block until the subscription is canceled
+		<-sub.chDone
+
+	case "ACK":
+		var versionID ID // @@TODO
+		t.ackHandler(r.URL.String(), versionID)
+
+	case "PUT":
+		var tx Tx
+		err := json.NewDecoder(r.Body).Decode(&tx)
+		if err != nil {
+			panic(err)
+		}
+		tx.URL = r.URL.String()
+		t.onReceivedPut(tx)
+
+	default:
+		panic("bad")
+	}
+}
+
+func (s *httpSubscriptionIn) Close() error {
+	close(s.chDone)
+	return nil
+}
+
+func (t *httpTransport) Subscribe(ctx context.Context, url string) error {
+	if url[:6] == "braid:" {
+		url = "http:" + url[6:]
+	}
+
+	_, exists := t.subscriptionsOut[url]
+	if exists {
+		return errors.New("already subscribed to " + url)
+	}
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+
+	stream := resp.Body
+
+	chDone := make(chan struct{})
+	t.subscriptionsOut[url] = subscriptionOut{stream, chDone}
+
+	go func() {
+		defer stream.Close()
+		for {
+			select {
+			case <-chDone:
+				return
+			default:
+			}
+
+			var msg Msg
+			err := ReadMsg(stream, &msg)
+			if err != nil {
+				log.Errorln(err)
+				return
+			}
+
+			if msg.Type != MsgType_Put {
+				panic("protocol error")
+			}
+
+			tx := msg.Payload.(Tx)
+			tx.URL = url
+			t.onReceivedPut(tx)
+		}
+	}()
+
+	return nil
+}
+
+func (t *httpTransport) Ack(ctx context.Context, url string, versionID ID) error {
+	if url[:6] == "braid:" {
+		url = "http:" + url[6:]
+	}
+
+	body := bytes.NewReader(versionID[:])
+
+	client := http.Client{}
+	req, err := http.NewRequest("ACK", url, body)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode > 299 {
+		return errors.Errorf("http error: %v", resp.StatusCode)
+	}
+	return nil
+}
+
+func (t *httpTransport) Put(ctx context.Context, tx Tx) error {
+	url := tx.URL
+
+	if url[:6] == "braid:" {
+		url = "http:" + url[6:]
+	}
+
+	txBytes, err := json.Marshal(tx)
+	if err != nil {
+		return err
+	}
+	body := bytes.NewReader(txBytes)
+
+	client := http.Client{}
+	req, err := http.NewRequest("PUT", url, body)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode > 299 {
+		return errors.Errorf("http error: %v", resp.StatusCode)
+	}
+	return nil
+}
+
+func (t *httpTransport) onReceivedPut(tx Tx) {
+	t.putHandler(tx)
+
+	// Broadcast to peers
+	err := t.Put(context.Background(), tx)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (t *httpTransport) SetAckHandler(handler AckHandler) {
+	t.ackHandler = handler
+}
+
+func (t *httpTransport) SetPutHandler(handler PutHandler) {
+	t.putHandler = handler
+}
+
+func (t *httpTransport) AddPeer(ctx context.Context, multiaddrString string) error {
+	return nil
+}

@@ -28,18 +28,19 @@ type store struct {
 	leaves       map[ID]bool
 }
 
-func NewStore(id ID) Store {
+func NewStore(id ID, genesisState interface{}) Store {
 	s := &store{
 		ID:           id,
 		mu:           sync.RWMutex{},
 		txs:          map[ID]Tx{},
 		resolverTree: resolverTree{},
-		currentState: nil,
+		currentState: genesisState,
 		timeDAG:      make(map[ID]map[ID]bool),
 		leaves:       make(map[ID]bool),
 	}
 
 	s.RegisterResolverForKeypath([]string{}, NewDumbResolver())
+	s.RegisterValidatorForKeypath([]string{}, &validator{ID: id})
 
 	return s
 }
@@ -59,6 +60,13 @@ func (s *store) RegisterResolverForKeypath(keypath []string, resolver Resolver) 
 	s.resolverTree.addResolver(keypath, resolver)
 }
 
+func (s *store) RegisterValidatorForKeypath(keypath []string, validator Validator) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.resolverTree.addValidator(keypath, validator)
+}
+
 func (s *store) AddTx(tx Tx) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -70,13 +78,44 @@ func (s *store) AddTx(tx Tx) error {
 		return nil
 	}
 
+	// Store the tx (so we can ignore txs we've seen before)
+	s.txs[tx.ID] = tx
+
+	// Validate the tx
+	validators := make(map[Validator][]Patch)
+	validatorKeypaths := make(map[Validator][]string)
+	for _, patch := range tx.Patches {
+		v, idx := s.resolverTree.validatorForKeypath(patch.Keys)
+		keys := make([]string, len(patch.Keys)-(idx+1))
+		copy(keys, patch.Keys[idx+1:])
+		p := patch
+		p.Keys = keys
+
+		validators[v] = append(validators[v], p)
+		validatorKeypaths[v] = patch.Keys[:idx]
+	}
+
+	for validator, patches := range validators {
+		if len(patches) == 0 {
+			continue
+		}
+
+		txCopy := tx
+		txCopy.Patches = patches
+
+		err := validator.Validate(s.stateAtKeypath(validatorKeypaths[validator]), s.timeDAG, txCopy)
+		if err != nil {
+			log.Errorln("DIDNT VALIDATE", err)
+			return err
+		}
+	}
+
 	// Unmark parents as leaves
 	for _, parentID := range tx.Parents {
 		delete(s.leaves, parentID)
 	}
 
-	// Store the tx
-	s.txs[tx.ID] = tx
+	// @@TODO: add to timeDAG
 
 	// Apply its changes to the state tree
 	for _, p := range tx.Patches {
@@ -84,12 +123,16 @@ func (s *store) AddTx(tx Tx) error {
 		var newState interface{}
 		var err error
 		for {
-			resolver, parentResolverKeypath := s.resolverTree.resolverForKeypath(patch.Keys)
+			resolver, currentResolverKeypathStartsAt := s.resolverTree.resolverForKeypath(patch.Keys)
+			parentResolverKeypath := patch.Keys[:currentResolverKeypathStartsAt]
+			thisResolverKeypath := patch.Keys[:currentResolverKeypathStartsAt]
+
+			thisResolverState := s.stateAtKeypath(thisResolverKeypath)
 
 			patchCopy := patch
 			patchCopy.Keys = patchCopy.Keys[len(parentResolverKeypath):]
 
-			newState, err = resolver.ResolveState(patchCopy)
+			newState, err = resolver.ResolveState(thisResolverState, patchCopy)
 			if err != nil {
 				return err
 			}
@@ -110,6 +153,18 @@ func (s *store) AddTx(tx Tx) error {
 	log.Infof("[store %v] state = %v", s.ID, string(j))
 
 	return nil
+}
+
+func (s *store) stateAtKeypath(keypath []string) interface{} {
+	current := s.currentState
+	for _, key := range keypath {
+		asMap, isMap := current.(map[string]interface{})
+		if !isMap {
+			return nil
+		}
+		current = asMap[key]
+	}
+	return current
 }
 
 func (s *store) RemoveTx(txID ID) error {

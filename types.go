@@ -18,15 +18,19 @@ type (
 	Tx struct {
 		ID      ID      `json:"id"`
 		Parents []ID    `json:"parents"`
+		From    ID      `json:"from"`
+		URL     string  `json:"url"`
 		Patches []Patch `json:"patches"`
 	}
 
 	Patch struct {
-		Keys  []string
-		Range *[2]int64
-		Val   interface{}
+		Keys  []string    `lua:"keys"`
+		Range *[2]int64   `lua:"range"`
+		Val   interface{} `lua:"val"`
 	}
 )
+
+var GenesisTxID = IDFromString("genesis")
 
 func (p *Patch) UnmarshalJSON(bs []byte) error {
 	var err error
@@ -38,9 +42,31 @@ func (p Patch) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + p.String() + `"`), nil
 }
 
+func (p Patch) Copy() Patch {
+	keys := make([]string, len(p.Keys))
+	copy(keys, p.Keys)
+
+	var rng *[2]int64
+	if p.Range != nil {
+		r := [2]int64{p.Range[0], p.Range[1]}
+		rng = &r
+	}
+
+	return Patch{
+		Keys:  keys,
+		Range: rng,
+	}
+}
+
 func RandomID() ID {
 	var id ID
 	rand.Read(id[:])
+	return id
+}
+
+func IDFromString(s string) ID {
+	var id ID
+	copy(id[:], []byte(s))
 	return id
 }
 

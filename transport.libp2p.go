@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -28,12 +30,27 @@ import (
 )
 
 type libp2pTransport struct {
-	ID                    ID
-	libp2pHost            p2phost.Host
-	dht                   *dht.IpfsDHT
-	incomingStreamHandler func(stream io.ReadWriteCloser)
+	ID         ID
+	libp2pHost p2phost.Host
+	dht        *dht.IpfsDHT
 	*metrics.BandwidthCounter
+
+	ackHandler AckHandler
+	putHandler PutHandler
+
+	subscriptionsIn  map[string][]libp2pSubscriptionIn
+	subscriptionsOut map[string]subscriptionOut
 }
+
+type libp2pSubscriptionIn struct {
+	domain  string
+	keypath []string
+	io.WriteCloser
+}
+
+const (
+	PROTO_MAIN protocol.ID = "/redwood/main/1.0.0"
+)
 
 func NewLibp2pTransport(ctx context.Context, id ID, port uint) (Transport, error) {
 	privkey, err := obtainP2PKey(id)
@@ -67,11 +84,11 @@ func NewLibp2pTransport(ctx context.Context, id ID, port uint) (Transport, error
 		libp2pHost:       libp2pHost,
 		dht:              d,
 		BandwidthCounter: bandwidthCounter,
+		subscriptionsIn:  make(map[string][]libp2pSubscriptionIn),
+		subscriptionsOut: make(map[string]subscriptionOut),
 	}
 
-	t.libp2pHost.SetStreamHandler(PROTO_MAIN, func(stream netp2p.Stream) {
-		t.incomingStreamHandler(stream)
-	})
+	t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
 
 	go t.periodicallyAnnounceContent(ctx)
 
@@ -83,12 +100,6 @@ func NewLibp2pTransport(ctx context.Context, id ID, port uint) (Transport, error
 
 	return t, nil
 }
-
-const (
-	PROTO_MAIN protocol.ID = "/redwood/main/1.0.0"
-	// PROTO_READ  protocol.ID = "/redwood/read/1.0.0"
-	// PROTO_WRITE protocol.ID = "/redwood/write/1.0.0"
-)
 
 func obtainP2PKey(id ID) (crypto.PrivKey, error) {
 	keyfile := fmt.Sprintf("/tmp/redwood.%v.key", id.String())
@@ -125,8 +136,82 @@ func obtainP2PKey(id ID) (crypto.PrivKey, error) {
 	return privkey, nil
 }
 
-func (t *libp2pTransport) OnIncomingStream(handler func(stream io.ReadWriteCloser)) {
-	t.incomingStreamHandler = handler
+func (t *libp2pTransport) SetAckHandler(handler AckHandler) {
+	t.ackHandler = handler
+}
+
+func (t *libp2pTransport) SetPutHandler(handler PutHandler) {
+	t.putHandler = handler
+}
+
+func (t *libp2pTransport) onReceivedPut(tx Tx) {
+	t.putHandler(tx)
+
+	// Broadcast to peers
+	err := t.Put(context.Background(), tx)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
+	var msg Msg
+	err := ReadMsg(stream, &msg)
+	if err != nil {
+		panic(err)
+	}
+
+	switch msg.Type {
+	case MsgType_Subscribe:
+		urlStr, ok := msg.Payload.(string)
+		if !ok {
+			log.Errorf("[transport %v] Subscribe message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
+			return
+		}
+
+		u, err := url.Parse(urlStr)
+		if err != nil {
+			log.Errorf("[transport %v] Subscribe message: bad url (%v): %v", t.ID, urlStr, err)
+			return
+		}
+
+		domain := u.Hostname()
+		keypath := strings.Split(u.Path, "/")
+
+		t.subscriptionsIn[domain] = append(t.subscriptionsIn[domain], libp2pSubscriptionIn{domain, keypath, stream})
+
+	case MsgType_Put:
+		defer stream.Close()
+
+		tx, ok := msg.Payload.(Tx)
+		if !ok {
+			log.Errorf("[transport %v] Put message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
+			return
+		}
+
+		t.onReceivedPut(tx)
+
+		// ACK the PUT
+		err := t.Ack(context.TODO(), tx.URL, tx.ID)
+		if err != nil {
+			log.Errorf("[transport %v] error ACKing a PUT: %v", err)
+			return
+		}
+
+	case MsgType_Ack:
+		defer stream.Close()
+
+		// versionID, ok := msg.Payload.(ID)
+		// if !ok {
+		// 	log.Errorf("[transport %v] Ack message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
+		// 	return
+		// }
+
+		// t.Ack(ctx, )
+
+	default:
+		panic("protocol error")
+	}
 }
 
 func (t *libp2pTransport) AddPeer(ctx context.Context, multiaddrString string) error {
@@ -151,36 +236,149 @@ func (t *libp2pTransport) AddPeer(ctx context.Context, multiaddrString string) e
 	return nil
 }
 
-func (t *libp2pTransport) GetPeerConn(ctx context.Context, url string) (io.ReadWriteCloser, error) {
-	urlCid, err := cidForString("serve:" + url)
-	if err != nil {
-		log.Errorf("[transport %v] GetPeerConn: error creating cid: %v", t.ID, err)
-		return nil, err
+func (t *libp2pTransport) Subscribe(ctx context.Context, url string) error {
+	_, exists := t.subscriptionsOut[url]
+	if exists {
+		return errors.New("already subscribed to " + url)
 	}
 
 	var peerInfo pstore.PeerInfo
+
+	// @@TODO: subscribe to more than one peer?
+	err := t.forEachProviderOfURL(ctx, url, func(pinfo pstore.PeerInfo) (bool, error) {
+		if len(t.libp2pHost.Network().ConnsToPeer(pinfo.ID)) == 0 {
+			err := t.libp2pHost.Connect(ctx, pinfo)
+			if err != nil {
+				return false, errors.Wrapf(err, "could not connect to peer %+v", pinfo)
+			}
+		}
+		peerInfo = pinfo
+		return false, nil
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if peerInfo.ID == "" {
+		return errors.New("cannot find provider for Subscribe url")
+	}
+
+	stream, err := t.libp2pHost.NewStream(ctx, peerInfo.ID, PROTO_MAIN)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	err = WriteMsg(stream, Msg{Type: MsgType_Subscribe, Payload: url})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	chDone := make(chan struct{})
+	t.subscriptionsOut[url] = subscriptionOut{stream, chDone}
+
+	go func() {
+		defer stream.Close()
+		for {
+			select {
+			case <-chDone:
+				return
+			default:
+			}
+
+			var msg Msg
+			err := ReadMsg(stream, &msg)
+			if err != nil {
+				log.Errorln(err)
+				return
+			}
+
+			if msg.Type != MsgType_Put {
+				panic("protocol error")
+			}
+
+			tx := msg.Payload.(Tx)
+			tx.URL = url
+			t.onReceivedPut(tx)
+
+			// @@TODO: ACK the PUT
+		}
+	}()
+
+	return nil
+}
+
+func (t *libp2pTransport) Ack(ctx context.Context, url string, versionID ID) error {
+	return t.forEachProviderOfURL(ctx, url, func(pinfo pstore.PeerInfo) (bool, error) {
+		if len(t.libp2pHost.Network().ConnsToPeer(pinfo.ID)) == 0 {
+			err := t.libp2pHost.Connect(ctx, pinfo)
+			if err != nil {
+				return false, errors.Wrapf(err, "could not connect to peer %+v", pinfo)
+			}
+		}
+
+		stream, err := t.libp2pHost.NewStream(ctx, pinfo.ID, PROTO_MAIN)
+		if err != nil {
+			return false, errors.WithStack(err)
+		}
+		defer stream.Close()
+
+		err = WriteMsg(stream, Msg{Type: MsgType_Ack, Payload: versionID})
+		if err != nil {
+			return false, errors.WithStack(err)
+		}
+
+		return true, nil
+	})
+}
+
+func (t *libp2pTransport) Put(ctx context.Context, tx Tx) error {
+
+	// @@TODO: should we also send all PUTs to some set of authoritative peers (like a central server)?
+
+	u, err := url.Parse(tx.URL)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// @@TODO: do we need to trim the tx's patches' keypaths so that they don't include
+	// the keypath that the subscription is listening to?
+
+	for _, subscriber := range t.subscriptionsIn[u.Hostname()] {
+		err := WriteMsg(subscriber, Msg{Type: MsgType_Put, Payload: tx})
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+	}
+	return nil
+}
+
+func (t *libp2pTransport) forEachProviderOfURL(ctx context.Context, theURL string, fn func(pstore.PeerInfo) (bool, error)) error {
+	u, err := url.Parse(theURL)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	log.Errorln(u.Hostname())
+	urlCid, err := cidForString("serve:" + u.Hostname())
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	for pinfo := range t.dht.FindProvidersAsync(ctx, urlCid, 8) {
 		if pinfo.ID == t.libp2pHost.ID() {
 			continue
 		}
-		peerInfo = pinfo
-		log.Infof(`[transport %v] found peer %v for url "%v"`, t.ID, pinfo.ID, url)
-		break
-	}
+		log.Infof(`[transport %v] found peer %v for url "%v"`, t.ID, pinfo.ID, theURL)
 
-	// peerinfo, err := peerstore.InfoFromP2pAddr(multiaddr)
-	// if err != nil {
-	// 	return nil, errors.Wrapf(err, "could not parse PeerInfo from multiaddr '%v'", multiaddr.String())
-	// }
-
-	if len(t.libp2pHost.Network().ConnsToPeer(peerInfo.ID)) == 0 {
-		err = t.libp2pHost.Connect(ctx, peerInfo)
+		keepGoing, err := fn(pinfo)
 		if err != nil {
-			return nil, errors.Wrapf(err, "could not connect to peer %+v", peerInfo)
+			return errors.WithStack(err)
+		} else if !keepGoing {
+			break
 		}
 	}
-
-	return t.libp2pHost.NewStream(ctx, peerInfo.ID, PROTO_MAIN)
+	return nil
 }
 
 func (t *libp2pTransport) Peers() []pstore.PeerInfo {

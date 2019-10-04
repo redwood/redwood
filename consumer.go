@@ -7,17 +7,17 @@ import (
 )
 
 type consumer struct {
-	ID    ID
-	host  Host
-	store Store
+	ID        ID
+	transport Transport
+	Store     Store
 }
 
-func NewConsumer(id ID, port uint) *consumer {
+func NewConsumer(id ID, port uint, store Store) *consumer {
 	// id := RandomID()
 
 	c := &consumer{
 		ID:    id,
-		store: NewStore(id),
+		Store: store,
 	}
 
 	transport, err := NewLibp2pTransport(context.Background(), id, port)
@@ -25,20 +25,18 @@ func NewConsumer(id ID, port uint) *consumer {
 		panic(err)
 	}
 
-	c.host = NewHost(
-		id,
-		transport,
-		c.onTxReceived,
-		c.onAckReceived,
-	)
+	transport.SetPutHandler(c.onTxReceived)
+	transport.SetAckHandler(c.onAckReceived)
+
+	c.transport = transport
 
 	return c
 }
 
-func (c *consumer) onTxReceived(url string, tx Tx) {
+func (c *consumer) onTxReceived(tx Tx) {
 	log.Infof("[consumer %v] tx %v received", c.ID.Pretty(), tx.ID)
 
-	err := c.store.AddTx(tx)
+	err := c.Store.AddTx(tx)
 	if err != nil {
 		panic(err)
 	}
@@ -49,20 +47,20 @@ func (c *consumer) onAckReceived(url string, id ID) {
 }
 
 func (c *consumer) AddPeer(ctx context.Context, multiaddrString string) error {
-	return c.host.AddPeer(ctx, multiaddrString)
+	return c.transport.AddPeer(ctx, multiaddrString)
 }
 
 func (c *consumer) Subscribe(ctx context.Context, url string) error {
-	return c.host.Subscribe(ctx, url)
+	return c.transport.Subscribe(ctx, url)
 }
 
-func (c *consumer) AddTx(ctx context.Context, url string, tx Tx) error {
-	err := c.store.AddTx(tx)
+func (c *consumer) AddTx(ctx context.Context, tx Tx) error {
+	err := c.Store.AddTx(tx)
 	if err != nil {
 		return err
 	}
 
-	err = c.host.BroadcastTx(ctx, url, tx)
+	err = c.transport.Put(ctx, tx)
 	if err != nil {
 		return err
 	}
