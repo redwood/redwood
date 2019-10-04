@@ -1,14 +1,12 @@
 module github.com/brynbellomy/redwood
 
-replace github.com/libgit2/git2go => ./vendor/github.com/libgit2/git2go
-
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Conscience/protocol v0.0.0-20190924232412-862dc8a9c9ef // indirect
 	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d
 	github.com/ThomsonReutersEikon/go-ntlm v0.0.0-20181130171125-cf23bd1ecf18 // indirect
 	github.com/brynbellomy/debugcharts v0.0.0-20180826220201-c3f57e57ea6f
-	github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d // indirect
+	github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d
 	github.com/brynbellomy/go-structomancer v1.0.1 // indirect
 	github.com/btcsuite/btcd v0.0.0-20190213025234-306aecffea32
 	github.com/btcsuite/btcutil v0.0.0-20190207003914-4c204d697803
@@ -46,7 +44,7 @@ require (
 	github.com/src-d/go-git v4.7.0+incompatible // indirect
 	github.com/tyler-smith/go-bip39 v1.0.0
 	github.com/urfave/cli v1.20.0
-	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036 // indirect
+	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036
 	golang.org/x/net v0.0.0-20190724013045-ca1201d0de80
 	google.golang.org/grpc v1.17.0
 	gopkg.in/src-d/go-git.v4 v4.13.1 // indirect

@@ -1,9 +1,7 @@
-package main
+package redwood
 
 import (
-	"encoding/json"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 )
 
 type dumbResolver struct{}
@@ -13,9 +11,6 @@ func NewDumbResolver() Resolver {
 }
 
 func (r *dumbResolver) ResolveState(state interface{}, p Patch) (interface{}, error) {
-	j, _ := json.MarshalIndent(state, "", "    ")
-	log.Errorln("RESOLVE STATE in", string(j))
-
 	setval := func(val interface{}) { state = val }
 	getval := func() interface{} { return state }
 
@@ -103,9 +98,6 @@ func (r *dumbResolver) ResolveState(state interface{}, p Patch) (interface{}, er
 	}
 
 	setval(p.Val)
-
-	j, _ = json.MarshalIndent(state, "", "    ")
-	log.Errorln("RESOLVE STATE out", string(j))
 
 	return state, nil
 }

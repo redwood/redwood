@@ -1,4 +1,4 @@
-package main
+package redwood
 
 import (
 	"encoding/json"
@@ -105,7 +105,6 @@ func (s *store) AddTx(tx Tx) error {
 
 		err := validator.Validate(s.stateAtKeypath(validatorKeypaths[validator]), s.timeDAG, txCopy)
 		if err != nil {
-			log.Errorln("DIDNT VALIDATE", err)
 			return err
 		}
 	}

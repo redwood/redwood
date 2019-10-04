@@ -1,4 +1,4 @@
-package main
+package gitresolver
 
 import (
 	"encoding/json"
@@ -9,16 +9,16 @@ import (
 	"github.com/libgit2/git2go"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/brynbellomy/redwood"
 )
 
-type gitResolver struct {
+type GitResolver struct {
 	repoRoot string
 	branch   string
 }
 
-func (s *gitResolver) ResolveState(state interface{}, patch Patch) (newState interface{}, err error) {
-	defer annotate(&err, "gitResolver.ResolveState")
-
+func (s *GitResolver) ResolveState(state interface{}, patch redwood.Patch) (newState interface{}, err error) {
 	repo, err := git.OpenRepository(s.repoRoot)
 	if err != nil {
 		return nil, errors.WithStack(err)

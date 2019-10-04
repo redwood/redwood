@@ -1,12 +1,10 @@
-package main
+package redwood
 
 import (
-	"encoding/json"
 	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 )
 
 type Validator interface {
@@ -18,9 +16,6 @@ type validator struct {
 }
 
 func (v *validator) Validate(state interface{}, timeDAG map[ID]map[ID]bool, tx Tx) error {
-	j, _ := json.MarshalIndent(state, "", "    ")
-	log.Warnln("Validate", v.ID, string(j))
-
 	if len(tx.Parents) == 0 {
 		return errors.New("tx must have parents")
 	} else if len(timeDAG) > 0 && len(tx.Parents) == 1 && tx.Parents[0] == GenesisTxID {

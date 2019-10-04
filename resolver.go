@@ -1,4 +1,4 @@
-package main
+package redwood
 
 import (
 // log "github.com/sirupsen/logrus"

@@ -1,4 +1,4 @@
-package main
+package redwood
 
 import (
 	"context"
@@ -359,7 +359,6 @@ func (t *libp2pTransport) forEachProviderOfURL(ctx context.Context, theURL strin
 		return errors.WithStack(err)
 	}
 
-	log.Errorln(u.Hostname())
 	urlCid, err := cidForString("serve:" + u.Hostname())
 	if err != nil {
 		return errors.WithStack(err)
