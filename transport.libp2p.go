@@ -101,6 +101,10 @@ func NewLibp2pTransport(ctx context.Context, id ID, port uint) (Transport, error
 	return t, nil
 }
 
+func (t *libp2pTransport) Libp2pPeerID() string {
+	return t.libp2pHost.ID().Pretty()
+}
+
 func obtainP2PKey(id ID) (crypto.PrivKey, error) {
 	keyfile := fmt.Sprintf("/tmp/redwood.%v.key", id.String())
 

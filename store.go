@@ -16,6 +16,7 @@ type Store interface {
 	StateJSON() ([]byte, error)
 
 	RegisterResolverForKeypath(keypath []string, resolver Resolver)
+	RegisterValidatorForKeypath(keypath []string, validator Validator)
 }
 
 type store struct {
@@ -40,7 +41,10 @@ func NewStore(id ID, genesisState interface{}) Store {
 	}
 
 	s.RegisterResolverForKeypath([]string{}, NewDumbResolver())
-	s.RegisterValidatorForKeypath([]string{}, &validator{ID: id})
+	s.RegisterValidatorForKeypath([]string{}, NewStackValidator([]Validator{
+		&IntrinsicsValidator{},
+		&PermissionsValidator{},
+	}))
 
 	return s
 }

@@ -59,8 +59,13 @@ end
 		// &gitResolver{repoRoot: "/tmp/hihihi", branch: "master"},
 	}))
 
-	c2.AddPeer(ctx, "/ip4/0.0.0.0/tcp/21231/p2p/16Uiu2HAkyRshgAY4q6SwfW88zM845mkauUQneWL3vX7Yacd17SNx")
+	// Connect the two consumers
+	peerID := c1.Transport.(interface {
+		Libp2pPeerID() string
+	}).Libp2pPeerID()
+	c2.AddPeer(ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
 
+	// Consumer 2 subscribes to a URL
 	err = c2.Subscribe(ctx, "braid://axon.science")
 	if err != nil {
 		panic(err)

@@ -10,7 +10,15 @@ func annotate(err *error, msg string, args ...interface{}) {
 	}
 }
 
-func valueAtKeypath(m map[string]interface{}, keypath []string) (interface{}, bool) {
+func valueAtKeypath(maybeMap interface{}, keypath []string) (interface{}, bool) {
+	m, isMap := maybeMap.(map[string]interface{})
+	if !isMap {
+		if len(keypath) > 0 {
+			return nil, false
+		}
+		return maybeMap, true
+	}
+
 	var cur interface{} = m
 	for i := 0; i < len(keypath); i++ {
 		var exists bool

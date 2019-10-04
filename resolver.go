@@ -1,9 +1,5 @@
 package redwood
 
-import (
-// log "github.com/sirupsen/logrus"
-)
-
 type Resolver interface {
 	ResolveState(state interface{}, patch Patch) (interface{}, error)
 }

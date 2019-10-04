@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/brynbellomy/redwood"
+	rw "github.com/brynbellomy/redwood"
 )
 
 type GitResolver struct {
@@ -18,7 +18,7 @@ type GitResolver struct {
 	branch   string
 }
 
-func (s *GitResolver) ResolveState(state interface{}, patch redwood.Patch) (newState interface{}, err error) {
+func (s *GitResolver) ResolveState(state interface{}, patch rw.Patch) (newState interface{}, err error) {
 	repo, err := git.OpenRepository(s.repoRoot)
 	if err != nil {
 		return nil, errors.WithStack(err)

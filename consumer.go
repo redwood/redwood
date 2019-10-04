@@ -8,13 +8,11 @@ import (
 
 type consumer struct {
 	ID        ID
-	transport Transport
+	Transport Transport
 	Store     Store
 }
 
 func NewConsumer(id ID, port uint, store Store) *consumer {
-	// id := RandomID()
-
 	c := &consumer{
 		ID:    id,
 		Store: store,
@@ -28,7 +26,7 @@ func NewConsumer(id ID, port uint, store Store) *consumer {
 	transport.SetPutHandler(c.onTxReceived)
 	transport.SetAckHandler(c.onAckReceived)
 
-	c.transport = transport
+	c.Transport = transport
 
 	return c
 }
@@ -47,11 +45,11 @@ func (c *consumer) onAckReceived(url string, id ID) {
 }
 
 func (c *consumer) AddPeer(ctx context.Context, multiaddrString string) error {
-	return c.transport.AddPeer(ctx, multiaddrString)
+	return c.Transport.AddPeer(ctx, multiaddrString)
 }
 
 func (c *consumer) Subscribe(ctx context.Context, url string) error {
-	return c.transport.Subscribe(ctx, url)
+	return c.Transport.Subscribe(ctx, url)
 }
 
 func (c *consumer) AddTx(ctx context.Context, tx Tx) error {
@@ -60,7 +58,7 @@ func (c *consumer) AddTx(ctx context.Context, tx Tx) error {
 		return err
 	}
 
-	err = c.transport.Put(ctx, tx)
+	err = c.Transport.Put(ctx, tx)
 	if err != nil {
 		return err
 	}
