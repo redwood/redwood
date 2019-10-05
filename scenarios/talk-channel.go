@@ -39,67 +39,40 @@ func main() {
 	copy(id1[:], []byte("oneoneoneoneone"))
 	copy(id2[:], []byte("twotwotwotwotwo"))
 
-	genesisState := M{
-		"permissions": M{
-			id1.String(): M{
-				"^.*$": M{
-					"read":  true,
-					"write": true,
-				},
-			},
-		},
-		"shrugisland": M{
-			"talk0": M{
-				// "messages": []interface{}{},
-				"permissions": M{
-					id1.String(): M{
-						"^.*$": M{
-							"read":  true,
-							"write": true,
-						},
-					},
-					id2.String(): M{
-						"^.*$": M{
-							"read":  true,
-							"write": true,
-						},
-					},
-				},
-			},
-		},
-	}
-	genesisState2 := M{
-		"permissions": M{
-			id1.String(): M{
-				"^.*$": M{
-					"read":  true,
-					"write": true,
-				},
-			},
-		},
-		"shrugisland": M{
-			"talk0": M{
-				// "messages": []interface{}{},
-				"permissions": M{
-					id1.String(): M{
-						"^.*$": M{
-							"read":  true,
-							"write": true,
-						},
-					},
-					id2.String(): M{
-						"^.*$": M{
-							"read":  true,
-							"write": true,
-						},
-					},
-				},
-			},
-		},
+	genesisBytes, err := ioutil.ReadFile("genesis.json")
+	if err != nil {
+		panic(err)
 	}
 
-	c1 := rw.NewConsumer(id1, 21231, rw.NewStore(id1, genesisState))
-	c2 := rw.NewConsumer(id2, 21241, rw.NewStore(id2, genesisState2))
+	var genesis1 map[string]interface{}
+	var genesis2 map[string]interface{}
+	err = json.Unmarshal(genesisBytes, &genesis1)
+	if err != nil {
+		panic(err)
+	}
+	err = json.Unmarshal(genesisBytes, &genesis2)
+	if err != nil {
+		panic(err)
+	}
+
+	store1, err := rw.NewStore(id1, genesis1)
+	if err != nil {
+		panic(err)
+	}
+	store2, err := rw.NewStore(id2, genesis2)
+	if err != nil {
+		panic(err)
+	}
+
+	c1, err := rw.NewConsumer(id1, 21231, store1)
+	if err != nil {
+		panic(err)
+	}
+
+	c2, err := rw.NewConsumer(id2, 21241, store2)
+	if err != nil {
+		panic(err)
+	}
 
 	n.CtxAddChild(c1, nil)
 	n.CtxAddChild(c2, nil)
@@ -193,3 +166,60 @@ func mustParsePatch(s string) rw.Patch {
 	}
 	return p
 }
+
+// genesisState := M{
+//     "permissions": M{
+//         id1.String(): M{
+//             "^.*$": M{
+//                 "read":  true,
+//                 "write": true,
+//             },
+//         },
+//     },
+//     "shrugisland": M{
+//         "talk0": M{
+//             "permissions": M{
+//                 id1.String(): M{
+//                     "^.*$": M{
+//                         "read":  true,
+//                         "write": true,
+//                     },
+//                 },
+//                 id2.String(): M{
+//                     "^.*$": M{
+//                         "read":  true,
+//                         "write": true,
+//                     },
+//                 },
+//             },
+//         },
+//     },
+// }
+// genesisState2 := M{
+//     "permissions": M{
+//         id1.String(): M{
+//             "^.*$": M{
+//                 "read":  true,
+//                 "write": true,
+//             },
+//         },
+//     },
+//     "shrugisland": M{
+//         "talk0": M{
+//             "permissions": M{
+//                 id1.String(): M{
+//                     "^.*$": M{
+//                         "read":  true,
+//                         "write": true,
+//                     },
+//                 },
+//                 id2.String(): M{
+//                     "^.*$": M{
+//                         "read":  true,
+//                         "write": true,
+//                     },
+//                 },
+//             },
+//         },
+//     },
+// }

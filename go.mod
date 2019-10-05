@@ -17,8 +17,7 @@ require (
 	github.com/docker/docker v0.7.3-0.20180815000130-e05b657120a6
 	github.com/dustin/go-humanize v1.0.0
 	github.com/gin-gonic/gin v1.4.0 // indirect
-	github.com/golang/protobuf v1.3.1
-	github.com/hashicorp/hcl v1.0.0 // indirect
+	github.com/golang/protobuf v1.3.2
 	github.com/ijc25/Gotty v0.0.0-20170406111628-a8b993ba6abd
 	github.com/ipfs/go-cid v0.0.1
 	github.com/ipfs/go-datastore v0.0.2
@@ -39,6 +38,7 @@ require (
 	github.com/multiformats/go-multihash v0.0.1
 	github.com/pborman/uuid v1.2.0 // indirect
 	github.com/pkg/errors v0.8.1
+	github.com/plan-systems/plan-core v0.0.2
 	github.com/rjeczalik/notify v0.9.2 // indirect
 	github.com/sirupsen/logrus v1.2.0
 	github.com/src-d/go-git v4.7.0+incompatible // indirect
@@ -46,7 +46,7 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036
 	golang.org/x/net v0.0.0-20190724013045-ca1201d0de80
-	google.golang.org/grpc v1.17.0
+	google.golang.org/grpc v1.22.0
 	gopkg.in/src-d/go-git.v4 v4.13.1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20190502103701-55513cacd4ae
 )

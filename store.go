@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/plan-systems/plan-core/tools/ctx"
 )
 
 type Store interface {
@@ -20,6 +20,8 @@ type Store interface {
 }
 
 type store struct {
+	ctx.Context
+
 	ID           ID
 	mu           sync.RWMutex
 	txs          map[ID]Tx
@@ -30,7 +32,7 @@ type store struct {
 	leaves       map[ID]bool
 }
 
-func NewStore(id ID, genesisState interface{}) Store {
+func NewStore(id ID, genesisState interface{}) (Store, error) {
 	s := &store{
 		ID:           id,
 		mu:           sync.RWMutex{},
@@ -42,13 +44,34 @@ func NewStore(id ID, genesisState interface{}) Store {
 		leaves:       make(map[ID]bool),
 	}
 
+	err := s.Startup()
+
+	return s, err
+}
+
+func (s *store) Startup() error {
+	return s.CtxStart(
+		s.ctxStartup,
+		nil,
+		nil,
+		s.ctxStopping,
+	)
+}
+
+func (s *store) ctxStartup() error {
+	s.SetLogLabel(s.ID.Pretty()[:4] + " store")
+
 	s.RegisterResolverForKeypath([]string{}, NewDumbResolver())
 	s.RegisterValidatorForKeypath([]string{}, NewStackValidator([]Validator{
 		&IntrinsicsValidator{},
 		&PermissionsValidator{},
 	}))
 
-	return s
+	return nil
+}
+
+func (s *store) ctxStopping() {
+	// No op since c.Ctx will cancel as this ctx completes stopping
 }
 
 func (s *store) State() interface{} {
@@ -77,7 +100,7 @@ func (s *store) AddTx(tx Tx) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	log.Infof("[store %v] new tx %v", s.ID, tx.ID)
+	s.Infof(0, "new tx %v", tx.ID)
 
 	// Ignore duplicates
 	if _, exists := s.txs[tx.ID]; exists {
@@ -155,7 +178,7 @@ func (s *store) AddTx(tx Tx) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("[store %v] state = %v", s.ID, string(j))
+	s.Infof(0, "state = %v", string(j))
 
 	// Save historical state
 
