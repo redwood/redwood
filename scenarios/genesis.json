@@ -1,0 +1,10 @@
+{
+    "permissions": {
+        "6f6e65": {
+            "^.*$": {
+                "read":  true,
+                "write": true
+            }
+        }
+    }
+}

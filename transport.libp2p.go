@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 
 	cid "github.com/ipfs/go-cid"
 	dstore "github.com/ipfs/go-datastore"
@@ -27,9 +26,13 @@ import (
 	protocol "github.com/libp2p/go-libp2p-protocol"
 	ma "github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
+
+	"github.com/plan-systems/plan-core/tools/ctx"
 )
 
 type libp2pTransport struct {
+	ctx.Context
+
 	ID         ID
 	libp2pHost p2phost.Host
 	dht        *dht.IpfsDHT
@@ -90,15 +93,36 @@ func NewLibp2pTransport(ctx context.Context, id ID, port uint) (Transport, error
 
 	t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
 
-	go t.periodicallyAnnounceContent(ctx)
+	err = t.Startup()
 
 	// addrs := []string{}
 	// for _, addr := range libp2pHost.Addrs() {
 	// 	addrs = append(addrs, addr.String()+"/p2p/"+libp2pHost.ID().Pretty())
 	// }
-	// log.Infof("[transport %v] addrs:\n%v", id, strings.Join(addrs, "\n"))
+	// t.Infof(0, "[transport %v] addrs:\n%v", id, strings.Join(addrs, "\n"))
 
-	return t, nil
+	return t, err
+}
+
+func (t *libp2pTransport) Startup() error {
+	return t.CtxStart(
+		t.ctxStartup,
+		nil,
+		nil,
+		t.ctxStopping,
+	)
+}
+
+func (t *libp2pTransport) ctxStartup() error {
+	t.SetLogLabel(t.ID.Pretty()[:4] + " transport")
+
+	go t.periodicallyAnnounceContent(t.Ctx)
+
+	return nil
+}
+
+func (t *libp2pTransport) ctxStopping() {
+	// No op since c.Ctx will cancel as this ctx completes stopping
 }
 
 func (t *libp2pTransport) Libp2pPeerID() string {
@@ -169,13 +193,13 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	case MsgType_Subscribe:
 		urlStr, ok := msg.Payload.(string)
 		if !ok {
-			log.Errorf("[transport %v] Subscribe message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
+			t.Errorf("[transport %v] Subscribe message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
 			return
 		}
 
 		u, err := url.Parse(urlStr)
 		if err != nil {
-			log.Errorf("[transport %v] Subscribe message: bad url (%v): %v", t.ID, urlStr, err)
+			t.Errorf("[transport %v] Subscribe message: bad url (%v): %v", t.ID, urlStr, err)
 			return
 		}
 
@@ -189,7 +213,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 
 		tx, ok := msg.Payload.(Tx)
 		if !ok {
-			log.Errorf("[transport %v] Put message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
+			t.Errorf("[transport %v] Put message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
 			return
 		}
 
@@ -198,7 +222,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 		// ACK the PUT
 		err := t.Ack(context.TODO(), tx.URL, tx.ID)
 		if err != nil {
-			log.Errorf("[transport %v] error ACKing a PUT: %v", err)
+			t.Errorf("[transport %v] error ACKing a PUT: %v", err)
 			return
 		}
 
@@ -207,7 +231,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 
 		// versionID, ok := msg.Payload.(ID)
 		// if !ok {
-		// 	log.Errorf("[transport %v] Ack message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
+		// 	t.Errorf("[transport %v] Ack message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
 		// 	return
 		// }
 
@@ -235,7 +259,7 @@ func (t *libp2pTransport) AddPeer(ctx context.Context, multiaddrString string) e
 		return errors.Wrapf(err, "could not connect to peer '%v'", multiaddrString)
 	}
 
-	log.Infof("[transport %v] connected to peer", t.ID)
+	t.Infof(0, "[transport %v] connected to peer", t.ID)
 
 	return nil
 }
@@ -292,7 +316,6 @@ func (t *libp2pTransport) Subscribe(ctx context.Context, url string) error {
 			var msg Msg
 			err := ReadMsg(stream, &msg)
 			if err != nil {
-				log.Errorln("xyzzy", err)
 				return
 			}
 
@@ -373,7 +396,7 @@ func (t *libp2pTransport) forEachProviderOfURL(ctx context.Context, theURL strin
 		if pinfo.ID == t.libp2pHost.ID() {
 			continue
 		}
-		log.Infof(`[transport %v] found peer %v for url "%v"`, t.ID, pinfo.ID, theURL)
+		t.Infof(0, `[transport %v] found peer %v for url "%v"`, t.ID, pinfo.ID, theURL)
 
 		keepGoing, err := fn(pinfo)
 		if err != nil {
@@ -404,7 +427,7 @@ func (t *libp2pTransport) periodicallyAnnounceContent(ctx context.Context) {
 		default:
 		}
 
-		log.Debugf("[transport] announce")
+		t.Info(0, "announce")
 
 		// Announce the URLs we're serving
 		for _, url := range URLS_TO_ADVERTISE {
@@ -414,13 +437,13 @@ func (t *libp2pTransport) periodicallyAnnounceContent(ctx context.Context) {
 
 				c, err := cidForString("serve:" + url)
 				if err != nil {
-					log.Errorf("[transport] announce: error creating cid: %v", err)
+					t.Errorf("announce: error creating cid: %v", err)
 					return
 				}
 
 				err = t.dht.Provide(ctxInner, c, true)
 				if err != nil && err != kbucket.ErrLookupFailure {
-					log.Errorf(`[transport] announce: could not dht.Provide url "%v": %v`, url, err)
+					t.Errorf(`announce: could not dht.Provide url "%v": %v`, url, err)
 					return
 				}
 			}()

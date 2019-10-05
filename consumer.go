@@ -15,33 +15,29 @@ type consumer struct {
 	Store     Store
 }
 
-func NewConsumer(id ID, port uint, store Store) *consumer {
+func NewConsumer(id ID, port uint, store Store) (*consumer, error) {
 	c := &consumer{
 		ID:    id,
 		Port:  port,
 		Store: store,
 	}
 
-	c.Startup()
+	err := c.Startup()
 
-	return c
+	return c, err
 }
 
 func (c *consumer) Startup() error {
-
-	err := c.CtxStart(
+	return c.CtxStart(
 		c.ctxStartup,
 		nil,
 		nil,
 		c.ctxStopping,
 	)
-
-	return err
 }
 
 func (c *consumer) ctxStartup() error {
-
-	c.SetLogLabel("consumer" + c.ID.Pretty()[:4])
+	c.SetLogLabel(c.ID.Pretty()[:4] + " consumer")
 	c.Infof(0, "opening libp2p on port %v", c.Port)
 	transport, err := NewLibp2pTransport(c.Ctx, c.ID, c.Port)
 	if err != nil {
@@ -57,9 +53,7 @@ func (c *consumer) ctxStartup() error {
 }
 
 func (c *consumer) ctxStopping() {
-
 	// No op since c.Ctx will cancel as this ctx completes stopping
-
 }
 
 func (c *consumer) onTxReceived(tx Tx) {
