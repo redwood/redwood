@@ -1,16 +1,32 @@
 package main
 
 import (
-	"context"
 	"time"
+
+	"github.com/plan-systems/plan-core/tools/ctx"
 
 	rw "github.com/brynbellomy/redwood"
 )
 
 type M = map[string]interface{}
 
+type testNode struct {
+	ctx.Context
+}
+
+func (n *testNode) onStartup() error {
+	return nil
+}
+
 func main() {
-	ctx := context.Background()
+
+	n := testNode{}
+	n.CtxStart(
+		n.onStartup,
+		nil,
+		nil,
+		nil,
+	)
 
 	var id1 rw.ID
 	var id2 rw.ID
@@ -53,6 +69,9 @@ func main() {
 		panic(err)
 	}
 
+	n.CtxAddChild(c1, nil)
+	n.CtxAddChild(c2, nil)
+
 	talkChannelResolver, err := rw.NewLuaResolverFromFile("talk-channel.lua")
 	if err != nil {
 		panic(err)
@@ -72,10 +91,10 @@ func main() {
 
 	// Connect the two consumers
 	peerID := c1.Transport.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
-	c2.AddPeer(ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
+	c2.AddPeer(c2.Ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
 
 	// Consumer 2 subscribes to a URL
-	err = c2.Subscribe(ctx, "braid://axon.science")
+	err = c2.Subscribe(c2.Ctx, "braid://axon.science")
 	if err != nil {
 		panic(err)
 	}
@@ -115,24 +134,24 @@ func main() {
 	)
 
 	c1.Info(1, "adding tx 1")
-	err = c1.AddTx(ctx, tx1)
+	err = c1.AddTx(c1.Ctx, tx1)
 	if err != nil {
 		c1.Errorf("zzz %+v", err)
 	}
 	c1.Info(1, "adding tx 2")
-	err = c1.AddTx(ctx, tx2)
+	err = c1.AddTx(c1.Ctx, tx2)
 	if err != nil {
 		c1.Errorf("yyy %+v", err)
 	}
 	c1.Info(1, "adding tx 3")
-	err = c1.AddTx(ctx, tx3)
+	err = c1.AddTx(c1.Ctx, tx3)
 	if err != nil {
 		c1.Errorf("xxx %+v", err)
 	}
 
-	// Block forever
-	ch := make(chan struct{})
-	<-ch
+	n.AttachInterruptHandler()
+	n.CtxWait()
+
 }
 
 func mustParsePatch(s string) rw.Patch {
