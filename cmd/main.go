@@ -72,7 +72,7 @@ end
 	}
 
 	time.Sleep(1 * time.Second)
-	log.Infof("adding txs...")
+
 
 	var (
 		tx1 = rw.Tx{

@@ -3,11 +3,14 @@ package redwood
 import (
 	"context"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/plan-systems/plan-core/tools/ctx"
 )
 
 type consumer struct {
+	ctx.Context
+
 	ID        ID
+	Port      uint
 	Transport Transport
 	Store     Store
 }
@@ -15,12 +18,34 @@ type consumer struct {
 func NewConsumer(id ID, port uint, store Store) *consumer {
 	c := &consumer{
 		ID:    id,
+		Port:  port,
 		Store: store,
 	}
 
-	transport, err := NewLibp2pTransport(context.Background(), id, port)
+	c.Startup()
+
+	return c
+}
+
+func (c *consumer) Startup() error {
+
+	err := c.CtxStart(
+		c.ctxStartup,
+		nil,
+		nil,
+		c.ctxStopping,
+	)
+
+	return err
+}
+
+func (c *consumer) ctxStartup() error {
+
+	c.SetLogLabel("consumer" + c.ID.Pretty()[:4])
+	c.Infof(0, "opening libp2p on port %v", c.Port)
+	transport, err := NewLibp2pTransport(c.Ctx, c.ID, c.Port)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	transport.SetPutHandler(c.onTxReceived)
@@ -28,11 +53,17 @@ func NewConsumer(id ID, port uint, store Store) *consumer {
 
 	c.Transport = transport
 
-	return c
+	return nil
+}
+
+func (c *consumer) ctxStopping() {
+
+	// No op since c.Ctx will cancel as this ctx completes stopping
+
 }
 
 func (c *consumer) onTxReceived(tx Tx) {
-	log.Infof("[consumer %v] tx %v received", c.ID.Pretty(), tx.ID)
+	c.Infof(0, "tx %v received", c.ID.Pretty())
 
 	err := c.Store.AddTx(tx)
 	if err != nil {
@@ -41,7 +72,7 @@ func (c *consumer) onTxReceived(tx Tx) {
 }
 
 func (c *consumer) onAckReceived(url string, id ID) {
-	log.Infof("[consumer %v] ack received", c.ID.Pretty(), id)
+	c.Info(0, "ack received for ", url)
 }
 
 func (c *consumer) AddPeer(ctx context.Context, multiaddrString string) error {
@@ -53,6 +84,8 @@ func (c *consumer) Subscribe(ctx context.Context, url string) error {
 }
 
 func (c *consumer) AddTx(ctx context.Context, tx Tx) error {
+
+	c.Info(0, "adding tx ", tx.ID.Pretty())
 	err := c.Store.AddTx(tx)
 	if err != nil {
 		return err
