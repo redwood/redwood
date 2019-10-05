@@ -25,6 +25,7 @@ type store struct {
 	txs          map[ID]Tx
 	resolverTree resolverTree
 	currentState interface{}
+	stateHistory map[ID]interface{}
 	timeDAG      map[ID]map[ID]bool
 	leaves       map[ID]bool
 }
@@ -36,6 +37,7 @@ func NewStore(id ID, genesisState interface{}) Store {
 		txs:          map[ID]Tx{},
 		resolverTree: resolverTree{},
 		currentState: genesisState,
+		stateHistory: map[ID]interface{}{},
 		timeDAG:      make(map[ID]map[ID]bool),
 		leaves:       make(map[ID]bool),
 	}
@@ -154,6 +156,8 @@ func (s *store) AddTx(tx Tx) error {
 		return err
 	}
 	log.Infof("[store %v] state = %v", s.ID, string(j))
+
+	// Save historical state
 
 	return nil
 }

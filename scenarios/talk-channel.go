@@ -32,22 +32,55 @@ func main() {
 		"shrugisland": M{
 			"talk0": M{
 				// "messages": []interface{}{},
+				"permissions": M{
+					id1.String(): M{
+						"^.*$": M{
+							"read":  true,
+							"write": true,
+						},
+					},
+					id2.String(): M{
+						"^.*$": M{
+							"read":  true,
+							"write": true,
+						},
+					},
+				},
 			},
 		},
 	}
-	// genesisState2 := M{
-	// 	"permissions": M{
-	// 		id1.String(): M{
-	// 			"^.*$": M{
-	// 				"read":  true,
-	// 				"write": true,
-	// 			},
-	// 		},
-	// 	},
-	// }
+	genesisState2 := M{
+		"permissions": M{
+			id1.String(): M{
+				"^.*$": M{
+					"read":  true,
+					"write": true,
+				},
+			},
+		},
+		"shrugisland": M{
+			"talk0": M{
+				// "messages": []interface{}{},
+				"permissions": M{
+					id1.String(): M{
+						"^.*$": M{
+							"read":  true,
+							"write": true,
+						},
+					},
+					id2.String(): M{
+						"^.*$": M{
+							"read":  true,
+							"write": true,
+						},
+					},
+				},
+			},
+		},
+	}
 
 	c1 := rw.NewConsumer(id1, 21231, rw.NewStore(id1, genesisState))
-	// c2 := rw.NewConsumer(id2, 21241, rw.NewStore(id2, genesisState2))
+	c2 := rw.NewConsumer(id2, 21241, rw.NewStore(id2, genesisState2))
 
 	talkChannelResolver, err := rw.NewLuaResolverFromFile("talk-channel.lua")
 	if err != nil {
@@ -55,16 +88,26 @@ func main() {
 	}
 
 	c1.Store.RegisterResolverForKeypath([]string{"shrugisland", "talk0"}, talkChannelResolver)
+	c1.Store.RegisterValidatorForKeypath([]string{"shrugisland", "talk0"}, rw.NewStackValidator([]rw.Validator{
+		&rw.IntrinsicsValidator{},
+		&rw.PermissionsValidator{},
+	}))
+
+	c2.Store.RegisterResolverForKeypath([]string{"shrugisland", "talk0"}, talkChannelResolver)
+	c2.Store.RegisterValidatorForKeypath([]string{"shrugisland", "talk0"}, rw.NewStackValidator([]rw.Validator{
+		&rw.IntrinsicsValidator{},
+		&rw.PermissionsValidator{},
+	}))
 
 	// Connect the two consumers
-	// peerID := c1.Transport.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
-	// c2.AddPeer(ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
+	peerID := c1.Transport.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
+	c2.AddPeer(ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
 
 	// Consumer 2 subscribes to a URL
-	// err = c2.Subscribe(ctx, "braid://axon.science")
-	// if err != nil {
-	// 	panic(err)
-	// }
+	err = c2.Subscribe(ctx, "braid://axon.science")
+	if err != nil {
+		panic(err)
+	}
 
 	time.Sleep(1 * time.Second)
 	log.Infof("adding txs...")
@@ -96,22 +139,25 @@ func main() {
 			From:    id1,
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[1:1] = {"text":"yoooo"}`),
+				mustParsePatch(`.shrugisland.talk0.messages[2:2] = {"text":"yoooo"}`),
 			},
 		}
 	)
 
+	log.Infoln("sending tx 1")
 	err = c1.AddTx(ctx, tx1)
 	if err != nil {
-		panic(err)
+		log.Errorf("zzz %+v", err)
 	}
+	log.Infoln("sending tx 2")
 	err = c1.AddTx(ctx, tx2)
 	if err != nil {
-		panic(err)
+		log.Errorf("yyy %+v", err)
 	}
+	log.Infoln("sending tx 3")
 	err = c1.AddTx(ctx, tx3)
 	if err != nil {
-		panic(err)
+		log.Errorf("xxx %+v", err)
 	}
 
 	// Block forever

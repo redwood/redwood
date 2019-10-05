@@ -1,8 +1,9 @@
 package redwood
 
 import (
-// "fmt"
-// "github.com/pkg/errors"
+	// "fmt"
+	// "github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 type dumbResolver struct{}
@@ -96,6 +97,7 @@ func (r *dumbResolver) ResolveState(state interface{}, p Patch) (interface{}, er
 
 					} else {
 						if int64(len(s)) < p.Range[1] {
+							log.Warnf("xyzzy ~> (s = [%T] %v), (patch = %v)", s, s, p.String())
 							old_setval(append(s[:p.Range[0]], v))
 						} else {
 							x := append(s[:p.Range[0]], v)

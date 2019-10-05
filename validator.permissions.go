@@ -9,15 +9,24 @@ import (
 
 type PermissionsValidator struct{}
 
+var Err403 = errors.New("nope")
+
+func patchStrs(patches []Patch) []string {
+	var s []string
+	for i := range patches {
+		s = append(s, patches[i].String())
+	}
+	return s
+}
+
 func (v *PermissionsValidator) Validate(state interface{}, timeDAG map[ID]map[ID]bool, tx Tx) error {
-	// Check write permissions on each patch key
 	maybePerms, exists := valueAtKeypath(state, []string{"permissions", tx.From.String()})
 	if !exists {
-		return errors.New("no permissions configured")
+		return errors.WithStack(Err403)
 	}
 	perms, isMap := maybePerms.(map[string]interface{})
 	if !isMap {
-		return errors.New("no permissions configured")
+		return errors.WithStack(Err403)
 	}
 
 	for _, patch := range tx.Patches {
@@ -27,7 +36,7 @@ func (v *PermissionsValidator) Validate(state interface{}, timeDAG map[ID]map[ID
 		for pattern := range perms {
 			matched, err := regexp.MatchString(pattern, keypath)
 			if err != nil {
-				return errors.WithStack(err)
+				return errors.WithStack(Err403)
 			}
 
 			if matched {
@@ -39,7 +48,7 @@ func (v *PermissionsValidator) Validate(state interface{}, timeDAG map[ID]map[ID
 			}
 		}
 		if !valid {
-			return errors.New("nope")
+			return errors.WithStack(Err403)
 		}
 	}
 

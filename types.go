@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"regexp"
 	"strconv"
+	// "strings"
 
 	"github.com/pkg/errors"
 	// log "github.com/sirupsen/logrus"
@@ -48,12 +49,17 @@ var GenesisTxID = IDFromString("genesis")
 
 func (p *Patch) UnmarshalJSON(bs []byte) error {
 	var err error
-	*p, err = ParsePatch(string(bs[1 : len(bs)-1]))
+	var s string
+	err = json.Unmarshal(bs, &s)
+	if err != nil {
+		return err
+	}
+	*p, err = ParsePatch(s)
 	return err
 }
 
 func (p Patch) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + p.String() + `"`), nil
+	return json.Marshal(p.String())
 }
 
 func (p Patch) Copy() Patch {

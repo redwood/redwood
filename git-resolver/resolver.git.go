@@ -69,7 +69,7 @@ func (s *GitResolver) ResolveState(state interface{}, patch rw.Patch) (newState 
 			var err error
 			filedata, err = json.Marshal(val)
 			if err != nil {
-				return err
+				return errors.WithStack(err)
 			}
 		}
 

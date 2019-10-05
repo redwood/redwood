@@ -171,18 +171,18 @@ func (t *httpTransport) Put(ctx context.Context, tx Tx) error {
 
 	txBytes, err := json.Marshal(tx)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	body := bytes.NewReader(txBytes)
 
 	client := http.Client{}
 	req, err := http.NewRequest("PUT", url, body)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	if resp.StatusCode > 299 {
