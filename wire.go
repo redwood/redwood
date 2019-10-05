@@ -1,12 +1,11 @@
 package redwood
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
+	// log "github.com/sirupsen/logrus"
 )
 
 type Msg struct {
@@ -23,23 +22,11 @@ const (
 )
 
 func WriteMsg(w io.Writer, msg Msg) error {
-	err := json.NewEncoder(w).Encode(msg)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	return nil
+	return json.NewEncoder(w).Encode(msg)
 }
 
 func ReadMsg(r io.Reader, msg *Msg) error {
-	buf := &bytes.Buffer{}
-	tee := io.TeeReader(r, buf)
-
-	err := json.NewDecoder(tee).Decode(msg)
-	if err != nil {
-		log.Errorf("ERR BUF <%v>", string(buf.Bytes()))
-		return errors.WithStack(err)
-	}
-	return nil
+	return json.NewDecoder(r).Decode(msg)
 }
 
 func (msg *Msg) UnmarshalJSON(bs []byte) error {
