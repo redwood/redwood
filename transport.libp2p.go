@@ -106,7 +106,7 @@ func (t *libp2pTransport) Libp2pPeerID() string {
 }
 
 func obtainP2PKey(id ID) (crypto.PrivKey, error) {
-	keyfile := fmt.Sprintf("/tmp/redwood.%v.key", id.String())
+	keyfile := fmt.Sprintf("redwood.%v.key", id.String())
 
 	f, err := os.Open(keyfile)
 	if err != nil && !os.IsNotExist(err) {
