@@ -30,6 +30,20 @@ type (
 	}
 )
 
+func (p Patch) RangeStart() int64 {
+	if p.Range == nil {
+		return -1
+	}
+	return p.Range[0]
+}
+
+func (p Patch) RangeEnd() int64 {
+	if p.Range == nil {
+		return -1
+	}
+	return p.Range[1]
+}
+
 var GenesisTxID = IDFromString("genesis")
 
 func (p *Patch) UnmarshalJSON(bs []byte) error {

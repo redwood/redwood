@@ -1,6 +1,8 @@
 package redwood
 
 import (
+	"encoding/json"
+
 	"github.com/pkg/errors"
 )
 
@@ -36,4 +38,9 @@ func valueAtKeypath(maybeMap interface{}, keypath []string) (interface{}, bool) 
 		}
 	}
 	return cur, true
+}
+
+func prettyJSON(val interface{}) string {
+	j, _ := json.MarshalIndent(val, "", "    ")
+	return string(j)
 }

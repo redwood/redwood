@@ -1,6 +1,7 @@
 package redwood
 
 import (
+	"io/ioutil"
 	"reflect"
 
 	"github.com/brynbellomy/go-luaconv"
@@ -9,6 +10,14 @@ import (
 
 type luaResolver struct {
 	L *lua.LState
+}
+
+func NewLuaResolverFromFile(filename string) (*luaResolver, error) {
+	bs, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	return NewLuaResolver(string(bs))
 }
 
 func NewLuaResolver(scriptSrc string) (*luaResolver, error) {
@@ -23,7 +32,7 @@ func NewLuaResolver(scriptSrc string) (*luaResolver, error) {
 func (r *luaResolver) ResolveState(state interface{}, patch Patch) (newState interface{}, err error) {
 	defer annotate(&err, "luaResolver.ResolveState")
 
-	luaState, err := luaconv.Wrap(r.L, reflect.ValueOf(state))
+	luaState, err := luaconv.Encode(r.L, reflect.ValueOf(state))
 	if err != nil {
 		return nil, err
 	}
@@ -35,11 +44,19 @@ func (r *luaResolver) ResolveState(state interface{}, patch Patch) (newState int
 
 	err = r.L.CallByParam(lua.P{
 		Fn:      r.L.GetGlobal("resolve_state"),
-		NRet:    0,
+		NRet:    1,
 		Protect: false,
 	}, luaState, luaPatch)
 	if err != nil {
 		return nil, err
 	}
+
+	retval := r.L.Get(-1)
+	rval, err := luaconv.Decode(retval, reflect.TypeOf(map[string]interface{}{}))
+	if err != nil {
+		panic(err)
+	}
+	state = rval.Interface()
+
 	return state, nil
 }

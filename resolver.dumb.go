@@ -1,7 +1,8 @@
 package redwood
 
 import (
-	"github.com/pkg/errors"
+// "fmt"
+// "github.com/pkg/errors"
 )
 
 type dumbResolver struct{}
@@ -59,7 +60,6 @@ func (r *dumbResolver) ResolveState(state interface{}, p Patch) (interface{}, er
 	if p.Range != nil {
 		old_setval := setval
 		setval = func(val interface{}) {
-
 			switch v := val.(type) {
 			case string:
 				if getval() == nil {
@@ -75,23 +75,38 @@ func (r *dumbResolver) ResolveState(state interface{}, p Patch) (interface{}, er
 					}
 				}
 
-			case []interface{}:
+				// case []interface{}:
+			default:
 				if getval() == nil {
 					old_setval(val)
 				} else {
 					s, ok := getval().([]interface{})
 					if !ok {
 						old_setval(val)
-					} else if int64(len(s)) < p.Range[1] {
-						old_setval(append(s[:p.Range[0]], v...))
-					} else {
-						x := append(s[:p.Range[0]], v)
-						old_setval(append(x, s[p.Range[1]:]...))
 					}
+
+					seq, isSequence := v.([]interface{})
+					if isSequence {
+						if int64(len(s)) < p.Range[1] {
+							old_setval(append(s[:p.Range[0]], seq...))
+						} else {
+							x := append(s[:p.Range[0]], seq...)
+							old_setval(append(x, s[p.Range[1]:]...))
+						}
+
+					} else {
+						if int64(len(s)) < p.Range[1] {
+							old_setval(append(s[:p.Range[0]], v))
+						} else {
+							x := append(s[:p.Range[0]], v)
+							old_setval(append(x, s[p.Range[1]:]...))
+						}
+					}
+
 				}
 
-			default:
-				panic(errors.Errorf("bad patch (type = %T)", p.Val))
+				// default:
+				// 	panic(errors.Errorf("bad patch (type = %T): %v", p.Val, p.String()))
 			}
 		}
 
