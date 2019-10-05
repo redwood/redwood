@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"time"
 
 	"github.com/plan-systems/plan-core/tools/ctx"
@@ -19,6 +20,10 @@ func (n *testNode) onStartup() error {
 }
 
 func main() {
+
+	flag.Parse()
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
 
 	n := testNode{}
 	n.CtxStart(
