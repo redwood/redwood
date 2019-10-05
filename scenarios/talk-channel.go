@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	rw "github.com/brynbellomy/redwood"
 )
 
@@ -110,7 +108,6 @@ func main() {
 	}
 
 	time.Sleep(1 * time.Second)
-	log.Infof("adding txs...")
 
 	var (
 		tx1 = rw.Tx{
@@ -144,20 +141,20 @@ func main() {
 		}
 	)
 
-	log.Infoln("sending tx 1")
+	c1.Info(1, "adding tx 1")
 	err = c1.AddTx(ctx, tx1)
 	if err != nil {
-		log.Errorf("zzz %+v", err)
+		c1.Errorf("zzz %+v", err)
 	}
-	log.Infoln("sending tx 2")
+	c1.Info(1, "adding tx 2")
 	err = c1.AddTx(ctx, tx2)
 	if err != nil {
-		log.Errorf("yyy %+v", err)
+		c1.Errorf("yyy %+v", err)
 	}
-	log.Infoln("sending tx 3")
+	c1.Info(1, "adding tx 3")
 	err = c1.AddTx(ctx, tx3)
 	if err != nil {
-		log.Errorf("xxx %+v", err)
+		c1.Errorf("xxx %+v", err)
 	}
 
 	// Block forever
