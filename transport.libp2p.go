@@ -259,7 +259,7 @@ func (t *libp2pTransport) AddPeer(ctx context.Context, multiaddrString string) e
 		return errors.Wrapf(err, "could not connect to peer '%v'", multiaddrString)
 	}
 
-	t.Infof(0, "[transport %v] connected to peer", t.ID)
+	t.Infof(0, "connected to %v", pinfo.ID)
 
 	return nil
 }
@@ -396,7 +396,7 @@ func (t *libp2pTransport) forEachProviderOfURL(ctx context.Context, theURL strin
 		if pinfo.ID == t.libp2pHost.ID() {
 			continue
 		}
-		t.Infof(0, `[transport %v] found peer %v for url "%v"`, t.ID, pinfo.ID, theURL)
+		t.Infof(0, `found peer %v for url "%v"`, pinfo.ID, theURL)
 
 		keepGoing, err := fn(pinfo)
 		if err != nil {
