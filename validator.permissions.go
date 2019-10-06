@@ -13,7 +13,7 @@ func NewPermissionsValidator(params map[string]interface{}) (Validator, error) {
 	return &permissionsValidator{}, nil
 }
 
-var Err403 = errors.New("nope")
+var Err403 = errors.New("403: nope")
 
 func patchStrs(patches []Patch) []string {
 	var s []string
@@ -24,13 +24,17 @@ func patchStrs(patches []Patch) []string {
 }
 
 func (v *permissionsValidator) Validate(state interface{}, txs map[ID]Tx, tx Tx) error {
-	maybePerms, exists := valueAtKeypath(state, []string{"permissions", tx.From.String()})
+	asMap, isMap := state.(map[string]interface{})
+	if !isMap {
+		return errors.Wrapf(Err403, "'state' is not a map")
+	}
+	maybePerms, exists := valueAtKeypath(asMap, []string{"permissions", tx.From.String()})
 	if !exists {
-		return errors.WithStack(Err403)
+		return errors.Wrapf(Err403, "permissions key for user '%v' does not exist", tx.From.String())
 	}
 	perms, isMap := maybePerms.(map[string]interface{})
 	if !isMap {
-		return errors.WithStack(Err403)
+		return errors.Wrapf(Err403, "permissions key for user '%v' is not a map", tx.From.String())
 	}
 
 	for _, patch := range tx.Patches {
@@ -40,7 +44,7 @@ func (v *permissionsValidator) Validate(state interface{}, txs map[ID]Tx, tx Tx)
 		for pattern := range perms {
 			matched, err := regexp.MatchString(pattern, keypath)
 			if err != nil {
-				return errors.WithStack(Err403)
+				return errors.Wrapf(Err403, "error executing regex")
 			}
 
 			if matched {
@@ -52,7 +56,7 @@ func (v *permissionsValidator) Validate(state interface{}, txs map[ID]Tx, tx Tx)
 			}
 		}
 		if !valid {
-			return errors.WithStack(Err403)
+			return errors.Wrapf(Err403, "could not find a matching rule (user: %v, patch: %v)", tx.From.String(), patch.String())
 		}
 	}
 

@@ -360,6 +360,8 @@ github.com/plan-systems/klog v0.0.0-20190618231738-14c6677fa6ea h1:ze+IEdbeyFvpd
 github.com/plan-systems/klog v0.0.0-20190618231738-14c6677fa6ea/go.mod h1:iHtOB3K2h2RzEB17aqbaMofmlLpTrNwr0kLkMt/2Oj4=
 github.com/plan-systems/plan-core v0.0.2 h1:xGe7cxdzLtAO3xquxUaDGsGmBTVRlGvZUKiIvDos8uQ=
 github.com/plan-systems/plan-core v0.0.2/go.mod h1:j1aIX7Qy2zgJIJRg08yTeNB9tLslAAiBb9IK0xIL0Oo=
+github.com/plan-systems/plan-core v0.0.3 h1:IwL2en5WNawRzh1yVxS2H6zT+HwryYdJKarKoLMJBEg=
+github.com/plan-systems/plan-core v0.0.3/go.mod h1:j1aIX7Qy2zgJIJRg08yTeNB9tLslAAiBb9IK0xIL0Oo=
 github.com/plan-systems/plan-pdi-local v0.0.0-20190730225752-0dc389a5d3e3/go.mod h1:MukSwc2ya2GA/THrkoWYvl8z/iAirJUtMcv8VpffpTk=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prometheus/client_golang v0.9.1/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=

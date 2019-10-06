@@ -1,7 +1,6 @@
 package redwood
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/brynbellomy/go-luaconv"
@@ -10,17 +9,10 @@ import (
 )
 
 type luaResolver struct {
-	L  *lua.LState
-	ID ID
+	L *lua.LState
 }
 
 func NewLuaResolver(params map[string]interface{}) (Resolver, error) {
-	idx, _ := M(params).GetValue("id")
-	var id ID
-	if idx, is := idx.(ID); is {
-		id = idx
-	}
-
 	src, exists := M(params).GetString("src")
 	if !exists {
 		return nil, errors.New("lua resolver needs a string 'src' param")
@@ -31,17 +23,11 @@ func NewLuaResolver(params map[string]interface{}) (Resolver, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &luaResolver{L: L, ID: id}, nil
+	return &luaResolver{L: L}, nil
 }
 
 func (r *luaResolver) ResolveState(state interface{}, id ID, patch Patch) (newState interface{}, err error) {
 	defer annotate(&err, "luaResolver.ResolveState")
-
-	if r.ID.Pretty()[0] == '7' {
-		fmt.Println("\n\n")
-		fmt.Println("INCOMING STATE ~>", prettyJSON(state))
-		fmt.Println("INCOMING PATCH ~>", prettyJSON(patch))
-	}
 
 	luaState, err := luaconv.Encode(r.L, reflect.ValueOf(state))
 	if err != nil {
@@ -68,11 +54,6 @@ func (r *luaResolver) ResolveState(state interface{}, id ID, patch Patch) (newSt
 		panic(err)
 	}
 	state = rval.Interface()
-
-	if r.ID.Pretty()[0] == '7' {
-		fmt.Println("\n\n")
-		fmt.Println("OUTGOING STATE ~>", prettyJSON(state))
-	}
 
 	return state, nil
 }

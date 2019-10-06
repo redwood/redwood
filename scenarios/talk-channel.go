@@ -100,8 +100,10 @@ func main() {
 		Patches: []rw.Patch{
 			mustParsePatch(`.shrugisland.talk0.permissions = {
                 "` + id1.Pretty() + `": {
-                    "read": true,
-                    "write": true
+                    "^.*$": {
+                        "read": true,
+                        "write": true
+                    }
                 }
             }`),
 			mustParsePatch(`.shrugisland.talk0.messages = []`),
@@ -122,14 +124,13 @@ func main() {
 
                             if patch:RangeStart() ~= -1 and patch:RangeStart() == patch:RangeEnd() then
                                 local msg = {
-                                    'text': sender,
-                                    'sender': sender,
+                                    text = patch.Val['text'],
+                                    sender = sender,
                                 }
                                 if state['messages'] == nil then
                                     state['messages'] = { msg }
 
                                 elseif patch:RangeStart() <= #state['messages'] then
-                                    -- state:Get('messages'):Insert(msg)
                                     state['messages'][ #state['messages'] + 1 ] = msg
 
                                 end
@@ -179,7 +180,7 @@ func main() {
                                     from: '6f6e656f6e656f6e656f6e656f6e650000000000000000000000000000000000',
                                     url: 'braid://axon.science',
                                     patches: [
-                                        '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = {\"text\": \"' + inputText.value + '\",\"sender\":\"6f6e65\"}',
+                                        '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = {\"text\": \"' + inputText.value + '\"}',
                                     ],
                                 }),
                             })

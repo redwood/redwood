@@ -46,6 +46,7 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036
 	golang.org/x/net v0.0.0-20190724013045-ca1201d0de80
+	google.golang.org/genproto v0.0.0-20180831171423-11092d34479b // indirect
 	google.golang.org/grpc v1.22.0
 	gopkg.in/src-d/go-git.v4 v4.13.1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20190502103701-55513cacd4ae

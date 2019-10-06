@@ -12,15 +12,7 @@ func annotate(err *error, msg string, args ...interface{}) {
 	}
 }
 
-func valueAtKeypath(maybeMap interface{}, keypath []string) (interface{}, bool) {
-	m, isMap := maybeMap.(map[string]interface{})
-	if !isMap {
-		if len(keypath) > 0 {
-			return nil, false
-		}
-		return maybeMap, true
-	}
-
+func valueAtKeypath(m map[string]interface{}, keypath []string) (interface{}, bool) {
 	var cur interface{} = m
 	for i := 0; i < len(keypath); i++ {
 		var exists bool
@@ -61,9 +53,12 @@ func walkTree(tree interface{}, fn func(keypath []string, val interface{}) error
 		asMap, isMap := current.val.(map[string]interface{})
 		if isMap {
 			for key := range asMap {
+				kp := make([]string, len(current.keypath)+1)
+				copy(kp, current.keypath)
+				kp[len(kp)-1] = key
 				stack = append(stack, item{
 					val:     asMap[key],
-					keypath: append(current.keypath, key),
+					keypath: kp,
 				})
 			}
 		}
@@ -79,7 +74,7 @@ func prettyJSON(val interface{}) string {
 type M map[string]interface{}
 
 func (m M) GetValue(keypath ...string) (interface{}, bool) {
-	return valueAtKeypath(map[string]interface{}(m), keypath)
+	return valueAtKeypath(m, keypath)
 }
 
 func (m M) GetString(keypath ...string) (string, bool) {
@@ -104,13 +99,26 @@ func (m M) GetSlice(keypath ...string) ([]interface{}, bool) {
 	return nil, false
 }
 
+func (m M) GetStringSlice(keypath ...string) ([]string, bool) {
+	x, exists := valueAtKeypath(m, keypath)
+	if !exists {
+		return nil, false
+	}
+	if s, isSlice := x.([]string); isSlice {
+		return s, true
+	}
+	return nil, false
+}
+
 func (m M) GetMap(keypath ...string) (map[string]interface{}, bool) {
 	x, exists := valueAtKeypath(m, keypath)
 	if !exists {
 		return nil, false
 	}
-	if m, isMap := x.(map[string]interface{}); isMap {
-		return m, true
+	if asMap, isMap := x.(map[string]interface{}); isMap {
+		return asMap, true
+	} else if asMap, isMap = x.(M); isMap {
+		return (map[string]interface{})(asMap), true
 	}
 	return nil, false
 }

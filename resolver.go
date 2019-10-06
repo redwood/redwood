@@ -36,16 +36,11 @@ func initResolverFromConfig(config map[string]interface{}) (Resolver, error) {
 	if !exists {
 		return nil, errors.New("cannot init resolver without a 'type' param")
 	}
-	params, exists := M(config).GetMap("params")
-	if !exists {
-		return nil, errors.New("cannot init resolver without a 'params' field")
-	}
 	ctor, exists := resolverRegistry[typ]
 	if !exists {
 		return nil, errors.Errorf("unknown resolver type '%v'", typ)
 	}
-
-	return ctor(params)
+	return ctor(config)
 }
 
 func initValidatorFromConfig(config map[string]interface{}) (Validator, error) {
@@ -53,16 +48,11 @@ func initValidatorFromConfig(config map[string]interface{}) (Validator, error) {
 	if !exists {
 		return nil, errors.New("cannot init validator without a 'type' param")
 	}
-	params, exists := M(config).GetMap("params")
-	if !exists {
-		return nil, errors.New("cannot init validator without a 'params' field")
-	}
 	ctor, exists := validatorRegistry[typ]
 	if !exists {
 		return nil, errors.Errorf("unknown validator type '%v'", typ)
 	}
-
-	return ctor(params)
+	return ctor(config)
 }
 
 type resolverTree struct {
