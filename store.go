@@ -2,6 +2,7 @@ package redwood
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 
 	"github.com/plan-systems/plan-core/tools/ctx"
@@ -79,7 +80,13 @@ func (s *store) State() interface{} {
 }
 
 func (s *store) StateJSON() ([]byte, error) {
-	return json.MarshalIndent(s.currentState, "", "    ")
+	bs, err := json.MarshalIndent(s.currentState, "", "    ")
+	if err != nil {
+		return nil, err
+	}
+	str := string(bs)
+	str = strings.Replace(str, "\\n", "\n", -1)
+	return []byte(str), nil
 }
 
 func (s *store) RegisterResolverForKeypath(keypath []string, resolver Resolver) {
@@ -107,9 +114,6 @@ func (s *store) AddTx(tx Tx) error {
 		return nil
 	}
 
-	// Store the tx (so we can ignore txs we've seen before)
-	s.txs[tx.ID] = tx
-
 	// Validate the tx
 	validators := make(map[Validator][]Patch)
 	validatorKeypaths := make(map[Validator][]string)
@@ -132,11 +136,14 @@ func (s *store) AddTx(tx Tx) error {
 		txCopy := tx
 		txCopy.Patches = patches
 
-		err := validator.Validate(s.stateAtKeypath(validatorKeypaths[validator]), s.timeDAG, txCopy)
+		err := validator.Validate(s.stateAtKeypath(validatorKeypaths[validator]), s.txs, txCopy)
 		if err != nil {
 			return err
 		}
 	}
+
+	// Store the tx (so we can ignore txs we've seen before)
+	s.txs[tx.ID] = tx
 
 	// Unmark parents as leaves
 	for _, parentID := range tx.Parents {
@@ -160,7 +167,7 @@ func (s *store) AddTx(tx Tx) error {
 			patchCopy := patch
 			patchCopy.Keys = patchCopy.Keys[len(parentResolverKeypath):]
 
-			newState, err = resolver.ResolveState(thisResolverState, patchCopy)
+			newState, err = resolver.ResolveState(thisResolverState, tx.From, patchCopy)
 			if err != nil {
 				return err
 			}
@@ -175,6 +182,7 @@ func (s *store) AddTx(tx Tx) error {
 	}
 
 	// Walk the tree and initialize validators and resolvers
+	// @@TODO: inefficient
 	s.resolverTree = resolverTree{}
 	s.resolverTree.addResolver([]string{}, &dumbResolver{})
 	s.resolverTree.addValidator([]string{}, &stackValidator{[]Validator{
@@ -213,11 +221,11 @@ func (s *store) AddTx(tx Tx) error {
 		return err
 	}
 
-	j, err := s.StateJSON()
-	if err != nil {
-		return err
-	}
-	s.Infof(0, "state = %v", string(j))
+	// j, err := s.StateJSON()
+	// if err != nil {
+	// 	return err
+	// }
+	// s.Infof(0, "state = %v", string(j))
 
 	// Save historical state
 

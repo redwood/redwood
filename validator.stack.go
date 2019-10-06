@@ -32,9 +32,9 @@ func NewStackValidator(params map[string]interface{}) (Validator, error) {
 	return &stackValidator{validators: validators}, nil
 }
 
-func (v *stackValidator) Validate(state interface{}, timeDAG map[ID]map[ID]bool, tx Tx) error {
+func (v *stackValidator) Validate(state interface{}, txs map[ID]Tx, tx Tx) error {
 	for i := range v.validators {
-		err := v.validators[i].Validate(state, timeDAG, tx)
+		err := v.validators[i].Validate(state, txs, tx)
 		if err != nil {
 			return err
 		}

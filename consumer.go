@@ -57,7 +57,7 @@ func (c *consumer) ctxStopping() {
 }
 
 func (c *consumer) onTxReceived(tx Tx) {
-	c.Infof(0, "tx %v received", c.ID.Pretty())
+	c.Infof(0, "tx %v received", tx.ID.Pretty())
 
 	err := c.Store.AddTx(tx)
 	if err != nil {

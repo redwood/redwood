@@ -12,7 +12,7 @@ func NewDumbResolver(params map[string]interface{}) (Resolver, error) {
 	return &dumbResolver{}, nil
 }
 
-func (r *dumbResolver) ResolveState(state interface{}, p Patch) (interface{}, error) {
+func (r *dumbResolver) ResolveState(state interface{}, id ID, p Patch) (interface{}, error) {
 	setval := func(val interface{}) { state = val }
 	getval := func() interface{} { return state }
 
@@ -103,7 +103,6 @@ func (r *dumbResolver) ResolveState(state interface{}, p Patch) (interface{}, er
 							old_setval(append(x, s[p.Range.End:]...))
 						}
 					}
-
 				}
 			}
 		}

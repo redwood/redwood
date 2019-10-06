@@ -5,11 +5,11 @@ import (
 )
 
 type Resolver interface {
-	ResolveState(state interface{}, patch Patch) (interface{}, error)
+	ResolveState(state interface{}, sender ID, patch Patch) (interface{}, error)
 }
 
 type Validator interface {
-	Validate(state interface{}, timeDAG map[ID]map[ID]bool, tx Tx) error
+	Validate(state interface{}, txs map[ID]Tx, tx Tx) error
 }
 
 type ResolverConstructor func(params map[string]interface{}) (Resolver, error)

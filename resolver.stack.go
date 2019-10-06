@@ -33,10 +33,10 @@ func NewStackResolver(params map[string]interface{}) (Resolver, error) {
 	return &stackResolver{resolvers: resolvers}, nil
 }
 
-func (r *stackResolver) ResolveState(state interface{}, patch Patch) (interface{}, error) {
+func (r *stackResolver) ResolveState(state interface{}, id ID, patch Patch) (interface{}, error) {
 	var err error
 	for _, resolver := range r.resolvers {
-		state, err = resolver.ResolveState(state, patch)
+		state, err = resolver.ResolveState(state, id, patch)
 		if err != nil {
 			return nil, err
 		}

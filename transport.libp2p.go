@@ -316,6 +316,7 @@ func (t *libp2pTransport) Subscribe(ctx context.Context, url string) error {
 			var msg Msg
 			err := ReadMsg(stream, &msg)
 			if err != nil {
+				t.Errorf("error reading: %v", err)
 				return
 			}
 
@@ -373,7 +374,6 @@ func (t *libp2pTransport) Put(ctx context.Context, tx Tx) error {
 	for _, subscriber := range t.subscriptionsIn[u.Hostname()] {
 		err := WriteMsg(subscriber, Msg{Type: MsgType_Put, Payload: tx})
 		if err != nil {
-			fmt.Printf("ZZZZZZZ ~> %+v\n", tx)
 			return errors.WithStack(err)
 		}
 

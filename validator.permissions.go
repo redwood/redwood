@@ -23,7 +23,7 @@ func patchStrs(patches []Patch) []string {
 	return s
 }
 
-func (v *permissionsValidator) Validate(state interface{}, timeDAG map[ID]map[ID]bool, tx Tx) error {
+func (v *permissionsValidator) Validate(state interface{}, txs map[ID]Tx, tx Tx) error {
 	maybePerms, exists := valueAtKeypath(state, []string{"permissions", tx.From.String()})
 	if !exists {
 		return errors.WithStack(Err403)

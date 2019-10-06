@@ -13,8 +13,6 @@ type parserPatch struct {
 	Keys   parserPatchKeys   `@@`
 	Range  *parserPatchRange `("[" @@ "]")?`
 	Equals parserPatchEquals `@@`
-	// Stuff  string            `("@")`
-	// Stuff  string            `("{" | "}" | "[" | "]" | ":" | "_" | "," | @Char)* )`
 }
 
 type parserPatchParts struct {
@@ -73,7 +71,7 @@ func ParsePatch(s string) (Patch, error) {
 
 	err = json.Unmarshal([]byte(jsonBlob), &patch.Val)
 	if err != nil {
-		panic(err)
+		panic(jsonBlob)
 		return Patch{}, errors.WithStack(err)
 	}
 

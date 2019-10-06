@@ -74,74 +74,6 @@ func main() {
 	n.CtxAddChild(c1, nil)
 	n.CtxAddChild(c2, nil)
 
-	// Setup talk channel using transactions
-	{
-		var (
-			tx1 = rw.Tx{
-				ID:      rw.RandomID(),
-				Parents: []rw.ID{rw.GenesisTxID},
-				From:    id1,
-				URL:     "braid://axon.science",
-				Patches: []rw.Patch{
-					mustParsePatch(`.shrugisland.talk0.validator = {
-                        "type":"stack",
-                        "children":[
-                            {"type": "intrinsics"},
-                            {"type": "permissions"}
-                        ]
-                    }`),
-					mustParsePatch(`.shrugisland.talk0.resolver = {
-                        "type":"lua",
-                        "src":"
-                            function resolve_state(state, patch)
-                                if state == nil then
-                                    state = {}
-                                end
-
-                                if patch:RangeStart() ~= -1 and patch:RangeStart() == patch:RangeEnd() then
-                                    if state['messages'] == nil then
-                                        state['messages'] = { patch.Val }
-
-                                    elseif patch:RangeStart() <= #state['messages'] then
-                                        -- state:Get('messages'):Insert(patch.Val)
-                                        state['messages'][ #state['messages'] + 1 ] = patch.Val
-
-                                    end
-                                else
-                                    error('invalid')
-                                end
-                                return state
-                            end
-                        "
-                    }`),
-				},
-			}
-		)
-
-		c1.Info(1, "sending tx to initialize talk channel...")
-		err = c1.AddTx(tx1)
-		if err != nil {
-			c1.Errorf("%+v", err)
-		}
-	}
-
-	// talkChannelResolver, err := rw.NewLuaResolverFromFile("talk-channel.lua")
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// c1.Store.RegisterResolverForKeypath([]string{"shrugisland", "talk0"}, talkChannelResolver)
-	// c1.Store.RegisterValidatorForKeypath([]string{"shrugisland", "talk0"}, rw.NewStackValidator([]rw.Validator{
-	// 	&rw.IntrinsicsValidator{},
-	// 	&rw.PermissionsValidator{},
-	// }))
-
-	// c2.Store.RegisterResolverForKeypath([]string{"shrugisland", "talk0"}, talkChannelResolver)
-	// c2.Store.RegisterValidatorForKeypath([]string{"shrugisland", "talk0"}, rw.NewStackValidator([]rw.Validator{
-	// 	&rw.IntrinsicsValidator{},
-	// 	&rw.PermissionsValidator{},
-	// }))
-
 	// Connect the two consumers
 	peerID := c1.Transport.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
 	c2.AddPeer(c2.Ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
@@ -154,14 +86,125 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 
+	// Setup talk channel using transactions
+	var tx1 = rw.Tx{
+		ID:      rw.RandomID(),
+		Parents: []rw.ID{rw.GenesisTxID},
+		From:    id1,
+		URL:     "braid://axon.science",
+		Patches: []rw.Patch{
+			mustParsePatch(`.shrugisland.talk0.permissions = {
+                "` + id1.Pretty() + `": {
+                    "read": true,
+                    "write": true
+                }
+            }`),
+			mustParsePatch(`.shrugisland.talk0.messages = []`),
+			mustParsePatch(`.shrugisland.talk0.validator = {
+                    "type":"stack",
+                    "children": [
+                        {"type": "intrinsics"},
+                        {"type": "permissions"}
+                    ]
+                }`),
+			mustParsePatch(`.shrugisland.talk0.resolver = {
+                    "type":"lua",
+                    "src":"
+                        function resolve_state(state, sender, patch)
+                            if state == nil then
+                                state = {}
+                            end
+
+                            if patch:RangeStart() ~= -1 and patch:RangeStart() == patch:RangeEnd() then
+                                local msg = {
+                                    'text': sender,
+                                    'sender': sender,
+                                }
+                                if state['messages'] == nil then
+                                    state['messages'] = { msg }
+
+                                elseif patch:RangeStart() <= #state['messages'] then
+                                    -- state:Get('messages'):Insert(msg)
+                                    state['messages'][ #state['messages'] + 1 ] = msg
+
+                                end
+                            else
+                                error('invalid')
+                            end
+                            return state
+                        end
+                    "
+                }`),
+			mustParsePatch(`.shrugisland.talk0.index = "
+                    <html>
+                    <body>
+                        <div id='container'></div>
+                        <div>
+                            <input id='input-text' />
+                            <button id='btn-send'>Send</button>
+                        </div>
+                    </body>
+
+                    <script>
+                        var messages = []
+                        function refresh() {
+                            var container = document.getElementById('container')
+                            var html = ''
+                            for (let msg of messages) {
+                                html += '<div><b>' + msg.sender + ':</b> ' + msg.text + '</div>'
+                            }
+                            container.innerHTML = html
+                        }
+
+                        setInterval(async () => {
+                            messages = (await (await fetch('/shrugisland/talk0/messages')).json())
+                            refresh()
+                        }, 1000)
+
+                        refresh()
+
+                        var btnSend = document.getElementById('btn-send')
+                        var inputText = document.getElementById('input-text')
+                        btnSend.addEventListener('click', function() {
+                            fetch('/', {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    id: randomID(),
+                                    parents: [ randomID() ],
+                                    from: '6f6e656f6e656f6e656f6e656f6e650000000000000000000000000000000000',
+                                    url: 'braid://axon.science',
+                                    patches: [
+                                        '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = {\"text\": \"' + inputText.value + '\",\"sender\":\"6f6e65\"}',
+                                    ],
+                                }),
+                            })
+                        })
+
+
+                        function randomID() {
+                            var s = (new Date().getTime()).toString()
+                            return s.slice(7, s.length) + '6f6e656f6e656f6e656f6e650000000000000000000000000000000000'
+                        }
+                    </script>
+                    </html>
+                "`),
+		},
+	}
+
+	c1.Info(1, "sending tx to initialize talk channel...")
+	err = c1.AddTx(tx1)
+	if err != nil {
+		c1.Errorf("%+v", err)
+	}
+
 	var (
 		tx2 = rw.Tx{
 			ID:      rw.RandomID(),
-			Parents: []rw.ID{rw.GenesisTxID},
+			Parents: []rw.ID{tx1.ID},
 			From:    id1,
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[0:0] = {"text":"hello!"}`),
+				mustParsePatch(`.shrugisland.talk0.messages[0:0] = {"sender":"` + id1.String() + `", "text":"hello!"}`),
 			},
 		}
 
@@ -171,7 +214,7 @@ func main() {
 			From:    id1,
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[1:1] = {"text":"well hello to you too"}`),
+				mustParsePatch(`.shrugisland.talk0.messages[1:1] = {"sender":"` + id1.String() + `", "text":"well hello to you too"}`),
 			},
 		}
 
@@ -181,7 +224,7 @@ func main() {
 			From:    id1,
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[2:2] = {"text":"yoooo"}`),
+				mustParsePatch(`.shrugisland.talk0.messages[2:2] = {"sender":"` + id1.String() + `", "text":"yoooo"}`),
 			},
 		}
 	)
@@ -201,6 +244,8 @@ func main() {
 	if err != nil {
 		c1.Errorf("xxx %+v", err)
 	}
+
+	rw.NewHTTPServer(c1)
 
 	n.AttachInterruptHandler()
 	n.CtxWait()

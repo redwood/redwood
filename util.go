@@ -79,7 +79,7 @@ func prettyJSON(val interface{}) string {
 type M map[string]interface{}
 
 func (m M) GetValue(keypath ...string) (interface{}, bool) {
-	return valueAtKeypath(m, keypath)
+	return valueAtKeypath(map[string]interface{}(m), keypath)
 }
 
 func (m M) GetString(keypath ...string) (string, bool) {

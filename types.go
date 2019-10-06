@@ -19,6 +19,7 @@ type (
 		From    ID      `json:"from"`
 		URL     string  `json:"url"`
 		Patches []Patch `json:"patches"`
+		Valid   bool    `json:"-"`
 	}
 
 	Patch struct {
@@ -77,6 +78,19 @@ func (p Patch) Copy() Patch {
 		Keys:  keys,
 		Range: rng,
 	}
+}
+
+func (id *ID) UnmarshalText(text []byte) error {
+	bs, err := hex.DecodeString(string(text))
+	if err != nil {
+		return err
+	}
+	copy((*id)[:], bs)
+	return nil
+}
+
+func (id ID) MarshalText() ([]byte, error) {
+	return []byte(hex.EncodeToString(id[:])), nil
 }
 
 func RandomID() ID {
