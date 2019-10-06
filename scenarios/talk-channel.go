@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"io/ioutil"
 	"time"
 
@@ -21,6 +22,10 @@ func (n *testNode) onStartup() error {
 }
 
 func main() {
+
+	flag.Parse()
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
 
 	n := testNode{}
 	n.CtxStart(

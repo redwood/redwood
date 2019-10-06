@@ -259,7 +259,7 @@ func (t *libp2pTransport) AddPeer(ctx context.Context, multiaddrString string) e
 		return errors.Wrapf(err, "could not connect to peer '%v'", multiaddrString)
 	}
 
-	t.Infof(0, "connected to peer")
+	t.Infof(0, "connected to %v", pinfo.ID)
 
 	return nil
 }

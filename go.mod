@@ -2,7 +2,6 @@ module github.com/brynbellomy/redwood
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/Conscience/protocol v0.0.0-20190924232412-862dc8a9c9ef // indirect
 	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d
 	github.com/ThomsonReutersEikon/go-ntlm v0.0.0-20181130171125-cf23bd1ecf18 // indirect
 	github.com/alecthomas/participle v0.3.0
@@ -39,7 +38,7 @@ require (
 	github.com/multiformats/go-multihash v0.0.1
 	github.com/pborman/uuid v1.2.0 // indirect
 	github.com/pkg/errors v0.8.1
-	github.com/plan-systems/plan-core v0.0.2
+	github.com/plan-systems/plan-core v0.0.3
 	github.com/rjeczalik/notify v0.9.2 // indirect
 	github.com/sirupsen/logrus v1.2.0
 	github.com/src-d/go-git v4.7.0+incompatible // indirect
