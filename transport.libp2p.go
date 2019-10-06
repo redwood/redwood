@@ -99,7 +99,7 @@ func NewLibp2pTransport(ctx context.Context, id ID, port uint) (Transport, error
 	// for _, addr := range libp2pHost.Addrs() {
 	// 	addrs = append(addrs, addr.String()+"/p2p/"+libp2pHost.ID().Pretty())
 	// }
-	// t.Infof(0, "[transport %v] addrs:\n%v", id, strings.Join(addrs, "\n"))
+	// t.Infof(0, "addrs:\n%v", id, strings.Join(addrs, "\n"))
 
 	return t, err
 }
@@ -193,13 +193,13 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	case MsgType_Subscribe:
 		urlStr, ok := msg.Payload.(string)
 		if !ok {
-			t.Errorf("[transport %v] Subscribe message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
+			t.Errorf("Subscribe message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
 
 		u, err := url.Parse(urlStr)
 		if err != nil {
-			t.Errorf("[transport %v] Subscribe message: bad url (%v): %v", t.ID, urlStr, err)
+			t.Errorf("Subscribe message: bad url (%v): %v", urlStr, err)
 			return
 		}
 
@@ -213,7 +213,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 
 		tx, ok := msg.Payload.(Tx)
 		if !ok {
-			t.Errorf("[transport %v] Put message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
+			t.Errorf("Put message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
 
@@ -222,7 +222,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 		// ACK the PUT
 		err := t.Ack(context.TODO(), tx.URL, tx.ID)
 		if err != nil {
-			t.Errorf("[transport %v] error ACKing a PUT: %v", err)
+			t.Errorf("error ACKing a PUT: %v", err)
 			return
 		}
 
@@ -231,7 +231,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 
 		// versionID, ok := msg.Payload.(ID)
 		// if !ok {
-		// 	t.Errorf("[transport %v] Ack message: bad payload: (%T) %v", t.ID, msg.Payload, msg.Payload)
+		// 	t.Errorf("Ack message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 		// 	return
 		// }
 
@@ -259,7 +259,7 @@ func (t *libp2pTransport) AddPeer(ctx context.Context, multiaddrString string) e
 		return errors.Wrapf(err, "could not connect to peer '%v'", multiaddrString)
 	}
 
-	t.Infof(0, "[transport %v] connected to peer", t.ID)
+	t.Infof(0, "connected to peer")
 
 	return nil
 }
@@ -396,7 +396,7 @@ func (t *libp2pTransport) forEachProviderOfURL(ctx context.Context, theURL strin
 		if pinfo.ID == t.libp2pHost.ID() {
 			continue
 		}
-		t.Infof(0, `[transport %v] found peer %v for url "%v"`, t.ID, pinfo.ID, theURL)
+		t.Infof(0, `found peer %v for url "%v"`, pinfo.ID, theURL)
 
 		keepGoing, err := fn(pinfo)
 		if err != nil {

@@ -8,8 +8,8 @@ import (
 
 type dumbResolver struct{}
 
-func NewDumbResolver() Resolver {
-	return &dumbResolver{}
+func NewDumbResolver(params map[string]interface{}) (Resolver, error) {
+	return &dumbResolver{}, nil
 }
 
 func (r *dumbResolver) ResolveState(state interface{}, p Patch) (interface{}, error) {
@@ -69,14 +69,13 @@ func (r *dumbResolver) ResolveState(state interface{}, p Patch) (interface{}, er
 					s, ok := getval().(string)
 					if !ok {
 						old_setval(val)
-					} else if int64(len(s)) < p.Range[1] {
-						old_setval(s[:p.Range[0]] + v)
+					} else if int64(len(s)) < p.Range.End {
+						old_setval(s[:p.Range.Start] + v)
 					} else {
-						old_setval(s[:p.Range[0]] + v + s[p.Range[1]:])
+						old_setval(s[:p.Range.Start] + v + s[p.Range.End:])
 					}
 				}
 
-				// case []interface{}:
 			default:
 				if getval() == nil {
 					old_setval(val)
@@ -88,27 +87,24 @@ func (r *dumbResolver) ResolveState(state interface{}, p Patch) (interface{}, er
 
 					seq, isSequence := v.([]interface{})
 					if isSequence {
-						if int64(len(s)) < p.Range[1] {
-							old_setval(append(s[:p.Range[0]], seq...))
+						if int64(len(s)) < p.Range.End {
+							old_setval(append(s[:p.Range.Start], seq...))
 						} else {
-							x := append(s[:p.Range[0]], seq...)
-							old_setval(append(x, s[p.Range[1]:]...))
+							x := append(s[:p.Range.Start], seq...)
+							old_setval(append(x, s[p.Range.End:]...))
 						}
 
 					} else {
-						if int64(len(s)) < p.Range[1] {
+						if int64(len(s)) < p.Range.End {
 							log.Warnf("xyzzy ~> (s = [%T] %v), (patch = %v)", s, s, p.String())
-							old_setval(append(s[:p.Range[0]], v))
+							old_setval(append(s[:p.Range.Start], v))
 						} else {
-							x := append(s[:p.Range[0]], v)
-							old_setval(append(x, s[p.Range[1]:]...))
+							x := append(s[:p.Range.Start], v)
+							old_setval(append(x, s[p.Range.End:]...))
 						}
 					}
 
 				}
-
-				// default:
-				// 	panic(errors.Errorf("bad patch (type = %T): %v", p.Val, p.String()))
 			}
 		}
 

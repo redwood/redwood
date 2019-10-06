@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"time"
 
 	"github.com/plan-systems/plan-core/tools/ctx"
@@ -72,22 +74,73 @@ func main() {
 	n.CtxAddChild(c1, nil)
 	n.CtxAddChild(c2, nil)
 
-	talkChannelResolver, err := rw.NewLuaResolverFromFile("talk-channel.lua")
-	if err != nil {
-		panic(err)
+	// Setup talk channel using transactions
+	{
+		var (
+			tx1 = rw.Tx{
+				ID:      rw.RandomID(),
+				Parents: []rw.ID{rw.GenesisTxID},
+				From:    id1,
+				URL:     "braid://axon.science",
+				Patches: []rw.Patch{
+					mustParsePatch(`.shrugisland.talk0.validator = {
+                        "type":"stack",
+                        "children":[
+                            {"type": "intrinsics"},
+                            {"type": "permissions"}
+                        ]
+                    }`),
+					mustParsePatch(`.shrugisland.talk0.resolver = {
+                        "type":"lua",
+                        "src":"
+                            function resolve_state(state, patch)
+                                if state == nil then
+                                    state = {}
+                                end
+
+                                if patch:RangeStart() ~= -1 and patch:RangeStart() == patch:RangeEnd() then
+                                    if state['messages'] == nil then
+                                        state['messages'] = { patch.Val }
+
+                                    elseif patch:RangeStart() <= #state['messages'] then
+                                        -- state:Get('messages'):Insert(patch.Val)
+                                        state['messages'][ #state['messages'] + 1 ] = patch.Val
+
+                                    end
+                                else
+                                    error('invalid')
+                                end
+                                return state
+                            end
+                        "
+                    }`),
+				},
+			}
+		)
+
+		c1.Info(1, "sending tx to initialize talk channel...")
+		err = c1.AddTx(tx1)
+		if err != nil {
+			c1.Errorf("%+v", err)
+		}
 	}
 
-	c1.Store.RegisterResolverForKeypath([]string{"shrugisland", "talk0"}, talkChannelResolver)
-	c1.Store.RegisterValidatorForKeypath([]string{"shrugisland", "talk0"}, rw.NewStackValidator([]rw.Validator{
-		&rw.IntrinsicsValidator{},
-		&rw.PermissionsValidator{},
-	}))
+	// talkChannelResolver, err := rw.NewLuaResolverFromFile("talk-channel.lua")
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	c2.Store.RegisterResolverForKeypath([]string{"shrugisland", "talk0"}, talkChannelResolver)
-	c2.Store.RegisterValidatorForKeypath([]string{"shrugisland", "talk0"}, rw.NewStackValidator([]rw.Validator{
-		&rw.IntrinsicsValidator{},
-		&rw.PermissionsValidator{},
-	}))
+	// c1.Store.RegisterResolverForKeypath([]string{"shrugisland", "talk0"}, talkChannelResolver)
+	// c1.Store.RegisterValidatorForKeypath([]string{"shrugisland", "talk0"}, rw.NewStackValidator([]rw.Validator{
+	// 	&rw.IntrinsicsValidator{},
+	// 	&rw.PermissionsValidator{},
+	// }))
+
+	// c2.Store.RegisterResolverForKeypath([]string{"shrugisland", "talk0"}, talkChannelResolver)
+	// c2.Store.RegisterValidatorForKeypath([]string{"shrugisland", "talk0"}, rw.NewStackValidator([]rw.Validator{
+	// 	&rw.IntrinsicsValidator{},
+	// 	&rw.PermissionsValidator{},
+	// }))
 
 	// Connect the two consumers
 	peerID := c1.Transport.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
@@ -102,7 +155,7 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	var (
-		tx1 = rw.Tx{
+		tx2 = rw.Tx{
 			ID:      rw.RandomID(),
 			Parents: []rw.ID{rw.GenesisTxID},
 			From:    id1,
@@ -112,9 +165,9 @@ func main() {
 			},
 		}
 
-		tx2 = rw.Tx{
+		tx3 = rw.Tx{
 			ID:      rw.RandomID(),
-			Parents: []rw.ID{tx1.ID},
+			Parents: []rw.ID{tx2.ID},
 			From:    id1,
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
@@ -122,9 +175,9 @@ func main() {
 			},
 		}
 
-		tx3 = rw.Tx{
+		tx4 = rw.Tx{
 			ID:      rw.RandomID(),
-			Parents: []rw.ID{tx2.ID},
+			Parents: []rw.ID{tx3.ID},
 			From:    id1,
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
@@ -133,18 +186,18 @@ func main() {
 		}
 	)
 
-	c1.Info(1, "adding tx 1")
-	err = c1.AddTx(c1.Ctx, tx1)
+	c1.Info(1, "sending tx 1...")
+	err = c1.AddTx(tx2)
 	if err != nil {
 		c1.Errorf("zzz %+v", err)
 	}
-	c1.Info(1, "adding tx 2")
-	err = c1.AddTx(c1.Ctx, tx2)
+	c1.Info(1, "sending tx 2...")
+	err = c1.AddTx(tx3)
 	if err != nil {
 		c1.Errorf("yyy %+v", err)
 	}
-	c1.Info(1, "adding tx 3")
-	err = c1.AddTx(c1.Ctx, tx3)
+	c1.Info(1, "sending tx 3...")
+	err = c1.AddTx(tx4)
 	if err != nil {
 		c1.Errorf("xxx %+v", err)
 	}
@@ -157,7 +210,7 @@ func main() {
 func mustParsePatch(s string) rw.Patch {
 	p, err := rw.ParsePatch(s)
 	if err != nil {
-		panic(err)
+		panic(err.Error() + ": " + s)
 	}
 	return p
 }

@@ -1,7 +1,68 @@
 package redwood
 
+import (
+	"github.com/pkg/errors"
+)
+
 type Resolver interface {
 	ResolveState(state interface{}, patch Patch) (interface{}, error)
+}
+
+type Validator interface {
+	Validate(state interface{}, timeDAG map[ID]map[ID]bool, tx Tx) error
+}
+
+type ResolverConstructor func(params map[string]interface{}) (Resolver, error)
+type ValidatorConstructor func(params map[string]interface{}) (Validator, error)
+
+var resolverRegistry map[string]ResolverConstructor
+var validatorRegistry map[string]ValidatorConstructor
+
+func init() {
+	validatorRegistry = map[string]ValidatorConstructor{
+		"intrinsics":  NewIntrinsicsValidator,
+		"permissions": NewPermissionsValidator,
+		"stack":       NewStackValidator,
+	}
+	resolverRegistry = map[string]ResolverConstructor{
+		"dumb":  NewDumbResolver,
+		"stack": NewStackResolver,
+		"lua":   NewLuaResolver,
+	}
+}
+
+func initResolverFromConfig(config map[string]interface{}) (Resolver, error) {
+	typ, exists := M(config).GetString("type")
+	if !exists {
+		return nil, errors.New("cannot init resolver without a 'type' param")
+	}
+	params, exists := M(config).GetMap("params")
+	if !exists {
+		return nil, errors.New("cannot init resolver without a 'params' field")
+	}
+	ctor, exists := resolverRegistry[typ]
+	if !exists {
+		return nil, errors.Errorf("unknown resolver type '%v'", typ)
+	}
+
+	return ctor(params)
+}
+
+func initValidatorFromConfig(config map[string]interface{}) (Validator, error) {
+	typ, exists := M(config).GetString("type")
+	if !exists {
+		return nil, errors.New("cannot init validator without a 'type' param")
+	}
+	params, exists := M(config).GetMap("params")
+	if !exists {
+		return nil, errors.New("cannot init validator without a 'params' field")
+	}
+	ctor, exists := validatorRegistry[typ]
+	if !exists {
+		return nil, errors.Errorf("unknown validator type '%v'", typ)
+	}
+
+	return ctor(params)
 }
 
 type resolverTree struct {

@@ -77,15 +77,14 @@ func (c *consumer) Subscribe(ctx context.Context, url string) error {
 	return c.Transport.Subscribe(ctx, url)
 }
 
-func (c *consumer) AddTx(ctx context.Context, tx Tx) error {
-
+func (c *consumer) AddTx(tx Tx) error {
 	c.Info(0, "adding tx ", tx.ID.Pretty())
 	err := c.Store.AddTx(tx)
 	if err != nil {
 		return err
 	}
 
-	err = c.Transport.Put(ctx, tx)
+	err = c.Transport.Put(c.Ctx, tx)
 	if err != nil {
 		return err
 	}

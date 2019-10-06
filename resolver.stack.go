@@ -1,12 +1,36 @@
 package redwood
 
+import (
+	"github.com/pkg/errors"
+)
+
 type stackResolver struct {
 	state     interface{}
 	resolvers []Resolver
 }
 
-func NewStackResolver(resolvers []Resolver) *stackResolver {
-	return &stackResolver{resolvers: resolvers}
+func NewStackResolver(params map[string]interface{}) (Resolver, error) {
+	children, exists := M(params).GetSlice("children")
+	if !exists {
+		return nil, errors.New("stack resolver needs an array 'children' param")
+	}
+
+	var resolvers []Resolver
+	for i := range children {
+		config, is := children[i].(map[string]interface{})
+		if !is {
+			return nil, errors.New("stack resolver found something that didn't look like a resolver config")
+		}
+
+		resolver, err := initResolverFromConfig(config)
+		if err != nil {
+			return nil, err
+		}
+
+		resolvers = append(resolvers, resolver)
+	}
+
+	return &stackResolver{resolvers: resolvers}, nil
 }
 
 func (r *stackResolver) ResolveState(state interface{}, patch Patch) (interface{}, error) {

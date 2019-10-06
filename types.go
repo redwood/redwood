@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"math/rand"
 	"regexp"
-	"strconv"
-	// "strings"
 
 	"github.com/pkg/errors"
-	// log "github.com/sirupsen/logrus"
 )
 
 type (
@@ -25,9 +22,14 @@ type (
 	}
 
 	Patch struct {
-		Keys  []string    `lua:"keys"`
-		Range *[2]int64   `lua:"range"`
-		Val   interface{} `lua:"val"`
+		Keys  []string
+		Range *Range
+		Val   interface{}
+	}
+
+	Range struct {
+		Start int64
+		End   int64
 	}
 )
 
@@ -35,14 +37,14 @@ func (p Patch) RangeStart() int64 {
 	if p.Range == nil {
 		return -1
 	}
-	return p.Range[0]
+	return p.Range.Start
 }
 
 func (p Patch) RangeEnd() int64 {
 	if p.Range == nil {
 		return -1
 	}
-	return p.Range[1]
+	return p.Range.End
 }
 
 var GenesisTxID = IDFromString("genesis")
@@ -66,10 +68,9 @@ func (p Patch) Copy() Patch {
 	keys := make([]string, len(p.Keys))
 	copy(keys, p.Keys)
 
-	var rng *[2]int64
+	var rng *Range
 	if p.Range != nil {
-		r := [2]int64{p.Range[0], p.Range[1]}
-		rng = &r
+		*rng = *p.Range
 	}
 
 	return Patch{
@@ -105,47 +106,54 @@ func (tx *Tx) PrettyJSON() string {
 }
 
 var (
-	patchRegexp = regexp.MustCompile(`\.?([^\.\[ =]+)|\[((\-?\d+)(:\-?\d+)?|'(\\'|[^'])*'|"(\\"|[^"])*")\]|\s*=\s*(.*)`)
+	patchRegexp = regexp.MustCompile(`\.?([^\.\[ =]+)|\[((\-?\d+)(:\-?\d+)?|'(\\'|[^'])*'|"(\\"|[^"])*")\]|\s*=\s*([.\n]*)`)
 	ErrBadPatch = errors.New("bad patch string")
 )
 
-func ParsePatch(txt string) (Patch, error) {
-	matches := patchRegexp.FindAllStringSubmatch(txt, -1)
+// func ParsePatch(txt string) (Patch, error) {
+// 	matches := patchRegexp.FindAllStringSubmatch(txt, -1)
 
-	var patch Patch
-	for _, m := range matches {
-		switch {
-		case len(m[1]) > 0:
-			patch.Keys = append(patch.Keys, m[1])
+// 	for i, m := range matches {
+// 		fmt.Println(i, "---------------------")
+// 		for j := range m {
+// 			fmt.Println("  - ", j, m[j])
+// 		}
+// 	}
 
-		case len(m[2]) > 0 && len(m[4]) > 0:
-			start, err := strconv.ParseInt(m[3], 10, 64)
-			if err != nil {
-				return Patch{}, errors.Wrap(ErrBadPatch, err.Error())
-			}
-			end, err := strconv.ParseInt(m[4][1:], 10, 64)
-			if err != nil {
-				return Patch{}, errors.Wrap(ErrBadPatch, err.Error())
-			}
+// 	var patch Patch
+// 	for i, m := range matches {
+// 		switch {
+// 		case len(m[1]) > 0:
+// 			patch.Keys = append(patch.Keys, m[1])
 
-			patch.Range = &[2]int64{start, end}
+// 		case len(m[2]) > 0 && len(m[4]) > 0:
+// 			start, err := strconv.ParseInt(m[3], 10, 64)
+// 			if err != nil {
+// 				return Patch{}, errors.Wrap(ErrBadPatch, err.Error())
+// 			}
+// 			end, err := strconv.ParseInt(m[4][1:], 10, 64)
+// 			if err != nil {
+// 				return Patch{}, errors.Wrap(ErrBadPatch, err.Error())
+// 			}
 
-		case len(m[2]) > 0:
-			patch.Keys = append(patch.Keys, m[2][1:len(m[2])-1])
+// 			patch.Range = &[2]int64{start, end}
 
-		case len(m[7]) > 0:
-			err := json.Unmarshal([]byte(m[7]), &patch.Val)
-			if err != nil {
-				return Patch{}, errors.Wrap(ErrBadPatch, err.Error())
-			}
+// 		case len(m[2]) > 0:
+// 			patch.Keys = append(patch.Keys, m[2][1:len(m[2])-1])
 
-		default:
-			return Patch{}, errors.Wrap(ErrBadPatch, "syntax error")
-		}
-	}
+// 		case len(m[7]) > 0:
+// 			err := json.Unmarshal([]byte(m[7]), &patch.Val)
+// 			if err != nil {
+// 				return Patch{}, errors.Wrap(ErrBadPatch, err.Error())
+// 			}
 
-	return patch, nil
-}
+// 		default:
+// 			return Patch{}, errors.Wrap(ErrBadPatch, "syntax error: "+txt)
+// 		}
+// 	}
+
+// 	return patch, nil
+// }
 
 func (p Patch) String() string {
 	var s string
@@ -154,7 +162,7 @@ func (p Patch) String() string {
 	}
 
 	if p.Range != nil {
-		s += fmt.Sprintf("[%d:%d]", p.Range[0], p.Range[1])
+		s += fmt.Sprintf("[%v:%v]", p.Range.Start, p.Range.End)
 	}
 
 	val, err := json.Marshal(p.Val)

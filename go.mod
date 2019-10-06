@@ -5,6 +5,7 @@ require (
 	github.com/Conscience/protocol v0.0.0-20190924232412-862dc8a9c9ef // indirect
 	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d
 	github.com/ThomsonReutersEikon/go-ntlm v0.0.0-20181130171125-cf23bd1ecf18 // indirect
+	github.com/alecthomas/participle v0.3.0
 	github.com/brynbellomy/debugcharts v0.0.0-20180826220201-c3f57e57ea6f
 	github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d
 	github.com/brynbellomy/go-structomancer v1.0.1 // indirect

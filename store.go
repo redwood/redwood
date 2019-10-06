@@ -61,11 +61,11 @@ func (s *store) Startup() error {
 func (s *store) ctxStartup() error {
 	s.SetLogLabel(s.ID.Pretty()[:4] + " store")
 
-	s.RegisterResolverForKeypath([]string{}, NewDumbResolver())
-	s.RegisterValidatorForKeypath([]string{}, NewStackValidator([]Validator{
-		&IntrinsicsValidator{},
-		&PermissionsValidator{},
-	}))
+	s.RegisterResolverForKeypath([]string{}, &dumbResolver{})
+	s.RegisterValidatorForKeypath([]string{}, &stackValidator{[]Validator{
+		&intrinsicsValidator{},
+		&permissionsValidator{},
+	}})
 
 	return nil
 }
@@ -172,6 +172,45 @@ func (s *store) AddTx(tx Tx) error {
 			patch = Patch{Keys: parentResolverKeypath, Val: newState}
 		}
 		s.currentState = newState
+	}
+
+	// Walk the tree and initialize validators and resolvers
+	s.resolverTree = resolverTree{}
+	s.resolverTree.addResolver([]string{}, &dumbResolver{})
+	s.resolverTree.addValidator([]string{}, &stackValidator{[]Validator{
+		&intrinsicsValidator{},
+		&permissionsValidator{},
+	}})
+	err := walkTree(s.currentState, func(keypath []string, val interface{}) error {
+		m, isMap := val.(map[string]interface{})
+		if !isMap {
+			return nil
+		}
+
+		resolverConfig, exists := M(m).GetMap("resolver")
+		if !exists {
+			return nil
+		}
+		resolver, err := initResolverFromConfig(resolverConfig)
+		if err != nil {
+			return err
+		}
+		s.resolverTree.addResolver(keypath, resolver)
+
+		validatorConfig, exists := M(m).GetMap("validator")
+		if !exists {
+			return nil
+		}
+		validator, err := initValidatorFromConfig(validatorConfig)
+		if err != nil {
+			return err
+		}
+		s.resolverTree.addValidator(keypath, validator)
+
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	j, err := s.StateJSON()

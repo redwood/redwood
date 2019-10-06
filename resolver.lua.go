@@ -1,10 +1,10 @@
 package redwood
 
 import (
-	"io/ioutil"
 	"reflect"
 
 	"github.com/brynbellomy/go-luaconv"
+	"github.com/pkg/errors"
 	"github.com/yuin/gopher-lua"
 )
 
@@ -12,17 +12,14 @@ type luaResolver struct {
 	L *lua.LState
 }
 
-func NewLuaResolverFromFile(filename string) (*luaResolver, error) {
-	bs, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
+func NewLuaResolver(params map[string]interface{}) (Resolver, error) {
+	src, exists := M(params).GetString("src")
+	if !exists {
+		return nil, errors.New("lua resolver needs a string 'src' param")
 	}
-	return NewLuaResolver(string(bs))
-}
 
-func NewLuaResolver(scriptSrc string) (*luaResolver, error) {
 	L := lua.NewState()
-	err := L.DoString(scriptSrc)
+	err := L.DoString(src)
 	if err != nil {
 		return nil, err
 	}

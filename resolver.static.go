@@ -72,10 +72,10 @@ func (r *staticResolver) ResolveState(state interface{}, p Patch) (interface{}, 
 					s, ok := getval().(string)
 					if !ok {
 						old_setval(val)
-					} else if int64(len(s)) < p.Range[1] {
-						old_setval(s[:p.Range[0]] + v)
+					} else if int64(len(s)) < p.Range.End {
+						old_setval(s[:p.Range.Start] + v)
 					} else {
-						old_setval(s[:p.Range[0]] + v + s[p.Range[1]:])
+						old_setval(s[:p.Range.Start] + v + s[p.Range.End:])
 					}
 				}
 
@@ -86,11 +86,11 @@ func (r *staticResolver) ResolveState(state interface{}, p Patch) (interface{}, 
 					s, ok := getval().([]interface{})
 					if !ok {
 						old_setval(val)
-					} else if int64(len(s)) < p.Range[1] {
-						old_setval(append(s[:p.Range[0]], v...))
+					} else if int64(len(s)) < p.Range.End {
+						old_setval(append(s[:p.Range.Start], v...))
 					} else {
-						x := append(s[:p.Range[0]], v)
-						old_setval(append(x, s[p.Range[1]:]...))
+						x := append(s[:p.Range.Start], v)
+						old_setval(append(x, s[p.Range.End:]...))
 					}
 				}
 
