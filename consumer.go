@@ -59,7 +59,7 @@ func (c *consumer) ctxStopping() {
 func (c *consumer) onTxReceived(tx Tx) {
 	c.Infof(0, "tx %v received", tx.ID.Pretty())
 
-	err := c.Store.AddTx(tx)
+	err := c.Store.AddTx(&tx)
 	if err != nil {
 		panic(err)
 	}
@@ -79,7 +79,7 @@ func (c *consumer) Subscribe(ctx context.Context, url string) error {
 
 func (c *consumer) AddTx(tx Tx) error {
 	c.Info(0, "adding tx ", tx.ID.Pretty())
-	err := c.Store.AddTx(tx)
+	err := c.Store.AddTx(&tx)
 	if err != nil {
 		return err
 	}

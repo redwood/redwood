@@ -9,7 +9,7 @@ type Resolver interface {
 }
 
 type Validator interface {
-	Validate(state interface{}, txs map[ID]Tx, tx Tx) error
+	Validate(state interface{}, txs, validTxs map[ID]*Tx, tx Tx) error
 }
 
 type ResolverConstructor func(params map[string]interface{}) (Resolver, error)

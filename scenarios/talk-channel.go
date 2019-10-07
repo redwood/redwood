@@ -152,6 +152,7 @@ func main() {
                     </body>
 
                     <script>
+                        var mostRecentTxID = null
                         var messages = []
                         function refresh() {
                             var container = document.getElementById('container')
@@ -163,7 +164,11 @@ func main() {
                         }
 
                         setInterval(async () => {
-                            messages = (await (await fetch('/shrugisland/talk0/messages')).json())
+                            var resp = (await (await fetch('/shrugisland/talk0/messages', {
+                                headers: { 'Accept': 'application/json' },
+                            })).json())
+                            messages = resp.data
+                            mostRecentTxID = resp.mostRecentTxID
                             refresh()
                         }, 1000)
 
@@ -172,17 +177,18 @@ func main() {
                         var btnSend = document.getElementById('btn-send')
                         var inputText = document.getElementById('input-text')
                         btnSend.addEventListener('click', function() {
+                            var tx = {
+                                id: randomID(),
+                                parents: [ mostRecentTxID ],
+                                from: '6f6e656f6e656f6e656f6e656f6e650000000000000000000000000000000000',
+                                url: 'braid://axon.science',
+                                patches: [
+                                    '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = {\"text\": \"' + inputText.value + '\"}',
+                                ],
+                            }
                             fetch('/', {
                                 method: 'POST',
-                                body: JSON.stringify({
-                                    id: randomID(),
-                                    parents: [ randomID() ],
-                                    from: '6f6e656f6e656f6e656f6e656f6e650000000000000000000000000000000000',
-                                    url: 'braid://axon.science',
-                                    patches: [
-                                        '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = {\"text\": \"' + inputText.value + '\"}',
-                                    ],
-                                }),
+                                body: JSON.stringify(tx),
                             })
                         })
 
@@ -210,7 +216,7 @@ func main() {
 			From:    id1,
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[0:0] = {"sender":"` + id1.String() + `", "text":"hello!"}`),
+				mustParsePatch(`.shrugisland.talk0.messages[0:0] = {"text":"hello!"}`),
 			},
 		}
 
@@ -220,7 +226,7 @@ func main() {
 			From:    id1,
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[1:1] = {"sender":"` + id1.String() + `", "text":"well hello to you too"}`),
+				mustParsePatch(`.shrugisland.talk0.messages[1:1] = {"text":"well hello to you too"}`),
 			},
 		}
 
@@ -230,25 +236,25 @@ func main() {
 			From:    id1,
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[2:2] = {"sender":"` + id1.String() + `", "text":"yoooo"}`),
+				mustParsePatch(`.shrugisland.talk0.messages[2:2] = {"text":"yoooo"}`),
 			},
 		}
 	)
 
-	c1.Info(1, "sending tx 1...")
-	err = c1.AddTx(tx2)
+	c1.Info(1, "sending tx 4...")
+	err = c1.AddTx(tx4)
+	if err != nil {
+		c1.Errorf("xxx %+v", err)
+	}
+	c1.Info(1, "sending tx 3...")
+	err = c1.AddTx(tx3)
 	if err != nil {
 		c1.Errorf("zzz %+v", err)
 	}
 	c1.Info(1, "sending tx 2...")
-	err = c1.AddTx(tx3)
+	err = c1.AddTx(tx2)
 	if err != nil {
 		c1.Errorf("yyy %+v", err)
-	}
-	c1.Info(1, "sending tx 3...")
-	err = c1.AddTx(tx4)
-	if err != nil {
-		c1.Errorf("xxx %+v", err)
 	}
 
 	rw.NewHTTPServer(c1)

@@ -5,16 +5,18 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pkg/errors"
 	"github.com/plan-systems/plan-core/tools/ctx"
 )
 
 type Store interface {
-	AddTx(tx Tx) error
+	AddTx(tx *Tx) error
 	RemoveTx(txID ID) error
 	FetchTxs() ([]Tx, error)
 
 	State() interface{}
 	StateJSON() ([]byte, error)
+	MostRecentTxID() ID
 
 	RegisterResolverForKeypath(keypath []string, resolver Resolver)
 	RegisterValidatorForKeypath(keypath []string, validator Validator)
@@ -23,26 +25,32 @@ type Store interface {
 type store struct {
 	ctx.Context
 
-	ID           ID
-	mu           sync.RWMutex
-	txs          map[ID]Tx
-	resolverTree resolverTree
-	currentState interface{}
-	stateHistory map[ID]interface{}
-	timeDAG      map[ID]map[ID]bool
-	leaves       map[ID]bool
+	ID             ID
+	mu             sync.RWMutex
+	txs            map[ID]*Tx
+	validTxs       map[ID]*Tx
+	resolverTree   resolverTree
+	currentState   interface{}
+	stateHistory   map[ID]interface{}
+	timeDAG        map[ID]map[ID]bool
+	leaves         map[ID]bool
+	chMempool      chan *Tx
+	mostRecentTxID ID
 }
 
 func NewStore(id ID, genesisState interface{}) (Store, error) {
 	s := &store{
-		ID:           id,
-		mu:           sync.RWMutex{},
-		txs:          map[ID]Tx{},
-		resolverTree: resolverTree{},
-		currentState: genesisState,
-		stateHistory: map[ID]interface{}{},
-		timeDAG:      make(map[ID]map[ID]bool),
-		leaves:       make(map[ID]bool),
+		ID:             id,
+		mu:             sync.RWMutex{},
+		txs:            make(map[ID]*Tx),
+		validTxs:       make(map[ID]*Tx),
+		resolverTree:   resolverTree{},
+		currentState:   genesisState,
+		stateHistory:   make(map[ID]interface{}),
+		timeDAG:        make(map[ID]map[ID]bool),
+		leaves:         make(map[ID]bool),
+		chMempool:      make(chan *Tx, 100),
+		mostRecentTxID: GenesisTxID,
 	}
 
 	err := s.Startup()
@@ -68,6 +76,8 @@ func (s *store) ctxStartup() error {
 		&permissionsValidator{},
 	}})
 
+	go s.mempoolLoop()
+
 	return nil
 }
 
@@ -89,6 +99,10 @@ func (s *store) StateJSON() ([]byte, error) {
 	return []byte(str), nil
 }
 
+func (s *store) MostRecentTxID() ID {
+	return s.mostRecentTxID
+}
+
 func (s *store) RegisterResolverForKeypath(keypath []string, resolver Resolver) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,17 +117,51 @@ func (s *store) RegisterValidatorForKeypath(keypath []string, validator Validato
 	s.resolverTree.addValidator(keypath, validator)
 }
 
-func (s *store) AddTx(tx Tx) error {
+func (s *store) addToMempool(tx *Tx) {
+	select {
+	case <-s.Ctx.Done():
+	case s.chMempool <- tx:
+
+	}
+}
+
+func (s *store) AddTx(tx *Tx) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	s.Infof(0, "new tx %v", tx.ID)
 
 	// Ignore duplicates
 	if _, exists := s.txs[tx.ID]; exists {
 		return nil
 	}
 
+	s.Infof(0, "new tx %v", tx.ID)
+
+	// Store the tx (so we can ignore txs we've seen before)
+	s.txs[tx.ID] = tx
+
+	s.addToMempool(tx)
+	return nil
+}
+
+func (s *store) mempoolLoop() {
+	for {
+		select {
+		case <-s.Ctx.Done():
+			return
+		case tx := <-s.chMempool:
+			err := s.processMempoolTx(tx)
+			if errors.Cause(err) == ErrNoParentYet {
+				s.addToMempool(tx)
+			} else if err != nil {
+				s.Errorf("invalid tx  %+v: %v", *tx, err)
+			} else {
+				s.Infof(0, "tx added to chain (%v)", tx.ID.Pretty())
+			}
+		}
+	}
+}
+
+func (s *store) processMempoolTx(tx *Tx) error {
 	// Validate the tx
 	validators := make(map[Validator][]Patch)
 	validatorKeypaths := make(map[Validator][]string)
@@ -133,17 +181,18 @@ func (s *store) AddTx(tx Tx) error {
 			continue
 		}
 
-		txCopy := tx
+		txCopy := *tx
 		txCopy.Patches = patches
 
-		err := validator.Validate(s.stateAtKeypath(validatorKeypaths[validator]), s.txs, txCopy)
+		err := validator.Validate(s.stateAtKeypath(validatorKeypaths[validator]), s.txs, s.validTxs, txCopy)
 		if err != nil {
 			return err
 		}
 	}
 
-	// Store the tx (so we can ignore txs we've seen before)
-	s.txs[tx.ID] = tx
+	tx.Valid = true
+	s.validTxs[tx.ID] = tx
+	s.mostRecentTxID = tx.ID
 
 	// Unmark parents as leaves
 	for _, parentID := range tx.Parents {
@@ -259,7 +308,7 @@ func (s *store) FetchTxs() ([]Tx, error) {
 
 	var txs []Tx
 	for _, tx := range s.txs {
-		txs = append(txs, tx)
+		txs = append(txs, *tx)
 	}
 
 	return txs, nil
