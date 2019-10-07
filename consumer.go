@@ -9,17 +9,19 @@ import (
 type consumer struct {
 	ctx.Context
 
-	ID        ID
+	// ID        ID
 	Port      uint
 	Transport Transport
 	Store     Store
+	privkey   *privateKey
 }
 
-func NewConsumer(id ID, port uint, store Store) (*consumer, error) {
+func NewConsumer(privkey *privateKey, port uint, store Store) (*consumer, error) {
 	c := &consumer{
-		ID:    id,
-		Port:  port,
-		Store: store,
+		// ID:      id,
+		Port:    port,
+		Store:   store,
+		privkey: privkey,
 	}
 
 	err := c.Startup()
@@ -36,10 +38,14 @@ func (c *consumer) Startup() error {
 	)
 }
 
+func (c *consumer) Address() Address {
+	return c.privkey.PublicKey().Address()
+}
+
 func (c *consumer) ctxStartup() error {
-	c.SetLogLabel(c.ID.Pretty()[:4] + " consumer")
+	c.SetLogLabel(c.Address().Pretty() + " consumer")
 	c.Infof(0, "opening libp2p on port %v", c.Port)
-	transport, err := NewLibp2pTransport(c.Ctx, c.ID, c.Port)
+	transport, err := NewLibp2pTransport(c.Ctx, c.Address().Pretty(), c.Port)
 	if err != nil {
 		return err
 	}
@@ -79,7 +85,20 @@ func (c *consumer) Subscribe(ctx context.Context, url string) error {
 
 func (c *consumer) AddTx(tx Tx) error {
 	c.Info(0, "adding tx ", tx.ID.Pretty())
-	err := c.Store.AddTx(&tx)
+
+	hash, err := tx.Hash()
+	if err != nil {
+		return err
+	}
+
+	sig, err := c.privkey.SignHash(hash)
+	if err != nil {
+		return err
+	}
+
+	tx.Sig = sig
+
+	err = c.Store.AddTx(&tx)
 	if err != nil {
 		return err
 	}

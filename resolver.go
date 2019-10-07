@@ -5,7 +5,7 @@ import (
 )
 
 type Resolver interface {
-	ResolveState(state interface{}, sender ID, patch Patch) (interface{}, error)
+	ResolveState(state interface{}, sender Address, patch Patch) (interface{}, error)
 }
 
 type Validator interface {
@@ -20,7 +20,6 @@ var validatorRegistry map[string]ValidatorConstructor
 
 func init() {
 	validatorRegistry = map[string]ValidatorConstructor{
-		"intrinsics":  NewIntrinsicsValidator,
 		"permissions": NewPermissionsValidator,
 		"stack":       NewStackValidator,
 	}

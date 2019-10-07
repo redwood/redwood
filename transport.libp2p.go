@@ -33,7 +33,7 @@ import (
 type libp2pTransport struct {
 	ctx.Context
 
-	ID         ID
+	addr       string
 	libp2pHost p2phost.Host
 	dht        *dht.IpfsDHT
 	*metrics.BandwidthCounter
@@ -55,8 +55,8 @@ const (
 	PROTO_MAIN protocol.ID = "/redwood/main/1.0.0"
 )
 
-func NewLibp2pTransport(ctx context.Context, id ID, port uint) (Transport, error) {
-	privkey, err := obtainP2PKey(id)
+func NewLibp2pTransport(ctx context.Context, addr string, port uint) (Transport, error) {
+	privkey, err := obtainP2PKey(addr)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func NewLibp2pTransport(ctx context.Context, id ID, port uint) (Transport, error
 
 	// Set up the transport
 	t := &libp2pTransport{
-		ID:               id,
+		addr:             addr,
 		libp2pHost:       libp2pHost,
 		dht:              d,
 		BandwidthCounter: bandwidthCounter,
@@ -114,7 +114,7 @@ func (t *libp2pTransport) Startup() error {
 }
 
 func (t *libp2pTransport) ctxStartup() error {
-	t.SetLogLabel(t.ID.Pretty()[:4] + " transport")
+	t.SetLogLabel(t.addr[:4] + " transport")
 
 	go t.periodicallyAnnounceContent(t.Ctx)
 
@@ -129,8 +129,8 @@ func (t *libp2pTransport) Libp2pPeerID() string {
 	return t.libp2pHost.ID().Pretty()
 }
 
-func obtainP2PKey(id ID) (crypto.PrivKey, error) {
-	keyfile := fmt.Sprintf("redwood.%v.key", id.String())
+func obtainP2PKey(addr string) (crypto.PrivKey, error) {
+	keyfile := fmt.Sprintf("redwood.%v.key", addr)
 
 	f, err := os.Open(keyfile)
 	if err != nil && !os.IsNotExist(err) {

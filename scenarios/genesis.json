@@ -1,6 +1,6 @@
 {
     "permissions": {
-        "6f6e65": {
+        "793d56a696967d8f0833fd6296216849c49358b10257cb55b28ea603c874b05e": {
             "^.*$": {
                 "read":  true,
                 "write": true

@@ -1,25 +1,41 @@
 package redwood
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/rand"
 	"regexp"
 
+	"github.com/lunixbochs/struc"
 	"github.com/pkg/errors"
 )
 
 type (
-	ID [32]byte
+	ID      [32]byte
+	Address [32]byte
+	Hash    [32]byte
 
 	Tx struct {
 		ID      ID      `json:"id"`
 		Parents []ID    `json:"parents"`
-		From    ID      `json:"from"`
+		From    Address `json:"from"`
+		Sig     []byte  `json:"sig"`
 		URL     string  `json:"url"`
 		Patches []Patch `json:"patches"`
 		Valid   bool    `json:"-"`
+	}
+
+	hashableTx struct {
+		ID         [32]byte
+		ParentsLen int64 `struc:"sizeof=Parents"`
+		Parents    []byte
+		From       [32]byte
+		URLLen     int64 `struc:"sizeof=URL"`
+		URL        string
+		PatchesLen int64 `struc:"sizeof=Patches"`
+		Patches    string
 	}
 
 	Patch struct {
@@ -33,6 +49,53 @@ type (
 		End   int64
 	}
 )
+
+func (a Address) String() string {
+	return hex.EncodeToString(a[:])
+}
+
+func (a Address) MarshalText() ([]byte, error) {
+	return []byte(a.String()), nil
+}
+
+func (a *Address) UnmarshalText(asHex []byte) error {
+	bs, err := hex.DecodeString(string(asHex))
+	if err != nil {
+		return err
+	}
+	copy((*a)[:], bs)
+	return nil
+}
+
+func (a Address) Pretty() string {
+	return a.String()[:6]
+}
+
+func (tx Tx) Hash() (Hash, error) {
+	patchStrs := ""
+	for i := range tx.Patches {
+		patchStrs += tx.Patches[i].String()
+	}
+
+	parents := []byte{}
+	for i := range tx.Parents {
+		parents = append(parents, tx.Parents[i][:]...)
+	}
+
+	s := hashableTx{
+		ID:      tx.ID,
+		Parents: parents,
+		From:    tx.From,
+		URL:     tx.URL,
+		Patches: patchStrs,
+	}
+	buf := &bytes.Buffer{}
+	err := struc.Pack(buf, &s)
+	if err != nil {
+		return Hash{}, err
+	}
+	return HashBytes(buf.Bytes()), nil
+}
 
 func (p Patch) RangeStart() int64 {
 	if p.Range == nil {

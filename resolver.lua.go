@@ -26,7 +26,7 @@ func NewLuaResolver(params map[string]interface{}) (Resolver, error) {
 	return &luaResolver{L: L}, nil
 }
 
-func (r *luaResolver) ResolveState(state interface{}, id ID, patch Patch) (newState interface{}, err error) {
+func (r *luaResolver) ResolveState(state interface{}, sender Address, patch Patch) (newState interface{}, err error) {
 	defer annotate(&err, "luaResolver.ResolveState")
 
 	luaState, err := luaconv.Encode(r.L, reflect.ValueOf(state))
@@ -43,7 +43,7 @@ func (r *luaResolver) ResolveState(state interface{}, id ID, patch Patch) (newSt
 		Fn:      r.L.GetGlobal("resolve_state"),
 		NRet:    1,
 		Protect: false,
-	}, luaState, lua.LString(id.Pretty()), luaPatch)
+	}, luaState, lua.LString(sender.String()), luaPatch)
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"time"
 
@@ -41,6 +42,18 @@ func main() {
 	copy(id1[:], []byte("oneoneoneoneone"))
 	copy(id2[:], []byte("twotwotwotwotwo"))
 
+	priv1, err := rw.KeypairFromHex("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19")
+	if err != nil {
+		panic(err)
+	}
+	priv2, err := rw.KeypairFromHex("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef")
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("account 1:", priv1.Address())
+	fmt.Println("account 2:", priv2.Address())
+
 	genesisBytes, err := ioutil.ReadFile("genesis.json")
 	if err != nil {
 		panic(err)
@@ -66,12 +79,12 @@ func main() {
 		panic(err)
 	}
 
-	c1, err := rw.NewConsumer(id1, 21231, store1)
+	c1, err := rw.NewConsumer(priv1, 21231, store1)
 	if err != nil {
 		panic(err)
 	}
 
-	c2, err := rw.NewConsumer(id2, 21241, store2)
+	c2, err := rw.NewConsumer(priv2, 21241, store2)
 	if err != nil {
 		panic(err)
 	}
@@ -95,11 +108,11 @@ func main() {
 	var tx1 = rw.Tx{
 		ID:      rw.RandomID(),
 		Parents: []rw.ID{rw.GenesisTxID},
-		From:    id1,
+		From:    c1.Address(),
 		URL:     "braid://axon.science",
 		Patches: []rw.Patch{
 			mustParsePatch(`.shrugisland.talk0.permissions = {
-                "` + id1.Pretty() + `": {
+                "793d56a696967d8f0833fd6296216849c49358b10257cb55b28ea603c874b05e": {
                     "^.*$": {
                         "read": true,
                         "write": true
@@ -107,13 +120,7 @@ func main() {
                 }
             }`),
 			mustParsePatch(`.shrugisland.talk0.messages = []`),
-			mustParsePatch(`.shrugisland.talk0.validator = {
-                    "type":"stack",
-                    "children": [
-                        {"type": "intrinsics"},
-                        {"type": "permissions"}
-                    ]
-                }`),
+			mustParsePatch(`.shrugisland.talk0.validator = {"type": "permissions"}`),
 			mustParsePatch(`.shrugisland.talk0.resolver = {
                     "type":"lua",
                     "src":"
@@ -158,7 +165,7 @@ func main() {
                             var container = document.getElementById('container')
                             var html = ''
                             for (let msg of messages) {
-                                html += '<div><b>' + msg.sender + ':</b> ' + msg.text + '</div>'
+                                html += '<div><b>' + msg.sender.substr(0, 6) + ':</b> ' + msg.text + '</div>'
                             }
                             container.innerHTML = html
                         }
@@ -180,7 +187,7 @@ func main() {
                             var tx = {
                                 id: randomID(),
                                 parents: [ mostRecentTxID ],
-                                from: '6f6e656f6e656f6e656f6e656f6e650000000000000000000000000000000000',
+                                from: '793d56a696967d8f0833fd6296216849c49358b10257cb55b28ea603c874b05e',
                                 url: 'braid://axon.science',
                                 patches: [
                                     '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = {\"text\": \"' + inputText.value + '\"}',
@@ -213,7 +220,7 @@ func main() {
 		tx2 = rw.Tx{
 			ID:      rw.RandomID(),
 			Parents: []rw.ID{tx1.ID},
-			From:    id1,
+			From:    c1.Address(),
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[0:0] = {"text":"hello!"}`),
@@ -223,7 +230,7 @@ func main() {
 		tx3 = rw.Tx{
 			ID:      rw.RandomID(),
 			Parents: []rw.ID{tx2.ID},
-			From:    id1,
+			From:    c1.Address(),
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[1:1] = {"text":"well hello to you too"}`),
@@ -233,7 +240,7 @@ func main() {
 		tx4 = rw.Tx{
 			ID:      rw.RandomID(),
 			Parents: []rw.ID{tx3.ID},
-			From:    id1,
+			From:    c1.Address(),
 			URL:     "braid://axon.science",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[2:2] = {"text":"yoooo"}`),

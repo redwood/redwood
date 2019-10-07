@@ -16,7 +16,9 @@ require (
 	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/docker/docker v0.7.3-0.20180815000130-e05b657120a6
 	github.com/dustin/go-humanize v1.0.0
+	github.com/ethereum/go-ethereum v1.9.6
 	github.com/gin-gonic/gin v1.4.0 // indirect
+	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/ijc25/Gotty v0.0.0-20170406111628-a8b993ba6abd
 	github.com/ipfs/go-cid v0.0.1
@@ -45,6 +47,7 @@ require (
 	github.com/tyler-smith/go-bip39 v1.0.0
 	github.com/urfave/cli v1.20.0
 	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036
+	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4
 	golang.org/x/net v0.0.0-20190724013045-ca1201d0de80
 	google.golang.org/genproto v0.0.0-20180831171423-11092d34479b // indirect
 	google.golang.org/grpc v1.22.0

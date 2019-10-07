@@ -71,10 +71,7 @@ func (s *store) ctxStartup() error {
 	s.SetLogLabel(s.ID.Pretty()[:4] + " store")
 
 	s.RegisterResolverForKeypath([]string{}, &dumbResolver{})
-	s.RegisterValidatorForKeypath([]string{}, &stackValidator{[]Validator{
-		&intrinsicsValidator{},
-		&permissionsValidator{},
-	}})
+	s.RegisterValidatorForKeypath([]string{}, &permissionsValidator{})
 
 	go s.mempoolLoop()
 
@@ -117,14 +114,6 @@ func (s *store) RegisterValidatorForKeypath(keypath []string, validator Validato
 	s.resolverTree.addValidator(keypath, validator)
 }
 
-func (s *store) addToMempool(tx *Tx) {
-	select {
-	case <-s.Ctx.Done():
-	case s.chMempool <- tx:
-
-	}
-}
-
 func (s *store) AddTx(tx *Tx) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -143,6 +132,13 @@ func (s *store) AddTx(tx *Tx) error {
 	return nil
 }
 
+func (s *store) addToMempool(tx *Tx) {
+	select {
+	case <-s.Ctx.Done():
+	case s.chMempool <- tx:
+	}
+}
+
 func (s *store) mempoolLoop() {
 	for {
 		select {
@@ -153,7 +149,7 @@ func (s *store) mempoolLoop() {
 			if errors.Cause(err) == ErrNoParentYet {
 				s.addToMempool(tx)
 			} else if err != nil {
-				s.Errorf("invalid tx  %+v: %v", *tx, err)
+				s.Errorf("invalid tx %+v: %v", *tx, err)
 			} else {
 				s.Infof(0, "tx added to chain (%v)", tx.ID.Pretty())
 			}
@@ -162,6 +158,11 @@ func (s *store) mempoolLoop() {
 }
 
 func (s *store) processMempoolTx(tx *Tx) error {
+	err := s.validateTxIntrinsics(tx)
+	if err != nil {
+		return err
+	}
+
 	// Validate the tx
 	validators := make(map[Validator][]Patch)
 	validatorKeypaths := make(map[Validator][]string)
@@ -234,11 +235,8 @@ func (s *store) processMempoolTx(tx *Tx) error {
 	// @@TODO: inefficient
 	s.resolverTree = resolverTree{}
 	s.resolverTree.addResolver([]string{}, &dumbResolver{})
-	s.resolverTree.addValidator([]string{}, &stackValidator{[]Validator{
-		&intrinsicsValidator{},
-		&permissionsValidator{},
-	}})
-	err := walkTree(s.currentState, func(keypath []string, val interface{}) error {
+	s.resolverTree.addValidator([]string{}, &permissionsValidator{})
+	err = walkTree(s.currentState, func(keypath []string, val interface{}) error {
 		m, isMap := val.(map[string]interface{})
 		if !isMap {
 			return nil
@@ -270,13 +268,49 @@ func (s *store) processMempoolTx(tx *Tx) error {
 		return err
 	}
 
-	// j, err := s.StateJSON()
-	// if err != nil {
-	// 	return err
-	// }
-	// s.Infof(0, "state = %v", string(j))
+	j, err := s.StateJSON()
+	if err != nil {
+		return err
+	}
+	s.Infof(0, "state = %v", string(j))
 
 	// Save historical state
+
+	return nil
+}
+
+var (
+	ErrNoParentYet      = errors.New("no parent yet")
+	ErrInvalidSignature = errors.New("invalid signature")
+)
+
+func (s *store) validateTxIntrinsics(tx *Tx) error {
+	if len(tx.Parents) == 0 {
+		return errors.New("tx must have parents")
+	} else if len(s.validTxs) > 0 && len(tx.Parents) == 1 && tx.Parents[0] == GenesisTxID {
+		return errors.New("already have a genesis tx")
+	}
+
+	for _, parentID := range tx.Parents {
+		if _, exists := s.validTxs[parentID]; !exists && parentID.Pretty() != GenesisTxID.Pretty() {
+			return errors.Wrapf(ErrNoParentYet, "txid: %v", parentID.Pretty())
+		}
+	}
+
+	hash, err := tx.Hash()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	pk, err := RecoverPubkey(hash, tx.Sig)
+	if err != nil {
+		return errors.Wrap(ErrInvalidSignature, err.Error())
+	} else if VerifySignature(pk, hash, tx.Sig) == false {
+		return errors.Wrap(ErrInvalidSignature, err.Error())
+	} else if pk.Address() != tx.From {
+
+		return errors.Wrapf(ErrInvalidSignature, "address doesn't match (%v expected, %v received)", tx.From, pk.Address())
+	}
 
 	return nil
 }
