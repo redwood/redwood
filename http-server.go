@@ -2,6 +2,7 @@ package redwood
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,19 +11,20 @@ import (
 
 type httpServer struct {
 	*http.ServeMux
-	*consumer
+	*host
 }
 
-func NewHTTPServer(consumer *consumer) *httpServer {
+func NewHTTPServer(host *host) *httpServer {
 	s := &httpServer{
 		ServeMux: http.NewServeMux(),
-		consumer: consumer,
+		host:     host,
 	}
 
 	s.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" {
-			s.get(w, r)
-		} else if r.Method == "POST" {
+		// if r.Method == "GET" {
+		// 	s.get(w, r)
+		// } else
+		if r.Method == "POST" {
 			s.post(w, r)
 		}
 	})
@@ -39,7 +41,7 @@ func NewHTTPServer(consumer *consumer) *httpServer {
 
 func (h *httpServer) get(w http.ResponseWriter, r *http.Request) {
 	keypath := strings.Split(r.URL.Path[1:], "/")
-	stateMap, isMap := h.consumer.Store.State().(map[string]interface{})
+	stateMap, isMap := h.host.Store.State().(map[string]interface{})
 	if !isMap {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -56,7 +58,7 @@ func (h *httpServer) get(w http.ResponseWriter, r *http.Request) {
 			MostRecentTxID ID          `json:"mostRecentTxID"`
 			Data           interface{} `json:"data"`
 		}
-		resp.MostRecentTxID = h.consumer.Store.MostRecentTxID()
+		resp.MostRecentTxID = h.host.Store.MostRecentTxID()
 
 		switch v := val.(type) {
 		case string:
@@ -121,7 +123,7 @@ func (h *httpServer) post(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	err = h.consumer.AddTx(tx)
+	err = h.host.AddTx(context.TODO(), tx)
 	if err != nil {
 		panic(err)
 	}

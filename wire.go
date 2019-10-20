@@ -4,23 +4,27 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"io"
 
 	"github.com/pkg/errors"
 )
 
 type Msg struct {
-	Type    string      `json:"type"`
+	Type    MsgType     `json:"type"`
 	Payload interface{} `json:"payload"`
 }
 
+type MsgType string
+
 const (
-	MsgType_Subscribe   = "subscribe"
-	MsgType_Unsubscribe = "unsubscribe"
-	MsgType_Put         = "put"
-	MsgType_Ack         = "ack"
-	MsgType_Error       = "error"
+	MsgType_Subscribe             MsgType = "subscribe"
+	MsgType_Unsubscribe           MsgType = "unsubscribe"
+	MsgType_Put                   MsgType = "put"
+	MsgType_Private               MsgType = "private"
+	MsgType_Ack                   MsgType = "ack"
+	MsgType_Error                 MsgType = "error"
+	MsgType_VerifyAddress         MsgType = "verify address"
+	MsgType_VerifyAddressResponse MsgType = "verify address response"
 )
 
 func WriteMsg(w io.Writer, msg Msg) error {
@@ -39,7 +43,7 @@ func WriteMsg(w io.Writer, msg Msg) error {
 	if err != nil {
 		return err
 	} else if n != int64(buflen) {
-		return fmt.Errorf("WriteMsg: could not write entire packet")
+		return errors.New("WriteMsg: could not write entire packet")
 	}
 	return nil
 }
@@ -97,9 +101,9 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		return err
 	}
 
-	msg.Type = m.Type
+	msg.Type = MsgType(m.Type)
 
-	switch m.Type {
+	switch msg.Type {
 	case MsgType_Subscribe:
 		url := string(m.PayloadBytes)
 		msg.Payload = url[1 : len(url)-1] // remove quotes
@@ -117,6 +121,22 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		bs := []byte(m.PayloadBytes[1 : len(m.PayloadBytes)-1]) // remove quotes
 		copy(id[:], bs)
 		msg.Payload = id
+
+	case MsgType_Private:
+		type encryptedPut struct {
+		}
+
+		var ep encryptedPut
+		err := json.Unmarshal(m.PayloadBytes, &ep)
+		if err != nil {
+			return err
+		}
+
+	case MsgType_VerifyAddress:
+		msg.Payload = []byte(m.PayloadBytes)
+
+	case MsgType_VerifyAddressResponse:
+		msg.Payload = []byte(m.PayloadBytes)
 
 	default:
 		return errors.New("bad msg")

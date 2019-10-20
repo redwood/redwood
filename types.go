@@ -1,41 +1,28 @@
 package redwood
 
 import (
-	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"regexp"
-
-	"github.com/lunixbochs/struc"
-	"github.com/pkg/errors"
 )
 
 type (
-	ID      [32]byte
-	Address [32]byte
-	Hash    [32]byte
+	ID        [32]byte
+	Address   [20]byte
+	Hash      [32]byte
+	Signature []byte
 
 	Tx struct {
-		ID      ID      `json:"id"`
-		Parents []ID    `json:"parents"`
-		From    Address `json:"from"`
-		Sig     []byte  `json:"sig"`
-		URL     string  `json:"url"`
-		Patches []Patch `json:"patches"`
-		Valid   bool    `json:"-"`
-	}
+		ID         ID        `json:"id"`
+		Parents    []ID      `json:"parents"`
+		From       Address   `json:"from"`
+		Sig        Signature `json:"sig"`
+		URL        string    `json:"url"`
+		Patches    []Patch   `json:"patches"`
+		Recipients []Address `json:"recipients,omitempty"`
 
-	hashableTx struct {
-		ID         [32]byte
-		ParentsLen int64 `struc:"sizeof=Parents"`
-		Parents    []byte
-		From       [32]byte
-		URLLen     int64 `struc:"sizeof=URL"`
-		URL        string
-		PatchesLen int64 `struc:"sizeof=Patches"`
-		Patches    string
+		Valid bool `json:"-"`
 	}
 
 	Patch struct {
@@ -50,7 +37,36 @@ type (
 	}
 )
 
+var (
+	GenesisTxID = IDFromString("genesis")
+)
+
+func (sig Signature) String() string {
+	return hex.EncodeToString(sig)
+}
+
+func (sig Signature) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + hex.EncodeToString(sig) + `"`), nil
+}
+
+func (sig *Signature) UnmarshalJSON(bs []byte) error {
+	bs, err := hex.DecodeString(string(bs[1 : len(bs)-1]))
+	if err != nil {
+		return err
+	}
+	*sig = bs
+	return nil
+}
+
 func (a Address) String() string {
+	return a.Hex()
+}
+
+func (a Address) Pretty() string {
+	return a.Hex()[:6]
+}
+
+func (a Address) Hex() string {
 	return hex.EncodeToString(a[:])
 }
 
@@ -67,34 +83,36 @@ func (a *Address) UnmarshalText(asHex []byte) error {
 	return nil
 }
 
-func (a Address) Pretty() string {
-	return a.String()[:6]
+func (tx Tx) Hash() (Hash, error) {
+	var txBytes []byte
+
+	txBytes = append(txBytes, tx.ID[:]...)
+
+	for i := range tx.Parents {
+		txBytes = append(txBytes, tx.Parents[i][:]...)
+	}
+
+	txBytes = append(txBytes, []byte(tx.URL)...)
+
+	for i := range tx.Patches {
+		txBytes = append(txBytes, []byte(tx.Patches[i].String())...)
+	}
+
+	for i := range tx.Recipients {
+		txBytes = append(txBytes, tx.Recipients[i][:]...)
+	}
+
+	fmt.Println("tx bytes ~>", hex.EncodeToString(txBytes))
+
+	return HashBytes(txBytes), nil
 }
 
-func (tx Tx) Hash() (Hash, error) {
-	patchStrs := ""
-	for i := range tx.Patches {
-		patchStrs += tx.Patches[i].String()
-	}
+func (h Hash) String() string {
+	return hex.EncodeToString(h[:])
+}
 
-	parents := []byte{}
-	for i := range tx.Parents {
-		parents = append(parents, tx.Parents[i][:]...)
-	}
-
-	s := hashableTx{
-		ID:      tx.ID,
-		Parents: parents,
-		From:    tx.From,
-		URL:     tx.URL,
-		Patches: patchStrs,
-	}
-	buf := &bytes.Buffer{}
-	err := struc.Pack(buf, &s)
-	if err != nil {
-		return Hash{}, err
-	}
-	return HashBytes(buf.Bytes()), nil
+func (h Hash) Pretty() string {
+	return h.String()[:6]
 }
 
 func (p Patch) RangeStart() int64 {
@@ -110,8 +128,6 @@ func (p Patch) RangeEnd() int64 {
 	}
 	return p.Range.End
 }
-
-var GenesisTxID = IDFromString("genesis")
 
 func (p *Patch) UnmarshalJSON(bs []byte) error {
 	var err error
@@ -169,12 +185,11 @@ func IDFromString(s string) ID {
 }
 
 func (id ID) Pretty() string {
-	s := hex.EncodeToString(id[:])
-	return s[:6]
+	return id.String()[:6]
 }
 
 func (id ID) String() string {
-	return id.Pretty()
+	return hex.EncodeToString(id[:])
 }
 
 func (tx *Tx) PrettyJSON() string {
@@ -182,10 +197,10 @@ func (tx *Tx) PrettyJSON() string {
 	return string(j)
 }
 
-var (
-	patchRegexp = regexp.MustCompile(`\.?([^\.\[ =]+)|\[((\-?\d+)(:\-?\d+)?|'(\\'|[^'])*'|"(\\"|[^"])*")\]|\s*=\s*([.\n]*)`)
-	ErrBadPatch = errors.New("bad patch string")
-)
+// var (
+// 	patchRegexp = regexp.MustCompile(`\.?([^\.\[ =]+)|\[((\-?\d+)(:\-?\d+)?|'(\\'|[^'])*'|"(\\"|[^"])*")\]|\s*=\s*([.\n]*)`)
+// 	ErrBadPatch = errors.New("bad patch string")
+// )
 
 // func ParsePatch(txt string) (Patch, error) {
 // 	matches := patchRegexp.FindAllStringSubmatch(txt, -1)

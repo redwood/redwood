@@ -2,24 +2,36 @@ package redwood
 
 import (
 	"context"
-	"io"
+
+	"github.com/pkg/errors"
 )
 
 type Transport interface {
 	AddPeer(ctx context.Context, multiaddrString string) error
 
-	Subscribe(ctx context.Context, url string) error
-	Ack(ctx context.Context, url string, versionID ID) error
-	Put(ctx context.Context, tx Tx) error
-
-	SetAckHandler(handler AckHandler)
 	SetPutHandler(handler PutHandler)
+	SetAckHandler(handler AckHandler)
+	SetVerifyAddressHandler(handler VerifyAddressHandler)
+
+	ForEachProviderOfURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error
+	ForEachSubscriberToURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error
+	PeersWithAddress(ctx context.Context, address Address) (<-chan Peer, error)
 }
 
-type AckHandler func(url string, version ID)
+type Peer interface {
+	EnsureConnected(ctx context.Context) error
+	WriteMsg(msg Msg) error
+	ReadMsg() (Msg, error)
+	CloseConn() error
+}
+
+type AckHandler func(version ID)
 type PutHandler func(tx Tx)
+type VerifyAddressHandler func(challengeMsg []byte) ([]byte, error)
 
 type subscriptionOut struct {
-	io.ReadCloser
+	peer   Peer
 	chDone chan struct{}
 }
+
+var ErrNoPeersForURL = errors.New("no known peers for the provided url")

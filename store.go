@@ -13,6 +13,7 @@ type Store interface {
 	AddTx(tx *Tx) error
 	RemoveTx(txID ID) error
 	FetchTxs() ([]Tx, error)
+	HaveTx(txID ID) bool
 
 	State() interface{}
 	StateJSON() ([]byte, error)
@@ -25,7 +26,7 @@ type Store interface {
 type store struct {
 	ctx.Context
 
-	ID             ID
+	address        Address
 	mu             sync.RWMutex
 	txs            map[ID]*Tx
 	validTxs       map[ID]*Tx
@@ -38,9 +39,9 @@ type store struct {
 	mostRecentTxID ID
 }
 
-func NewStore(id ID, genesisState interface{}) (Store, error) {
+func NewStore(address Address, genesisState interface{}) (Store, error) {
 	s := &store{
-		ID:             id,
+		address:        address,
 		mu:             sync.RWMutex{},
 		txs:            make(map[ID]*Tx),
 		validTxs:       make(map[ID]*Tx),
@@ -68,7 +69,7 @@ func (s *store) Startup() error {
 }
 
 func (s *store) ctxStartup() error {
-	s.SetLogLabel(s.ID.Pretty()[:4] + " store")
+	s.SetLogLabel(s.address.Pretty() + " store")
 
 	s.RegisterResolverForKeypath([]string{}, &dumbResolver{})
 	s.RegisterValidatorForKeypath([]string{}, &permissionsValidator{})
@@ -209,6 +210,8 @@ func (s *store) processMempoolTx(tx *Tx) error {
 		var err error
 		for {
 			resolver, currentResolverKeypathStartsAt := s.resolverTree.resolverForKeypath(patch.Keys)
+
+			// @@TODO: why are these the same?
 			parentResolverKeypath := patch.Keys[:currentResolverKeypathStartsAt]
 			thisResolverKeypath := patch.Keys[:currentResolverKeypathStartsAt]
 
@@ -268,11 +271,11 @@ func (s *store) processMempoolTx(tx *Tx) error {
 		return err
 	}
 
-	j, err := s.StateJSON()
-	if err != nil {
-		return err
-	}
-	s.Infof(0, "state = %v", string(j))
+	// j, err := s.StateJSON()
+	// if err != nil {
+	// 	return err
+	// }
+	// s.Infof(0, "state = %v", string(j))
 
 	// Save historical state
 
@@ -302,14 +305,15 @@ func (s *store) validateTxIntrinsics(tx *Tx) error {
 		return errors.WithStack(err)
 	}
 
-	pk, err := RecoverPubkey(hash, tx.Sig)
+	s.Warn(hash.String())
+
+	sigPubKey, err := RecoverSigningPubkey(hash, tx.Sig)
 	if err != nil {
 		return errors.Wrap(ErrInvalidSignature, err.Error())
-	} else if VerifySignature(pk, hash, tx.Sig) == false {
-		return errors.Wrap(ErrInvalidSignature, err.Error())
-	} else if pk.Address() != tx.From {
-
-		return errors.Wrapf(ErrInvalidSignature, "address doesn't match (%v expected, %v received)", tx.From, pk.Address())
+	} else if sigPubKey.VerifySignature(hash, tx.Sig) == false {
+		return errors.WithStack(ErrInvalidSignature)
+	} else if sigPubKey.Address() != tx.From {
+		return errors.Wrapf(ErrInvalidSignature, "address doesn't match (%v expected, %v received)", tx.From.Hex(), sigPubKey.Address().Hex())
 	}
 
 	return nil
@@ -334,6 +338,11 @@ func (s *store) RemoveTx(txID ID) error {
 	delete(s.txs, txID)
 
 	return nil
+}
+
+func (s *store) HaveTx(txID ID) bool {
+	_, have := s.txs[txID]
+	return have
 }
 
 func (s *store) FetchTxs() ([]Tx, error) {

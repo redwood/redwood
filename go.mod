@@ -18,6 +18,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/ethereum/go-ethereum v1.9.6
 	github.com/gin-gonic/gin v1.4.0 // indirect
+	github.com/git-lfs/gitobj v1.4.1 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/ijc25/Gotty v0.0.0-20170406111628-a8b993ba6abd
@@ -54,3 +55,5 @@ require (
 	gopkg.in/src-d/go-git.v4 v4.13.1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20190502103701-55513cacd4ae
 )
+
+go 1.13

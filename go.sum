@@ -110,6 +110,8 @@ github.com/git-lfs/git-lfs v0.0.0-20190228200031-78645419de54 h1:BvKvmy/90joADF7
 github.com/git-lfs/git-lfs v0.0.0-20190228200031-78645419de54/go.mod h1:61ddNHYqU3N74Vd1Asu63eVqIMHhlGgbcoToBzPPHKg=
 github.com/git-lfs/gitobj v1.1.0 h1:XRUyk5nKYTWiO8U4cokO5QeoNUNBL8LKS+jXxXZdCTA=
 github.com/git-lfs/gitobj v1.1.0/go.mod h1:EdPNGHVxXe1jTuNXzZT1+CdJCuASoDSLPQuvNOo9nGM=
+github.com/git-lfs/gitobj v1.4.1 h1:6nH5d1QP7GJjZfBqaBXpS7mDzT4plXQLqUjPbcbtRpw=
+github.com/git-lfs/gitobj v1.4.1/go.mod h1:B+djgKTnUoJHbg4uDvnC/+6xPcfEJNFbZd/YunEJRtA=
 github.com/git-lfs/go-netrc v0.0.0-20180525200031-e0e9ca483a18/go.mod h1:70O4NAtvWn1jW8V8V+OKrJJYcxDLTmIozfi2fmSz5SI=
 github.com/git-lfs/wildmatch v1.0.2 h1:Bt8fjbL2OjfhSTsmLPXSalpXgX9twSIFSVvupY2IdbE=
 github.com/git-lfs/wildmatch v1.0.2/go.mod h1:SdHAGnApDpnFYQ0vAxbniWR0sn7yLJ3QXo9RRfhn2ew=

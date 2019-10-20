@@ -28,9 +28,12 @@ func (v *permissionsValidator) Validate(state interface{}, txs, validTxs map[ID]
 	if !isMap {
 		return errors.Wrapf(Err403, "'state' is not a map")
 	}
-	maybePerms, exists := valueAtKeypath(asMap, []string{"permissions", tx.From.String()})
+	maybePerms, exists := valueAtKeypath(asMap, []string{"permissions", tx.From.Hex()})
 	if !exists {
-		return errors.Wrapf(Err403, "permissions key for user '%v' does not exist", tx.From.String())
+		maybePerms, exists = valueAtKeypath(asMap, []string{"permissions", "*"})
+		if !exists {
+			return errors.Wrapf(Err403, "permissions key for user '%v' does not exist", tx.From.String())
+		}
 	}
 	perms, isMap := maybePerms.(map[string]interface{})
 	if !isMap {

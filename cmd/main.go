@@ -73,7 +73,6 @@ end
 
 	time.Sleep(1 * time.Second)
 
-
 	var (
 		tx1 = rw.Tx{
 			ID:      rw.RandomID(),

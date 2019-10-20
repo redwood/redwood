@@ -2,6 +2,8 @@ package redwood
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 
 	"github.com/pkg/errors"
 )
@@ -121,4 +123,32 @@ func (m M) GetMap(keypath ...string) (map[string]interface{}, bool) {
 		return (map[string]interface{})(asMap), true
 	}
 	return nil, false
+}
+
+func braidURLToHTTP(url string) string {
+	if url[:6] == "braid:" {
+		return "http:" + url[6:]
+	}
+	return url
+}
+
+func RedwoodConfigDirPath() (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+
+	redwoodConfigDir := filepath.Join(configDir, "redwood")
+
+	err = os.MkdirAll(redwoodConfigDir, 0700)
+	if err != nil {
+		return "", err
+	}
+
+	return redwoodConfigDir, nil
+}
+
+func fileExists(filename string) bool {
+	_, err := os.Stat(filename)
+	return !os.IsNotExist(err)
 }

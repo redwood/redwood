@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -42,17 +43,26 @@ func main() {
 	copy(id1[:], []byte("oneoneoneoneone"))
 	copy(id2[:], []byte("twotwotwotwotwo"))
 
-	priv1, err := rw.KeypairFromHex("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19")
+	signingKeypair1, err := rw.SigningKeypairFromHex("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19")
 	if err != nil {
 		panic(err)
 	}
-	priv2, err := rw.KeypairFromHex("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef")
+	signingKeypair2, err := rw.SigningKeypairFromHex("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef")
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println("account 1:", priv1.Address())
-	fmt.Println("account 2:", priv2.Address())
+	encryptingKeypair1, err := rw.GenerateEncryptingKeypair()
+	if err != nil {
+		panic(err)
+	}
+	encryptingKeypair2, err := rw.GenerateEncryptingKeypair()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("account 1:", signingKeypair1.Address())
+	fmt.Println("account 2:", signingKeypair2.Address())
 
 	genesisBytes, err := ioutil.ReadFile("genesis.json")
 	if err != nil {
@@ -70,21 +80,21 @@ func main() {
 		panic(err)
 	}
 
-	store1, err := rw.NewStore(id1, genesis1)
+	store1, err := rw.NewStore(signingKeypair1.Address(), genesis1)
 	if err != nil {
 		panic(err)
 	}
-	store2, err := rw.NewStore(id2, genesis2)
-	if err != nil {
-		panic(err)
-	}
-
-	c1, err := rw.NewConsumer(priv1, 21231, store1)
+	store2, err := rw.NewStore(signingKeypair2.Address(), genesis2)
 	if err != nil {
 		panic(err)
 	}
 
-	c2, err := rw.NewConsumer(priv2, 21241, store2)
+	c1, err := rw.NewHost(signingKeypair1, encryptingKeypair1, 21231, store1)
+	if err != nil {
+		panic(err)
+	}
+
+	c2, err := rw.NewHost(signingKeypair2, encryptingKeypair2, 21241, store2)
 	if err != nil {
 		panic(err)
 	}
@@ -93,11 +103,11 @@ func main() {
 	n.CtxAddChild(c2, nil)
 
 	// Connect the two consumers
-	peerID := c1.Transport.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
-	c2.AddPeer(c2.Ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
+	// peerID := c1.Transport.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
+	// c2.AddPeer(c2.Ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
 
 	// Consumer 2 subscribes to a URL
-	err = c2.Subscribe(c2.Ctx, "braid://axon.science")
+	err = c2.Subscribe(c2.Ctx, "axon.science:21231")
 	if err != nil {
 		panic(err)
 	}
@@ -109,10 +119,16 @@ func main() {
 		ID:      rw.RandomID(),
 		Parents: []rw.ID{rw.GenesisTxID},
 		From:    c1.Address(),
-		URL:     "braid://axon.science",
+		URL:     "axon.science:21231",
 		Patches: []rw.Patch{
 			mustParsePatch(`.shrugisland.talk0.permissions = {
-                "793d56a696967d8f0833fd6296216849c49358b10257cb55b28ea603c874b05e": {
+                "96216849c49358b10257cb55b28ea603c874b05e": {
+                    "^.*$": {
+                        "read": true,
+                        "write": true
+                    }
+                },
+                "*": {
                     "^.*$": {
                         "read": true,
                         "write": true
@@ -150,7 +166,24 @@ func main() {
                 }`),
 			mustParsePatch(`.shrugisland.talk0.index = "
                     <html>
+                    <head>
+                        <style>
+                            * {
+                                font-family: 'Consolas', 'Ubuntu Mono', 'Monaco', 'Courier New', Courier, sans-serif;
+                            }
+                        </style>
+                    </head>
                     <body>
+                        <div id='my-address'></div>
+                        <br/>
+                        <div>
+                            Log into a new address with a seed phrase:<br/>
+                            <input id='input-mnemonic'/>&nbsp;
+                            <button id='btn-login'>Go</button>
+                        </div>
+                        <br/>
+                        <br/>
+
                         <div id='container'></div>
                         <div>
                             <input id='input-text' />
@@ -158,10 +191,34 @@ func main() {
                         </div>
                     </body>
 
+                    <script src='/braid.js'></script>
                     <script>
+
+                        //
+                        // Identity stuff
+                        //
+
+                        var identity = Braid.randomIdentity()
+                        function refreshIdentityUI() {
+                            document.getElementById('my-address').innerHTML = '<strong>Your address:</strong> ' + identity.address
+                        }
+
+                        refreshIdentityUI()
+
+                        var inputMnemonic = document.getElementById('input-mnemonic')
+                        document.getElementById('btn-login').addEventListener('click', () => {
+                            identity = Braid.identityFromMnemonic(inputMnemonic.value)
+                            refreshIdentityUI()
+                        })
+
+
+                        //
+                        // Chat stuff
+                        //
+
                         var mostRecentTxID = null
                         var messages = []
-                        function refresh() {
+                        function refreshChatUI() {
                             var container = document.getElementById('container')
                             var html = ''
                             for (let msg of messages) {
@@ -170,40 +227,28 @@ func main() {
                             container.innerHTML = html
                         }
 
-                        setInterval(async () => {
-                            var resp = (await (await fetch('/shrugisland/talk0/messages', {
-                                headers: { 'Accept': 'application/json' },
-                            })).json())
-                            messages = resp.data
-                            mostRecentTxID = resp.mostRecentTxID
-                            refresh()
-                        }, 1000)
-
-                        refresh()
-
-                        var btnSend = document.getElementById('btn-send')
-                        var inputText = document.getElementById('input-text')
-                        btnSend.addEventListener('click', function() {
-                            var tx = {
-                                id: randomID(),
-                                parents: [ mostRecentTxID ],
-                                from: '793d56a696967d8f0833fd6296216849c49358b10257cb55b28ea603c874b05e',
-                                url: 'braid://axon.science',
-                                patches: [
-                                    '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = {\"text\": \"' + inputText.value + '\"}',
-                                ],
+                        Braid.get('/shrugisland/talk0/messages', (err, update) => {
+                            if (err) {
+                                throw new Error(err)
                             }
-                            fetch('/', {
-                                method: 'POST',
-                                body: JSON.stringify(tx),
-                            })
+                            messages = update.data
+                            mostRecentTxID = update.mostRecentTxID
+                            refreshChatUI()
                         })
 
+                        refreshChatUI()
 
-                        function randomID() {
-                            var s = (new Date().getTime()).toString()
-                            return s.slice(7, s.length) + '6f6e656f6e656f6e656f6e650000000000000000000000000000000000'
-                        }
+                        var inputText = document.getElementById('input-text')
+                        document.getElementById('btn-send').addEventListener('click', () => {
+                            Braid.put({
+                                id: Braid.util.randomID(),
+                                parents: [ mostRecentTxID ],
+                                url: 'axon.science:21231',
+                                patches: [
+                                    '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify({text: inputText.value}),
+                                ],
+                            }, identity)
+                        })
                     </script>
                     </html>
                 "`),
@@ -211,7 +256,7 @@ func main() {
 	}
 
 	c1.Info(1, "sending tx to initialize talk channel...")
-	err = c1.AddTx(tx1)
+	err = c1.AddTx(context.Background(), tx1)
 	if err != nil {
 		c1.Errorf("%+v", err)
 	}
@@ -221,7 +266,7 @@ func main() {
 			ID:      rw.RandomID(),
 			Parents: []rw.ID{tx1.ID},
 			From:    c1.Address(),
-			URL:     "braid://axon.science",
+			URL:     "axon.science:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[0:0] = {"text":"hello!"}`),
 			},
@@ -231,7 +276,7 @@ func main() {
 			ID:      rw.RandomID(),
 			Parents: []rw.ID{tx2.ID},
 			From:    c1.Address(),
-			URL:     "braid://axon.science",
+			URL:     "axon.science:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[1:1] = {"text":"well hello to you too"}`),
 			},
@@ -241,7 +286,7 @@ func main() {
 			ID:      rw.RandomID(),
 			Parents: []rw.ID{tx3.ID},
 			From:    c1.Address(),
-			URL:     "braid://axon.science",
+			URL:     "axon.science:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[2:2] = {"text":"yoooo"}`),
 			},
@@ -249,17 +294,17 @@ func main() {
 	)
 
 	c1.Info(1, "sending tx 4...")
-	err = c1.AddTx(tx4)
+	err = c1.AddTx(context.Background(), tx4)
 	if err != nil {
 		c1.Errorf("xxx %+v", err)
 	}
 	c1.Info(1, "sending tx 3...")
-	err = c1.AddTx(tx3)
+	err = c1.AddTx(context.Background(), tx3)
 	if err != nil {
 		c1.Errorf("zzz %+v", err)
 	}
 	c1.Info(1, "sending tx 2...")
-	err = c1.AddTx(tx2)
+	err = c1.AddTx(context.Background(), tx2)
 	if err != nil {
 		c1.Errorf("yyy %+v", err)
 	}
