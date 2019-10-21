@@ -26,6 +26,7 @@ type host struct {
 	encryptingKeypair *EncryptingKeypair
 
 	subscriptionsOut map[string]subscriptionOut
+	peerSeenTxs      map[string]map[ID]bool
 }
 
 var (
@@ -40,6 +41,7 @@ func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypai
 		signingKeypair:    signingKeypair,
 		encryptingKeypair: encryptingKeypair,
 		subscriptionsOut:  make(map[string]subscriptionOut),
+		peerSeenTxs:       make(map[string]map[ID]bool),
 	}
 
 	err := h.CtxStart(
@@ -79,28 +81,42 @@ func (h *host) ctxStopping() {
 	// No op since h.Ctx will cancel as this ctx completes stopping
 }
 
-func (h *host) onTxReceived(tx Tx) {
+func (h *host) onTxReceived(tx Tx, peer Peer) {
 	h.Infof(0, "tx %v received", tx.ID.Pretty())
+	h.markTxSeenByPeer(peer.ID(), tx.ID)
 
 	// @@TODO: private txs
 
 	if !h.Store.HaveTx(tx.ID) {
-		// Broadcast to subscribed peers
-		err := h.put(context.TODO(), tx)
-		if err != nil {
-			h.Errorf("error rebroadcasting tx: %v", err)
-		}
-
 		// Add to store
-		err = h.Store.AddTx(&tx)
+		err := h.Store.AddTx(&tx)
 		if err != nil {
 			h.Errorf("error adding tx to store: %v", err)
 		}
+
+		// Broadcast to subscribed peers
+		err = h.put(context.TODO(), tx)
+		if err != nil {
+			h.Errorf("error rebroadcasting tx: %v", err)
+		}
+	}
+
+	err := peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.ID})
+	if err != nil {
+		h.Errorf("error ACKing peer: %v", err)
 	}
 }
 
-func (h *host) onAckReceived(id ID) {
-	h.Info(0, "ack received for ", id)
+func (h *host) onAckReceived(txID ID, peer Peer) {
+	h.Infof(0, "ack received for %v from %v", txID, peer.ID())
+	h.markTxSeenByPeer(peer.ID(), txID)
+}
+
+func (h *host) markTxSeenByPeer(peerID string, txID ID) {
+	if h.peerSeenTxs[peerID] == nil {
+		h.peerSeenTxs[peerID] = make(map[ID]bool)
+	}
+	h.peerSeenTxs[peerID][txID] = true
 }
 
 func (h *host) AddPeer(ctx context.Context, multiaddrString string) error {
@@ -159,7 +175,7 @@ func (h *host) Subscribe(ctx context.Context, url string) error {
 
 			tx := msg.Payload.(Tx)
 			tx.URL = url
-			h.onTxReceived(tx)
+			h.onTxReceived(tx, peer)
 
 			// @@TODO: ACK the PUT
 		}
@@ -286,6 +302,10 @@ func (h *host) put(ctx context.Context, tx Tx) error {
 		// the keypath that the subscription is listening to?
 
 		err := h.Transport.ForEachSubscriberToURL(ctx, tx.URL, func(peer Peer) (bool, error) {
+			if h.peerSeenTxs[peer.ID()][tx.ID] {
+				return true, nil
+			}
+
 			err := peer.EnsureConnected(context.TODO())
 			if err != nil {
 				// @@TODO: just log, don't break?
@@ -302,23 +322,6 @@ func (h *host) put(ctx context.Context, tx Tx) error {
 		return err
 	}
 	return nil
-}
-
-func (h *host) ack(ctx context.Context, url string, versionID ID) error {
-	return h.Transport.ForEachProviderOfURL(ctx, url, func(peer Peer) (bool, error) {
-		err := peer.EnsureConnected(ctx)
-		if err != nil {
-			return true, err
-		}
-		defer peer.CloseConn()
-
-		err = peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: versionID})
-		if err != nil {
-			return true, errors.WithStack(err)
-		}
-
-		return true, nil
-	})
 }
 
 // @@TODO: remove this and build a mechanism for transports to fetch the public key associated with a given address

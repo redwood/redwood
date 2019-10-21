@@ -305,8 +305,6 @@ func (s *store) validateTxIntrinsics(tx *Tx) error {
 		return errors.WithStack(err)
 	}
 
-	s.Warn(hash.String())
-
 	sigPubKey, err := RecoverSigningPubkey(hash, tx.Sig)
 	if err != nil {
 		return errors.Wrap(ErrInvalidSignature, err.Error())

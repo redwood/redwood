@@ -37,12 +37,6 @@ func main() {
 		nil,
 	)
 
-	var id1 rw.ID
-	var id2 rw.ID
-
-	copy(id1[:], []byte("oneoneoneoneone"))
-	copy(id2[:], []byte("twotwotwotwotwo"))
-
 	signingKeypair1, err := rw.SigningKeypairFromHex("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19")
 	if err != nil {
 		panic(err)
@@ -107,7 +101,7 @@ func main() {
 	// c2.AddPeer(c2.Ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
 
 	// Consumer 2 subscribes to a URL
-	err = c2.Subscribe(c2.Ctx, "axon.science:21231")
+	err = c2.Subscribe(c2.Ctx, "localhost:21231")
 	if err != nil {
 		panic(err)
 	}
@@ -119,7 +113,7 @@ func main() {
 		ID:      rw.RandomID(),
 		Parents: []rw.ID{rw.GenesisTxID},
 		From:    c1.Address(),
-		URL:     "axon.science:21231",
+		URL:     "localhost:21231",
 		Patches: []rw.Patch{
 			mustParsePatch(`.shrugisland.talk0.permissions = {
                 "96216849c49358b10257cb55b28ea603c874b05e": {
@@ -243,7 +237,7 @@ func main() {
                             Braid.put({
                                 id: Braid.util.randomID(),
                                 parents: [ mostRecentTxID ],
-                                url: 'axon.science:21231',
+                                url: 'localhost:21231',
                                 patches: [
                                     '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify({text: inputText.value}),
                                 ],
@@ -266,7 +260,7 @@ func main() {
 			ID:      rw.RandomID(),
 			Parents: []rw.ID{tx1.ID},
 			From:    c1.Address(),
-			URL:     "axon.science:21231",
+			URL:     "localhost:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[0:0] = {"text":"hello!"}`),
 			},
@@ -276,7 +270,7 @@ func main() {
 			ID:      rw.RandomID(),
 			Parents: []rw.ID{tx2.ID},
 			From:    c1.Address(),
-			URL:     "axon.science:21231",
+			URL:     "localhost:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[1:1] = {"text":"well hello to you too"}`),
 			},
@@ -286,7 +280,7 @@ func main() {
 			ID:      rw.RandomID(),
 			Parents: []rw.ID{tx3.ID},
 			From:    c1.Address(),
-			URL:     "axon.science:21231",
+			URL:     "localhost:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[2:2] = {"text":"yoooo"}`),
 			},
@@ -309,8 +303,6 @@ func main() {
 		c1.Errorf("yyy %+v", err)
 	}
 
-	rw.NewHTTPServer(c1)
-
 	n.AttachInterruptHandler()
 	n.CtxWait()
 
@@ -323,60 +315,3 @@ func mustParsePatch(s string) rw.Patch {
 	}
 	return p
 }
-
-// genesisState := M{
-//     "permissions": M{
-//         id1.String(): M{
-//             "^.*$": M{
-//                 "read":  true,
-//                 "write": true,
-//             },
-//         },
-//     },
-//     "shrugisland": M{
-//         "talk0": M{
-//             "permissions": M{
-//                 id1.String(): M{
-//                     "^.*$": M{
-//                         "read":  true,
-//                         "write": true,
-//                     },
-//                 },
-//                 id2.String(): M{
-//                     "^.*$": M{
-//                         "read":  true,
-//                         "write": true,
-//                     },
-//                 },
-//             },
-//         },
-//     },
-// }
-// genesisState2 := M{
-//     "permissions": M{
-//         id1.String(): M{
-//             "^.*$": M{
-//                 "read":  true,
-//                 "write": true,
-//             },
-//         },
-//     },
-//     "shrugisland": M{
-//         "talk0": M{
-//             "permissions": M{
-//                 id1.String(): M{
-//                     "^.*$": M{
-//                         "read":  true,
-//                         "write": true,
-//                     },
-//                 },
-//                 id2.String(): M{
-//                     "^.*$": M{
-//                         "read":  true,
-//                         "write": true,
-//                     },
-//                 },
-//             },
-//         },
-//     },
-// }

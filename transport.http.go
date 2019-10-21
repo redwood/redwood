@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -137,8 +138,8 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		} else {
 			// Regular HTTP GET request (from browsers, etc.)
-			t.Infof(0, "incoming GET request")
 
+			// @@TODO: this is hacky
 			if r.URL.Path == "/braid.js" {
 				var filename string
 				if fileExists("./braidjs/dist.js") {
@@ -231,8 +232,24 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "ACK":
-		var versionID ID // @@TODO
-		t.ackHandler(versionID)
+		defer r.Body.Close()
+
+		bs, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("error reading ACK body: %v", err)
+			http.Error(w, "error reading body", http.StatusBadRequest)
+			return
+		}
+
+		var versionID ID
+		err = versionID.UnmarshalText(bs)
+		if err != nil {
+			t.Errorf("error reading ACK body: %v", err)
+			http.Error(w, "error reading body", http.StatusBadRequest)
+			return
+		}
+
+		t.ackHandler(versionID, &httpPeer{t, r.RemoteAddr, w, nil, nil, httpPeerState_Unknown, nil})
 
 	case "PUT":
 		defer r.Body.Close()
@@ -245,7 +262,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 
-		t.putHandler(tx)
+		t.putHandler(tx, &httpPeer{t, r.RemoteAddr, w, nil, nil, httpPeerState_Unknown, nil})
 
 	default:
 		http.Error(w, "unsupported method", http.StatusMethodNotAllowed)
@@ -294,7 +311,7 @@ func (t *httpTransport) ForEachProviderOfURL(ctx context.Context, theURL string,
 	}
 
 	for _, providerURL := range providers {
-		keepGoing, err := fn(&httpPeer{t, providerURL, nil, nil, nil, false, nil})
+		keepGoing, err := fn(&httpPeer{t, providerURL, nil, nil, nil, httpPeerState_Unknown, nil})
 		if err != nil {
 			return errors.WithStack(err)
 		} else if !keepGoing {
@@ -318,7 +335,7 @@ func (t *httpTransport) ForEachSubscriberToURL(ctx context.Context, theURL strin
 	defer t.subscriptionsInMu.RUnlock()
 
 	for _, sub := range t.subscriptionsIn[domain] {
-		keepGoing, err := fn(&httpPeer{t, "", sub.Writer, nil, sub.Flusher, false, nil})
+		keepGoing, err := fn(&httpPeer{t, "", sub.Writer, nil, sub.Flusher, httpPeerState_Unknown, nil})
 		if err != nil {
 			return errors.WithStack(err)
 		} else if !keepGoing {
@@ -339,8 +356,19 @@ type httpPeer struct {
 	io.ReadCloser
 	http.Flusher
 
-	verifyAddressUnderway bool
-	challengeResp         []byte
+	peerState     httpPeerState
+	challengeResp []byte
+}
+
+type httpPeerState int
+
+const (
+	httpPeerState_Unknown httpPeerState = iota
+	httpPeerState_VerifyingAddress
+)
+
+func (p *httpPeer) ID() string {
+	return p.url
 }
 
 func (p *httpPeer) EnsureConnected(ctx context.Context) error {
@@ -416,8 +444,13 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 			return ErrProtocol
 		}
 
+		vidBytes, err := versionID.MarshalText()
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		client := http.Client{}
-		req, err := http.NewRequest("ACK", p.url, bytes.NewReader(versionID[:]))
+		req, err := http.NewRequest("ACK", "http://"+p.url, bytes.NewReader(vidBytes))
 		if err != nil {
 			return err
 		}
@@ -426,7 +459,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		if err != nil {
 			return err
 		} else if resp.StatusCode != 200 {
-			return errors.Errorf("error POSTing to peer: (%v) %v", resp.StatusCode, resp.Status)
+			return errors.Errorf("error ACKing to peer: (%v) %v", resp.StatusCode, resp.Status)
 		}
 		defer resp.Body.Close()
 
@@ -459,7 +492,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		if err != nil {
 			panic(err.Error()) // @@TODO
 		}
-		p.verifyAddressUnderway = true
+		p.peerState = httpPeerState_VerifyingAddress
 		p.challengeResp = challengeResp
 
 	default:
@@ -469,14 +502,16 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 }
 
 func (p *httpPeer) ReadMsg() (Msg, error) {
-	if p.verifyAddressUnderway {
-		p.verifyAddressUnderway = false
+	switch p.peerState {
+	case httpPeerState_VerifyingAddress:
+		p.peerState = httpPeerState_Unknown
 		return Msg{Type: MsgType_VerifyAddressResponse, Payload: p.challengeResp}, nil
-	}
 
-	var msg Msg
-	err := ReadMsg(p.ReadCloser, &msg)
-	return msg, err
+	default:
+		var msg Msg
+		err := ReadMsg(p.ReadCloser, &msg)
+		return msg, err
+	}
 }
 
 func (p *httpPeer) CloseConn() error {

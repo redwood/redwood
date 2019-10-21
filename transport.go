@@ -19,14 +19,15 @@ type Transport interface {
 }
 
 type Peer interface {
+	ID() string
 	EnsureConnected(ctx context.Context) error
 	WriteMsg(msg Msg) error
 	ReadMsg() (Msg, error)
 	CloseConn() error
 }
 
-type AckHandler func(version ID)
-type PutHandler func(tx Tx)
+type AckHandler func(version ID, peer Peer)
+type PutHandler func(tx Tx, peer Peer)
 type VerifyAddressHandler func(challengeMsg []byte) ([]byte, error)
 
 type subscriptionOut struct {

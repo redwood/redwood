@@ -102,8 +102,6 @@ func (tx Tx) Hash() (Hash, error) {
 		txBytes = append(txBytes, tx.Recipients[i][:]...)
 	}
 
-	fmt.Println("tx bytes ~>", hex.EncodeToString(txBytes))
-
 	return HashBytes(txBytes), nil
 }
 

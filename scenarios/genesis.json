@@ -8,6 +8,6 @@
         }
     },
     "providers": [
-        "axon.science:21231"
+        "localhost:21231"
     ]
 }
