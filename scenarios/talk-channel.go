@@ -100,13 +100,18 @@ func main() {
 	// peerID := c1.Transport.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
 	// c2.AddPeer(c2.Ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
 
-	// Consumer 2 subscribes to a URL
+	time.Sleep(2 * time.Second)
+
+	// Both consumers subscribe to the URL
 	err = c2.Subscribe(c2.Ctx, "localhost:21231")
 	if err != nil {
 		panic(err)
 	}
 
-	time.Sleep(1 * time.Second)
+	err = c1.Subscribe(c1.Ctx, "localhost:21231")
+	if err != nil {
+		panic(err)
+	}
 
 	// Setup talk channel using transactions
 	var tx1 = rw.Tx{
@@ -279,7 +284,7 @@ func main() {
 		tx4 = rw.Tx{
 			ID:      rw.RandomID(),
 			Parents: []rw.ID{tx3.ID},
-			From:    c1.Address(),
+			From:    c2.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[2:2] = {"text":"yoooo"}`),
@@ -287,10 +292,10 @@ func main() {
 		}
 	)
 
-	c1.Info(1, "sending tx 4...")
-	err = c1.AddTx(context.Background(), tx4)
+	c2.Info(1, "sending tx 4...")
+	err = c2.AddTx(context.Background(), tx4)
 	if err != nil {
-		c1.Errorf("xxx %+v", err)
+		c2.Errorf("xxx %+v", err)
 	}
 	c1.Info(1, "sending tx 3...")
 	err = c1.AddTx(context.Background(), tx3)

@@ -11,9 +11,8 @@ import (
 
 type Host interface {
 	Subscribe(ctx context.Context, url string) error
-	Ack(ctx context.Context, url string, versionID ID) error
-	Put(ctx context.Context, tx Tx) error
 	AddTx(ctx context.Context, tx Tx) error
+	AddPeer(ctx context.Context, multiaddrString string) error
 }
 
 type host struct {

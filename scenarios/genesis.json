@@ -8,6 +8,7 @@
         }
     },
     "providers": [
-        "localhost:21231"
+        "localhost:21231",
+        "localhost:21241"
     ]
 }

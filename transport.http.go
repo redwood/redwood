@@ -26,6 +26,7 @@ type httpTransport struct {
 
 	address Address
 	store   Store
+	ownURL  string
 
 	ackHandler           AckHandler
 	putHandler           PutHandler
@@ -40,6 +41,7 @@ func NewHTTPTransport(ctx context.Context, addr Address, port uint, store Store)
 		address:         addr,
 		subscriptionsIn: make(map[string][]*httpSubscriptionIn),
 		store:           store,
+		ownURL:          fmt.Sprintf("localhost:%v", port),
 	}
 
 	err := t.CtxStart(
@@ -100,7 +102,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				panic(err.Error()) // @@TODO
 			}
 
-		} else if r.Header.Get("Subscribe") == "true" {
+		} else if r.Header.Get("Subscribe") != "" {
 			// Subscription request
 			t.Infof(0, "incoming subscription")
 
@@ -127,8 +129,10 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			sub := &httpSubscriptionIn{w, f, make(chan struct{})}
 
+			urlToSubscribe := r.Header.Get("Subscribe")
+
 			t.subscriptionsInMu.Lock()
-			t.subscriptionsIn[r.Host] = append(t.subscriptionsIn[r.Host], sub)
+			t.subscriptionsIn[urlToSubscribe] = append(t.subscriptionsIn[urlToSubscribe], sub)
 			t.subscriptionsInMu.Unlock()
 
 			f.Flush()
@@ -241,15 +245,15 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var versionID ID
-		err = versionID.UnmarshalText(bs)
+		var txID ID
+		err = txID.UnmarshalText(bs)
 		if err != nil {
 			t.Errorf("error reading ACK body: %v", err)
 			http.Error(w, "error reading body", http.StatusBadRequest)
 			return
 		}
 
-		t.ackHandler(versionID, &httpPeer{t, r.RemoteAddr, w, nil, nil, httpPeerState_Unknown, nil})
+		t.ackHandler(txID, &httpPeer{t, r.RemoteAddr, w, nil, nil, httpPeerState_Unknown, nil})
 
 	case "PUT":
 		defer r.Body.Close()
@@ -304,13 +308,16 @@ func (t *httpTransport) ForEachProviderOfURL(ctx context.Context, theURL string,
 	defer resp.Body.Close()
 
 	var providers []string
-
 	err = json.NewDecoder(resp.Body).Decode(&providers)
 	if err != nil {
 		return err
 	}
 
 	for _, providerURL := range providers {
+		if providerURL == t.ownURL {
+			continue
+		}
+
 		keepGoing, err := fn(&httpPeer{t, providerURL, nil, nil, nil, httpPeerState_Unknown, nil})
 		if err != nil {
 			return errors.WithStack(err)
@@ -378,23 +385,22 @@ func (p *httpPeer) EnsureConnected(ctx context.Context) error {
 func (p *httpPeer) WriteMsg(msg Msg) error {
 	switch msg.Type {
 	case MsgType_Subscribe:
-		url, ok := msg.Payload.(string)
+		urlToSubscribe, ok := msg.Payload.(string)
 		if !ok {
 			return ErrProtocol
 		}
 
 		// url = braidURLToHTTP(url)
-		url = "http://" + url
 
 		client := http.Client{}
-		req, err := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequest("GET", "http://"+p.url, nil)
 		if err != nil {
 			return err
 		}
 		req.Header.Set("Cache-Control", "no-cache")
 		req.Header.Set("Accept", "text/event-stream")
 		req.Header.Set("Connection", "keep-alive")
-		req.Header.Set("Subscribe", "true")
+		req.Header.Set("Subscribe", urlToSubscribe)
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -439,12 +445,12 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 	case MsgType_Ack:
-		versionID, ok := msg.Payload.(ID)
+		txID, ok := msg.Payload.(ID)
 		if !ok {
 			return ErrProtocol
 		}
 
-		vidBytes, err := versionID.MarshalText()
+		vidBytes, err := txID.MarshalText()
 		if err != nil {
 			return errors.WithStack(err)
 		}

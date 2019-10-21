@@ -26,7 +26,7 @@ type Peer interface {
 	CloseConn() error
 }
 
-type AckHandler func(version ID, peer Peer)
+type AckHandler func(txID ID, peer Peer)
 type PutHandler func(tx Tx, peer Peer)
 type VerifyAddressHandler func(challengeMsg []byte) ([]byte, error)
 
