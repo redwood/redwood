@@ -96,7 +96,7 @@ func (t *resolverTree) ensureNodeExists(keypath []string) *resolverTreeNode {
 	}
 }
 
-func (t *resolverTree) closestAncestorOfKeypathWhere(keypath []string, condition func(*resolverTreeNode) bool) (*resolverTreeNode, int) {
+func (t *resolverTree) deepestNodeInKeypathWhere(keypath []string, condition func(*resolverTreeNode) bool) (*resolverTreeNode, int) {
 	remaining := keypath
 	current := t.root
 	ancestor := (*resolverTreeNode)(nil)
@@ -106,12 +106,13 @@ func (t *resolverTree) closestAncestorOfKeypathWhere(keypath []string, condition
 	for {
 		if current == nil {
 			break
-		} else if len(remaining) == 0 {
-			break
 		}
 		if condition(current) == true {
 			closestAncestorKeypathIdx = i
 			ancestor = current
+		}
+		if len(remaining) == 0 {
+			break
 		}
 
 		key := remaining[0]
@@ -126,11 +127,11 @@ func (t *resolverTree) closestAncestorOfKeypathWhere(keypath []string, condition
 }
 
 func (t *resolverTree) resolverForKeypath(keypath []string) (Resolver, int) {
-	node, idx := t.closestAncestorOfKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.resolver != nil })
+	node, idx := t.deepestNodeInKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.resolver != nil })
 	return node.resolver, idx
 }
 
 func (t *resolverTree) validatorForKeypath(keypath []string) (Validator, int) {
-	node, idx := t.closestAncestorOfKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.validator != nil })
+	node, idx := t.deepestNodeInKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.validator != nil })
 	return node.validator, idx
 }

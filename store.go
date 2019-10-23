@@ -169,8 +169,8 @@ func (s *store) processMempoolTx(tx *Tx) error {
 	validatorKeypaths := make(map[Validator][]string)
 	for _, patch := range tx.Patches {
 		v, idx := s.resolverTree.validatorForKeypath(patch.Keys)
-		keys := make([]string, len(patch.Keys)-(idx+1))
-		copy(keys, patch.Keys[idx+1:])
+		keys := make([]string, len(patch.Keys)-(idx))
+		copy(keys, patch.Keys[idx:])
 		p := patch
 		p.Keys = keys
 
@@ -209,27 +209,23 @@ func (s *store) processMempoolTx(tx *Tx) error {
 		var newState interface{}
 		var err error
 		for {
-			resolver, currentResolverKeypathStartsAt := s.resolverTree.resolverForKeypath(patch.Keys)
-
-			// @@TODO: why are these the same?
-			parentResolverKeypath := patch.Keys[:currentResolverKeypathStartsAt]
+			resolver, currentResolverKeypathStartsAt := s.resolverTree.resolverForKeypath(patch.Keys[:len(patch.Keys)-1])
 			thisResolverKeypath := patch.Keys[:currentResolverKeypathStartsAt]
-
 			thisResolverState := s.stateAtKeypath(thisResolverKeypath)
 
 			patchCopy := patch
-			patchCopy.Keys = patchCopy.Keys[len(parentResolverKeypath):]
+			patchCopy.Keys = patch.Keys[len(thisResolverKeypath):]
 
 			newState, err = resolver.ResolveState(thisResolverState, tx.From, patchCopy)
 			if err != nil {
 				return err
 			}
 
-			if len(parentResolverKeypath) == 0 {
+			if currentResolverKeypathStartsAt == 0 {
 				break
 			}
 
-			patch = Patch{Keys: parentResolverKeypath, Val: newState}
+			patch = Patch{Keys: thisResolverKeypath, Val: newState}
 		}
 		s.currentState = newState
 	}

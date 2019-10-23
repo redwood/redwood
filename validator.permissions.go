@@ -43,7 +43,7 @@ func (v *permissionsValidator) Validate(state interface{}, txs, validTxs map[ID]
 	for _, patch := range tx.Patches {
 		var valid bool
 
-		keypath := strings.Join(patch.Keys, "/")
+		keypath := KeypathSeparator + strings.Join(patch.Keys, KeypathSeparator)
 		for pattern := range perms {
 			matched, err := regexp.MatchString(pattern, keypath)
 			if err != nil {

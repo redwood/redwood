@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 )
 
 type (
@@ -39,6 +40,10 @@ type (
 
 var (
 	GenesisTxID = IDFromString("genesis")
+)
+
+const (
+	KeypathSeparator = "."
 )
 
 func (sig Signature) String() string {
@@ -246,10 +251,7 @@ func (tx *Tx) PrettyJSON() string {
 // }
 
 func (p Patch) String() string {
-	var s string
-	for i := range p.Keys {
-		s += "." + p.Keys[i]
-	}
+	s := KeypathSeparator + strings.Join(p.Keys, KeypathSeparator)
 
 	if p.Range != nil {
 		s += fmt.Sprintf("[%v:%v]", p.Range.Start, p.Range.End)
