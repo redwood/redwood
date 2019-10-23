@@ -7,12 +7,11 @@ import (
 )
 
 type Transport interface {
-	AddPeer(ctx context.Context, multiaddrString string) error
-
 	SetPutHandler(handler PutHandler)
 	SetAckHandler(handler AckHandler)
 	SetVerifyAddressHandler(handler VerifyAddressHandler)
 
+	AddPeer(ctx context.Context, multiaddrString string) error
 	ForEachProviderOfURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error
 	ForEachSubscriberToURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error
 	PeersWithAddress(ctx context.Context, address Address) (<-chan Peer, error)

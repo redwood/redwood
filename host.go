@@ -329,6 +329,27 @@ var ENCRYPTION_PUBKEY_FOR_ADDRESS map[Address]EncryptingPublicKey
 func (h *host) AddTx(ctx context.Context, tx Tx) error {
 	h.Info(0, "adding tx ", tx.ID.Pretty())
 
+	if len(tx.Sig) == 0 {
+		err := h.SignTx(&tx)
+		if err != nil {
+			return err
+		}
+	}
+
+	err := h.Store.AddTx(&tx)
+	if err != nil {
+		return err
+	}
+
+	err = h.put(h.Ctx, tx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (h *host) SignTx(tx *Tx) error {
 	hash, err := tx.Hash()
 	if err != nil {
 		return err
@@ -340,16 +361,5 @@ func (h *host) AddTx(ctx context.Context, tx Tx) error {
 	}
 
 	tx.Sig = sig
-
-	err = h.Store.AddTx(&tx)
-	if err != nil {
-		return err
-	}
-
-	err = h.put(h.Ctx, tx)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }

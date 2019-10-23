@@ -164,37 +164,40 @@ func (s *store) processMempoolTx(tx *Tx) error {
 		return err
 	}
 
-	// Validate the tx
-	validators := make(map[Validator][]Patch)
-	validatorKeypaths := make(map[Validator][]string)
-	for _, patch := range tx.Patches {
-		v, idx := s.resolverTree.validatorForKeypath(patch.Keys)
-		keys := make([]string, len(patch.Keys)-(idx))
-		copy(keys, patch.Keys[idx:])
-		p := patch
-		p.Keys = keys
+	//
+	// Validate the tx's extrinsics
+	//
+	{
+		validators := make(map[Validator][]Patch)
+		validatorKeypaths := make(map[Validator][]string)
+		for _, patch := range tx.Patches {
+			v, idx := s.resolverTree.validatorForKeypath(patch.Keys)
+			keys := make([]string, len(patch.Keys)-(idx))
+			copy(keys, patch.Keys[idx:])
+			p := patch
+			p.Keys = keys
 
-		validators[v] = append(validators[v], p)
-		validatorKeypaths[v] = patch.Keys[:idx]
-	}
-
-	for validator, patches := range validators {
-		if len(patches) == 0 {
-			continue
+			validators[v] = append(validators[v], p)
+			validatorKeypaths[v] = patch.Keys[:idx]
 		}
 
-		txCopy := *tx
-		txCopy.Patches = patches
+		for validator, patches := range validators {
+			if len(patches) == 0 {
+				continue
+			}
 
-		err := validator.Validate(s.stateAtKeypath(validatorKeypaths[validator]), s.txs, s.validTxs, txCopy)
-		if err != nil {
-			return err
+			txCopy := *tx
+			txCopy.Patches = patches
+
+			err := validator.Validate(s.stateAtKeypath(validatorKeypaths[validator]), s.txs, s.validTxs, txCopy)
+			if err != nil {
+				return err
+			}
 		}
-	}
 
-	tx.Valid = true
-	s.validTxs[tx.ID] = tx
-	s.mostRecentTxID = tx.ID
+		tx.Valid = true
+		s.validTxs[tx.ID] = tx
+	}
 
 	// Unmark parents as leaves
 	for _, parentID := range tx.Parents {
@@ -203,68 +206,74 @@ func (s *store) processMempoolTx(tx *Tx) error {
 
 	// @@TODO: add to timeDAG
 
-	// Apply its changes to the state tree
-	for _, p := range tx.Patches {
-		var patch Patch = p
-		var newState interface{}
-		var err error
-		for {
-			resolver, currentResolverKeypathStartsAt := s.resolverTree.resolverForKeypath(patch.Keys[:len(patch.Keys)-1])
-			thisResolverKeypath := patch.Keys[:currentResolverKeypathStartsAt]
-			thisResolverState := s.stateAtKeypath(thisResolverKeypath)
+	//
+	// Apply changes to the state tree
+	//
+	{
+		for _, p := range tx.Patches {
+			var patch Patch = p
+			var newState interface{}
+			var err error
+			for {
+				resolver, currentResolverKeypathStartsAt := s.resolverTree.resolverForKeypath(patch.Keys[:len(patch.Keys)-1])
+				thisResolverKeypath := patch.Keys[:currentResolverKeypathStartsAt]
+				thisResolverState := s.stateAtKeypath(thisResolverKeypath)
 
-			patchCopy := patch
-			patchCopy.Keys = patch.Keys[len(thisResolverKeypath):]
+				patchCopy := patch
+				patchCopy.Keys = patch.Keys[len(thisResolverKeypath):]
 
-			newState, err = resolver.ResolveState(thisResolverState, tx.From, patchCopy)
+				newState, err = resolver.ResolveState(thisResolverState, tx.From, patchCopy)
+				if err != nil {
+					return err
+				}
+
+				if currentResolverKeypathStartsAt == 0 {
+					break
+				}
+
+				patch = Patch{Keys: thisResolverKeypath, Val: newState}
+			}
+			s.currentState = newState
+		}
+
+		s.mostRecentTxID = tx.ID
+
+		// Walk the tree and initialize validators and resolvers
+		// @@TODO: inefficient
+		s.resolverTree = resolverTree{}
+		s.resolverTree.addResolver([]string{}, &dumbResolver{})
+		s.resolverTree.addValidator([]string{}, &permissionsValidator{})
+		err = walkTree(s.currentState, func(keypath []string, val interface{}) error {
+			m, isMap := val.(map[string]interface{})
+			if !isMap {
+				return nil
+			}
+
+			resolverConfig, exists := M(m).GetMap("resolver")
+			if !exists {
+				return nil
+			}
+			resolver, err := initResolverFromConfig(resolverConfig)
 			if err != nil {
 				return err
 			}
+			s.resolverTree.addResolver(keypath, resolver)
 
-			if currentResolverKeypathStartsAt == 0 {
-				break
+			validatorConfig, exists := M(m).GetMap("validator")
+			if !exists {
+				return nil
 			}
+			validator, err := initValidatorFromConfig(validatorConfig)
+			if err != nil {
+				return err
+			}
+			s.resolverTree.addValidator(keypath, validator)
 
-			patch = Patch{Keys: thisResolverKeypath, Val: newState}
-		}
-		s.currentState = newState
-	}
-
-	// Walk the tree and initialize validators and resolvers
-	// @@TODO: inefficient
-	s.resolverTree = resolverTree{}
-	s.resolverTree.addResolver([]string{}, &dumbResolver{})
-	s.resolverTree.addValidator([]string{}, &permissionsValidator{})
-	err = walkTree(s.currentState, func(keypath []string, val interface{}) error {
-		m, isMap := val.(map[string]interface{})
-		if !isMap {
 			return nil
-		}
-
-		resolverConfig, exists := M(m).GetMap("resolver")
-		if !exists {
-			return nil
-		}
-		resolver, err := initResolverFromConfig(resolverConfig)
+		})
 		if err != nil {
 			return err
 		}
-		s.resolverTree.addResolver(keypath, resolver)
-
-		validatorConfig, exists := M(m).GetMap("validator")
-		if !exists {
-			return nil
-		}
-		validator, err := initValidatorFromConfig(validatorConfig)
-		if err != nil {
-			return err
-		}
-		s.resolverTree.addValidator(keypath, validator)
-
-		return nil
-	})
-	if err != nil {
-		return err
 	}
 
 	// j, err := s.StateJSON()

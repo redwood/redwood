@@ -152,3 +152,8 @@ func fileExists(filename string) bool {
 	_, err := os.Stat(filename)
 	return !os.IsNotExist(err)
 }
+
+func PrettyJSON(x interface{}) string {
+	j, _ := json.MarshalIndent(x, "", "    ")
+	return string(j)
+}
