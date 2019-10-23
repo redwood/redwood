@@ -16,7 +16,7 @@ type (
 
 	Tx struct {
 		ID         ID        `json:"id"`
-		Parents    []ID      `json:"parents"`
+		Parents    []Hash    `json:"parents"`
 		From       Address   `json:"from"`
 		Sig        Signature `json:"sig"`
 		URL        string    `json:"url"`
@@ -24,6 +24,7 @@ type (
 		Recipients []Address `json:"recipients,omitempty"`
 
 		Valid bool `json:"-"`
+		hash  Hash `json:"-"`
 	}
 
 	Patch struct {
@@ -39,7 +40,8 @@ type (
 )
 
 var (
-	GenesisTxID = IDFromString("genesis")
+	GenesisTxHash = HashBytes([]byte("genesis"))
+	EmptyHash     = Hash{}
 )
 
 const (
@@ -88,26 +90,30 @@ func (a *Address) UnmarshalText(asHex []byte) error {
 	return nil
 }
 
-func (tx Tx) Hash() (Hash, error) {
-	var txBytes []byte
+func (tx Tx) Hash() Hash {
+	if tx.hash == EmptyHash {
+		var txBytes []byte
 
-	txBytes = append(txBytes, tx.ID[:]...)
+		txBytes = append(txBytes, tx.ID[:]...)
 
-	for i := range tx.Parents {
-		txBytes = append(txBytes, tx.Parents[i][:]...)
+		for i := range tx.Parents {
+			txBytes = append(txBytes, tx.Parents[i][:]...)
+		}
+
+		txBytes = append(txBytes, []byte(tx.URL)...)
+
+		for i := range tx.Patches {
+			txBytes = append(txBytes, []byte(tx.Patches[i].String())...)
+		}
+
+		for i := range tx.Recipients {
+			txBytes = append(txBytes, tx.Recipients[i][:]...)
+		}
+
+		tx.hash = HashBytes(txBytes)
 	}
 
-	txBytes = append(txBytes, []byte(tx.URL)...)
-
-	for i := range tx.Patches {
-		txBytes = append(txBytes, []byte(tx.Patches[i].String())...)
-	}
-
-	for i := range tx.Recipients {
-		txBytes = append(txBytes, tx.Recipients[i][:]...)
-	}
-
-	return HashBytes(txBytes), nil
+	return tx.hash
 }
 
 func (tx Tx) IsPrivate() bool {
@@ -121,6 +127,19 @@ func (tx Tx) PrivateRootKey() string {
 	}
 	hash := HashBytes(bs)
 	return hash.String()
+}
+
+func (h *Hash) UnmarshalText(text []byte) error {
+	bs, err := hex.DecodeString(string(text))
+	if err != nil {
+		return err
+	}
+	copy((*h)[:], bs)
+	return nil
+}
+
+func (h Hash) MarshalText() ([]byte, error) {
+	return []byte(hex.EncodeToString(h[:])), nil
 }
 
 func (h Hash) String() string {

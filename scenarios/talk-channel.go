@@ -4,23 +4,50 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"time"
 
-	"github.com/plan-systems/plan-core/tools/ctx"
-
 	rw "github.com/brynbellomy/redwood"
+	"github.com/brynbellomy/redwood/ctx"
 )
 
 type M = map[string]interface{}
 
-type testNode struct {
+type app struct {
 	ctx.Context
 }
 
-func (n *testNode) onStartup() error {
-	return nil
+func makeHost(signingKeypairHex string, port uint, dbfile string) rw.Host {
+	signingKeypair, err := rw.SigningKeypairFromHex(signingKeypairHex)
+	if err != nil {
+		panic(err)
+	}
+
+	encryptingKeypair, err := rw.GenerateEncryptingKeypair()
+	if err != nil {
+		panic(err)
+	}
+
+	genesisBytes, err := ioutil.ReadFile("genesis.json")
+	if err != nil {
+		panic(err)
+	}
+
+	var genesis map[string]interface{}
+	err = json.Unmarshal(genesisBytes, &genesis)
+	if err != nil {
+		panic(err)
+	}
+	persistence := rw.NewBadgerPersistence(dbfile, signingKeypair.Address())
+	store, err := rw.NewStore(signingKeypair.Address(), genesis, persistence)
+	if err != nil {
+		panic(err)
+	}
+	h, err := rw.NewHost(signingKeypair, encryptingKeypair, port, store)
+	if err != nil {
+		panic(err)
+	}
+	return h
 }
 
 func main() {
@@ -29,95 +56,61 @@ func main() {
 	flag.Set("logtostderr", "true")
 	flag.Set("v", "2")
 
-	n := testNode{}
-	n.CtxStart(
-		n.onStartup,
+	host1 := makeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/badger1")
+	host2 := makeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/badger2")
+
+	err := host1.Start()
+	if err != nil {
+		panic(err)
+	}
+	err = host2.Start()
+	if err != nil {
+		panic(err)
+	}
+
+	app := app{}
+	app.CtxAddChild(host1.Ctx(), nil)
+	app.CtxAddChild(host2.Ctx(), nil)
+	app.CtxStart(
+		func() error { return nil },
 		nil,
 		nil,
 		nil,
 	)
 
-	signingKeypair1, err := rw.SigningKeypairFromHex("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19")
-	if err != nil {
-		panic(err)
-	}
-	signingKeypair2, err := rw.SigningKeypairFromHex("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef")
-	if err != nil {
-		panic(err)
-	}
-
-	encryptingKeypair1, err := rw.GenerateEncryptingKeypair()
-	if err != nil {
-		panic(err)
-	}
-	encryptingKeypair2, err := rw.GenerateEncryptingKeypair()
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("account 1:", signingKeypair1.Address())
-	fmt.Println("account 2:", signingKeypair2.Address())
-
-	genesisBytes, err := ioutil.ReadFile("genesis.json")
-	if err != nil {
-		panic(err)
-	}
-
-	var genesis1 map[string]interface{}
-	var genesis2 map[string]interface{}
-	err = json.Unmarshal(genesisBytes, &genesis1)
-	if err != nil {
-		panic(err)
-	}
-	err = json.Unmarshal(genesisBytes, &genesis2)
-	if err != nil {
-		panic(err)
-	}
-
-	store1, err := rw.NewStore(signingKeypair1.Address(), genesis1)
-	if err != nil {
-		panic(err)
-	}
-	store2, err := rw.NewStore(signingKeypair2.Address(), genesis2)
-	if err != nil {
-		panic(err)
-	}
-
-	c1, err := rw.NewHost(signingKeypair1, encryptingKeypair1, 21231, store1)
-	if err != nil {
-		panic(err)
-	}
-
-	c2, err := rw.NewHost(signingKeypair2, encryptingKeypair2, 21241, store2)
-	if err != nil {
-		panic(err)
-	}
-
-	n.CtxAddChild(c1, nil)
-	n.CtxAddChild(c2, nil)
-
 	// Connect the two consumers
-	// peerID := c1.Transport.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
-	// c2.AddPeer(c2.Ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
+	if libp2pTransport, is := host1.Transport().(interface{ Libp2pPeerID() string }); is {
+		host2.AddPeer(host2.Ctx(), "/ip4/0.0.0.0/tcp/21231/p2p/"+libp2pTransport.Libp2pPeerID())
+	} else {
+		host2.AddPeer(host2.Ctx(), "localhost:21231")
+	}
 
 	time.Sleep(2 * time.Second)
 
 	// Both consumers subscribe to the URL
-	err = c2.Subscribe(c2.Ctx, "localhost:21231")
+	err = host2.Subscribe(host2.Ctx(), "localhost:21231")
 	if err != nil {
 		panic(err)
 	}
 
-	err = c1.Subscribe(c1.Ctx, "localhost:21231")
+	err = host1.Subscribe(host1.Ctx(), "localhost:21231")
 	if err != nil {
 		panic(err)
 	}
 
+	time.Sleep(5 * time.Second)
+	sendTxs(host1, host2)
+
+	app.AttachInterruptHandler()
+	app.CtxWait()
+}
+
+func sendTxs(host1, host2 rw.Host) {
 	// Setup talk channel using transactions
 	var tx1 = rw.Tx{
-		ID:      rw.RandomID(),
-		Parents: []rw.ID{rw.GenesisTxID},
-		From:    c1.Address(),
+		ID:      rw.IDFromString("one"),
+		Parents: []rw.Hash{rw.GenesisTxHash},
+		From:    host1.Address(),
 		URL:     "localhost:21231",
 		Patches: []rw.Patch{
 			mustParsePatch(`.shrugisland.talk0.permissions = {
@@ -128,7 +121,7 @@ func main() {
                     }
                 },
                 "*": {
-                    "^.*$": {
+                    "^\\.messages.*$": {
                         "read": true,
                         "write": true
                     }
@@ -136,33 +129,30 @@ func main() {
             }`),
 			mustParsePatch(`.shrugisland.talk0.messages = []`),
 			mustParsePatch(`.shrugisland.talk0.validator = {"type": "permissions"}`),
-			mustParsePatch(`.shrugisland.talk0.resolver = {
-                    "type":"lua",
-                    "src":"
-                        function resolve_state(state, sender, patch)
-                            if state == nil then
-                                state = {}
-                            end
+			mustParsePatch(`.shrugisland.talk0.resolver = {"type":"lua", "src":"
+                function resolve_state(state, sender, patch)
+                    if state == nil then
+                        state = {}
+                    end
 
-                            if patch:RangeStart() ~= -1 and patch:RangeStart() == patch:RangeEnd() then
-                                local msg = {
-                                    text = patch.Val['text'],
-                                    sender = sender,
-                                }
-                                if state['messages'] == nil then
-                                    state['messages'] = { msg }
+                    if patch:RangeStart() ~= -1 and patch:RangeStart() == patch:RangeEnd() then
+                        local msg = {
+                            text = patch.Val['text'],
+                            sender = sender,
+                        }
+                        if state['messages'] == nil then
+                            state['messages'] = { msg }
 
-                                elseif patch:RangeStart() <= #state['messages'] then
-                                    state['messages'][ #state['messages'] + 1 ] = msg
+                        elseif patch:RangeStart() <= #state['messages'] then
+                            state['messages'][ #state['messages'] + 1 ] = msg
 
-                                end
-                            else
-                                error('invalid')
-                            end
-                            return state
                         end
-                    "
-                }`),
+                    else
+                        error('only patches that append messages to the end of the channel are allowed')
+                    end
+                    return state
+                end
+            "}`),
 			mustParsePatch(`.shrugisland.talk0.index = "
                     <html>
                     <head>
@@ -215,7 +205,7 @@ func main() {
                         // Chat stuff
                         //
 
-                        var mostRecentTxID = null
+                        var mostRecentTxHash = null
                         var messages = []
                         function refreshChatUI() {
                             var container = document.getElementById('container')
@@ -231,7 +221,7 @@ func main() {
                                 throw new Error(err)
                             }
                             messages = update.data
-                            mostRecentTxID = update.mostRecentTxID
+                            mostRecentTxHash = update.mostRecentTxHash
                             refreshChatUI()
                         })
 
@@ -241,7 +231,7 @@ func main() {
                         document.getElementById('btn-send').addEventListener('click', () => {
                             Braid.put({
                                 id: Braid.util.randomID(),
-                                parents: [ mostRecentTxID ],
+                                parents: [ mostRecentTxHash ],
                                 url: 'localhost:21231',
                                 patches: [
                                     '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify({text: inputText.value}),
@@ -254,17 +244,17 @@ func main() {
 		},
 	}
 
-	c1.Info(1, "sending tx to initialize talk channel...")
-	err = c1.AddTx(context.Background(), tx1)
+	host1.Info(1, "sending tx to initialize talk channel...")
+	err := host1.AddTx(context.Background(), tx1)
 	if err != nil {
-		c1.Errorf("%+v", err)
+		host1.Errorf("%+v", err)
 	}
 
 	var (
 		tx2 = rw.Tx{
-			ID:      rw.RandomID(),
-			Parents: []rw.ID{tx1.ID},
-			From:    c1.Address(),
+			ID:      rw.IDFromString("two"),
+			Parents: []rw.Hash{tx1.Hash()},
+			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[0:0] = {"text":"hello!"}`),
@@ -272,9 +262,9 @@ func main() {
 		}
 
 		tx3 = rw.Tx{
-			ID:      rw.RandomID(),
-			Parents: []rw.ID{tx2.ID},
-			From:    c1.Address(),
+			ID:      rw.IDFromString("three"),
+			Parents: []rw.Hash{tx2.Hash()},
+			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[1:1] = {"text":"well hello to you too"}`),
@@ -282,9 +272,9 @@ func main() {
 		}
 
 		tx4 = rw.Tx{
-			ID:      rw.RandomID(),
-			Parents: []rw.ID{tx3.ID},
-			From:    c2.Address(),
+			ID:      rw.IDFromString("four"),
+			Parents: []rw.Hash{tx3.Hash()},
+			From:    host2.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[2:2] = {"text":"yoooo"}`),
@@ -292,25 +282,21 @@ func main() {
 		}
 	)
 
-	c2.Info(1, "sending tx 4...")
-	err = c2.AddTx(context.Background(), tx4)
+	host2.Info(1, "sending tx 4...")
+	err = host2.AddTx(context.Background(), tx4)
 	if err != nil {
-		c2.Errorf("xxx %+v", err)
+		host2.Errorf("xxx %+v", err)
 	}
-	c1.Info(1, "sending tx 3...")
-	err = c1.AddTx(context.Background(), tx3)
+	host1.Info(1, "sending tx 3...")
+	err = host1.AddTx(context.Background(), tx3)
 	if err != nil {
-		c1.Errorf("zzz %+v", err)
+		host1.Errorf("zzz %+v", err)
 	}
-	c1.Info(1, "sending tx 2...")
-	err = c1.AddTx(context.Background(), tx2)
+	host1.Info(1, "sending tx 2...")
+	err = host1.AddTx(context.Background(), tx2)
 	if err != nil {
-		c1.Errorf("yyy %+v", err)
+		host1.Errorf("yyy %+v", err)
 	}
-
-	n.AttachInterruptHandler()
-	n.CtxWait()
-
 }
 
 func mustParsePatch(s string) rw.Patch {

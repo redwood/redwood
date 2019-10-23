@@ -14,6 +14,7 @@ require (
 	github.com/bugsnag/bugsnag-go v1.4.1
 	github.com/bugsnag/panicwrap v1.2.0 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
+	github.com/dgraph-io/badger v1.6.0
 	github.com/docker/docker v0.7.3-0.20180815000130-e05b657120a6
 	github.com/dustin/go-humanize v1.0.0
 	github.com/ethereum/go-ethereum v1.9.6
@@ -41,6 +42,7 @@ require (
 	github.com/multiformats/go-multihash v0.0.1
 	github.com/pborman/uuid v1.2.0 // indirect
 	github.com/pkg/errors v0.8.1
+	github.com/plan-systems/klog v0.0.0-20190618231738-14c6677fa6ea
 	github.com/plan-systems/plan-core v0.0.3
 	github.com/rjeczalik/notify v0.9.2 // indirect
 	github.com/sirupsen/logrus v1.2.0

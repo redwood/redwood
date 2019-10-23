@@ -32,7 +32,7 @@ func NewStackValidator(params map[string]interface{}) (Validator, error) {
 	return &stackValidator{validators: validators}, nil
 }
 
-func (v *stackValidator) Validate(state interface{}, txs, validTxs map[ID]*Tx, tx Tx) error {
+func (v *stackValidator) Validate(state interface{}, txs, validTxs map[Hash]*Tx, tx Tx) error {
 	for i := range v.validators {
 		err := v.validators[i].Validate(state, txs, validTxs, tx)
 		if err != nil {

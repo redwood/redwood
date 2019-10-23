@@ -17,16 +17,17 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/plan-systems/plan-core/tools/ctx"
-	log "github.com/sirupsen/logrus"
+
+	"github.com/brynbellomy/redwood/ctx"
 )
 
 type httpTransport struct {
-	ctx.Context
+	*ctx.Context
 
 	address Address
 	store   Store
 	ownURL  string
+	port    uint
 
 	ackHandler           AckHandler
 	putHandler           PutHandler
@@ -36,20 +37,26 @@ type httpTransport struct {
 	subscriptionsInMu sync.RWMutex
 }
 
-func NewHTTPTransport(ctx context.Context, addr Address, port uint, store Store) (Transport, error) {
+func NewHTTPTransport(addr Address, port uint, store Store) (Transport, error) {
 	t := &httpTransport{
+		Context:         &ctx.Context{},
 		address:         addr,
 		subscriptionsIn: make(map[string][]*httpSubscriptionIn),
 		store:           store,
+		port:            port,
 		ownURL:          fmt.Sprintf("localhost:%v", port),
 	}
+	return t, nil
+}
 
-	err := t.CtxStart(
+func (t *httpTransport) Start() error {
+	return t.CtxStart(
 		// on startup
 		func() error {
-			t.SetLogLabel(addr.Pretty() + " transport")
+			t.Infof(0, "opening http transport at :%v", t.port)
+			t.SetLogLabel(t.address.Pretty() + " transport")
 			go func() {
-				err := http.ListenAndServe(fmt.Sprintf(":%v", port), t)
+				err := http.ListenAndServe(fmt.Sprintf(":%v", t.port), t)
 				if err != nil {
 					panic(err.Error())
 				}
@@ -58,10 +65,9 @@ func NewHTTPTransport(ctx context.Context, addr Address, port uint, store Store)
 		},
 		nil,
 		nil,
+		// on shutdown
 		nil,
 	)
-
-	return t, err
 }
 
 type httpSubscriptionIn struct {
@@ -121,7 +127,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			notify := w.(http.CloseNotifier).CloseNotify()
 			go func() {
 				<-notify
-				log.Println("http connection closed")
+				t.Info(0, "http connection closed")
 			}()
 
 			// Set the headers related to event streaming.
@@ -182,10 +188,10 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			if r.Header.Get("Accept") == "application/json" {
 				var resp struct {
-					MostRecentTxID ID          `json:"mostRecentTxID"`
-					Data           interface{} `json:"data"`
+					MostRecentTxHash Hash        `json:"mostRecentTxHash"`
+					Data             interface{} `json:"data"`
 				}
-				resp.MostRecentTxID = t.store.MostRecentTxID() // @@TODO: hacky
+				resp.MostRecentTxHash = t.store.MostRecentTxHash() // @@TODO: hacky
 
 				switch v := val.(type) {
 				case string:
@@ -251,15 +257,15 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var txID ID
-		err = txID.UnmarshalText(bs)
+		var txHash Hash
+		err = txHash.UnmarshalText(bs)
 		if err != nil {
 			t.Errorf("error reading ACK body: %v", err)
 			http.Error(w, "error reading body", http.StatusBadRequest)
 			return
 		}
 
-		t.ackHandler(txID, &httpPeer{t, r.RemoteAddr, w, nil, nil, httpPeerState_Unknown, nil})
+		t.ackHandler(txHash, &httpPeer{t, r.RemoteAddr, w, nil, nil, httpPeerState_Unknown, nil})
 
 	case "PUT":
 		defer r.Body.Close()
@@ -457,12 +463,12 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 	case MsgType_Ack:
-		txID, ok := msg.Payload.(ID)
+		txHash, ok := msg.Payload.(Hash)
 		if !ok {
 			return ErrProtocol
 		}
 
-		vidBytes, err := txID.MarshalText()
+		vidBytes, err := txHash.MarshalText()
 		if err != nil {
 			return errors.WithStack(err)
 		}

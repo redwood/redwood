@@ -17,7 +17,7 @@ import (
 	dstore "github.com/ipfs/go-datastore"
 	dsync "github.com/ipfs/go-datastore/sync"
 	libp2p "github.com/libp2p/go-libp2p"
-	crypto "github.com/libp2p/go-libp2p-crypto"
+	cryptop2p "github.com/libp2p/go-libp2p-crypto"
 	p2phost "github.com/libp2p/go-libp2p-host"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
@@ -29,15 +29,17 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
 
-	"github.com/plan-systems/plan-core/tools/ctx"
+	"github.com/brynbellomy/redwood/ctx"
 )
 
 type libp2pTransport struct {
-	ctx.Context
+	*ctx.Context
 
 	libp2pHost p2phost.Host
 	dht        *dht.IpfsDHT
 	*metrics.BandwidthCounter
+	port   uint
+	p2pKey cryptop2p.PrivKey
 
 	address Address
 
@@ -59,56 +61,60 @@ const (
 	PROTO_MAIN protocol.ID = "/redwood/main/1.0.0"
 )
 
-func NewLibp2pTransport(ctx context.Context, addr Address, port uint) (Transport, error) {
-	privkey, err := obtainP2PKey(addr)
-	if err != nil {
-		return nil, err
-	}
-
-	bandwidthCounter := metrics.NewBandwidthCounter()
-
-	// Initialize the libp2p host
-	libp2pHost, err := libp2p.New(ctx,
-		libp2p.ListenAddrStrings(
-			// fmt.Sprintf("/ip4/%v/tcp/%v", cfg.Node.P2PListenAddr, cfg.Node.P2PListenPort),
-			fmt.Sprintf("/ip4/0.0.0.0/tcp/%v", port),
-		),
-		libp2p.Identity(privkey),
-		libp2p.BandwidthReporter(bandwidthCounter),
-		libp2p.NATPortMap(),
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not initialize libp2p host")
-	}
-
-	// Initialize the DHT
-	d := dht.NewDHT(ctx, libp2pHost, dsync.MutexWrap(dstore.NewMapDatastore()))
-	d.Validator = blankValidator{} // Set a pass-through validator
-
-	// Set up the transport
+func NewLibp2pTransport(addr Address, port uint) (Transport, error) {
 	t := &libp2pTransport{
-		libp2pHost:       libp2pHost,
-		dht:              d,
-		BandwidthCounter: bandwidthCounter,
-		address:          addr,
-		subscriptionsIn:  make(map[string][]libp2pSubscriptionIn),
+		Context:         &ctx.Context{},
+		port:            port,
+		address:         addr,
+		subscriptionsIn: make(map[string][]libp2pSubscriptionIn),
 	}
+	return t, nil
+}
 
-	t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
-
-	err = t.CtxStart(
+func (t *libp2pTransport) Start() error {
+	return t.CtxStart(
 		// on startup
 		func() error {
-			t.SetLogLabel(addr.Pretty() + " transport")
-			go t.periodicallyAnnounceContent(t.Ctx)
+			t.Infof(0, "opening libp2p on port %v", t.port)
+			t.SetLogLabel(t.address.Pretty() + " transport")
+
+			p2pKey, err := obtainP2PKey(t.address)
+			if err != nil {
+				return err
+			}
+			t.p2pKey = p2pKey
+			t.BandwidthCounter = metrics.NewBandwidthCounter()
+
+			// Initialize the libp2p host
+			libp2pHost, err := libp2p.New(t.Ctx(),
+				libp2p.ListenAddrStrings(
+					// fmt.Sprintf("/ip4/%v/tcp/%v", cfg.Node.P2PListenAddr, cfg.Node.P2PListenPort),
+					fmt.Sprintf("/ip4/0.0.0.0/tcp/%v", t.port),
+				),
+				libp2p.Identity(t.p2pKey),
+				libp2p.BandwidthReporter(t.BandwidthCounter),
+				libp2p.NATPortMap(),
+			)
+			if err != nil {
+				return errors.Wrap(err, "could not initialize libp2p host")
+			}
+			t.libp2pHost = libp2pHost
+
+			// Initialize the DHT
+			t.dht = dht.NewDHT(t.Ctx(), t.libp2pHost, dsync.MutexWrap(dstore.NewMapDatastore()))
+			t.dht.Validator = blankValidator{} // Set a pass-through validator
+
+			t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
+
+			go t.periodicallyAnnounceContent()
+
 			return nil
 		},
 		nil,
 		nil,
+		// on shutdown
 		nil,
 	)
-
-	return t, err
 }
 
 func (t *libp2pTransport) Libp2pPeerID() string {
@@ -188,7 +194,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	case MsgType_Ack:
 		defer stream.Close()
 
-		txID, ok := msg.Payload.(ID)
+		txHash, ok := msg.Payload.(Hash)
 		if !ok {
 			t.Errorf("Ack message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
@@ -201,7 +207,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			return
 		}
 
-		t.ackHandler(txID, peer)
+		t.ackHandler(txHash, peer)
 
 	case MsgType_VerifyAddress:
 		defer stream.Close()
@@ -323,7 +329,7 @@ func (t *libp2pTransport) PeersWithAddress(ctx context.Context, address Address)
 			select {
 			case <-ctx.Done():
 				return
-			case <-t.Ctx.Done():
+			case <-t.Ctx().Done():
 				return
 			case ch <- &libp2pPeer{t, pinfo.ID, nil}:
 			}
@@ -352,10 +358,10 @@ var URLS_TO_ADVERTISE = []string{
 }
 
 // Periodically announces our repos and objects to the network.
-func (t *libp2pTransport) periodicallyAnnounceContent(ctx context.Context) {
+func (t *libp2pTransport) periodicallyAnnounceContent() {
 	for {
 		select {
-		case <-ctx.Done():
+		case <-t.Ctx().Done():
 			return
 		default:
 		}
@@ -365,7 +371,7 @@ func (t *libp2pTransport) periodicallyAnnounceContent(ctx context.Context) {
 		// Announce the URLs we're serving
 		for _, url := range URLS_TO_ADVERTISE {
 			func() {
-				ctxInner, cancel := context.WithTimeout(ctx, 10*time.Second)
+				ctxInner, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)
 				defer cancel()
 
 				c, err := cidForString("serve:" + url)
@@ -384,7 +390,7 @@ func (t *libp2pTransport) periodicallyAnnounceContent(ctx context.Context) {
 
 		// Advertise our address (for exchanging private txs)
 		func() {
-			ctxInner, cancel := context.WithTimeout(ctx, 10*time.Second)
+			ctxInner, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)
 			defer cancel()
 
 			c, err := cidForString("addr:" + t.address.String())
@@ -445,7 +451,7 @@ func (p *libp2pPeer) CloseConn() error {
 	return p.stream.Close()
 }
 
-func obtainP2PKey(addr Address) (crypto.PrivKey, error) {
+func obtainP2PKey(addr Address) (cryptop2p.PrivKey, error) {
 	configPath, err := RedwoodConfigDirPath()
 	if err != nil {
 		return nil, err
@@ -465,15 +471,15 @@ func obtainP2PKey(addr Address) (crypto.PrivKey, error) {
 		if err != nil {
 			return nil, err
 		}
-		return crypto.UnmarshalPrivateKey(data)
+		return cryptop2p.UnmarshalPrivateKey(data)
 	}
 
-	privkey, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 0)
+	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Secp256k1, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	bs, err := privkey.Bytes()
+	bs, err := p2pKey.Bytes()
 	if err != nil {
 		return nil, err
 	}
@@ -483,7 +489,7 @@ func obtainP2PKey(addr Address) (crypto.PrivKey, error) {
 		return nil, err
 	}
 
-	return privkey, nil
+	return p2pKey, nil
 }
 
 func cidForString(s string) (cid.Cid, error) {

@@ -4,9 +4,14 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+
+	"github.com/brynbellomy/redwood/ctx"
 )
 
 type Transport interface {
+	Ctx() *ctx.Context
+	Start() error
+
 	SetPutHandler(handler PutHandler)
 	SetAckHandler(handler AckHandler)
 	SetVerifyAddressHandler(handler VerifyAddressHandler)
@@ -25,7 +30,7 @@ type Peer interface {
 	CloseConn() error
 }
 
-type AckHandler func(txID ID, peer Peer)
+type AckHandler func(txHash Hash, peer Peer)
 type PutHandler func(tx Tx, peer Peer)
 type VerifyAddressHandler func(challengeMsg []byte) (VerifyAddressResponse, error)
 

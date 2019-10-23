@@ -4,83 +4,98 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
-	"github.com/plan-systems/plan-core/tools/ctx"
+
+	"github.com/brynbellomy/redwood/ctx"
 )
 
 type Store interface {
+	Ctx() *ctx.Context
+	Start() error
+
 	AddTx(tx *Tx) error
-	RemoveTx(txID ID) error
+	RemoveTx(txHash Hash) error
 	FetchTxs() ([]Tx, error)
-	HaveTx(txID ID) bool
+	HaveTx(txHash Hash) bool
 
 	State() interface{}
 	StateJSON() ([]byte, error)
-	MostRecentTxID() ID
+	MostRecentTxHash() Hash
 
 	RegisterResolverForKeypath(keypath []string, resolver Resolver)
 	RegisterValidatorForKeypath(keypath []string, validator Validator)
 }
 
 type store struct {
-	ctx.Context
+	*ctx.Context
 
-	address        Address
-	mu             sync.RWMutex
-	txs            map[ID]*Tx
-	validTxs       map[ID]*Tx
-	resolverTree   resolverTree
-	currentState   interface{}
-	stateHistory   map[ID]interface{}
-	timeDAG        map[ID]map[ID]bool
-	leaves         map[ID]bool
-	chMempool      chan *Tx
-	mostRecentTxID ID
+	address          Address
+	mu               sync.RWMutex
+	txs              map[Hash]*Tx
+	validTxs         map[Hash]*Tx
+	resolverTree     resolverTree
+	currentState     interface{}
+	stateHistory     map[Hash]interface{}
+	timeDAG          map[Hash]map[Hash]bool
+	leaves           map[Hash]bool
+	chMempool        chan *Tx
+	mostRecentTxHash Hash
+
+	persistence Persistence
 }
 
-func NewStore(address Address, genesisState interface{}) (Store, error) {
+func NewStore(address Address, genesisState interface{}, persistence Persistence) (Store, error) {
 	s := &store{
-		address:        address,
-		mu:             sync.RWMutex{},
-		txs:            make(map[ID]*Tx),
-		validTxs:       make(map[ID]*Tx),
-		resolverTree:   resolverTree{},
-		currentState:   genesisState,
-		stateHistory:   make(map[ID]interface{}),
-		timeDAG:        make(map[ID]map[ID]bool),
-		leaves:         make(map[ID]bool),
-		chMempool:      make(chan *Tx, 100),
-		mostRecentTxID: GenesisTxID,
+		Context:          &ctx.Context{},
+		address:          address,
+		mu:               sync.RWMutex{},
+		txs:              make(map[Hash]*Tx),
+		validTxs:         make(map[Hash]*Tx),
+		resolverTree:     resolverTree{},
+		currentState:     genesisState,
+		stateHistory:     make(map[Hash]interface{}),
+		timeDAG:          make(map[Hash]map[Hash]bool),
+		leaves:           make(map[Hash]bool),
+		chMempool:        make(chan *Tx, 100),
+		mostRecentTxHash: GenesisTxHash,
+		persistence:      persistence,
 	}
 
-	err := s.Startup()
-
-	return s, err
+	return s, nil
 }
 
-func (s *store) Startup() error {
+func (s *store) Start() error {
 	return s.CtxStart(
-		s.ctxStartup,
+		// on startup,
+		func() error {
+			s.SetLogLabel(s.address.Pretty() + " store")
+
+			s.RegisterResolverForKeypath([]string{}, &dumbResolver{})
+			s.RegisterValidatorForKeypath([]string{}, &permissionsValidator{})
+
+			s.CtxAddChild(s.persistence.Ctx(), nil)
+
+			err := s.persistence.Start()
+			if err != nil {
+				return err
+			}
+
+			err = s.replayStoredTxs()
+			if err != nil {
+				return err
+			}
+
+			go s.mempoolLoop()
+
+			return nil
+		},
 		nil,
 		nil,
-		s.ctxStopping,
+		// on shutdown
+		func() {},
 	)
-}
-
-func (s *store) ctxStartup() error {
-	s.SetLogLabel(s.address.Pretty() + " store")
-
-	s.RegisterResolverForKeypath([]string{}, &dumbResolver{})
-	s.RegisterValidatorForKeypath([]string{}, &permissionsValidator{})
-
-	go s.mempoolLoop()
-
-	return nil
-}
-
-func (s *store) ctxStopping() {
-	// No op since c.Ctx will cancel as this ctx completes stopping
 }
 
 func (s *store) State() interface{} {
@@ -97,8 +112,8 @@ func (s *store) StateJSON() ([]byte, error) {
 	return []byte(str), nil
 }
 
-func (s *store) MostRecentTxID() ID {
-	return s.mostRecentTxID
+func (s *store) MostRecentTxHash() Hash {
+	return s.mostRecentTxHash
 }
 
 func (s *store) RegisterResolverForKeypath(keypath []string, resolver Resolver) {
@@ -120,22 +135,43 @@ func (s *store) AddTx(tx *Tx) error {
 	defer s.mu.Unlock()
 
 	// Ignore duplicates
-	if _, exists := s.txs[tx.ID]; exists {
+	if _, exists := s.txs[tx.Hash()]; exists {
+		s.Infof(0, "already know tx %v, skipping", tx.Hash().String())
 		return nil
 	}
 
-	s.Infof(0, "new tx %v", tx.ID)
+	s.Infof(0, "new tx %v", tx.Hash().Pretty())
 
 	// Store the tx (so we can ignore txs we've seen before)
-	s.txs[tx.ID] = tx
+	s.txs[tx.Hash()] = tx
 
 	s.addToMempool(tx)
 	return nil
 }
 
+func (s *store) replayStoredTxs() error {
+	iter := s.persistence.AllTxs()
+
+	for {
+		tx := iter.Next()
+		if iter.Error() != nil {
+			return iter.Error()
+		} else if tx == nil {
+			return nil
+		}
+
+		s.Warnf("found stored tx %v", tx.Hash())
+		err := s.AddTx(tx)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *store) addToMempool(tx *Tx) {
 	select {
-	case <-s.Ctx.Done():
+	case <-s.Context.Done():
 	case s.chMempool <- tx:
 	}
 }
@@ -143,16 +179,22 @@ func (s *store) addToMempool(tx *Tx) {
 func (s *store) mempoolLoop() {
 	for {
 		select {
-		case <-s.Ctx.Done():
+		case <-s.Context.Done():
 			return
 		case tx := <-s.chMempool:
 			err := s.processMempoolTx(tx)
 			if errors.Cause(err) == ErrNoParentYet {
-				s.addToMempool(tx)
+				go func() {
+					select {
+					case <-s.Context.Done():
+					case <-time.After(500 * time.Millisecond):
+						s.addToMempool(tx)
+					}
+				}()
 			} else if err != nil {
 				s.Errorf("invalid tx %+v: %v", *tx, err)
 			} else {
-				s.Infof(0, "tx added to chain (%v)", tx.ID.Pretty())
+				s.Infof(0, "tx added to chain (%v)", tx.Hash().Pretty())
 			}
 		}
 	}
@@ -196,12 +238,12 @@ func (s *store) processMempoolTx(tx *Tx) error {
 		}
 
 		tx.Valid = true
-		s.validTxs[tx.ID] = tx
+		s.validTxs[tx.Hash()] = tx
 	}
 
 	// Unmark parents as leaves
-	for _, parentID := range tx.Parents {
-		delete(s.leaves, parentID)
+	for _, parentHash := range tx.Parents {
+		delete(s.leaves, parentHash)
 	}
 
 	// @@TODO: add to timeDAG
@@ -236,7 +278,7 @@ func (s *store) processMempoolTx(tx *Tx) error {
 			s.currentState = newState
 		}
 
-		s.mostRecentTxID = tx.ID
+		s.mostRecentTxHash = tx.Hash()
 
 		// Walk the tree and initialize validators and resolvers
 		// @@TODO: inefficient
@@ -277,11 +319,18 @@ func (s *store) processMempoolTx(tx *Tx) error {
 		}
 	}
 
+	err = s.persistence.AddTx(tx)
+	if err != nil {
+		return err
+	}
+
 	// j, err := s.StateJSON()
 	// if err != nil {
 	// 	return err
 	// }
 	// s.Infof(0, "state = %v", string(j))
+	// v, _ := valueAtKeypath(s.currentState.(map[string]interface{}), []string{"shrugisland", "talk0", "messages"})
+	// s.Infof(0, "state = %v", string(PrettyJSON(v)))
 
 	// Save historical state
 
@@ -292,18 +341,20 @@ var (
 	ErrNoParentYet           = errors.New("no parent yet")
 	ErrInvalidSignature      = errors.New("invalid signature")
 	ErrInvalidPrivateRootKey = errors.New("invalid private root key")
+	ErrDuplicateGenesis      = errors.New("already have a genesis tx")
+	ErrTxMissingPArents      = errors.New("tx must have parents")
 )
 
 func (s *store) validateTxIntrinsics(tx *Tx) error {
 	if len(tx.Parents) == 0 {
-		return errors.New("tx must have parents")
-	} else if len(s.validTxs) > 0 && len(tx.Parents) == 1 && tx.Parents[0] == GenesisTxID {
-		return errors.New("already have a genesis tx")
+		return ErrTxMissingParents
+	} else if len(s.validTxs) > 0 && len(tx.Parents) == 1 && tx.Parents[0] == GenesisTxHash {
+		return ErrDuplicateGenesis
 	}
 
-	for _, parentID := range tx.Parents {
-		if _, exists := s.validTxs[parentID]; !exists && parentID.Pretty() != GenesisTxID.Pretty() {
-			return errors.Wrapf(ErrNoParentYet, "txid: %v", parentID.Pretty())
+	for _, parentHash := range tx.Parents {
+		if _, exists := s.validTxs[parentHash]; !exists && parentHash.Pretty() != GenesisTxHash.Pretty() {
+			return errors.Wrapf(ErrNoParentYet, "tx: %v", parentHash.Pretty())
 		}
 	}
 
@@ -316,15 +367,10 @@ func (s *store) validateTxIntrinsics(tx *Tx) error {
 		}
 	}
 
-	hash, err := tx.Hash()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	sigPubKey, err := RecoverSigningPubkey(hash, tx.Sig)
+	sigPubKey, err := RecoverSigningPubkey(tx.Hash(), tx.Sig)
 	if err != nil {
 		return errors.Wrap(ErrInvalidSignature, err.Error())
-	} else if sigPubKey.VerifySignature(hash, tx.Sig) == false {
+	} else if sigPubKey.VerifySignature(tx.Hash(), tx.Sig) == false {
 		return errors.WithStack(ErrInvalidSignature)
 	} else if sigPubKey.Address() != tx.From {
 		return errors.Wrapf(ErrInvalidSignature, "address doesn't match (%v expected, %v received)", tx.From.Hex(), sigPubKey.Address().Hex())
@@ -345,17 +391,17 @@ func (s *store) stateAtKeypath(keypath []string) interface{} {
 	return current
 }
 
-func (s *store) RemoveTx(txID ID) error {
+func (s *store) RemoveTx(txHash Hash) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	delete(s.txs, txID)
+	delete(s.txs, txHash)
 
 	return nil
 }
 
-func (s *store) HaveTx(txID ID) bool {
-	_, have := s.txs[txID]
+func (s *store) HaveTx(txHash Hash) bool {
+	_, have := s.txs[txHash]
 	return have
 }
 
@@ -371,20 +417,20 @@ func (s *store) FetchTxs() ([]Tx, error) {
 	return txs, nil
 }
 
-func (s *store) getAncestors(vids map[ID]bool) map[ID]bool {
-	ancestors := map[ID]bool{}
+func (s *store) getAncestors(hashes map[Hash]bool) map[Hash]bool {
+	ancestors := map[Hash]bool{}
 
-	var mark_ancestors func(id ID)
-	mark_ancestors = func(id ID) {
-		if !ancestors[id] {
-			ancestors[id] = true
-			for parentID := range s.timeDAG[id] {
-				mark_ancestors(parentID)
+	var mark_ancestors func(id Hash)
+	mark_ancestors = func(txHash Hash) {
+		if !ancestors[txHash] {
+			ancestors[txHash] = true
+			for parentHash := range s.timeDAG[txHash] {
+				mark_ancestors(parentHash)
 			}
 		}
 	}
-	for parentID := range vids {
-		mark_ancestors(parentID)
+	for parentHash := range hashes {
+		mark_ancestors(parentHash)
 	}
 
 	return ancestors

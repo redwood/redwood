@@ -122,10 +122,10 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		msg.Payload = tx
 
 	case MsgType_Ack:
-		var id ID
+		var hash Hash
 		bs := []byte(m.PayloadBytes[1 : len(m.PayloadBytes)-1]) // remove quotes
-		copy(id[:], bs)
-		msg.Payload = id
+		copy(hash[:], bs)
+		msg.Payload = hash
 
 	case MsgType_Private:
 		type encryptedPut struct {

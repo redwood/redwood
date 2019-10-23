@@ -6,26 +6,35 @@ import (
 	"math/rand"
 
 	"github.com/pkg/errors"
-	"github.com/plan-systems/plan-core/tools/ctx"
+
+	"github.com/brynbellomy/redwood/ctx"
 )
 
 type Host interface {
+	ctx.Logger
+	Ctx() *ctx.Context
+	Start() error
+
 	Subscribe(ctx context.Context, url string) error
 	AddTx(ctx context.Context, tx Tx) error
 	AddPeer(ctx context.Context, multiaddrString string) error
+	Port() uint
+	Transport() Transport
+	Store() Store
+	Address() Address
 }
 
 type host struct {
-	ctx.Context
+	*ctx.Context
 
-	Port              uint
-	Transport         Transport
-	Store             Store
+	port              uint
+	transport         Transport
+	store             Store
 	signingKeypair    *SigningKeypair
 	encryptingKeypair *EncryptingKeypair
 
 	subscriptionsOut map[string]subscriptionOut
-	peerSeenTxs      map[string]map[ID]bool
+	peerSeenTxs      map[string]map[Hash]bool
 }
 
 var (
@@ -33,62 +42,81 @@ var (
 	ErrProtocol   = errors.New("protocol error")
 )
 
-func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, store Store) (*host, error) {
+func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, store Store) (Host, error) {
 	h := &host{
-		Port:              port,
-		Store:             store,
+		Context:           &ctx.Context{},
+		port:              port,
+		store:             store,
 		signingKeypair:    signingKeypair,
 		encryptingKeypair: encryptingKeypair,
 		subscriptionsOut:  make(map[string]subscriptionOut),
-		peerSeenTxs:       make(map[string]map[ID]bool),
+		peerSeenTxs:       make(map[string]map[Hash]bool),
 	}
+	return h, nil
+}
 
-	err := h.CtxStart(
-		h.ctxStartup,
+func (h *host) Ctx() *ctx.Context {
+	return h.Context
+}
+
+func (h *host) Start() error {
+	return h.CtxStart(
+		// on startup
+		func() error {
+			h.SetLogLabel(h.Address().Pretty() + " host")
+
+			// transport, err := NewLibp2pTransport(h.Address(), h.port)
+			transport, err := NewHTTPTransport(h.Address(), h.port, h.store)
+			if err != nil {
+				return err
+			}
+
+			transport.SetPutHandler(h.onTxReceived)
+			transport.SetAckHandler(h.onAckReceived)
+			transport.SetVerifyAddressHandler(h.onVerifyAddressReceived)
+			h.transport = transport
+
+			h.CtxAddChild(h.transport.Ctx(), nil)
+			h.CtxAddChild(h.store.Ctx(), nil)
+
+			err = h.store.Start()
+			if err != nil {
+				return err
+			}
+			return h.transport.Start()
+		},
 		nil,
 		nil,
-		h.ctxStopping,
+		// on shutdown
+		func() {},
 	)
+}
 
-	return h, err
+func (h *host) Port() uint {
+	return h.port
+}
+
+func (h *host) Transport() Transport {
+	return h.transport
+}
+
+func (h *host) Store() Store {
+	return h.store
 }
 
 func (h *host) Address() Address {
 	return h.signingKeypair.Address()
 }
 
-func (h *host) ctxStartup() error {
-	h.SetLogLabel(h.Address().Pretty() + " host")
-
-	h.Infof(0, "opening libp2p on port %v", h.Port)
-	// transport, err := NewLibp2pTransport(h.Ctx, h.Address(), h.Port)
-	transport, err := NewHTTPTransport(h.Ctx, h.Address(), h.Port, h.Store)
-	if err != nil {
-		return err
-	}
-
-	transport.SetPutHandler(h.onTxReceived)
-	transport.SetAckHandler(h.onAckReceived)
-	transport.SetVerifyAddressHandler(h.onVerifyAddressReceived)
-
-	h.Transport = transport
-
-	return nil
-}
-
-func (h *host) ctxStopping() {
-	// No op since h.Ctx will cancel as this ctx completes stopping
-}
-
 func (h *host) onTxReceived(tx Tx, peer Peer) {
-	h.Infof(0, "tx %v received", tx.ID.Pretty())
-	h.markTxSeenByPeer(peer.ID(), tx.ID)
+	h.Infof(0, "tx %v received", tx.Hash().Pretty())
+	h.markTxSeenByPeer(peer.ID(), tx.Hash())
 
 	// @@TODO: private txs
 
-	if !h.Store.HaveTx(tx.ID) {
+	if !h.store.HaveTx(tx.Hash()) {
 		// Add to store
-		err := h.Store.AddTx(&tx)
+		err := h.store.AddTx(&tx)
 		if err != nil {
 			h.Errorf("error adding tx to store: %v", err)
 		}
@@ -100,26 +128,26 @@ func (h *host) onTxReceived(tx Tx, peer Peer) {
 		}
 	}
 
-	err := peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.ID})
+	err := peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.Hash()})
 	if err != nil {
 		h.Errorf("error ACKing peer: %v", err)
 	}
 }
 
-func (h *host) onAckReceived(txID ID, peer Peer) {
-	h.Infof(0, "ack received for %v from %v", txID, peer.ID())
-	h.markTxSeenByPeer(peer.ID(), txID)
+func (h *host) onAckReceived(txHash Hash, peer Peer) {
+	h.Infof(0, "ack received for %v from %v", txHash, peer.ID())
+	h.markTxSeenByPeer(peer.ID(), txHash)
 }
 
-func (h *host) markTxSeenByPeer(peerID string, txID ID) {
+func (h *host) markTxSeenByPeer(peerID string, txHash Hash) {
 	if h.peerSeenTxs[peerID] == nil {
-		h.peerSeenTxs[peerID] = make(map[ID]bool)
+		h.peerSeenTxs[peerID] = make(map[Hash]bool)
 	}
-	h.peerSeenTxs[peerID][txID] = true
+	h.peerSeenTxs[peerID][txHash] = true
 }
 
 func (h *host) AddPeer(ctx context.Context, multiaddrString string) error {
-	return h.Transport.AddPeer(ctx, multiaddrString)
+	return h.transport.AddPeer(ctx, multiaddrString)
 }
 
 func (h *host) Subscribe(ctx context.Context, url string) error {
@@ -131,7 +159,7 @@ func (h *host) Subscribe(ctx context.Context, url string) error {
 	var peer Peer
 
 	// @@TODO: subscribe to more than one peer?
-	err := h.Transport.ForEachProviderOfURL(ctx, url, func(p Peer) (bool, error) {
+	err := h.transport.ForEachProviderOfURL(ctx, url, func(p Peer) (bool, error) {
 		err := p.EnsureConnected(ctx)
 		if err != nil {
 			return true, err
@@ -235,7 +263,7 @@ func (h *host) peerWithAddress(ctx context.Context, address Address) (Peer, Encr
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	chPeers, err := h.Transport.PeersWithAddress(ctx, address)
+	chPeers, err := h.transport.PeersWithAddress(ctx, address)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -308,8 +336,8 @@ func (h *host) put(ctx context.Context, tx Tx) error {
 		// @@TODO: do we need to trim the tx's patches' keypaths so that they don't include
 		// the keypath that the subscription is listening to?
 
-		err := h.Transport.ForEachSubscriberToURL(ctx, tx.URL, func(peer Peer) (bool, error) {
-			if h.peerSeenTxs[peer.ID()][tx.ID] {
+		err := h.transport.ForEachSubscriberToURL(ctx, tx.URL, func(peer Peer) (bool, error) {
+			if h.peerSeenTxs[peer.ID()][tx.Hash()] {
 				return true, nil
 			}
 
@@ -335,7 +363,7 @@ func (h *host) put(ctx context.Context, tx Tx) error {
 var ENCRYPTION_PUBKEY_FOR_ADDRESS map[Address]EncryptingPublicKey
 
 func (h *host) AddTx(ctx context.Context, tx Tx) error {
-	h.Info(0, "adding tx ", tx.ID.Pretty())
+	h.Info(0, "adding tx ", tx.Hash().Pretty())
 
 	if len(tx.Sig) == 0 {
 		err := h.SignTx(&tx)
@@ -344,12 +372,12 @@ func (h *host) AddTx(ctx context.Context, tx Tx) error {
 		}
 	}
 
-	err := h.Store.AddTx(&tx)
+	err := h.store.AddTx(&tx)
 	if err != nil {
 		return err
 	}
 
-	err = h.put(h.Ctx, tx)
+	err = h.put(h.Ctx(), tx)
 	if err != nil {
 		return err
 	}
@@ -358,16 +386,7 @@ func (h *host) AddTx(ctx context.Context, tx Tx) error {
 }
 
 func (h *host) SignTx(tx *Tx) error {
-	hash, err := tx.Hash()
-	if err != nil {
-		return err
-	}
-
-	sig, err := h.signingKeypair.SignHash(hash)
-	if err != nil {
-		return err
-	}
-
-	tx.Sig = sig
-	return nil
+	var err error
+	tx.Sig, err = h.signingKeypair.SignHash(tx.Hash())
+	return err
 }
