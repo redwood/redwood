@@ -27,6 +27,11 @@ const (
 	MsgType_VerifyAddressResponse MsgType = "verify address response"
 )
 
+type VerifyAddressResponse struct {
+	Signature           []byte `json:"signature"`
+	EncryptingPublicKey []byte `json:"encryptingPublicKey"`
+}
+
 func WriteMsg(w io.Writer, msg Msg) error {
 	bs, err := json.Marshal(msg)
 	if err != nil {
@@ -136,7 +141,13 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		msg.Payload = []byte(m.PayloadBytes)
 
 	case MsgType_VerifyAddressResponse:
-		msg.Payload = []byte(m.PayloadBytes)
+		var resp VerifyAddressResponse
+		err := json.Unmarshal([]byte(m.PayloadBytes), &resp)
+		if err != nil {
+			return err
+		}
+
+		msg.Payload = resp
 
 	default:
 		return errors.New("bad msg")

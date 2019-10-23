@@ -27,7 +27,7 @@ type Peer interface {
 
 type AckHandler func(txID ID, peer Peer)
 type PutHandler func(tx Tx, peer Peer)
-type VerifyAddressHandler func(challengeMsg []byte) ([]byte, error)
+type VerifyAddressHandler func(challengeMsg []byte) (VerifyAddressResponse, error)
 
 type subscriptionOut struct {
 	peer   Peer

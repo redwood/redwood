@@ -81,7 +81,9 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
 		if challengeMsgHex := r.Header.Get("Verify-Address"); challengeMsgHex != "" {
+			//
 			// Address verification request
+			//
 			t.Infof(0, "incoming verify-address request")
 
 			challengeMsg, err := hex.DecodeString(challengeMsgHex)
@@ -90,20 +92,22 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			respBytes, err := t.verifyAddressHandler([]byte(challengeMsg))
+			resp, err := t.verifyAddressHandler([]byte(challengeMsg))
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
-			w.Header().Set("Verify-Address", hex.EncodeToString(respBytes))
-			_, err = w.Write([]byte{})
+			err = json.NewEncoder(w).Encode(resp)
 			if err != nil {
-				panic(err.Error()) // @@TODO
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
 			}
 
 		} else if r.Header.Get("Subscribe") != "" {
+			//
 			// Subscription request
+			//
 			t.Infof(0, "incoming subscription")
 
 			// Make sure that the writer supports flushing.
@@ -141,7 +145,9 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			<-sub.chDone
 
 		} else {
+			//
 			// Regular HTTP GET request (from browsers, etc.)
+			//
 
 			// @@TODO: this is hacky
 			if r.URL.Path == "/braid.js" {
@@ -179,7 +185,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					MostRecentTxID ID          `json:"mostRecentTxID"`
 					Data           interface{} `json:"data"`
 				}
-				resp.MostRecentTxID = t.store.MostRecentTxID()
+				resp.MostRecentTxID = t.store.MostRecentTxID() // @@TODO: hacky
 
 				switch v := val.(type) {
 				case string:
@@ -285,7 +291,7 @@ func (t *httpTransport) SetVerifyAddressHandler(handler VerifyAddressHandler) {
 	t.verifyAddressHandler = handler
 }
 
-func (t *httpTransport) AddPeer(ctx context.Context, multiaddrString string) error {
+func (t *httpTransport) AddPeer(ctx context.Context, addrString string) error {
 	return nil
 }
 
@@ -357,14 +363,20 @@ func (t *httpTransport) PeersWithAddress(ctx context.Context, address Address) (
 }
 
 type httpPeer struct {
-	t   *httpTransport
+	t *httpTransport
+
+	// stream
 	url string
 	io.Writer
 	io.ReadCloser
 	http.Flusher
 
+	// state
 	peerState     httpPeerState
 	challengeResp []byte
+
+	// // identity
+	// encryptingPublicKey EncryptingPublicKey
 }
 
 type httpPeerState int

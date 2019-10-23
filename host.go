@@ -183,70 +183,78 @@ func (h *host) Subscribe(ctx context.Context, url string) error {
 	return nil
 }
 
-func (h *host) verifyPeerAddress(peer Peer, address Address) error {
+func (h *host) verifyPeerAddress(peer Peer, address Address) (EncryptingPublicKey, error) {
 	challengeMsg := make([]byte, 128)
 	_, err := rand.Read(challengeMsg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = peer.WriteMsg(Msg{Type: MsgType_VerifyAddress, Payload: challengeMsg})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	msg, err := peer.ReadMsg()
 	if err != nil {
-		return err
+		return nil, err
 	} else if msg.Type != MsgType_VerifyAddressResponse {
-		return ErrProtocol
+		return nil, ErrProtocol
 	}
 
-	sig, ok := msg.Payload.([]byte)
+	resp, ok := msg.Payload.(VerifyAddressResponse)
 	if !ok {
-		return ErrProtocol
+		return nil, ErrProtocol
 	}
 
-	hash := HashBytes(challengeMsg)
+	hash := HashBytes(resp.Signature)
 
-	pubkey, err := RecoverSigningPubkey(hash, sig)
+	pubkey, err := RecoverSigningPubkey(hash, resp.Signature)
 	if err != nil {
-		return err
+		return nil, err
 	} else if pubkey.Address() != address {
-		return ErrInvalidSignature
+		return nil, ErrInvalidSignature
 	}
-	return nil
+
+	return EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey), nil
 }
 
-func (h *host) onVerifyAddressReceived(challengeMsg []byte) ([]byte, error) {
+func (h *host) onVerifyAddressReceived(challengeMsg []byte) (VerifyAddressResponse, error) {
 	hash := HashBytes(challengeMsg)
-	return h.signingKeypair.SignHash(hash)
+	sig, err := h.signingKeypair.SignHash(hash)
+	if err != nil {
+		return VerifyAddressResponse{}, err
+	}
+	return VerifyAddressResponse{
+		Signature:           sig,
+		EncryptingPublicKey: h.encryptingKeypair.EncryptingPublicKey.Bytes(),
+	}, nil
 }
 
-func (h *host) peerWithAddress(ctx context.Context, address Address) (Peer, error) {
+func (h *host) peerWithAddress(ctx context.Context, address Address) (Peer, EncryptingPublicKey, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	chPeers, err := h.Transport.PeersWithAddress(ctx, address)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	for peer := range chPeers {
 		err = peer.EnsureConnected(context.TODO())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		defer peer.CloseConn()
 
-		err = h.verifyPeerAddress(peer, address)
+		encryptingPubkey, err := h.verifyPeerAddress(peer, address)
 		if err != nil {
 			continue
 		}
 
-		return peer, nil
+		return peer, encryptingPubkey, nil
 	}
-	return nil, nil
+	return nil, nil, nil
 }
 
 func (h *host) put(ctx context.Context, tx Tx) error {
@@ -264,7 +272,7 @@ func (h *host) put(ctx context.Context, tx Tx) error {
 
 		for _, recipientAddr := range tx.Recipients {
 			err := func() error {
-				peer, err := h.peerWithAddress(ctx, recipientAddr)
+				peer, encryptingPubkey, err := h.peerWithAddress(ctx, recipientAddr)
 				if err != nil {
 					return err
 				} else if peer == nil {
@@ -278,7 +286,7 @@ func (h *host) put(ctx context.Context, tx Tx) error {
 				}
 				defer peer.CloseConn()
 
-				msgEncrypted, err := h.encryptingKeypair.SealMessageFor(ENCRYPTION_PUBKEY_FOR_ADDRESS[recipientAddr], marshalledTx)
+				msgEncrypted, err := h.encryptingKeypair.SealMessageFor(encryptingPubkey, marshalledTx)
 				if err != nil {
 					return err
 				}

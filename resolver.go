@@ -126,12 +126,12 @@ func (t *resolverTree) deepestNodeInKeypathWhere(keypath []string, condition fun
 	return ancestor, closestAncestorKeypathIdx
 }
 
-func (t *resolverTree) resolverForKeypath(keypath []string) (Resolver, int) {
+func (t *resolverTree) nearestResolverForKeypath(keypath []string) (Resolver, int) {
 	node, idx := t.deepestNodeInKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.resolver != nil })
 	return node.resolver, idx
 }
 
-func (t *resolverTree) validatorForKeypath(keypath []string) (Validator, int) {
+func (t *resolverTree) nearestValidatorForKeypath(keypath []string) (Validator, int) {
 	node, idx := t.deepestNodeInKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.validator != nil })
 	return node.validator, idx
 }

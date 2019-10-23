@@ -110,6 +110,19 @@ func (tx Tx) Hash() (Hash, error) {
 	return HashBytes(txBytes), nil
 }
 
+func (tx Tx) IsPrivate() bool {
+	return len(tx.Recipients) > 0
+}
+
+func (tx Tx) PrivateRootKey() string {
+	var bs []byte
+	for _, r := range tx.Recipients {
+		bs = append(bs, r[:]...)
+	}
+	hash := HashBytes(bs)
+	return hash.String()
+}
+
 func (h Hash) String() string {
 	return hex.EncodeToString(h[:])
 }

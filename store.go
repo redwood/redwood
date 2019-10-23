@@ -171,7 +171,7 @@ func (s *store) processMempoolTx(tx *Tx) error {
 		validators := make(map[Validator][]Patch)
 		validatorKeypaths := make(map[Validator][]string)
 		for _, patch := range tx.Patches {
-			v, idx := s.resolverTree.validatorForKeypath(patch.Keys)
+			v, idx := s.resolverTree.nearestValidatorForKeypath(patch.Keys)
 			keys := make([]string, len(patch.Keys)-(idx))
 			copy(keys, patch.Keys[idx:])
 			p := patch
@@ -215,7 +215,7 @@ func (s *store) processMempoolTx(tx *Tx) error {
 			var newState interface{}
 			var err error
 			for {
-				resolver, currentResolverKeypathStartsAt := s.resolverTree.resolverForKeypath(patch.Keys[:len(patch.Keys)-1])
+				resolver, currentResolverKeypathStartsAt := s.resolverTree.nearestResolverForKeypath(patch.Keys[:len(patch.Keys)-1])
 				thisResolverKeypath := patch.Keys[:currentResolverKeypathStartsAt]
 				thisResolverState := s.stateAtKeypath(thisResolverKeypath)
 
@@ -240,6 +240,7 @@ func (s *store) processMempoolTx(tx *Tx) error {
 
 		// Walk the tree and initialize validators and resolvers
 		// @@TODO: inefficient
+		// @@TODO: breaks stateful resolvers
 		s.resolverTree = resolverTree{}
 		s.resolverTree.addResolver([]string{}, &dumbResolver{})
 		s.resolverTree.addValidator([]string{}, &permissionsValidator{})
@@ -288,8 +289,9 @@ func (s *store) processMempoolTx(tx *Tx) error {
 }
 
 var (
-	ErrNoParentYet      = errors.New("no parent yet")
-	ErrInvalidSignature = errors.New("invalid signature")
+	ErrNoParentYet           = errors.New("no parent yet")
+	ErrInvalidSignature      = errors.New("invalid signature")
+	ErrInvalidPrivateRootKey = errors.New("invalid private root key")
 )
 
 func (s *store) validateTxIntrinsics(tx *Tx) error {
@@ -302,6 +304,15 @@ func (s *store) validateTxIntrinsics(tx *Tx) error {
 	for _, parentID := range tx.Parents {
 		if _, exists := s.validTxs[parentID]; !exists && parentID.Pretty() != GenesisTxID.Pretty() {
 			return errors.Wrapf(ErrNoParentYet, "txid: %v", parentID.Pretty())
+		}
+	}
+
+	if tx.IsPrivate() {
+		root := tx.PrivateRootKey()
+		for _, p := range tx.Patches {
+			if p.Keys[0] != root {
+				return ErrInvalidPrivateRootKey
+			}
 		}
 	}
 

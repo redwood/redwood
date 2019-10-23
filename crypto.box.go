@@ -19,6 +19,7 @@ type (
 	}
 
 	EncryptingPublicKey interface {
+		Bytes() []byte
 	}
 
 	EncryptingKeypair struct {
@@ -44,6 +45,12 @@ func GenerateEncryptingKeypair() (*EncryptingKeypair, error) {
 	return &EncryptingKeypair{EncryptingPrivateKey: (*encryptingPrivateKey)(privateKey), EncryptingPublicKey: (*encryptingPublicKey)(publicKey)}, nil
 }
 
+func EncryptingPublicKeyFromBytes(bs []byte) EncryptingPublicKey {
+	var pk encryptingPublicKey
+	copy(pk[:], bs)
+	return &pk
+}
+
 func EncryptingPublicKeyFromHex(s string) (EncryptingPublicKey, error) {
 	bs, err := hex.DecodeString(s)
 	if err != nil {
@@ -66,11 +73,17 @@ func EncryptingPrivateKeyFromHex(s string) (EncryptingPrivateKey, error) {
 	return &pk, nil
 }
 
+func (pubkey *encryptingPublicKey) Bytes() []byte {
+	bs := make([]byte, ENCRYPTING_KEY_LENGTH)
+	copy(bs, (*pubkey)[:])
+	return bs
+}
+
 func (privkey *encryptingPrivateKey) SealMessageFor(recipientPubKey EncryptingPublicKey, msg []byte) ([]byte, error) {
 	// The shared key can be used to speed up processing when using the same
 	// pair of keys repeatedly.
 	var sharedEncryptKey [ENCRYPTING_KEY_LENGTH]byte
-	box.Precompute(&sharedEncryptKey, recipientPubKey.(*[ENCRYPTING_KEY_LENGTH]byte), (*[ENCRYPTING_KEY_LENGTH]byte)(privkey))
+	box.Precompute(&sharedEncryptKey, (*[ENCRYPTING_KEY_LENGTH]byte)(recipientPubKey.(*encryptingPublicKey)), (*[ENCRYPTING_KEY_LENGTH]byte)(privkey))
 
 	// You must use a different nonce for each message you encrypt with the
 	// same key. Since the nonce here is 192 bits long, a random value
@@ -90,7 +103,7 @@ func (privkey *encryptingPrivateKey) OpenMessageFrom(senderPublicKey EncryptingP
 	// The shared key can be used to speed up processing when using the same
 	// pair of keys repeatedly.
 	var sharedDecryptKey [ENCRYPTING_KEY_LENGTH]byte
-	box.Precompute(&sharedDecryptKey, senderPublicKey.(*[ENCRYPTING_KEY_LENGTH]byte), (*[ENCRYPTING_KEY_LENGTH]byte)(privkey))
+	box.Precompute(&sharedDecryptKey, (*[ENCRYPTING_KEY_LENGTH]byte)(senderPublicKey.(*encryptingPublicKey)), (*[ENCRYPTING_KEY_LENGTH]byte)(privkey))
 
 	// The recipient can decrypt the message using the shared key. When you
 	// decrypt, you must use the same nonce you used to encrypt the message.
