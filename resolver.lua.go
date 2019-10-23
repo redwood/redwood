@@ -42,7 +42,7 @@ func (r *luaResolver) ResolveState(state interface{}, sender Address, patch Patc
 	err = r.L.CallByParam(lua.P{
 		Fn:      r.L.GetGlobal("resolve_state"),
 		NRet:    1,
-		Protect: false,
+		Protect: true,
 	}, luaState, lua.LString(sender.String()), luaPatch)
 	if err != nil {
 		return nil, err
