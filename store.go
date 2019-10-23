@@ -332,8 +332,6 @@ func (s *store) processMempoolTx(tx *Tx) error {
 	// v, _ := valueAtKeypath(s.currentState.(map[string]interface{}), []string{"shrugisland", "talk0", "messages"})
 	// s.Infof(0, "state = %v", string(PrettyJSON(v)))
 
-	// Save historical state
-
 	return nil
 }
 
@@ -342,7 +340,7 @@ var (
 	ErrInvalidSignature      = errors.New("invalid signature")
 	ErrInvalidPrivateRootKey = errors.New("invalid private root key")
 	ErrDuplicateGenesis      = errors.New("already have a genesis tx")
-	ErrTxMissingPArents      = errors.New("tx must have parents")
+	ErrTxMissingParents      = errors.New("tx must have parents")
 )
 
 func (s *store) validateTxIntrinsics(tx *Tx) error {

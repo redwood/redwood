@@ -68,6 +68,17 @@ func walkTree(tree interface{}, fn func(keypath []string, val interface{}) error
 	return nil
 }
 
+func filterEmptyStrings(s []string) []string {
+	var filtered []string
+	for i := range s {
+		if s[i] == "" {
+			continue
+		}
+		filtered = append(filtered, s[i])
+	}
+	return filtered
+}
+
 func prettyJSON(val interface{}) string {
 	j, _ := json.MarshalIndent(val, "", "    ")
 	return string(j)

@@ -98,7 +98,6 @@ func main() {
 		panic(err)
 	}
 
-	time.Sleep(5 * time.Second)
 	sendTxs(host1, host2)
 
 	app.AttachInterruptHandler()
@@ -160,23 +159,40 @@ func sendTxs(host1, host2 rw.Host) {
                             * {
                                 font-family: 'Consolas', 'Ubuntu Mono', 'Monaco', 'Courier New', Courier, sans-serif;
                             }
+                            #debug-state {
+                                background: #eaeaea;
+                                font-size: 0.7rem;
+                                padding: 10px;
+                                border-radius: 5px;
+                                margin-left: 40px;
+                            }
                         </style>
                     </head>
                     <body>
-                        <div id='my-address'></div>
-                        <br/>
-                        <div>
-                            Log into a new address with a seed phrase:<br/>
-                            <input id='input-mnemonic'/>&nbsp;
-                            <button id='btn-login'>Go</button>
-                        </div>
-                        <br/>
-                        <br/>
+                        <div style='display: flex'>
+                            <div>
+                                <div id='my-address'></div>
+                                <br/>
+                                <div>
+                                    Log into a new address with a seed phrase:<br/>
+                                    <input id='input-mnemonic'/>&nbsp;
+                                    <button id='btn-login'>Go</button>
+                                </div>
+                                <br/>
+                                <br/>
 
-                        <div id='container'></div>
-                        <div>
-                            <input id='input-text' />
-                            <button id='btn-send'>Send</button>
+                                <div id='container'></div>
+                                <div>
+                                    <input id='input-text' />
+                                    <button id='btn-send'>Send</button>
+                                </div>
+                            </div>
+                            <div>
+                                <code>
+                                    <pre id='debug-state'>
+                                    </pre>
+                                </code>
+                            </div>
                         </div>
                     </body>
 
@@ -215,6 +231,21 @@ func sendTxs(host1, host2 rw.Host) {
                             }
                             container.innerHTML = html
                         }
+
+                        var debugStateElem = document.getElementById('debug-state')
+                        Braid.get('/', (err, update) => {
+                            if (err) {
+                                throw new Error(err)
+                            }
+                            console.log(update.data)
+                            var j = JSON.stringify(update.data, null, 4)
+                            j = j.replace(/\\\\n/g, '\\n')
+                                 .replace(/</g, '&lt;')
+                                 .replace(/>/g, '&gt;')
+                            console.log('j ~>', j)
+
+                            debugStateElem.innerHTML = j
+                        })
 
                         Braid.get('/shrugisland/talk0/messages', (err, update) => {
                             if (err) {

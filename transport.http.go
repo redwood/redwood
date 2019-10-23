@@ -173,7 +173,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			keypath := strings.Split(r.URL.Path[1:], "/")
+			keypath := filterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
 			stateMap, isMap := t.store.State().(map[string]interface{})
 			if !isMap {
 				http.Error(w, "not found", http.StatusNotFound)
