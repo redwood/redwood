@@ -25,10 +25,10 @@ $ go run cmd/main.go
     Creates an SSE keep-alive connection that pushes transactions to the subscriber.
 
 
-- **Verify-Address GET**
+- **Verify-Credentials GET**
     ```
     GET /
-    Verify-Address: <challenge message>
+    Verify-Credentials: <challenge message>
     ```
     Requests that the receiving node sign the challenge message to prove which address represents their identity.
 

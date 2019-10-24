@@ -82,12 +82,12 @@ func (s *store) Start() error {
 				return err
 			}
 
+			go s.mempoolLoop()
+
 			err = s.replayStoredTxs()
 			if err != nil {
 				return err
 			}
-
-			go s.mempoolLoop()
 
 			return nil
 		},

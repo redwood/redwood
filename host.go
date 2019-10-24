@@ -147,7 +147,18 @@ func (h *host) markTxSeenByPeer(peerID string, txHash Hash) {
 }
 
 func (h *host) AddPeer(ctx context.Context, multiaddrString string) error {
-	return h.transport.AddPeer(ctx, multiaddrString)
+	peer, err := h.transport.AddPeer(ctx, multiaddrString)
+	if err != nil {
+		return err
+	}
+
+	sigpubkey, _, err := h.getPeerCredentials(ctx, peer)
+	if err != nil {
+		return err
+	}
+
+	h.Infof(0, "added peer with address %v", sigpubkey.Address())
+	return nil
 }
 
 func (h *host) Subscribe(ctx context.Context, url string) error {
@@ -211,40 +222,40 @@ func (h *host) Subscribe(ctx context.Context, url string) error {
 	return nil
 }
 
-func (h *host) verifyPeerAddress(peer Peer, address Address) (EncryptingPublicKey, error) {
-	challengeMsg := make([]byte, 128)
-	_, err := rand.Read(challengeMsg)
+func (h *host) getPeerCredentials(ctx context.Context, peer Peer) (SigningPublicKey, EncryptingPublicKey, error) {
+	err := peer.EnsureConnected(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	challengeMsg := make([]byte, 128)
+	_, err = rand.Read(challengeMsg)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	err = peer.WriteMsg(Msg{Type: MsgType_VerifyAddress, Payload: challengeMsg})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	msg, err := peer.ReadMsg()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	} else if msg.Type != MsgType_VerifyAddressResponse {
-		return nil, ErrProtocol
+		return nil, nil, ErrProtocol
 	}
 
 	resp, ok := msg.Payload.(VerifyAddressResponse)
 	if !ok {
-		return nil, ErrProtocol
+		return nil, nil, ErrProtocol
 	}
 
-	hash := HashBytes(resp.Signature)
-
-	pubkey, err := RecoverSigningPubkey(hash, resp.Signature)
+	pubkey, err := RecoverSigningPubkey(HashBytes(challengeMsg), resp.Signature)
 	if err != nil {
-		return nil, err
-	} else if pubkey.Address() != address {
-		return nil, ErrInvalidSignature
+		return nil, nil, err
 	}
-
-	return EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey), nil
+	return pubkey, EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey), nil
 }
 
 func (h *host) onVerifyAddressReceived(challengeMsg []byte) (VerifyAddressResponse, error) {
@@ -275,9 +286,11 @@ func (h *host) peerWithAddress(ctx context.Context, address Address) (Peer, Encr
 		}
 		defer peer.CloseConn()
 
-		encryptingPubkey, err := h.verifyPeerAddress(peer, address)
+		signingPubkey, encryptingPubkey, err := h.getPeerCredentials(ctx, peer)
 		if err != nil {
 			continue
+		} else if signingPubkey.Address() != address {
+			return nil, nil, ErrInvalidSignature
 		}
 
 		return peer, encryptingPubkey, nil
@@ -358,9 +371,6 @@ func (h *host) put(ctx context.Context, tx Tx) error {
 	}
 	return nil
 }
-
-// @@TODO: remove this and build a mechanism for transports to fetch the public key associated with a given address
-var ENCRYPTION_PUBKEY_FOR_ADDRESS map[Address]EncryptingPublicKey
 
 func (h *host) AddTx(ctx context.Context, tx Tx) error {
 	h.Info(0, "adding tx ", tx.Hash().Pretty())

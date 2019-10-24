@@ -86,7 +86,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "GET":
-		if challengeMsgHex := r.Header.Get("Verify-Address"); challengeMsgHex != "" {
+		if challengeMsgHex := r.Header.Get("Verify-Credentials"); challengeMsgHex != "" {
 			//
 			// Address verification request
 			//
@@ -94,17 +94,17 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			challengeMsg, err := hex.DecodeString(challengeMsgHex)
 			if err != nil {
-				http.Error(w, "Verify-Address header: bad challenge message", http.StatusBadRequest)
+				http.Error(w, "Verify-Credentials header: bad challenge message", http.StatusBadRequest)
 				return
 			}
 
-			resp, err := t.verifyAddressHandler([]byte(challengeMsg))
+			verifyAddressResponse, err := t.verifyAddressHandler([]byte(challengeMsg))
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
-			err = json.NewEncoder(w).Encode(resp)
+			err = json.NewEncoder(w).Encode(verifyAddressResponse)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -265,7 +265,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		t.ackHandler(txHash, &httpPeer{t, r.RemoteAddr, w, nil, nil, httpPeerState_Unknown, nil})
+		t.ackHandler(txHash, &httpPeer{t, r.RemoteAddr, w, nil, nil, httpPeerState_Unknown, nil, nil})
 
 	case "PUT":
 		defer r.Body.Close()
@@ -278,7 +278,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 
-		t.putHandler(tx, &httpPeer{t, r.RemoteAddr, w, nil, nil, httpPeerState_Unknown, nil})
+		t.putHandler(tx, &httpPeer{t, r.RemoteAddr, w, nil, nil, httpPeerState_Unknown, nil, nil})
 
 	default:
 		http.Error(w, "unsupported method", http.StatusMethodNotAllowed)
@@ -297,8 +297,8 @@ func (t *httpTransport) SetVerifyAddressHandler(handler VerifyAddressHandler) {
 	t.verifyAddressHandler = handler
 }
 
-func (t *httpTransport) AddPeer(ctx context.Context, addrString string) error {
-	return nil
+func (t *httpTransport) AddPeer(ctx context.Context, addrString string) (Peer, error) {
+	return &httpPeer{t: t, url: "http://" + addrString}, nil
 }
 
 func (t *httpTransport) ForEachProviderOfURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error {
@@ -330,7 +330,7 @@ func (t *httpTransport) ForEachProviderOfURL(ctx context.Context, theURL string,
 			continue
 		}
 
-		keepGoing, err := fn(&httpPeer{t, providerURL, nil, nil, nil, httpPeerState_Unknown, nil})
+		keepGoing, err := fn(&httpPeer{t, providerURL, nil, nil, nil, httpPeerState_Unknown, nil, nil})
 		if err != nil {
 			return errors.WithStack(err)
 		} else if !keepGoing {
@@ -354,7 +354,7 @@ func (t *httpTransport) ForEachSubscriberToURL(ctx context.Context, theURL strin
 	defer t.subscriptionsInMu.RUnlock()
 
 	for _, sub := range t.subscriptionsIn[domain] {
-		keepGoing, err := fn(&httpPeer{t, "", sub.Writer, nil, sub.Flusher, httpPeerState_Unknown, nil})
+		keepGoing, err := fn(&httpPeer{t, "", sub.Writer, nil, sub.Flusher, httpPeerState_Unknown, nil, nil})
 		if err != nil {
 			return errors.WithStack(err)
 		} else if !keepGoing {
@@ -381,8 +381,8 @@ type httpPeer struct {
 	peerState     httpPeerState
 	challengeResp []byte
 
-	// // identity
-	// encryptingPublicKey EncryptingPublicKey
+	// identity
+	encryptingPublicKey EncryptingPublicKey
 }
 
 type httpPeerState int
@@ -494,11 +494,11 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("GET", p.url, bytes.NewReader(challengeMsg))
+		req, err := http.NewRequest("GET", p.url, nil)
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Verify-Address", hex.EncodeToString(challengeMsg))
+		req.Header.Set("Verify-Credentials", hex.EncodeToString(challengeMsg))
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -506,18 +506,9 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		} else if resp.StatusCode != 200 {
 			return errors.Errorf("error verifying peer address: (%v) %v", resp.StatusCode, resp.Status)
 		}
-		defer resp.Body.Close()
 
-		challengeRespStr := resp.Header.Get("Verify-Address")
-		if challengeRespStr == "" {
-			panic("bad challenge response") // @@TODO
-		}
-		challengeResp, err := hex.DecodeString(challengeRespStr)
-		if err != nil {
-			panic(err.Error()) // @@TODO
-		}
+		p.ReadCloser = resp.Body
 		p.peerState = httpPeerState_VerifyingAddress
-		p.challengeResp = challengeResp
 
 	default:
 		panic("unimplemented")
@@ -529,7 +520,17 @@ func (p *httpPeer) ReadMsg() (Msg, error) {
 	switch p.peerState {
 	case httpPeerState_VerifyingAddress:
 		p.peerState = httpPeerState_Unknown
-		return Msg{Type: MsgType_VerifyAddressResponse, Payload: p.challengeResp}, nil
+
+		var verifyResp VerifyAddressResponse
+		err := json.NewDecoder(p.ReadCloser).Decode(&verifyResp)
+		if err != nil {
+			return Msg{}, err
+		}
+
+		p.challengeResp = verifyResp.Signature
+		p.encryptingPublicKey = EncryptingPublicKeyFromBytes(verifyResp.EncryptingPublicKey)
+
+		return Msg{Type: MsgType_VerifyAddressResponse, Payload: verifyResp}, nil
 
 	default:
 		var msg Msg

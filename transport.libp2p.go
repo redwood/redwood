@@ -235,25 +235,25 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	}
 }
 
-func (t *libp2pTransport) AddPeer(ctx context.Context, multiaddrString string) error {
+func (t *libp2pTransport) AddPeer(ctx context.Context, multiaddrString string) (Peer, error) {
 	addr, err := ma.NewMultiaddr(multiaddrString)
 	if err != nil {
-		return errors.Wrapf(err, "could not parse multiaddr '%v'", multiaddrString)
+		return nil, errors.Wrapf(err, "could not parse multiaddr '%v'", multiaddrString)
 	}
 
 	pinfo, err := pstore.InfoFromP2pAddr(addr)
 	if err != nil {
-		return errors.Wrapf(err, "could not parse PeerInfo from multiaddr '%v'", multiaddrString)
+		return nil, errors.Wrapf(err, "could not parse PeerInfo from multiaddr '%v'", multiaddrString)
 	}
 
 	err = t.libp2pHost.Connect(ctx, *pinfo)
 	if err != nil {
-		return errors.Wrapf(err, "could not connect to peer '%v'", multiaddrString)
+		return nil, errors.Wrapf(err, "could not connect to peer '%v'", multiaddrString)
 	}
 
 	t.Infof(0, "connected to %v", pinfo.ID)
 
-	return nil
+	return &libp2pPeer{t: t, peerID: pinfo.ID}, nil
 }
 
 func (t *libp2pTransport) ForEachProviderOfURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error {
