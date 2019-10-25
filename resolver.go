@@ -27,6 +27,7 @@ func init() {
 		"dumb":  NewDumbResolver,
 		"stack": NewStackResolver,
 		"lua":   NewLuaResolver,
+		"js":    NewJSResolver,
 	}
 }
 

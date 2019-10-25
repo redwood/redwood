@@ -135,30 +135,42 @@ func sendTxs(host1, host2 rw.Host) {
             }`),
 			mustParsePatch(`.shrugisland.talk0.messages = []`),
 			mustParsePatch(`.shrugisland.talk0.validator = {"type": "permissions"}`),
-			mustParsePatch(`.shrugisland.talk0.resolver = {"type":"lua", "src":"
-                function resolve_state(state, sender, patch)
-                    if state == nil then
-                        state = {}
-                    end
+			mustParsePatch(`.shrugisland.talk0.resolver = {"type":"js", "src":"
+                function resolve_state(stateJSON, sender, patch) {
+                    var state = JSON.parse(stateJSON || {})
 
-                    if patch:RangeStart() ~= -1 and patch:RangeStart() == patch:RangeEnd() then
-                        local msg = {
-                            text = patch.Val['text'],
-                            sender = sender,
-                        }
-                        if state['messages'] == nil then
-                            state['messages'] = { msg }
+                    state.messages.push({
+                        text: patch.val.text,
+                        sender: sender,
+                    })
 
-                        elseif patch:RangeStart() <= #state['messages'] then
-                            state['messages'][ #state['messages'] + 1 ] = msg
-
-                        end
-                    else
-                        error('only patches that append messages to the end of the channel are allowed')
-                    end
-                    return state
-                end
+                    return JSON.stringify(state)
+                }
             "}`),
+			// mustParsePatch(`.shrugisland.talk0.resolver = {"type":"lua", "src":"
+			//              function resolve_state(state, sender, patch)
+			//                  if state == nil then
+			//                      state = {}
+			//                  end
+
+			//                  if patch:RangeStart() ~= -1 and patch:RangeStart() == patch:RangeEnd() then
+			//                      local msg = {
+			//                          text = patch.Val['text'],
+			//                          sender = sender,
+			//                      }
+			//                      if state['messages'] == nil then
+			//                          state['messages'] = { msg }
+
+			//                      elseif patch:RangeStart() <= #state['messages'] then
+			//                          state['messages'][ #state['messages'] + 1 ] = msg
+
+			//                      end
+			//                  else
+			//                      error('only patches that append messages to the end of the channel are allowed')
+			//                  end
+			//                  return state
+			//              end
+			//          "}`),
 			mustParsePatch(`.shrugisland.talk0.index = "
                     <html>
                     <head>
@@ -249,7 +261,6 @@ func sendTxs(host1, host2 rw.Host) {
                             j = j.replace(/\\\\n/g, '\\n')
                                  .replace(/</g, '&lt;')
                                  .replace(/>/g, '&gt;')
-                            console.log('j ~>', j)
 
                             debugStateElem.innerHTML = j
                         })

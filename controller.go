@@ -208,7 +208,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 	}
 
 	//
-	// Validate the tx'c extrinsics
+	// Validate the tx's extrinsics
 	//
 	{
 		validators := make(map[Validator][]Patch)
