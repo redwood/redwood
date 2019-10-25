@@ -16,7 +16,7 @@ type Host interface {
 	Start() error
 
 	Subscribe(ctx context.Context, url string) error
-	AddTx(ctx context.Context, tx Tx) error
+	SendTx(ctx context.Context, tx Tx) error
 	AddPeer(ctx context.Context, multiaddrString string) error
 	Port() uint
 	Transport() Transport
@@ -35,11 +35,20 @@ type host struct {
 
 	subscriptionsOut map[string]subscriptionOut
 	peerSeenTxs      map[string]map[Hash]bool
+
+	addressesToPeers map[Address]storedPeer
+}
+
+type storedPeer struct {
+	id        string
+	sigpubkey SigningPublicKey
+	encpubkey EncryptingPublicKey
 }
 
 var (
 	ErrUnsignedTx = errors.New("unsigned tx")
 	ErrProtocol   = errors.New("protocol error")
+	ErrPeerIsSelf = errors.New("peer is self")
 )
 
 func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, store Store) (Host, error) {
@@ -51,6 +60,7 @@ func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypai
 		encryptingKeypair: encryptingKeypair,
 		subscriptionsOut:  make(map[string]subscriptionOut),
 		peerSeenTxs:       make(map[string]map[Hash]bool),
+		addressesToPeers:  make(map[Address]storedPeer),
 	}
 	return h, nil
 }
@@ -71,7 +81,8 @@ func (h *host) Start() error {
 				return err
 			}
 
-			transport.SetPutHandler(h.onTxReceived)
+			transport.SetTxHandler(h.onTxReceived)
+			transport.SetPrivateTxHandler(h.onPrivateTxReceived)
 			transport.SetAckHandler(h.onAckReceived)
 			transport.SetVerifyAddressHandler(h.onVerifyAddressReceived)
 			h.transport = transport
@@ -112,7 +123,45 @@ func (h *host) onTxReceived(tx Tx, peer Peer) {
 	h.Infof(0, "tx %v received", tx.Hash().Pretty())
 	h.markTxSeenByPeer(peer.ID(), tx.Hash())
 
-	// @@TODO: private txs
+	if !h.store.HaveTx(tx.Hash()) {
+		err := h.store.AddTx(&tx)
+		if err != nil {
+			h.Errorf("error adding tx to store: %v", err)
+		}
+
+		err = h.broadcastTx(context.TODO(), tx)
+		if err != nil {
+			h.Errorf("error rebroadcasting tx: %v", err)
+		}
+	}
+
+	err := peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.Hash()})
+	if err != nil {
+		h.Errorf("error ACKing peer: %v", err)
+	}
+}
+
+func (h *host) onPrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
+	h.Infof(0, "private tx %v received", encryptedTx.TxHash.Pretty())
+	h.markTxSeenByPeer(peer.ID(), encryptedTx.TxHash)
+
+	bs, err := h.encryptingKeypair.OpenMessageFrom(EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey), encryptedTx.EncryptedPayload)
+	if err != nil {
+		h.Errorf("error decrypting tx: %v", err)
+		return
+	}
+
+	var tx Tx
+	err = json.Unmarshal(bs, &tx)
+	if err != nil {
+		h.Errorf("error decoding tx: %v", err)
+		return
+	}
+
+	if encryptedTx.TxHash != tx.Hash() {
+		h.Errorf("private tx hash does not match")
+		return
+	}
 
 	if !h.store.HaveTx(tx.Hash()) {
 		// Add to store
@@ -122,13 +171,13 @@ func (h *host) onTxReceived(tx Tx, peer Peer) {
 		}
 
 		// Broadcast to subscribed peers
-		err = h.put(context.TODO(), tx)
+		err = h.broadcastTx(context.TODO(), tx)
 		if err != nil {
 			h.Errorf("error rebroadcasting tx: %v", err)
 		}
 	}
 
-	err := peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.Hash()})
+	err = peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.Hash()})
 	if err != nil {
 		h.Errorf("error ACKing peer: %v", err)
 	}
@@ -147,12 +196,12 @@ func (h *host) markTxSeenByPeer(peerID string, txHash Hash) {
 }
 
 func (h *host) AddPeer(ctx context.Context, multiaddrString string) error {
-	peer, err := h.transport.AddPeer(ctx, multiaddrString)
+	peer, err := h.transport.GetPeer(ctx, multiaddrString)
 	if err != nil {
 		return err
 	}
 
-	sigpubkey, _, err := h.getPeerCredentials(ctx, peer)
+	sigpubkey, _, err := h.requestPeerCredentials(ctx, peer)
 	if err != nil {
 		return err
 	}
@@ -222,7 +271,7 @@ func (h *host) Subscribe(ctx context.Context, url string) error {
 	return nil
 }
 
-func (h *host) getPeerCredentials(ctx context.Context, peer Peer) (SigningPublicKey, EncryptingPublicKey, error) {
+func (h *host) requestPeerCredentials(ctx context.Context, peer Peer) (SigningPublicKey, EncryptingPublicKey, error) {
 	err := peer.EnsureConnected(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -243,37 +292,55 @@ func (h *host) getPeerCredentials(ctx context.Context, peer Peer) (SigningPublic
 	if err != nil {
 		return nil, nil, err
 	} else if msg.Type != MsgType_VerifyAddressResponse {
-		return nil, nil, ErrProtocol
+		return nil, nil, errors.WithStack(ErrProtocol)
 	}
 
 	resp, ok := msg.Payload.(VerifyAddressResponse)
 	if !ok {
-		return nil, nil, ErrProtocol
+		return nil, nil, errors.WithStack(ErrProtocol)
 	}
 
-	pubkey, err := RecoverSigningPubkey(HashBytes(challengeMsg), resp.Signature)
+	sigpubkey, err := RecoverSigningPubkey(HashBytes(challengeMsg), resp.Signature)
 	if err != nil {
 		return nil, nil, err
 	}
-	return pubkey, EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey), nil
+
+	encpubkey := EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey)
+
+	h.addressesToPeers[sigpubkey.Address()] = storedPeer{peer.ID(), sigpubkey, encpubkey}
+
+	return sigpubkey, encpubkey, nil
 }
 
-func (h *host) onVerifyAddressReceived(challengeMsg []byte) (VerifyAddressResponse, error) {
-	hash := HashBytes(challengeMsg)
-	sig, err := h.signingKeypair.SignHash(hash)
+func (h *host) onVerifyAddressReceived(challengeMsg []byte, peer Peer) error {
+	defer peer.CloseConn()
+
+	sig, err := h.signingKeypair.SignHash(HashBytes(challengeMsg))
 	if err != nil {
-		return VerifyAddressResponse{}, err
+		return err
 	}
-	return VerifyAddressResponse{
+
+	return peer.WriteMsg(Msg{Type: MsgType_VerifyAddressResponse, Payload: VerifyAddressResponse{
 		Signature:           sig,
 		EncryptingPublicKey: h.encryptingKeypair.EncryptingPublicKey.Bytes(),
-	}, nil
+	}})
 }
 
 func (h *host) peerWithAddress(ctx context.Context, address Address) (Peer, EncryptingPublicKey, error) {
+	if address == h.Address() {
+		return nil, nil, ErrPeerIsSelf
+	}
+
+	if storedPeer, exists := h.addressesToPeers[address]; exists {
+		peer, err := h.transport.GetPeer(ctx, storedPeer.id)
+		if err != nil {
+			return nil, nil, err
+		}
+		return peer, storedPeer.encpubkey, nil
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
 	chPeers, err := h.transport.PeersWithAddress(ctx, address)
 	if err != nil {
 		return nil, nil, err
@@ -286,7 +353,7 @@ func (h *host) peerWithAddress(ctx context.Context, address Address) (Peer, Encr
 		}
 		defer peer.CloseConn()
 
-		signingPubkey, encryptingPubkey, err := h.getPeerCredentials(ctx, peer)
+		signingPubkey, encryptingPubkey, err := h.requestPeerCredentials(ctx, peer)
 		if err != nil {
 			continue
 		} else if signingPubkey.Address() != address {
@@ -298,7 +365,7 @@ func (h *host) peerWithAddress(ctx context.Context, address Address) (Peer, Encr
 	return nil, nil, nil
 }
 
-func (h *host) put(ctx context.Context, tx Tx) error {
+func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 	// @@TODO: should we also send all PUTs to some set of authoritative peers (like a central server)?
 
 	if len(tx.Sig) == 0 {
@@ -312,6 +379,10 @@ func (h *host) put(ctx context.Context, tx Tx) error {
 		}
 
 		for _, recipientAddr := range tx.Recipients {
+			if recipientAddr == h.Address() {
+				continue
+			}
+
 			err := func() error {
 				peer, encryptingPubkey, err := h.peerWithAddress(ctx, recipientAddr)
 				if err != nil {
@@ -332,7 +403,14 @@ func (h *host) put(ctx context.Context, tx Tx) error {
 					return err
 				}
 
-				err = peer.WriteMsg(Msg{Type: MsgType_Private, Payload: msgEncrypted})
+				err = peer.WriteMsg(Msg{
+					Type: MsgType_Private,
+					Payload: EncryptedTx{
+						TxHash:           tx.Hash(),
+						EncryptedPayload: msgEncrypted,
+						SenderPublicKey:  h.encryptingKeypair.EncryptingPublicKey.Bytes(),
+					},
+				})
 				if err != nil {
 					return err
 				}
@@ -372,7 +450,7 @@ func (h *host) put(ctx context.Context, tx Tx) error {
 	return nil
 }
 
-func (h *host) AddTx(ctx context.Context, tx Tx) error {
+func (h *host) SendTx(ctx context.Context, tx Tx) error {
 	h.Info(0, "adding tx ", tx.Hash().Pretty())
 
 	if len(tx.Sig) == 0 {
@@ -387,7 +465,7 @@ func (h *host) AddTx(ctx context.Context, tx Tx) error {
 		return err
 	}
 
-	err = h.put(h.Ctx(), tx)
+	err = h.broadcastTx(h.Ctx(), tx)
 	if err != nil {
 		return err
 	}

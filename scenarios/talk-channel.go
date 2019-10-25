@@ -82,7 +82,14 @@ func main() {
 	if libp2pTransport, is := host1.Transport().(interface{ Libp2pPeerID() string }); is {
 		host2.AddPeer(host2.Ctx(), "/ip4/0.0.0.0/tcp/21231/p2p/"+libp2pTransport.Libp2pPeerID())
 	} else {
-		host2.AddPeer(host2.Ctx(), "localhost:21231")
+		err := host2.AddPeer(host2.Ctx(), "localhost:21231")
+		if err != nil {
+			panic(err)
+		}
+		err = host1.AddPeer(host2.Ctx(), "localhost:21241")
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	time.Sleep(2 * time.Second)
@@ -276,7 +283,7 @@ func sendTxs(host1, host2 rw.Host) {
 	}
 
 	host1.Info(1, "sending tx to initialize talk channel...")
-	err := host1.AddTx(context.Background(), tx1)
+	err := host1.SendTx(context.Background(), tx1)
 	if err != nil {
 		host1.Errorf("%+v", err)
 	}
@@ -314,19 +321,38 @@ func sendTxs(host1, host2 rw.Host) {
 	)
 
 	host2.Info(1, "sending tx 4...")
-	err = host2.AddTx(context.Background(), tx4)
+	err = host2.SendTx(context.Background(), tx4)
 	if err != nil {
 		host2.Errorf("xxx %+v", err)
 	}
 	host1.Info(1, "sending tx 3...")
-	err = host1.AddTx(context.Background(), tx3)
+	err = host1.SendTx(context.Background(), tx3)
 	if err != nil {
 		host1.Errorf("zzz %+v", err)
 	}
 	host1.Info(1, "sending tx 2...")
-	err = host1.AddTx(context.Background(), tx2)
+	err = host1.SendTx(context.Background(), tx2)
 	if err != nil {
 		host1.Errorf("yyy %+v", err)
+	}
+
+	var (
+		recipients = []rw.Address{host1.Address(), host2.Address()}
+		tx5        = rw.Tx{
+			ID:      rw.IDFromString("four"),
+			Parents: []rw.Hash{tx4.Hash()},
+			From:    host2.Address(),
+			URL:     "localhost:21231",
+			Patches: []rw.Patch{
+				mustParsePatch(`.` + rw.PrivateRootKeyForRecipients(recipients) + `.shrugisland.talk0.messages[2:2] = {"text":"private message for you!"}`),
+			},
+			Recipients: recipients,
+		}
+	)
+
+	err = host2.SendTx(context.Background(), tx5)
+	if err != nil {
+		host2.Errorf("yyy %+v", err)
 	}
 }
 

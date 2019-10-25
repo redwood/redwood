@@ -43,7 +43,8 @@ type libp2pTransport struct {
 
 	address Address
 
-	putHandler           PutHandler
+	txHandler            TxHandler
+	privateTxHandler     PrivateTxHandler
 	ackHandler           AckHandler
 	verifyAddressHandler VerifyAddressHandler
 
@@ -133,8 +134,12 @@ func (t *libp2pTransport) Peers() []pstore.PeerInfo {
 	return pstore.PeerInfos(t.libp2pHost.Peerstore(), t.libp2pHost.Peerstore().Peers())
 }
 
-func (t *libp2pTransport) SetPutHandler(handler PutHandler) {
-	t.putHandler = handler
+func (t *libp2pTransport) SetTxHandler(handler TxHandler) {
+	t.txHandler = handler
+}
+
+func (t *libp2pTransport) SetPrivateTxHandler(handler PrivateTxHandler) {
+	t.privateTxHandler = handler
 }
 
 func (t *libp2pTransport) SetAckHandler(handler AckHandler) {
@@ -189,7 +194,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			return
 		}
 
-		t.putHandler(tx, peer)
+		t.txHandler(tx, peer)
 
 	case MsgType_Ack:
 		defer stream.Close()
@@ -218,15 +223,10 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			return
 		}
 
-		resp, err := t.verifyAddressHandler(challengeMsg)
+		peer := &libp2pPeer{t: t, stream: stream}
+		err := t.verifyAddressHandler(challengeMsg, peer)
 		if err != nil {
 			t.Errorf("VerifyAddress: error from verifyAddressHandler: %v", err)
-			return
-		}
-
-		err = WriteMsg(stream, Msg{Type: MsgType_VerifyAddressResponse, Payload: resp})
-		if err != nil {
-			t.Errorf("VerifyAddress: error writing response: %v", err)
 			return
 		}
 
@@ -235,7 +235,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	}
 }
 
-func (t *libp2pTransport) AddPeer(ctx context.Context, multiaddrString string) (Peer, error) {
+func (t *libp2pTransport) GetPeer(ctx context.Context, multiaddrString string) (Peer, error) {
 	addr, err := ma.NewMultiaddr(multiaddrString)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not parse multiaddr '%v'", multiaddrString)

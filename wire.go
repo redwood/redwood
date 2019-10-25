@@ -32,6 +32,12 @@ type VerifyAddressResponse struct {
 	EncryptingPublicKey []byte `json:"encryptingPublicKey"`
 }
 
+type EncryptedTx struct {
+	TxHash           Hash   `json:"txHash"`
+	EncryptedPayload []byte `json:"encryptedPayload"`
+	SenderPublicKey  []byte `json:"senderPublicKey"`
+}
+
 func WriteMsg(w io.Writer, msg Msg) error {
 	bs, err := json.Marshal(msg)
 	if err != nil {
@@ -128,14 +134,12 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		msg.Payload = hash
 
 	case MsgType_Private:
-		type encryptedPut struct {
-		}
-
-		var ep encryptedPut
+		var ep EncryptedTx
 		err := json.Unmarshal(m.PayloadBytes, &ep)
 		if err != nil {
 			return err
 		}
+		msg.Payload = ep
 
 	case MsgType_VerifyAddress:
 		msg.Payload = []byte(m.PayloadBytes)

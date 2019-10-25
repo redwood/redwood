@@ -24,8 +24,8 @@ type Store interface {
 	StateJSON() ([]byte, error)
 	MostRecentTxHash() Hash
 
-	RegisterResolverForKeypath(keypath []string, resolver Resolver)
-	RegisterValidatorForKeypath(keypath []string, validator Validator)
+	SetResolver(keypath []string, resolver Resolver)
+	SetValidator(keypath []string, validator Validator)
 }
 
 type store struct {
@@ -72,8 +72,8 @@ func (s *store) Start() error {
 		func() error {
 			s.SetLogLabel(s.address.Pretty() + " store")
 
-			s.RegisterResolverForKeypath([]string{}, &dumbResolver{})
-			s.RegisterValidatorForKeypath([]string{}, &permissionsValidator{})
+			s.SetResolver([]string{}, &dumbResolver{})
+			s.SetValidator([]string{}, &permissionsValidator{})
 
 			s.CtxAddChild(s.persistence.Ctx(), nil)
 
@@ -116,14 +116,14 @@ func (s *store) MostRecentTxHash() Hash {
 	return s.mostRecentTxHash
 }
 
-func (s *store) RegisterResolverForKeypath(keypath []string, resolver Resolver) {
+func (s *store) SetResolver(keypath []string, resolver Resolver) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.resolverTree.addResolver(keypath, resolver)
 }
 
-func (s *store) RegisterValidatorForKeypath(keypath []string, validator Validator) {
+func (s *store) SetValidator(keypath []string, validator Validator) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -151,6 +151,7 @@ func (s *store) AddTx(tx *Tx) error {
 
 func (s *store) replayStoredTxs() error {
 	iter := s.persistence.AllTxs()
+	defer iter.Cancel()
 
 	for {
 		tx := iter.Next()
@@ -378,15 +379,13 @@ func (s *store) validateTxIntrinsics(tx *Tx) error {
 }
 
 func (s *store) stateAtKeypath(keypath []string) interface{} {
-	current := s.currentState
-	for _, key := range keypath {
-		asMap, isMap := current.(map[string]interface{})
-		if !isMap {
-			return nil
-		}
-		current = asMap[key]
+	if len(keypath) == 0 {
+		return s.currentState
+	} else if stateMap, isMap := s.currentState.(map[string]interface{}); isMap {
+		val, _ := M(stateMap).GetValue(keypath...)
+		return val
 	}
-	return current
+	return nil
 }
 
 func (s *store) RemoveTx(txHash Hash) error {

@@ -120,13 +120,16 @@ func (tx Tx) IsPrivate() bool {
 	return len(tx.Recipients) > 0
 }
 
-func (tx Tx) PrivateRootKey() string {
+func PrivateRootKeyForRecipients(recipients []Address) string {
 	var bs []byte
-	for _, r := range tx.Recipients {
+	for _, r := range recipients {
 		bs = append(bs, r[:]...)
 	}
-	hash := HashBytes(bs)
-	return hash.String()
+	return "private" + HashBytes(bs).String()
+}
+
+func (tx Tx) PrivateRootKey() string {
+	return PrivateRootKeyForRecipients(tx.Recipients)
 }
 
 func (h *Hash) UnmarshalText(text []byte) error {

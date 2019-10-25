@@ -12,11 +12,12 @@ type Transport interface {
 	Ctx() *ctx.Context
 	Start() error
 
-	SetPutHandler(handler PutHandler)
+	SetTxHandler(handler TxHandler)
+	SetPrivateTxHandler(handler PrivateTxHandler)
 	SetAckHandler(handler AckHandler)
 	SetVerifyAddressHandler(handler VerifyAddressHandler)
 
-	AddPeer(ctx context.Context, multiaddrString string) (Peer, error)
+	GetPeer(ctx context.Context, multiaddr string) (Peer, error)
 	ForEachProviderOfURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error
 	ForEachSubscriberToURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error
 	PeersWithAddress(ctx context.Context, address Address) (<-chan Peer, error)
@@ -31,8 +32,9 @@ type Peer interface {
 }
 
 type AckHandler func(txHash Hash, peer Peer)
-type PutHandler func(tx Tx, peer Peer)
-type VerifyAddressHandler func(challengeMsg []byte) (VerifyAddressResponse, error)
+type TxHandler func(tx Tx, peer Peer)
+type PrivateTxHandler func(encryptedTx EncryptedTx, peer Peer)
+type VerifyAddressHandler func(challengeMsg []byte, peer Peer) error
 
 type subscriptionOut struct {
 	peer   Peer
