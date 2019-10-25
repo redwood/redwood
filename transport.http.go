@@ -54,8 +54,8 @@ func (t *httpTransport) Start() error {
 	return t.CtxStart(
 		// on startup
 		func() error {
-			t.Infof(0, "opening http transport at :%v", t.port)
 			t.SetLogLabel(t.address.Pretty() + " transport")
+			t.Infof(0, "opening http transport at :%v", t.port)
 			go func() {
 				err := http.ListenAndServe(fmt.Sprintf(":%v", t.port), t)
 				if err != nil {

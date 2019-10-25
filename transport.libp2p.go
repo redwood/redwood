@@ -76,8 +76,8 @@ func (t *libp2pTransport) Start() error {
 	return t.CtxStart(
 		// on startup
 		func() error {
-			t.Infof(0, "opening libp2p on port %v", t.port)
 			t.SetLogLabel(t.address.Pretty() + " transport")
+			t.Infof(0, "opening libp2p on port %v", t.port)
 
 			p2pKey, err := obtainP2PKey(t.address)
 			if err != nil {

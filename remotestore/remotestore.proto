@@ -1,0 +1,65 @@
+
+syntax = "proto3";
+
+package redwood;
+
+option go_package = "remotestore";
+
+service RemoteStore {
+    rpc Authenticate(stream AuthenticateMessage) returns (stream AuthenticateMessage) {}
+    rpc AddTx(AddTxRequest) returns (AddTxResponse) {}
+    rpc RemoveTx(RemoveTxRequest) returns (RemoveTxResponse) {}
+    rpc FetchTx(FetchTxRequest) returns (FetchTxResponse) {}
+    rpc AllTxs(AllTxsRequest) returns (stream AllTxsResponsePacket) {}
+}
+
+message AuthenticateMessage {
+    message AuthenticateChallenge {
+        bytes challenge = 1;
+    }
+
+    message AuthenticateSignature {
+        bytes signature = 1;
+    }
+
+    message AuthenticateResponse {
+        string jwt = 1;
+    }
+
+    oneof payload {
+        AuthenticateChallenge authenticateChallenge = 1;
+        AuthenticateSignature authenticateSignature = 2;
+        AuthenticateResponse authenticateResponse = 3;
+    }
+}
+
+message AddTxRequest {
+    bytes txHash = 1;
+    bytes txBytes = 2;
+}
+
+message AddTxResponse {}
+
+message RemoveTxRequest {
+    bytes txHash = 1;
+}
+
+message RemoveTxResponse {}
+
+message FetchTxRequest {
+    bytes txHash = 1;
+}
+
+message FetchTxResponse {
+    bytes txBytes = 1;
+}
+
+message AllTxsRequest {}
+
+message AllTxsResponsePacket {
+    bytes txBytes = 1;
+}
+
+
+
+

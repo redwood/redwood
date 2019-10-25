@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
+	"math/rand"
 
 	"github.com/pkg/errors"
 )
@@ -158,4 +159,10 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 	}
 
 	return nil
+}
+
+func GenerateChallengeMsg() ([]byte, error) {
+	challengeMsg := make([]byte, 128)
+	_, err := rand.Read(challengeMsg)
+	return challengeMsg, err
 }

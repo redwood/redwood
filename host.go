@@ -3,7 +3,6 @@ package redwood
 import (
 	"context"
 	"encoding/json"
-	"math/rand"
 
 	"github.com/pkg/errors"
 
@@ -277,8 +276,7 @@ func (h *host) requestPeerCredentials(ctx context.Context, peer Peer) (SigningPu
 		return nil, nil, err
 	}
 
-	challengeMsg := make([]byte, 128)
-	_, err = rand.Read(challengeMsg)
+	challengeMsg, err := GenerateChallengeMsg()
 	if err != nil {
 		return nil, nil, err
 	}

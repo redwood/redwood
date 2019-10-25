@@ -161,7 +161,7 @@ func (c *controller) replayStoredTxs() error {
 			return nil
 		}
 
-		c.Warnf("found stored tx %v", tx.Hash())
+		c.Infof(0, "found stored tx %v", tx.Hash())
 		err := c.AddTx(tx)
 		if err != nil {
 			return err

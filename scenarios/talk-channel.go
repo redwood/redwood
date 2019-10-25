@@ -9,6 +9,7 @@ import (
 
 	rw "github.com/brynbellomy/redwood"
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/remotestore"
 )
 
 type M = map[string]interface{}
@@ -38,7 +39,8 @@ func makeHost(signingKeypairHex string, port uint, dbfile string) rw.Host {
 	if err != nil {
 		panic(err)
 	}
-	store := rw.NewBadgerStore(dbfile, signingKeypair.Address())
+	// store := rw.NewBadgerStore(dbfile, signingKeypair.Address())
+	store := remotestore.NewClient("0.0.0.0:4567", signingKeypair.Address(), signingKeypair.SigningPrivateKey)
 	controller, err := rw.NewController(signingKeypair.Address(), genesis, store)
 	if err != nil {
 		panic(err)

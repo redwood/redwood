@@ -65,6 +65,16 @@ func (sig *Signature) UnmarshalJSON(bs []byte) error {
 	return nil
 }
 
+func AddressFromHex(hx string) (Address, error) {
+	bs, err := hex.DecodeString(hx)
+	if err != nil {
+		return Address{}, err
+	}
+	var addr Address
+	copy(addr[:], bs)
+	return addr, nil
+}
+
 func (a Address) String() string {
 	return a.Hex()
 }
