@@ -24,10 +24,10 @@ import (
 type httpTransport struct {
 	*ctx.Context
 
-	address Address
-	store   Store
-	ownURL  string
-	port    uint
+	address    Address
+	controller Controller
+	ownURL     string
+	port       uint
 
 	ackHandler           AckHandler
 	txHandler            TxHandler
@@ -38,12 +38,12 @@ type httpTransport struct {
 	subscriptionsInMu sync.RWMutex
 }
 
-func NewHTTPTransport(addr Address, port uint, store Store) (Transport, error) {
+func NewHTTPTransport(addr Address, port uint, controller Controller) (Transport, error) {
 	t := &httpTransport{
 		Context:         &ctx.Context{},
 		address:         addr,
 		subscriptionsIn: make(map[string][]*httpSubscriptionIn),
-		store:           store,
+		controller:      controller,
 		port:            port,
 		ownURL:          fmt.Sprintf("localhost:%v", port),
 	}
@@ -168,7 +168,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			keypath := filterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
-			stateMap, isMap := t.store.State().(map[string]interface{})
+			stateMap, isMap := t.controller.State().(map[string]interface{})
 			if !isMap {
 				http.Error(w, "not found", http.StatusNotFound)
 				return
@@ -185,7 +185,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					MostRecentTxHash Hash        `json:"mostRecentTxHash"`
 					Data             interface{} `json:"data"`
 				}
-				resp.MostRecentTxHash = t.store.MostRecentTxHash() // @@TODO: hacky
+				resp.MostRecentTxHash = t.controller.MostRecentTxHash() // @@TODO: hacky
 
 				switch v := val.(type) {
 				case string:
@@ -378,7 +378,7 @@ func (t *httpTransport) ForEachSubscriberToURL(ctx context.Context, theURL strin
 	return nil
 }
 
-func (t *httpTransport) PeersWithAddress(ctx context.Context, address Address) (<-chan Peer, error) {
+func (t *httpTransport) PeersClaimingAddress(ctx context.Context, address Address) (<-chan Peer, error) {
 	panic("unimplemented")
 }
 

@@ -309,7 +309,7 @@ func (t *libp2pTransport) ForEachSubscriberToURL(ctx context.Context, theURL str
 	return nil
 }
 
-func (t *libp2pTransport) PeersWithAddress(ctx context.Context, address Address) (<-chan Peer, error) {
+func (t *libp2pTransport) PeersClaimingAddress(ctx context.Context, address Address) (<-chan Peer, error) {
 	addrCid, err := cidForString("addr:" + address.String())
 	if err != nil {
 		t.Errorf("announce: error creating cid: %v", err)

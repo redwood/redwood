@@ -20,7 +20,7 @@ type Transport interface {
 	GetPeer(ctx context.Context, multiaddr string) (Peer, error)
 	ForEachProviderOfURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error
 	ForEachSubscriberToURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error
-	PeersWithAddress(ctx context.Context, address Address) (<-chan Peer, error)
+	PeersClaimingAddress(ctx context.Context, address Address) (<-chan Peer, error)
 }
 
 type Peer interface {

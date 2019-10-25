@@ -38,12 +38,12 @@ func makeHost(signingKeypairHex string, port uint, dbfile string) rw.Host {
 	if err != nil {
 		panic(err)
 	}
-	persistence := rw.NewBadgerPersistence(dbfile, signingKeypair.Address())
-	store, err := rw.NewStore(signingKeypair.Address(), genesis, persistence)
+	store := rw.NewBadgerStore(dbfile, signingKeypair.Address())
+	controller, err := rw.NewController(signingKeypair.Address(), genesis, store)
 	if err != nil {
 		panic(err)
 	}
-	h, err := rw.NewHost(signingKeypair, encryptingKeypair, port, store)
+	h, err := rw.NewHost(signingKeypair, encryptingKeypair, port, controller)
 	if err != nil {
 		panic(err)
 	}

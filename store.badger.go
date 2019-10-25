@@ -8,27 +8,27 @@ import (
 	"github.com/brynbellomy/redwood/ctx"
 )
 
-type badgerPersistence struct {
+type badgerStore struct {
 	*ctx.Context
 	db         *badger.DB
 	dbFilename string
 	address    Address
 }
 
-func NewBadgerPersistence(dbFilename string, address Address) Persistence {
-	return &badgerPersistence{
+func NewBadgerStore(dbFilename string, address Address) Store {
+	return &badgerStore{
 		Context:    &ctx.Context{},
 		dbFilename: dbFilename,
 		address:    address,
 	}
 }
 
-func (p *badgerPersistence) Start() error {
+func (p *badgerStore) Start() error {
 	return p.CtxStart(
 		// on startup,
 		func() error {
-			p.SetLogLabel(p.address.Pretty() + " persistence:badger")
-			p.Infof(0, "opening badger persistent store at %v", p.dbFilename)
+			p.SetLogLabel(p.address.Pretty() + " store:badger")
+			p.Infof(0, "opening badger store at %v", p.dbFilename)
 			db, err := badger.Open(badger.DefaultOptions(p.dbFilename))
 			if err != nil {
 				return err
@@ -45,7 +45,7 @@ func (p *badgerPersistence) Start() error {
 	)
 }
 
-func (p *badgerPersistence) AddTx(tx *Tx) error {
+func (p *badgerStore) AddTx(tx *Tx) error {
 	bs, err := json.Marshal(tx)
 	if err != nil {
 		return err
@@ -65,14 +65,14 @@ func (p *badgerPersistence) AddTx(tx *Tx) error {
 	return nil
 }
 
-func (p *badgerPersistence) RemoveTx(txHash Hash) error {
+func (p *badgerStore) RemoveTx(txHash Hash) error {
 	key := append([]byte("tx:"), txHash[:]...)
 	return p.db.Update(func(txn *badger.Txn) error {
 		return txn.Delete(key)
 	})
 }
 
-func (p *badgerPersistence) FetchTx(txHash Hash) (*Tx, error) {
+func (p *badgerStore) FetchTx(txHash Hash) (*Tx, error) {
 	key := append([]byte("tx:"), txHash[:]...)
 
 	var bs []byte
@@ -96,7 +96,7 @@ func (p *badgerPersistence) FetchTx(txHash Hash) (*Tx, error) {
 	return &tx, err
 }
 
-func (p *badgerPersistence) AllTxs() TxIterator {
+func (p *badgerStore) AllTxs() TxIterator {
 	txIter := &txIterator{
 		ch:       make(chan *Tx),
 		chCancel: make(chan struct{}),

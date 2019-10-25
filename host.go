@@ -20,7 +20,7 @@ type Host interface {
 	AddPeer(ctx context.Context, multiaddrString string) error
 	Port() uint
 	Transport() Transport
-	Store() Store
+	Controller() Controller
 	Address() Address
 }
 
@@ -29,14 +29,14 @@ type host struct {
 
 	port              uint
 	transport         Transport
-	store             Store
+	controller        Controller
 	signingKeypair    *SigningKeypair
 	encryptingKeypair *EncryptingKeypair
 
 	subscriptionsOut map[string]subscriptionOut
 	peerSeenTxs      map[string]map[Hash]bool
 
-	addressesToPeers map[Address]storedPeer
+	peerStore map[Address]storedPeer
 }
 
 type storedPeer struct {
@@ -51,16 +51,16 @@ var (
 	ErrPeerIsSelf = errors.New("peer is self")
 )
 
-func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, store Store) (Host, error) {
+func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, controller Controller) (Host, error) {
 	h := &host{
 		Context:           &ctx.Context{},
 		port:              port,
-		store:             store,
+		controller:        controller,
 		signingKeypair:    signingKeypair,
 		encryptingKeypair: encryptingKeypair,
 		subscriptionsOut:  make(map[string]subscriptionOut),
 		peerSeenTxs:       make(map[string]map[Hash]bool),
-		addressesToPeers:  make(map[Address]storedPeer),
+		peerStore:         make(map[Address]storedPeer),
 	}
 	return h, nil
 }
@@ -76,7 +76,7 @@ func (h *host) Start() error {
 			h.SetLogLabel(h.Address().Pretty() + " host")
 
 			// transport, err := NewLibp2pTransport(h.Address(), h.port)
-			transport, err := NewHTTPTransport(h.Address(), h.port, h.store)
+			transport, err := NewHTTPTransport(h.Address(), h.port, h.controller)
 			if err != nil {
 				return err
 			}
@@ -88,9 +88,9 @@ func (h *host) Start() error {
 			h.transport = transport
 
 			h.CtxAddChild(h.transport.Ctx(), nil)
-			h.CtxAddChild(h.store.Ctx(), nil)
+			h.CtxAddChild(h.controller.Ctx(), nil)
 
-			err = h.store.Start()
+			err = h.controller.Start()
 			if err != nil {
 				return err
 			}
@@ -111,8 +111,8 @@ func (h *host) Transport() Transport {
 	return h.transport
 }
 
-func (h *host) Store() Store {
-	return h.store
+func (h *host) Controller() Controller {
+	return h.controller
 }
 
 func (h *host) Address() Address {
@@ -123,10 +123,10 @@ func (h *host) onTxReceived(tx Tx, peer Peer) {
 	h.Infof(0, "tx %v received", tx.Hash().Pretty())
 	h.markTxSeenByPeer(peer.ID(), tx.Hash())
 
-	if !h.store.HaveTx(tx.Hash()) {
-		err := h.store.AddTx(&tx)
+	if !h.controller.HaveTx(tx.Hash()) {
+		err := h.controller.AddTx(&tx)
 		if err != nil {
-			h.Errorf("error adding tx to store: %v", err)
+			h.Errorf("error adding tx to controller: %v", err)
 		}
 
 		err = h.broadcastTx(context.TODO(), tx)
@@ -163,11 +163,11 @@ func (h *host) onPrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
 		return
 	}
 
-	if !h.store.HaveTx(tx.Hash()) {
-		// Add to store
-		err := h.store.AddTx(&tx)
+	if !h.controller.HaveTx(tx.Hash()) {
+		// Add to controller
+		err := h.controller.AddTx(&tx)
 		if err != nil {
-			h.Errorf("error adding tx to store: %v", err)
+			h.Errorf("error adding tx to controller: %v", err)
 		}
 
 		// Broadcast to subscribed peers
@@ -307,7 +307,7 @@ func (h *host) requestPeerCredentials(ctx context.Context, peer Peer) (SigningPu
 
 	encpubkey := EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey)
 
-	h.addressesToPeers[sigpubkey.Address()] = storedPeer{peer.ID(), sigpubkey, encpubkey}
+	h.peerStore[sigpubkey.Address()] = storedPeer{peer.ID(), sigpubkey, encpubkey}
 
 	return sigpubkey, encpubkey, nil
 }
@@ -331,7 +331,7 @@ func (h *host) peerWithAddress(ctx context.Context, address Address) (Peer, Encr
 		return nil, nil, ErrPeerIsSelf
 	}
 
-	if storedPeer, exists := h.addressesToPeers[address]; exists {
+	if storedPeer, exists := h.peerStore[address]; exists {
 		peer, err := h.transport.GetPeer(ctx, storedPeer.id)
 		if err != nil {
 			return nil, nil, err
@@ -341,7 +341,7 @@ func (h *host) peerWithAddress(ctx context.Context, address Address) (Peer, Encr
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	chPeers, err := h.transport.PeersWithAddress(ctx, address)
+	chPeers, err := h.transport.PeersClaimingAddress(ctx, address)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -460,7 +460,7 @@ func (h *host) SendTx(ctx context.Context, tx Tx) error {
 		}
 	}
 
-	err := h.store.AddTx(&tx)
+	err := h.controller.AddTx(&tx)
 	if err != nil {
 		return err
 	}
