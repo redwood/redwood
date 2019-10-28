@@ -9,7 +9,7 @@ import (
 
 	rw "github.com/brynbellomy/redwood"
 	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/remotestore"
+	// "github.com/brynbellomy/redwood/remotestore"
 )
 
 type M = map[string]interface{}
@@ -39,8 +39,8 @@ func makeHost(signingKeypairHex string, port uint, dbfile string) rw.Host {
 	if err != nil {
 		panic(err)
 	}
-	// store := rw.NewBadgerStore(dbfile, signingKeypair.Address())
-	store := remotestore.NewClient("0.0.0.0:4567", signingKeypair.Address(), signingKeypair.SigningPrivateKey)
+	store := rw.NewBadgerStore(dbfile, signingKeypair.Address())
+	// store := remotestore.NewClient("0.0.0.0:4567", signingKeypair.Address(), signingKeypair.SigningPrivateKey)
 	controller, err := rw.NewController(signingKeypair.Address(), genesis, store)
 	if err != nil {
 		panic(err)
@@ -114,6 +114,15 @@ func main() {
 }
 
 func sendTxs(host1, host2 rw.Host) {
+	sync9, err := ioutil.ReadFile("../braidjs/sync9-dist.js")
+	if err != nil {
+		panic(err)
+	}
+	s9, err := json.Marshal(string(sync9))
+	if err != nil {
+		panic(err)
+	}
+
 	// Setup talk channel using transactions
 	var tx1 = rw.Tx{
 		ID:      rw.IDFromString("one"),
@@ -137,18 +146,23 @@ func sendTxs(host1, host2 rw.Host) {
             }`),
 			mustParsePatch(`.shrugisland.talk0.messages = []`),
 			mustParsePatch(`.shrugisland.talk0.validator = {"type": "permissions"}`),
-			mustParsePatch(`.shrugisland.talk0.resolver = {"type":"js", "src":"
-                function resolve_state(stateJSON, sender, patch) {
-                    var state = JSON.parse(stateJSON || {})
+			mustParsePatch(`.shrugisland.talk0.resolver = {"type":"js", "src":` + string(s9) + `}`),
+			// mustParsePatch(`.shrugisland.talk0.resolver = {"type":"js", "src":"
+			//                      function init(internalStateJSON) {}
 
-                    state.messages.push({
-                        text: patch.val.text,
-                        sender: sender,
-                    })
+			//                       function resolve_state(stateJSON, sender, txHash, parents, patches) {
+			//                           var state = JSON.parse(stateJSON)
 
-                    return JSON.stringify(state)
-                }
-            "}`),
+			//                           patches.forEach(function(patch) {
+			//                               state.messages.push({
+			//                                   text: patch.val[0].text,
+			//                                   sender: sender,
+			//                               })
+			//                           })
+
+			//                           return JSON.stringify({ state: state, internalState: {} })
+			//                       }
+			//                   "}`),
 			// mustParsePatch(`.shrugisland.talk0.resolver = {"type":"lua", "src":"
 			//              function resolve_state(state, sender, patch)
 			//                  if state == nil then
@@ -296,7 +310,7 @@ func sendTxs(host1, host2 rw.Host) {
 	}
 
 	host1.Info(1, "sending tx to initialize talk channel...")
-	err := host1.SendTx(context.Background(), tx1)
+	err = host1.SendTx(context.Background(), tx1)
 	if err != nil {
 		host1.Errorf("%+v", err)
 	}
@@ -308,7 +322,7 @@ func sendTxs(host1, host2 rw.Host) {
 			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[0:0] = {"text":"hello!"}`),
+				mustParsePatch(`.shrugisland.talk0.messages[0:0] = [{"text":"hello!"}]`),
 			},
 		}
 
@@ -318,7 +332,7 @@ func sendTxs(host1, host2 rw.Host) {
 			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[1:1] = {"text":"well hello to you too"}`),
+				mustParsePatch(`.shrugisland.talk0.messages[1:1] = [{"text":"well hello to you too"}]`),
 			},
 		}
 
@@ -328,7 +342,7 @@ func sendTxs(host1, host2 rw.Host) {
 			From:    host2.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[2:2] = {"text":"yoooo"}`),
+				mustParsePatch(`.shrugisland.talk0.messages[2:2] = [{"text":"yoooo"}]`),
 			},
 		}
 	)
@@ -357,7 +371,7 @@ func sendTxs(host1, host2 rw.Host) {
 			From:    host2.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
-				mustParsePatch(`.` + rw.PrivateRootKeyForRecipients(recipients) + `.shrugisland.talk0.messages[2:2] = {"text":"private message for you!"}`),
+				mustParsePatch(`.` + rw.PrivateRootKeyForRecipients(recipients) + `.shrugisland.talk0.messages[2:2] = [{"text":"private message for you!"}]`),
 			},
 			Recipients: recipients,
 		}

@@ -9,10 +9,11 @@ import (
 )
 
 type luaResolver struct {
+	resolver
 	L *lua.LState
 }
 
-func NewLuaResolver(params map[string]interface{}) (Resolver, error) {
+func NewLuaResolver(params map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
 	src, exists := M(params).GetString("src")
 	if !exists {
 		return nil, errors.New("lua resolver needs a string 'src' param")
@@ -26,15 +27,19 @@ func NewLuaResolver(params map[string]interface{}) (Resolver, error) {
 	return &luaResolver{L: L}, nil
 }
 
-func (r *luaResolver) ResolveState(state interface{}, sender Address, patch Patch) (newState interface{}, err error) {
+func (r *luaResolver) InternalState() map[string]interface{} {
+	return nil
+}
+
+func (r *luaResolver) ResolveState(state interface{}, sender Address, txHash Hash, parents []Hash, patches []Patch) (newState interface{}, err error) {
 	defer annotate(&err, "luaResolver.ResolveState")
 
-	luaState, err := luaconv.Encode(r.L, reflect.ValueOf(state))
+	luaPatches, err := luaconv.Wrap(r.L, reflect.ValueOf(patches))
 	if err != nil {
 		return nil, err
 	}
 
-	luaPatch, err := luaconv.Wrap(r.L, reflect.ValueOf(patch))
+	luaState, err := luaconv.Encode(r.L, reflect.ValueOf(state))
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +48,7 @@ func (r *luaResolver) ResolveState(state interface{}, sender Address, patch Patc
 		Fn:      r.L.GetGlobal("resolve_state"),
 		NRet:    1,
 		Protect: true,
-	}, luaState, lua.LString(sender.String()), luaPatch)
+	}, luaState, lua.LString(sender.String()), luaPatches)
 	if err != nil {
 		return nil, err
 	}

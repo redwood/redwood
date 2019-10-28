@@ -34,6 +34,29 @@ func valueAtKeypath(m map[string]interface{}, keypath []string) (interface{}, bo
 	return cur, true
 }
 
+func setValueAtKeypath(m map[string]interface{}, keypath []string, val interface{}) {
+	if len(keypath) == 0 {
+		panic("bad")
+	}
+
+	var cur interface{} = m
+	for i := 0; i < len(keypath)-1; i++ {
+		var exists bool
+		cur, exists = m[keypath[i]]
+		if !exists {
+			m[keypath[i]] = make(map[string]interface{})
+		} else if _, isMap := cur.(map[string]interface{}); !isMap {
+			m[keypath[i]] = make(map[string]interface{})
+		}
+		cur = m[keypath[i]]
+	}
+	if asMap, isMap := cur.(map[string]interface{}); isMap {
+		asMap[keypath[len(keypath)-1]] = val
+	} else {
+		panic("bad")
+	}
+}
+
 func walkTree(tree interface{}, fn func(keypath []string, val interface{}) error) error {
 	type item struct {
 		val     interface{}
@@ -85,6 +108,10 @@ func prettyJSON(val interface{}) string {
 }
 
 type M map[string]interface{}
+
+func (m M) SetValue(keypath []string, val interface{}) {
+	setValueAtKeypath(m, keypath, val)
+}
 
 func (m M) GetValue(keypath ...string) (interface{}, bool) {
 	return valueAtKeypath(m, keypath)

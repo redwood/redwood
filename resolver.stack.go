@@ -5,11 +5,16 @@ import (
 )
 
 type stackResolver struct {
+	resolver
 	state     interface{}
 	resolvers []Resolver
 }
 
-func NewStackResolver(params map[string]interface{}) (Resolver, error) {
+func (r *stackResolver) InternalState() map[string]interface{} {
+	return nil
+}
+
+func NewStackResolver(params map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
 	children, exists := M(params).GetSlice("children")
 	if !exists {
 		return nil, errors.New("stack resolver needs an array 'children' param")
@@ -22,7 +27,7 @@ func NewStackResolver(params map[string]interface{}) (Resolver, error) {
 			return nil, errors.New("stack resolver found something that didn't look like a resolver config")
 		}
 
-		resolver, err := initResolverFromConfig(config)
+		resolver, err := initResolverFromConfig(config, nil) // @@TODO: stack resolver internal state...?
 		if err != nil {
 			return nil, err
 		}
@@ -33,10 +38,10 @@ func NewStackResolver(params map[string]interface{}) (Resolver, error) {
 	return &stackResolver{resolvers: resolvers}, nil
 }
 
-func (r *stackResolver) ResolveState(state interface{}, sender Address, patch Patch) (interface{}, error) {
+func (r *stackResolver) ResolveState(state interface{}, sender Address, txHash Hash, parents []Hash, patches []Patch) (interface{}, error) {
 	var err error
 	for _, resolver := range r.resolvers {
-		state, err = resolver.ResolveState(state, sender, patch)
+		state, err = resolver.ResolveState(state, sender, txHash, parents, patches)
 		if err != nil {
 			return nil, err
 		}

@@ -71,7 +71,7 @@ func ParsePatch(s string) (Patch, error) {
 
 	err = json.Unmarshal([]byte(jsonBlob), &patch.Val)
 	if err != nil {
-		panic(jsonBlob)
+		panic(err)
 		return Patch{}, errors.WithStack(err)
 	}
 

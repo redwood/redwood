@@ -152,10 +152,10 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// @@TODO: this is hacky
 			if r.URL.Path == "/braid.js" {
 				var filename string
-				if fileExists("./braidjs/dist.js") {
-					filename = "./braidjs/dist.js"
-				} else if fileExists("../braidjs/dist.js") {
-					filename = "../braidjs/dist.js"
+				if fileExists("./braidjs/braid-dist.js") {
+					filename = "./braidjs/braid-dist.js"
+				} else if fileExists("../braidjs/braid-dist.js") {
+					filename = "../braidjs/braid-dist.js"
 				}
 				f, err := os.Open(filename)
 				if err != nil {
@@ -163,7 +163,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				defer f.Close()
-				http.ServeContent(w, r, "./braidjs/dist.js", time.Now(), f)
+				http.ServeContent(w, r, "./braidjs/braid-dist.js", time.Now(), f)
 				return
 			}
 

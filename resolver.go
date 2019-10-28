@@ -5,14 +5,29 @@ import (
 )
 
 type Resolver interface {
-	ResolveState(state interface{}, sender Address, patch Patch) (interface{}, error)
+	ResolveState(state interface{}, sender Address, txHash Hash, parents []Hash, patches []Patch) (interface{}, error)
+	Keypath() []string
+	SetKeypath(keypath []string)
+	InternalState() map[string]interface{}
 }
 
 type Validator interface {
 	Validate(state interface{}, txs, validTxs map[Hash]*Tx, tx Tx) error
 }
 
-type ResolverConstructor func(params map[string]interface{}) (Resolver, error)
+type resolver struct {
+	keypath []string
+}
+
+func (r *resolver) Keypath() []string {
+	return r.keypath
+}
+
+func (r *resolver) SetKeypath(keypath []string) {
+	r.keypath = keypath
+}
+
+type ResolverConstructor func(params map[string]interface{}, internalState map[string]interface{}) (Resolver, error)
 type ValidatorConstructor func(params map[string]interface{}) (Validator, error)
 
 var resolverRegistry map[string]ResolverConstructor
@@ -31,7 +46,7 @@ func init() {
 	}
 }
 
-func initResolverFromConfig(config map[string]interface{}) (Resolver, error) {
+func initResolverFromConfig(config map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
 	typ, exists := M(config).GetString("type")
 	if !exists {
 		return nil, errors.New("cannot init resolver without a 'type' param")
@@ -40,7 +55,7 @@ func initResolverFromConfig(config map[string]interface{}) (Resolver, error) {
 	if !exists {
 		return nil, errors.Errorf("unknown resolver type '%v'", typ)
 	}
-	return ctor(config)
+	return ctor(config, internalState)
 }
 
 func initValidatorFromConfig(config map[string]interface{}) (Validator, error) {
@@ -63,11 +78,14 @@ type resolverTreeNode struct {
 	resolver  Resolver
 	validator Validator
 	subkeys   map[string]*resolverTreeNode
+	depth     int
+	keypath   []string
 }
 
 func (t *resolverTree) addResolver(keypath []string, resolver Resolver) {
 	node := t.ensureNodeExists(keypath)
 	node.resolver = resolver
+	resolver.SetKeypath(keypath)
 }
 
 func (t *resolverTree) addValidator(keypath []string, validator Validator) {
@@ -81,6 +99,7 @@ func (t *resolverTree) ensureNodeExists(keypath []string) *resolverTreeNode {
 	}
 
 	current := t.root
+	depth := len(keypath)
 
 	for {
 		if len(keypath) == 0 {
@@ -91,7 +110,7 @@ func (t *resolverTree) ensureNodeExists(keypath []string) *resolverTreeNode {
 		keypath = keypath[1:]
 
 		if current.subkeys[key] == nil {
-			current.subkeys[key] = &resolverTreeNode{subkeys: map[string]*resolverTreeNode{}}
+			current.subkeys[key] = &resolverTreeNode{subkeys: map[string]*resolverTreeNode{}, depth: depth, keypath: keypath}
 		}
 		current = current.subkeys[key]
 	}

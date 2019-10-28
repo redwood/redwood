@@ -21,7 +21,7 @@ type Controller interface {
 	HaveTx(txHash Hash) bool
 
 	State() interface{}
-	StateJSON() ([]byte, error)
+	StateJSON() []byte
 	MostRecentTxHash() Hash
 
 	SetResolver(keypath []string, resolver Resolver)
@@ -102,14 +102,14 @@ func (c *controller) State() interface{} {
 	return c.currentState
 }
 
-func (c *controller) StateJSON() ([]byte, error) {
+func (c *controller) StateJSON() []byte {
 	bs, err := json.MarshalIndent(c.currentState, "", "    ")
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 	str := string(bs)
 	str = strings.Replace(str, "\\n", "\n", -1)
-	return []byte(str), nil
+	return []byte(str)
 }
 
 func (c *controller) MostRecentTxHash() Hash {
@@ -253,55 +253,87 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 	// Apply changes to the state tree
 	//
 	{
-		for _, p := range tx.Patches {
-			var patch Patch = p
-			var newState interface{}
-			var err error
-			for {
-				resolver, currentResolverKeypathStartsAt := c.resolverTree.nearestResolverForKeypath(patch.Keys[:len(patch.Keys)-1])
-				thisResolverKeypath := patch.Keys[:currentResolverKeypathStartsAt]
-				thisResolverState := c.stateAtKeypath(thisResolverKeypath)
-
-				patchCopy := patch
-				patchCopy.Keys = patch.Keys[len(thisResolverKeypath):]
-
-				newState, err = resolver.ResolveState(thisResolverState, tx.From, patchCopy)
-				if err != nil {
-					return err
-				}
-
-				if currentResolverKeypathStartsAt == 0 {
-					break
-				}
-
-				patch = Patch{Keys: thisResolverKeypath, Val: newState}
+		var processNode func(node *resolverTreeNode, localState interface{}, patches []Patch) []Patch
+		processNode = func(node *resolverTreeNode, localState interface{}, patches []Patch) []Patch {
+			localStateMap, isMap := localState.(map[string]interface{})
+			if !isMap {
+				localStateMap = make(map[string]interface{})
 			}
-			c.currentState = newState
+			newPatches := []Patch{}
+			for key, child := range node.subkeys {
+				patchesTrimmed := make([]Patch, 0)
+				for _, p := range patches {
+					if len(p.Keys) > 0 && p.Keys[0] == key {
+						patchesTrimmed = append(patchesTrimmed, Patch{Keys: p.Keys[1:], Range: p.Range, Val: p.Val})
+					}
+				}
+				processed := processNode(child, localStateMap[key], patchesTrimmed)
+				for i := range processed {
+					processed[i].Keys = append([]string{key}, processed[i].Keys...)
+				}
+				newPatches = append(newPatches, processed...)
+			}
+			for _, p := range patches {
+				if len(p.Keys) == 0 {
+					continue
+				}
+				if _, exists := node.subkeys[p.Keys[0]]; !exists {
+					newPatches = append(newPatches, p)
+				}
+			}
+
+			if node.resolver != nil {
+				var err error
+				newState, err := node.resolver.ResolveState(localStateMap, tx.From, tx.Hash(), tx.Parents, newPatches)
+				if err != nil {
+					panic(err)
+				}
+				return []Patch{{Keys: node.keypath, Val: newState}}
+			} else {
+				return newPatches
+			}
 		}
+		finalPatches := processNode(c.resolverTree.root, c.currentState, tx.Patches)
+		if len(finalPatches) > 1 {
+			panic("noooo")
+		}
+		c.currentState = finalPatches[0].Val
+
+		msgs, _ := M(c.currentState.(map[string]interface{})).GetValue("shrugisland", "talk0", "messages")
+		c.Warnf("state ~> %v", PrettyJSON(msgs))
+		// c.Warnf("controller state ~>", string(c.StateJSON()))
 
 		c.mostRecentTxHash = tx.Hash()
 
 		// Walk the tree and initialize validators and resolvers
 		// @@TODO: inefficient
 		// @@TODO: breaks stateful resolvers
-		c.resolverTree = resolverTree{}
-		c.resolverTree.addResolver([]string{}, &dumbResolver{})
-		c.resolverTree.addValidator([]string{}, &permissionsValidator{})
+		newResolverTree := resolverTree{}
+		newResolverTree.addResolver([]string{}, &dumbResolver{})
+		newResolverTree.addValidator([]string{}, &permissionsValidator{})
 		err = walkTree(c.currentState, func(keypath []string, val interface{}) error {
 			m, isMap := val.(map[string]interface{})
 			if !isMap {
 				return nil
 			}
 
+			var resolverInternalState map[string]interface{}
+			oldResolver, depth := c.resolverTree.nearestResolverForKeypath(keypath)
+			if depth != len(keypath) {
+				resolverInternalState = make(map[string]interface{})
+			} else {
+				resolverInternalState = oldResolver.InternalState()
+			}
+
 			resolverConfig, exists := M(m).GetMap("resolver")
 			if !exists {
 				return nil
 			}
-			resolver, err := initResolverFromConfig(resolverConfig)
+			resolver, err := initResolverFromConfig(resolverConfig, resolverInternalState)
 			if err != nil {
 				return err
 			}
-			c.resolverTree.addResolver(keypath, resolver)
+			newResolverTree.addResolver(keypath, resolver)
 
 			validatorConfig, exists := M(m).GetMap("validator")
 			if !exists {
@@ -311,13 +343,14 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			if err != nil {
 				return err
 			}
-			c.resolverTree.addValidator(keypath, validator)
+			newResolverTree.addValidator(keypath, validator)
 
 			return nil
 		})
 		if err != nil {
 			return err
 		}
+		c.resolverTree = newResolverTree
 	}
 
 	err = c.store.AddTx(tx)
