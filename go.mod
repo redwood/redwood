@@ -61,6 +61,7 @@ require (
 	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4
 	golang.org/x/net v0.0.0-20190912160710-24e19bdeb0f2
+	google.golang.org/appengine v1.4.0
 	google.golang.org/grpc v1.23.1
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/src-d/go-git.v4 v4.13.1 // indirect

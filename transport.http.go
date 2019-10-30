@@ -33,12 +33,15 @@ type httpTransport struct {
 	txHandler            TxHandler
 	privateTxHandler     PrivateTxHandler
 	verifyAddressHandler VerifyAddressHandler
+	fetchRefHandler      FetchRefHandler
 
 	subscriptionsIn   map[string][]*httpSubscriptionIn
 	subscriptionsInMu sync.RWMutex
+
+	refStore RefStore
 }
 
-func NewHTTPTransport(addr Address, port uint, controller Controller) (Transport, error) {
+func NewHTTPTransport(addr Address, port uint, controller Controller, refStore RefStore) (Transport, error) {
 	t := &httpTransport{
 		Context:         &ctx.Context{},
 		address:         addr,
@@ -46,6 +49,7 @@ func NewHTTPTransport(addr Address, port uint, controller Controller) (Transport
 		controller:      controller,
 		port:            port,
 		ownURL:          fmt.Sprintf("localhost:%v", port),
+		refStore:        refStore,
 	}
 	return t, nil
 }
@@ -168,19 +172,14 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			keypath := filterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
-			stateMap, isMap := t.controller.State().(map[string]interface{})
-			if !isMap {
-				http.Error(w, "not found", http.StatusNotFound)
-				return
-			}
-
-			val, exists := M(stateMap).GetValue(keypath...)
-			if !exists {
-				http.Error(w, "not found", http.StatusNotFound)
-				return
-			}
 
 			if r.Header.Get("Accept") == "application/json" {
+				val, err := t.controller.State(keypath, false)
+				if err != nil {
+					http.Error(w, "not found", http.StatusNotFound)
+					return
+				}
+
 				var resp struct {
 					MostRecentTxHash Hash        `json:"mostRecentTxHash"`
 					Data             interface{} `json:"data"`
@@ -212,6 +211,12 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 
 			} else {
+				val, err := t.controller.State(keypath, true)
+				if err != nil {
+					http.Error(w, "not found: "+err.Error(), http.StatusNotFound)
+					return
+				}
+
 				switch v := val.(type) {
 				case string:
 					_, err := io.Copy(w, bytes.NewBuffer([]byte(v)))
@@ -277,6 +282,28 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			url := strings.Replace(r.RemoteAddr, "http://", "", -1)
 			t.privateTxHandler(encryptedTx, &httpPeer{t: t, url: url, Writer: w})
 
+		} else if r.Header.Get("Ref") == "true" {
+			t.Infof(0, "incoming ref")
+
+			file, header, err := r.FormFile("ref")
+			if err != nil {
+				panic(err)
+			}
+			defer file.Close()
+
+			hash, err := t.refStore.StoreObject(file, header.Header.Get("Content-Type"))
+			if err != nil {
+				t.Errorf("error storing ref: %v", err)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return
+			}
+
+			respondJSON(w, struct {
+				Hash Hash `json:"hash"`
+			}{hash})
+
+			return
+
 		} else {
 			t.Infof(0, "incoming tx")
 
@@ -292,6 +319,15 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		http.Error(w, "unsupported method", http.StatusMethodNotAllowed)
+	}
+}
+
+func respondJSON(resp http.ResponseWriter, data interface{}) {
+	resp.Header().Add("Content-Type", "application/json")
+
+	err := json.NewEncoder(resp).Encode(data)
+	if err != nil {
+		panic(err)
 	}
 }
 
@@ -311,71 +347,83 @@ func (t *httpTransport) SetVerifyAddressHandler(handler VerifyAddressHandler) {
 	t.verifyAddressHandler = handler
 }
 
+func (t *httpTransport) SetFetchRefHandler(handler FetchRefHandler) {
+	t.fetchRefHandler = handler
+}
+
 func (t *httpTransport) GetPeer(ctx context.Context, addrString string) (Peer, error) {
 	return &httpPeer{t: t, url: addrString}, nil
 }
 
-func (t *httpTransport) ForEachProviderOfURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error {
+func (t *httpTransport) ForEachProviderOfURL(ctx context.Context, theURL string) (<-chan Peer, error) {
 	// theURL = braidURLToHTTP(theURL)
 
 	u, err := url.Parse("http://" + theURL)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	u.Path = path.Join(u.Path, "providers")
 
 	resp, err := http.Get(u.String())
 	if err != nil {
-		return err
+		return nil, err
 	} else if resp.StatusCode != 200 {
-		return errors.Errorf("error GETting providers: (%v) %v", resp.StatusCode, resp.Status)
+		return nil, errors.Errorf("error GETting providers: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
 
 	var providers []string
 	err = json.NewDecoder(resp.Body).Decode(&providers)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	for _, providerURL := range providers {
-		if providerURL == t.ownURL {
-			continue
-		}
+	ch := make(chan Peer)
+	go func() {
+		defer close(ch)
+		for _, providerURL := range providers {
+			if providerURL == t.ownURL {
+				continue
+			}
 
-		keepGoing, err := fn(&httpPeer{t: t, url: providerURL})
-		if err != nil {
-			return errors.WithStack(err)
-		} else if !keepGoing {
-			break
+			select {
+			case ch <- &httpPeer{t: t, url: providerURL}:
+			case <-ctx.Done():
+			}
 		}
-	}
-	return nil
+	}()
+	return ch, nil
 }
 
-func (t *httpTransport) ForEachSubscriberToURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error {
+func (t *httpTransport) ForEachProviderOfRef(ctx context.Context, refHash Hash) (<-chan Peer, error) {
+	panic("unimplemented")
+}
+
+func (t *httpTransport) ForEachSubscriberToURL(ctx context.Context, theURL string) (<-chan Peer, error) {
 	// theURL = braidURLToHTTP(theURL)
 
 	u, err := url.Parse("http://" + theURL)
 	if err != nil {
-		return errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
 	domain := u.Host
 
-	t.subscriptionsInMu.RLock()
-	defer t.subscriptionsInMu.RUnlock()
+	ch := make(chan Peer)
+	go func() {
+		t.subscriptionsInMu.RLock()
+		defer t.subscriptionsInMu.RUnlock()
+		defer close(ch)
 
-	for _, sub := range t.subscriptionsIn[domain] {
-		keepGoing, err := fn(&httpPeer{t: t, Writer: sub.Writer, Flusher: sub.Flusher})
-		if err != nil {
-			return errors.WithStack(err)
-		} else if !keepGoing {
-			break
+		for _, sub := range t.subscriptionsIn[domain] {
+			select {
+			case ch <- &httpPeer{t: t, Writer: sub.Writer, Flusher: sub.Flusher}:
+			case <-ctx.Done():
+			}
 		}
-	}
-	return nil
+	}()
+	return ch, nil
 }
 
 func (t *httpTransport) PeersClaimingAddress(ctx context.Context, address Address) (<-chan Peer, error) {

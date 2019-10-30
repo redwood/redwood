@@ -47,9 +47,12 @@ type libp2pTransport struct {
 	privateTxHandler     PrivateTxHandler
 	ackHandler           AckHandler
 	verifyAddressHandler VerifyAddressHandler
+	fetchRefHandler      FetchRefHandler
 
 	subscriptionsIn   map[string][]libp2pSubscriptionIn
 	subscriptionsInMu sync.RWMutex
+
+	refStore RefStore
 }
 
 type libp2pSubscriptionIn struct {
@@ -62,12 +65,13 @@ const (
 	PROTO_MAIN protocol.ID = "/redwood/main/1.0.0"
 )
 
-func NewLibp2pTransport(addr Address, port uint) (Transport, error) {
+func NewLibp2pTransport(addr Address, port uint, refStore RefStore) (Transport, error) {
 	t := &libp2pTransport{
 		Context:         &ctx.Context{},
 		port:            port,
 		address:         addr,
 		subscriptionsIn: make(map[string][]libp2pSubscriptionIn),
+		refStore:        refStore,
 	}
 	return t, nil
 }
@@ -89,7 +93,6 @@ func (t *libp2pTransport) Start() error {
 			// Initialize the libp2p host
 			libp2pHost, err := libp2p.New(t.Ctx(),
 				libp2p.ListenAddrStrings(
-					// fmt.Sprintf("/ip4/%v/tcp/%v", cfg.Node.P2PListenAddr, cfg.Node.P2PListenPort),
 					fmt.Sprintf("/ip4/0.0.0.0/tcp/%v", t.port),
 				),
 				libp2p.Identity(t.p2pKey),
@@ -148,6 +151,10 @@ func (t *libp2pTransport) SetAckHandler(handler AckHandler) {
 
 func (t *libp2pTransport) SetVerifyAddressHandler(handler VerifyAddressHandler) {
 	t.verifyAddressHandler = handler
+}
+
+func (t *libp2pTransport) SetFetchRefHandler(handler FetchRefHandler) {
+	t.fetchRefHandler = handler
 }
 
 func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
@@ -230,6 +237,18 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			return
 		}
 
+	case MsgType_FetchRef:
+		defer stream.Close()
+
+		refHash, ok := msg.Payload.(Hash)
+		if !ok {
+			t.Errorf("FetchRef message: bad payload: (%T) %v", msg.Payload, msg.Payload)
+			return
+		}
+
+		peer := &libp2pPeer{t: t, stream: stream}
+		t.fetchRefHandler(refHash, peer)
+
 	default:
 		panic("protocol error")
 	}
@@ -256,7 +275,7 @@ func (t *libp2pTransport) GetPeer(ctx context.Context, multiaddrString string) (
 	return &libp2pPeer{t: t, peerID: pinfo.ID}, nil
 }
 
-func (t *libp2pTransport) ForEachProviderOfURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error {
+func (t *libp2pTransport) ForEachProviderOfURL(ctx context.Context, theURL string) (<-chan Peer, error) {
 	// u, err := url.Parse(theURL)
 	// if err != nil {
 	// 	return errors.WithStack(err)
@@ -264,49 +283,80 @@ func (t *libp2pTransport) ForEachProviderOfURL(ctx context.Context, theURL strin
 
 	urlCid, err := cidForString("serve:" + theURL)
 	if err != nil {
-		return errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
-	for pinfo := range t.dht.FindProvidersAsync(ctx, urlCid, 8) {
-		if pinfo.ID == t.libp2pHost.ID() {
-			continue
+	ch := make(chan Peer)
+	go func() {
+		defer close(ch)
+		for pinfo := range t.dht.FindProvidersAsync(ctx, urlCid, 8) {
+			if pinfo.ID == t.libp2pHost.ID() {
+				continue
+			}
+
+			// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
+			// whitelist, etc.
+
+			t.Infof(0, `found peer %v for url "%v"`, pinfo.ID, theURL)
+
+			select {
+			case ch <- &libp2pPeer{t, pinfo.ID, nil}:
+			case <-ctx.Done():
+			}
 		}
-
-		// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
-		// whitelist, etc.
-
-		t.Infof(0, `found peer %v for url "%v"`, pinfo.ID, theURL)
-
-		keepGoing, err := fn(&libp2pPeer{t, pinfo.ID, nil})
-		if err != nil {
-			return errors.WithStack(err)
-		} else if !keepGoing {
-			break
-		}
-	}
-	return nil
+	}()
+	return ch, nil
 }
 
-func (t *libp2pTransport) ForEachSubscriberToURL(ctx context.Context, theURL string, fn func(Peer) (bool, error)) error {
+func (t *libp2pTransport) ForEachProviderOfRef(ctx context.Context, refHash Hash) (<-chan Peer, error) {
+
+	refCid, err := cidForString("ref:" + refHash.String())
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	ch := make(chan Peer)
+	go func() {
+		defer close(ch)
+		for {
+			for pinfo := range t.dht.FindProvidersAsync(ctx, refCid, 8) {
+				if pinfo.ID == t.libp2pHost.ID() {
+					continue
+				}
+
+				t.Infof(0, `found peer %v for ref "%v"`, pinfo.ID, refHash.String())
+
+				select {
+				case ch <- &libp2pPeer{t, pinfo.ID, nil}:
+				case <-ctx.Done():
+				}
+			}
+		}
+	}()
+	return ch, nil
+}
+
+func (t *libp2pTransport) ForEachSubscriberToURL(ctx context.Context, theURL string) (<-chan Peer, error) {
 	u, err := url.Parse(theURL)
 	if err != nil {
-		return errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
 	domain := u.Host
 
-	t.subscriptionsInMu.RLock()
-	defer t.subscriptionsInMu.RUnlock()
-
-	for _, sub := range t.subscriptionsIn[domain] {
-		keepGoing, err := fn(&libp2pPeer{t, sub.stream.Conn().RemotePeer(), sub.stream})
-		if err != nil {
-			return errors.WithStack(err)
-		} else if !keepGoing {
-			break
+	ch := make(chan Peer)
+	go func() {
+		t.subscriptionsInMu.RLock()
+		defer t.subscriptionsInMu.RUnlock()
+		defer close(ch)
+		for _, sub := range t.subscriptionsIn[domain] {
+			select {
+			case ch <- &libp2pPeer{t, sub.stream.Conn().RemotePeer(), sub.stream}:
+			case <-ctx.Done():
+			}
 		}
-	}
-	return nil
+	}()
+	return ch, nil
 }
 
 func (t *libp2pTransport) PeersClaimingAddress(ctx context.Context, address Address) (<-chan Peer, error) {
@@ -370,7 +420,7 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 
 		// Announce the URLs we're serving
 		for _, url := range URLS_TO_ADVERTISE {
-			func() {
+			go func(url string) {
 				ctxInner, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)
 				defer cancel()
 
@@ -385,11 +435,35 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 					t.Errorf(`announce: could not dht.Provide url "%v": %v`, url, err)
 					return
 				}
-			}()
+			}(url)
+		}
+
+		// Announce the blobs we're serving
+		refHashes, err := t.refStore.AllHashes()
+		if err != nil {
+			t.Errorf("error fetching refStore hashes: %v", err)
+		}
+		for _, refHash := range refHashes {
+			go func(refHash Hash) {
+				ctxInner, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)
+				defer cancel()
+
+				c, err := cidForString("ref:" + refHash.String())
+				if err != nil {
+					t.Errorf("announce: error creating cid: %v", err)
+					return
+				}
+
+				err = t.dht.Provide(ctxInner, c, true)
+				if err != nil && err != kbucket.ErrLookupFailure {
+					t.Errorf(`announce: could not dht.Provide refHash "%v": %v`, refHash.String(), err)
+					return
+				}
+			}(refHash)
 		}
 
 		// Advertise our address (for exchanging private txs)
-		func() {
+		go func() {
 			ctxInner, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)
 			defer cancel()
 

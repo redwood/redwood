@@ -22,10 +22,8 @@ var hasRun = false
 global.init = function init(internalStateJSON) {
     var internalState = JSON.parse(internalStateJSON)
     if (Object.keys(internalState).length === 0) {
-        console.log('[JS RESOLVER] init NO STATE')
         s9state = sync9_create()
     } else {
-        console.log('[JS RESOLVER] init HAVE STATE')
         s9state = internalState.s9state
         hasRun = internalState.hasRun
     }
@@ -336,7 +334,6 @@ function sync9_create() {
 }
 
 function sync9_add_version(x, vid, parents, changes, is_anc) {
-    console.log('[JS RESOLVER] sync9_add_version ~>', JSON.stringify(changes))
     let make_lit = x => (x && typeof(x) == 'object') ? {t: 'lit', S: x} : x
 
     if (!vid && Object.keys(x.T).length == 0) {

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
+	"os"
 	"time"
 
 	rw "github.com/brynbellomy/redwood"
@@ -12,13 +14,11 @@ import (
 	// "github.com/brynbellomy/redwood/remotestore"
 )
 
-type M = map[string]interface{}
-
 type app struct {
 	ctx.Context
 }
 
-func makeHost(signingKeypairHex string, port uint, dbfile string) rw.Host {
+func makeHost(signingKeypairHex string, port uint, dbfile string, refStoreRoot string) rw.Host {
 	signingKeypair, err := rw.SigningKeypairFromHex(signingKeypairHex)
 	if err != nil {
 		panic(err)
@@ -41,14 +41,26 @@ func makeHost(signingKeypairHex string, port uint, dbfile string) rw.Host {
 	}
 	store := rw.NewBadgerStore(dbfile, signingKeypair.Address())
 	// store := remotestore.NewClient("0.0.0.0:4567", signingKeypair.Address(), signingKeypair.SigningPrivateKey)
-	controller, err := rw.NewController(signingKeypair.Address(), genesis, store)
+	refStore := rw.NewRefStore(refStoreRoot)
+	controller, err := rw.NewController(signingKeypair.Address(), genesis, store, refStore)
 	if err != nil {
 		panic(err)
 	}
-	h, err := rw.NewHost(signingKeypair, encryptingKeypair, port, controller)
+	h, err := rw.NewHost(signingKeypair, encryptingKeypair, port, controller, refStore)
 	if err != nil {
 		panic(err)
 	}
+	tpt, err := rw.NewHTTPTransport(signingKeypair.Address(), port+1, controller, refStore)
+	if err != nil {
+		panic(err)
+	}
+
+	err = tpt.Start()
+	if err != nil {
+		panic(err)
+	}
+	tpt.SetTxHandler(h.OnTxReceived)
+
 	return h
 }
 
@@ -58,8 +70,10 @@ func main() {
 	flag.Set("logtostderr", "true")
 	flag.Set("v", "2")
 
-	host1 := makeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/badger1")
-	host2 := makeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/badger2")
+	os.MkdirAll("/tmp/forest", 0700)
+
+	host1 := makeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/forest/badger1", "/tmp/forest/refs1")
+	host2 := makeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/forest/badger2", "/tmp/forest/refs2")
 
 	err := host1.Start()
 	if err != nil {
@@ -114,11 +128,27 @@ func main() {
 }
 
 func sendTxs(host1, host2 rw.Host) {
-	sync9, err := ioutil.ReadFile("../braidjs/sync9-dist.js")
+	sync9, err := os.Open("../braidjs/sync9-dist.js")
 	if err != nil {
 		panic(err)
 	}
-	s9, err := json.Marshal(string(sync9))
+	sync9Hash, err := host1.AddRef(sync9, "application/js")
+	if err != nil {
+		panic(fmt.Sprintf("%+v", err))
+	}
+	indexHTML, err := os.Open("./index.html")
+	if err != nil {
+		panic(err)
+	}
+	indexHTMLHash, err := host1.AddRef(indexHTML, "text/html")
+	if err != nil {
+		panic(err)
+	}
+	meme, err := os.Open("./meme.jpg")
+	if err != nil {
+		panic(err)
+	}
+	memeHash, err := host1.AddRef(meme, "image/jpg")
 	if err != nil {
 		panic(err)
 	}
@@ -146,166 +176,8 @@ func sendTxs(host1, host2 rw.Host) {
             }`),
 			mustParsePatch(`.shrugisland.talk0.messages = []`),
 			mustParsePatch(`.shrugisland.talk0.validator = {"type": "permissions"}`),
-			mustParsePatch(`.shrugisland.talk0.resolver = {"type":"js", "src":` + string(s9) + `}`),
-			// mustParsePatch(`.shrugisland.talk0.resolver = {"type":"js", "src":"
-			//                      function init(internalStateJSON) {}
-
-			//                       function resolve_state(stateJSON, sender, txHash, parents, patches) {
-			//                           var state = JSON.parse(stateJSON)
-
-			//                           patches.forEach(function(patch) {
-			//                               state.messages.push({
-			//                                   text: patch.val[0].text,
-			//                                   sender: sender,
-			//                               })
-			//                           })
-
-			//                           return JSON.stringify({ state: state, internalState: {} })
-			//                       }
-			//                   "}`),
-			// mustParsePatch(`.shrugisland.talk0.resolver = {"type":"lua", "src":"
-			//              function resolve_state(state, sender, patch)
-			//                  if state == nil then
-			//                      state = {}
-			//                  end
-
-			//                  if patch:RangeStart() ~= -1 and patch:RangeStart() == patch:RangeEnd() then
-			//                      local msg = {
-			//                          text = patch.Val['text'],
-			//                          sender = sender,
-			//                      }
-			//                      if state['messages'] == nil then
-			//                          state['messages'] = { msg }
-
-			//                      elseif patch:RangeStart() <= #state['messages'] then
-			//                          state['messages'][ #state['messages'] + 1 ] = msg
-
-			//                      end
-			//                  else
-			//                      error('only patches that append messages to the end of the channel are allowed')
-			//                  end
-			//                  return state
-			//              end
-			//          "}`),
-			mustParsePatch(`.shrugisland.talk0.index = "
-                    <html>
-                    <head>
-                        <style>
-                            * {
-                                font-family: 'Consolas', 'Ubuntu Mono', 'Monaco', 'Courier New', Courier, sans-serif;
-                            }
-                            #debug-state {
-                                background: #eaeaea;
-                                font-size: 0.7rem;
-                                padding: 10px;
-                                border-radius: 5px;
-                                margin-left: 40px;
-                            }
-                        </style>
-                    </head>
-                    <body>
-                        <div style='display: flex'>
-                            <div>
-                                <div id='my-address'></div>
-                                <br/>
-                                <div>
-                                    Log into a new address with a seed phrase:<br/>
-                                    <input id='input-mnemonic'/>&nbsp;
-                                    <button id='btn-login'>Go</button>
-                                </div>
-                                <br/>
-                                <br/>
-
-                                <div id='container'></div>
-                                <div>
-                                    <input id='input-text' />
-                                    <button id='btn-send'>Send</button>
-                                </div>
-                            </div>
-                            <div>
-                                <code>
-                                    <pre id='debug-state'>
-                                    </pre>
-                                </code>
-                            </div>
-                        </div>
-                    </body>
-
-                    <script src='/braid.js'></script>
-                    <script>
-
-                        //
-                        // Identity stuff
-                        //
-
-                        var identity = Braid.randomIdentity()
-                        function refreshIdentityUI() {
-                            document.getElementById('my-address').innerHTML = '<strong>Your address:</strong> ' + identity.address
-                        }
-
-                        refreshIdentityUI()
-
-                        var inputMnemonic = document.getElementById('input-mnemonic')
-                        document.getElementById('btn-login').addEventListener('click', () => {
-                            identity = Braid.identityFromMnemonic(inputMnemonic.value)
-                            refreshIdentityUI()
-                        })
-
-
-                        //
-                        // Chat stuff
-                        //
-
-                        var mostRecentTxHash = null
-                        var messages = []
-                        function refreshChatUI() {
-                            var container = document.getElementById('container')
-                            var html = ''
-                            for (let msg of messages) {
-                                html += '<div><b>' + msg.sender.substr(0, 6) + ':</b> ' + msg.text + '</div>'
-                            }
-                            container.innerHTML = html
-                        }
-
-                        var debugStateElem = document.getElementById('debug-state')
-                        Braid.get('/', (err, update) => {
-                            if (err) {
-                                throw new Error(err)
-                            }
-                            console.log(update.data)
-                            var j = JSON.stringify(update.data, null, 4)
-                            j = j.replace(/\\\\n/g, '\\n')
-                                 .replace(/</g, '&lt;')
-                                 .replace(/>/g, '&gt;')
-
-                            debugStateElem.innerHTML = j
-                        })
-
-                        Braid.get('/shrugisland/talk0/messages', (err, update) => {
-                            if (err) {
-                                throw new Error(err)
-                            }
-                            messages = update.data
-                            mostRecentTxHash = update.mostRecentTxHash
-                            refreshChatUI()
-                        })
-
-                        refreshChatUI()
-
-                        var inputText = document.getElementById('input-text')
-                        document.getElementById('btn-send').addEventListener('click', () => {
-                            Braid.put({
-                                id: Braid.util.randomID(),
-                                parents: [ mostRecentTxHash ],
-                                url: 'localhost:21231',
-                                patches: [
-                                    '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify({text: inputText.value}),
-                                ],
-                            }, identity)
-                        })
-                    </script>
-                    </html>
-                "`),
+			mustParsePatch(`.shrugisland.talk0.resolver = {"type":"js", "src": { "link": "ref:` + sync9Hash.String() + `" }}`),
+			mustParsePatch(`.shrugisland.talk0.index = { "link": "ref:` + indexHTMLHash.String() + `" }`),
 		},
 	}
 
@@ -322,40 +194,40 @@ func sendTxs(host1, host2 rw.Host) {
 			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[0:0] = [{"text":"hello!"}]`),
+				mustParsePatch(`.shrugisland.talk0.messages[0:0] = [{"text":"hello!","sender":"` + host1.Address().String() + `"}]`),
 			},
 		}
 
 		tx3 = rw.Tx{
 			ID:      rw.IDFromString("three"),
 			Parents: []rw.Hash{tx2.Hash()},
-			From:    host1.Address(),
+			From:    host2.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[1:1] = [{"text":"well hello to you too"}]`),
+				mustParsePatch(`.shrugisland.talk0.messages[1:1] = [{"text":"well hello to you too","sender":"` + host2.Address().String() + `"}]`),
 			},
 		}
 
 		tx4 = rw.Tx{
 			ID:      rw.IDFromString("four"),
 			Parents: []rw.Hash{tx3.Hash()},
-			From:    host2.Address(),
+			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[2:2] = [{"text":"yoooo"}]`),
+				mustParsePatch(`.shrugisland.talk0.messages[2:2] = [{"text":"who needs a meme?","sender":"` + host1.Address().String() + `","attachment":{"link":"ref:` + memeHash.String() + `"}}]`),
 			},
 		}
 	)
 
-	host2.Info(1, "sending tx 4...")
-	err = host2.SendTx(context.Background(), tx4)
+	host1.Info(1, "sending tx 4...")
+	err = host1.SendTx(context.Background(), tx4)
 	if err != nil {
-		host2.Errorf("xxx %+v", err)
+		host1.Errorf("xxx %+v", err)
 	}
-	host1.Info(1, "sending tx 3...")
-	err = host1.SendTx(context.Background(), tx3)
+	host2.Info(1, "sending tx 3...")
+	err = host2.SendTx(context.Background(), tx3)
 	if err != nil {
-		host1.Errorf("zzz %+v", err)
+		host2.Errorf("zzz %+v", err)
 	}
 	host1.Info(1, "sending tx 2...")
 	err = host1.SendTx(context.Background(), tx2)
@@ -363,24 +235,24 @@ func sendTxs(host1, host2 rw.Host) {
 		host1.Errorf("yyy %+v", err)
 	}
 
-	var (
-		recipients = []rw.Address{host1.Address(), host2.Address()}
-		tx5        = rw.Tx{
-			ID:      rw.IDFromString("four"),
-			Parents: []rw.Hash{tx4.Hash()},
-			From:    host2.Address(),
-			URL:     "localhost:21231",
-			Patches: []rw.Patch{
-				mustParsePatch(`.` + rw.PrivateRootKeyForRecipients(recipients) + `.shrugisland.talk0.messages[2:2] = [{"text":"private message for you!"}]`),
-			},
-			Recipients: recipients,
-		}
-	)
-
-	err = host2.SendTx(context.Background(), tx5)
-	if err != nil {
-		host2.Errorf("yyy %+v", err)
-	}
+	//var (
+	//    recipients = []rw.Address{host1.Address(), host2.Address()}
+	//    tx5        = rw.Tx{
+	//        ID:      rw.IDFromString("four"),
+	//        Parents: []rw.Hash{tx4.Hash()},
+	//        From:    host2.Address(),
+	//        URL:     "localhost:21231",
+	//        Patches: []rw.Patch{
+	//            mustParsePatch(`.` + rw.PrivateRootKeyForRecipients(recipients) + `.shrugisland.talk0.messages[2:2] = [{"text":"private message for you!"}]`),
+	//        },
+	//        Recipients: recipients,
+	//    }
+	//)
+	//
+	//err = host2.SendTx(context.Background(), tx5)
+	//if err != nil {
+	//    host2.Errorf("yyy %+v", err)
+	//}
 }
 
 func mustParsePatch(s string) rw.Patch {

@@ -10,6 +10,7 @@ window.Braid = {
     randomIdentity,
     get,
     put,
+    storeRef,
     util: {
         hashTx,
         serializeTx,
@@ -70,6 +71,19 @@ function put(tx, identity) {
         method: 'PUT',
         body: JSON.stringify(tx),
     })
+}
+
+async function storeRef(file) {
+    const formData = new FormData()
+    formData.append(`ref`, file)
+
+    const resp = await fetch(`/`, {
+        method: 'PUT',
+        headers: { 'Ref': 'true' },
+        body: formData,
+    })
+
+    return (await resp.json()).hash
 }
 
 function hashTx(tx) {

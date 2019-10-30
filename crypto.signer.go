@@ -67,23 +67,6 @@ func (privkey *signingPrivateKey) String() string {
 	return hex.EncodeToString(privkey.Bytes())
 }
 
-func HashBytes(bs []byte) Hash {
-	hash := crypto.Keccak256(bs)
-	var h Hash
-	copy(h[:], hash)
-	return h
-}
-
-func HashFromHex(hexstr string) (Hash, error) {
-	bs, err := hex.DecodeString(hexstr)
-	if err != nil {
-		return Hash{}, err
-	}
-	var hash Hash
-	copy(hash[:], bs)
-	return hash, nil
-}
-
 func GenerateSigningKeypair() (*SigningKeypair, error) {
 	pk, err := crypto.GenerateKey()
 	if err != nil {

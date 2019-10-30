@@ -1,0 +1,200 @@
+<html>
+<head>
+    <style>
+        * {
+            font-family: 'Consolas', 'Ubuntu Mono', 'Monaco', 'Courier New', Courier, sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        #chat-container {
+            padding: 10px;
+        }
+        #debug-state-container {
+            flex-grow: 1;
+        }
+        #debug-state {
+            background: #eaeaea;
+            font-size: 0.7rem;
+            padding: 10px;
+            margin: 0;
+        }
+        #debug-state pre {
+            min-height: 100vh;
+        }
+        #messages .message {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px; 
+        }
+        #messages .message img {
+            max-width: 80px;
+        }
+        #form {
+            display: flex;
+            padding: 10px;
+        }
+        #form #form-inputs {
+            flex-grow: 1;
+        }
+        #form #input-text {
+            width: 100%;
+            margin-bottom: 4px;
+        }
+        #form button {
+            background-color: #6200ff;
+            border: none;
+            border-radius: 3px;
+            color: white;
+            cursor: pointer;
+            margin-left: 4px; 
+        }
+    </style>
+</head>
+<body>
+    <div style='display: flex'>
+        <div id='chat-container'>
+            <h1>chat</h1>
+
+            <div id='my-address'></div>
+            <br/>
+            <div>
+                Log into a new address with a seed phrase:<br/>
+                <input id='input-mnemonic'/>&nbsp;
+                <button id='btn-login'>Go</button>
+            </div>
+            <br/>
+            <br/>
+
+            <div id='messages'></div>
+            <div id='form'>
+                <div id='form-inputs'>
+                    <input id='input-text' />
+                    Attachment: <input type='file' id='input-file' />
+                </div>
+                <button id='btn-send'>Send</button>
+            </div>
+        </div>
+        <div id='debug-state-container'>
+            <code>
+                <pre id='debug-state'>
+                </pre>
+            </code>
+        </div>
+    </div>
+</body>
+
+<script src='/braid.js'></script>
+<script>
+
+    //
+    // Identity stuff
+    //
+
+    var identity = Braid.randomIdentity()
+    function refreshIdentityUI() {
+        document.getElementById('my-address').innerHTML = '<strong>Your address:</strong> ' + identity.address
+    }
+
+    refreshIdentityUI()
+
+    var inputMnemonic = document.getElementById('input-mnemonic')
+    document.getElementById('btn-login').addEventListener('click', () => {
+        identity = Braid.identityFromMnemonic(inputMnemonic.value)
+        refreshIdentityUI()
+    })
+
+
+    //
+    // Chat stuff
+    //
+
+    var mostRecentTxHash = null
+    var messages = []
+    function refreshChatUI() {
+        var messagesElem = document.getElementById('messages')
+        var html = ''
+        for (var i = 0; i < messages.length; i++) {
+            var msg = messages[i]
+            html += '<div class="message" style="background-color: ' + intToRGB(hashCode(msg.sender)) + '">'
+            html += '    <div><b>' + (msg.sender || '').substr(0, 6) + ':</b> </div>'
+            html += '    <div>'
+            html += '        <div>' + msg.text + '</div>'
+            if (msg.attachment) {
+            html += '        <img src="/shrugisland/talk0/messages/' + i + '/attachment" />'
+            }
+            html += '    </div>'
+            html += '</div>'
+        }
+        messagesElem.innerHTML = html
+    }
+
+    var debugStateElem = document.getElementById('debug-state')
+    Braid.get('/', (err, update) => {
+        if (err) {
+            throw new Error(err)
+        }
+        console.log(update.data)
+        var j = JSON.stringify(update.data, null, 4)
+        j = j.replace(/\\\\n/g, '\\n')
+             .replace(/</g, '&lt;')
+             .replace(/>/g, '&gt;')
+
+        debugStateElem.innerHTML = j
+    })
+
+    Braid.get('/shrugisland/talk0/messages', (err, update) => {
+        if (err) {
+            throw new Error(err)
+        } else if (mostRecentTxHash === update.mostRecentTxHash) {
+            return
+        }
+        messages = update.data
+        mostRecentTxHash = update.mostRecentTxHash
+        refreshChatUI()
+    })
+
+    refreshChatUI()
+
+    var inputText = document.getElementById('input-text')
+    var inputFile = document.getElementById('input-file')
+    document.getElementById('btn-send').addEventListener('click', async () => {
+        var refHash
+        if (inputFile.files.length > 0) {
+            refHash = await Braid.storeRef(inputFile.files[0])
+        }
+
+        Braid.put({
+            id: Braid.util.randomID(),
+            parents: [ mostRecentTxHash ],
+            url: 'localhost:21231',
+            patches: [
+                '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify([{
+                    // @@TODO: the browser encodes this in alphabetical order, whereas Go does not seem to.
+                    //         As a result, the signatures on either end will differ.  Need to fix.
+                    attachment: refHash ? { link: 'ref:' + refHash } : null,
+                    sender: identity.address,
+                    text: inputText.value,
+                }]),
+            ],
+        }, identity)
+    })
+
+    function hashCode(str) {
+        var hash = 0
+        for (var i = 0; i < str.length; i++) {
+           hash = str.charCodeAt(i) + ((hash << 5) - hash)
+        }
+        return hash
+    } 
+
+    function intToRGB(i) {
+        var c = (i & 0x00FFFFFF)
+            .toString(16)
+            .toUpperCase()
+
+        return '00000'.substring(0, 6 - c.length) + c
+    } 
+</script>
+</html>

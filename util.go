@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/pkg/errors"
 )
@@ -14,24 +15,35 @@ func annotate(err *error, msg string, args ...interface{}) {
 	}
 }
 
-func valueAtKeypath(m map[string]interface{}, keypath []string) (interface{}, bool) {
-	var cur interface{} = m
+func valueAtKeypath(x interface{}, keypath []string) (interface{}, bool) {
 	for i := 0; i < len(keypath); i++ {
-		var exists bool
-		cur, exists = m[keypath[i]]
-		if !exists {
-			return nil, false
-		}
-
-		if i < len(keypath)-1 {
-			var isMap bool
-			m, isMap = cur.(map[string]interface{})
-			if !isMap {
+		if asMap, isMap := x.(map[string]interface{}); isMap {
+			var exists bool
+			x, exists = asMap[keypath[i]]
+			if !exists {
 				return nil, false
 			}
+
+		} else if asMap, isMap := x.(M); isMap {
+			var exists bool
+			x, exists = asMap[keypath[i]]
+			if !exists {
+				return nil, false
+			}
+
+		} else if asSlice, isSlice := x.([]interface{}); isSlice {
+			sliceIdx, err := strconv.ParseInt(keypath[i], 10, 64)
+			if err != nil {
+				return nil, false
+			} else if sliceIdx > int64(len(asSlice)-1) {
+				return nil, false
+			}
+			x = asSlice[sliceIdx]
+		} else {
+			return nil, false
 		}
 	}
-	return cur, true
+	return x, true
 }
 
 func setValueAtKeypath(m map[string]interface{}, keypath []string, val interface{}) {
@@ -75,14 +87,24 @@ func walkTree(tree interface{}, fn func(keypath []string, val interface{}) error
 			return err
 		}
 
-		asMap, isMap := current.val.(map[string]interface{})
-		if isMap {
+		if asMap, isMap := current.val.(map[string]interface{}); isMap {
 			for key := range asMap {
 				kp := make([]string, len(current.keypath)+1)
 				copy(kp, current.keypath)
 				kp[len(kp)-1] = key
 				stack = append(stack, item{
 					val:     asMap[key],
+					keypath: kp,
+				})
+			}
+
+		} else if asSlice, isSlice := current.val.([]interface{}); isSlice {
+			for i := range asSlice {
+				kp := make([]string, len(current.keypath)+1)
+				copy(kp, current.keypath)
+				kp[len(kp)-1] = strconv.Itoa(i)
+				stack = append(stack, item{
+					val:     asSlice[i],
 					keypath: kp,
 				})
 			}
@@ -194,4 +216,18 @@ func fileExists(filename string) bool {
 func PrettyJSON(x interface{}) string {
 	j, _ := json.MarshalIndent(x, "", "    ")
 	return string(j)
+}
+
+// @@TODO: everything about this is horrible
+func DeepCopyJSValue(val interface{}) interface{} {
+	bs, err := json.Marshal(val)
+	if err != nil {
+		panic(err)
+	}
+	var copied interface{}
+	err = json.Unmarshal(bs, &copied)
+	if err != nil {
+		panic(err)
+	}
+	return copied
 }

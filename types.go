@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type (
@@ -140,6 +142,19 @@ func PrivateRootKeyForRecipients(recipients []Address) string {
 
 func (tx Tx) PrivateRootKey() string {
 	return PrivateRootKeyForRecipients(tx.Recipients)
+}
+
+func HashBytes(bs []byte) Hash {
+	hash := crypto.Keccak256(bs)
+	var h Hash
+	copy(h[:], hash)
+	return h
+}
+
+func HashFromHex(hexStr string) (Hash, error) {
+	var hash Hash
+	err := hash.UnmarshalText([]byte(hexStr))
+	return hash, err
 }
 
 func (h *Hash) UnmarshalText(text []byte) error {

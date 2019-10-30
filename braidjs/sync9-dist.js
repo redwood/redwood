@@ -7237,42 +7237,31 @@ global.init = function init(internalStateJSON) {
   var internalState = JSON.parse(internalStateJSON);
 
   if (Object.keys(internalState).length === 0) {
-    console.log('[JS RESOLVER] init NO STATE');
     s9state = sync9_create();
   } else {
-    console.log('[JS RESOLVER] init HAVE STATE');
     s9state = internalState.s9state;
     hasRun = internalState.hasRun;
   }
 };
 
 global.resolve_state = function resolve_state(stateJSON, sender, txHash, parents, patches) {
-  // console.log('[JS RESOLVER] resolve_state: patches ~>', JSON.stringify(patches))
-  var state = JSON.parse(stateJSON);
   var parentsObj = {};
 
   if (!hasRun) {
+    var state = JSON.parse(stateJSON);
     var ps = {};
     sync9_add_version(s9state, 'init', ps, [{
       keys: [],
       val: state
-    }], null); // console.log('INITIAL STATE ~>', trimstr(JSON.stringify(sync9_read(s9state), null, 4), 200))
-
+    }], null);
     parentsObj['init'] = true;
   } else {
     parents.forEach(function (p) {
       parentsObj[p] = true;
     });
-  } // console.log('txHash', txHash)
-  // console.log('parentsObj', JSON.stringify(parentsObj))
-  // console.log('patch', trimstr(JSON.stringify(patches), 200))
+  }
 
-
-  sync9_add_version(s9state, txHash, parentsObj, patches, null); // var zzz = JSON.parse( JSON.stringify( sync9_read(s9state) ) )
-  // delete zzz['resolver']['src']
-  // console.log('[JS RESOLVER] resolve_state: s9state ~>', JSON.stringify(s9state, null, 4))
-  // console.log('[JS RESOLVER] new state ~>', JSON.stringify(zzz, null, 4), 200)
-
+  sync9_add_version(s9state, txHash, parentsObj, patches, null);
   return JSON.stringify({
     state: sync9_read(s9state),
     internalState: {
@@ -7625,8 +7614,6 @@ function sync9_create() {
 }
 
 function sync9_add_version(x, vid, parents, changes, is_anc) {
-  console.log('[JS RESOLVER] sync9_add_version ~>', JSON.stringify(changes));
-
   var make_lit = function make_lit(x) {
     return x && _typeof(x) == 'object' ? {
       t: 'lit',

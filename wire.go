@@ -26,11 +26,27 @@ const (
 	MsgType_Error                 MsgType = "error"
 	MsgType_VerifyAddress         MsgType = "verify address"
 	MsgType_VerifyAddressResponse MsgType = "verify address response"
+	MsgType_FetchRef              MsgType = "fetch ref"
+	MsgType_FetchRefResponse      MsgType = "fetch ref response"
 )
 
 type VerifyAddressResponse struct {
 	Signature           []byte `json:"signature"`
 	EncryptingPublicKey []byte `json:"encryptingPublicKey"`
+}
+
+type FetchRefResponse struct {
+	Header *FetchRefResponseHeader `json:"header,omitempty"`
+	Body   *FetchRefResponseBody   `json:"body,omitempty"`
+}
+
+type FetchRefResponseHeader struct {
+	ContentType string `json:"contentType"`
+}
+
+type FetchRefResponseBody struct {
+	Data []byte `json:"data"`
+	End  bool   `json:"end"`
 }
 
 type EncryptedTx struct {
@@ -152,6 +168,22 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 			return err
 		}
 
+		msg.Payload = resp
+
+	case MsgType_FetchRef:
+		var hash Hash
+		err := json.Unmarshal([]byte(m.PayloadBytes), &hash)
+		if err != nil {
+			return err
+		}
+		msg.Payload = hash
+
+	case MsgType_FetchRefResponse:
+		var resp FetchRefResponse
+		err := json.Unmarshal([]byte(m.PayloadBytes), &resp)
+		if err != nil {
+			return err
+		}
 		msg.Payload = resp
 
 	default:

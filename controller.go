@@ -2,6 +2,8 @@ package redwood
 
 import (
 	"encoding/json"
+	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -20,13 +22,17 @@ type Controller interface {
 	FetchTxs() ([]Tx, error)
 	HaveTx(txHash Hash) bool
 
-	State() interface{}
+	State(keypath []string, resolveRefs bool) (interface{}, error)
 	StateJSON() []byte
 	MostRecentTxHash() Hash
 
 	SetResolver(keypath []string, resolver Resolver)
 	SetValidator(keypath []string, validator Validator)
+
+	SetReceivedRefsHandler(handler ReceivedRefsHandler)
 }
+
+type ReceivedRefsHandler func(refs []Hash)
 
 type controller struct {
 	*ctx.Context
@@ -43,10 +49,13 @@ type controller struct {
 	chMempool        chan *Tx
 	mostRecentTxHash Hash
 
-	store Store
+	onReceivedRefs func(refs []Hash)
+
+	store    Store
+	refStore RefStore
 }
 
-func NewController(address Address, genesisState interface{}, store Store) (Controller, error) {
+func NewController(address Address, genesisState interface{}, store Store, refStore RefStore) (Controller, error) {
 	c := &controller{
 		Context:          &ctx.Context{},
 		address:          address,
@@ -61,6 +70,7 @@ func NewController(address Address, genesisState interface{}, store Store) (Cont
 		chMempool:        make(chan *Tx, 100),
 		mostRecentTxHash: GenesisTxHash,
 		store:            store,
+		refStore:         refStore,
 	}
 
 	return c, nil
@@ -98,8 +108,96 @@ func (c *controller) Start() error {
 	)
 }
 
-func (c *controller) State() interface{} {
-	return c.currentState
+func (c *controller) SetReceivedRefsHandler(handler ReceivedRefsHandler) {
+	c.onReceivedRefs = handler
+}
+
+func (c *controller) State(keypath []string, resolveRefs bool) (interface{}, error) {
+	val, exists := M(c.currentState.(map[string]interface{})).GetValue(keypath...)
+	if !exists {
+		return nil, nil
+	}
+
+	copied := DeepCopyJSValue(val)
+
+	if resolveRefs {
+		asMap, isMap := copied.(map[string]interface{})
+		if isMap {
+			resolved, err := c.resolveRefs(asMap)
+			if err != nil {
+				return nil, err
+			}
+			return resolved, nil
+		}
+	}
+
+	return copied, nil
+}
+
+func (c *controller) resolveRefs(m map[string]interface{}) (interface{}, error) {
+	type resolution struct {
+		keypath []string
+		val     interface{}
+	}
+	resolutions := []resolution{}
+
+	err := walkTree(m, func(keypath []string, val interface{}) error {
+		asMap, isMap := val.(map[string]interface{})
+		if !isMap {
+			return nil
+		}
+
+		link, exists := M(asMap).GetString("link")
+		if !exists {
+			return nil
+		}
+
+		hash, err := HashFromHex(link[len("ref:"):])
+		if err != nil {
+			return err
+		}
+
+		objectReader, contentType, err := c.refStore.Object(hash)
+		if errors.Cause(err) == os.ErrNotExist {
+			// If we don't have a given ref, we just don't fill it in
+			return nil
+		} else if err != nil {
+			return err
+		}
+		defer objectReader.Close()
+
+		bs, err := ioutil.ReadAll(objectReader)
+		if err != nil {
+			return err
+		}
+
+		switch {
+		case contentType == "application/json",
+			contentType == "application/js",
+			contentType[:5] == "text/":
+			resolutions = append(resolutions, resolution{keypath, string(bs)})
+
+		case contentType[:6] == "image/":
+			resolutions = append(resolutions, resolution{keypath, bs})
+
+		default:
+			panic("unknown content type")
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, res := range resolutions {
+		if len(res.keypath) > 0 {
+			M(m).SetValue(res.keypath, res.val)
+		} else {
+			// This tends to come up when a browser is fetching individual resources that are refs
+			return res.val, nil
+		}
+	}
+	return m, nil
 }
 
 func (c *controller) StateJSON() []byte {
@@ -184,11 +282,12 @@ func (c *controller) mempoolLoop() {
 			return
 		case tx := <-c.chMempool:
 			err := c.processMempoolTx(tx)
-			if errors.Cause(err) == ErrNoParentYet {
+			if errors.Cause(err) == ErrNoParentYet || errors.Cause(err) == ErrMissingCriticalRefs {
 				go func() {
 					select {
 					case <-c.Context.Done():
 					case <-time.After(500 * time.Millisecond):
+						c.Infof(0, "readding to mempool %v (%v)", tx.Hash(), err)
 						c.addToMempool(tx)
 					}
 				}()
@@ -237,17 +336,69 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 				return err
 			}
 		}
-
-		tx.Valid = true
-		c.validTxs[tx.Hash()] = tx
 	}
 
-	// Unmark parents as leaves
-	for _, parentHash := range tx.Parents {
-		delete(c.leaves, parentHash)
+	//
+	// Check incoming patches to see if any refs will be modified (necessitating that we fetch them before updating the state tree)
+	//
+	{
+		var resolverRefs []Hash
+
+	CheckPatchesForRefs:
+		for _, p := range tx.Patches {
+			var foundResolverKey bool
+
+			for i, key := range p.Keys {
+				if key == "resolver" || key == "validator" {
+					foundResolverKey = true
+					continue
+				}
+				if foundResolverKey && key == "link" && i == len(p.Keys)-1 {
+					if linkStr, isString := p.Val.(string); isString {
+						hash, err := HashFromHex(linkStr[len("ref:"):])
+						if err != nil {
+							return err
+						}
+						resolverRefs = append(resolverRefs, hash)
+						continue CheckPatchesForRefs
+					}
+				}
+			}
+			if foundResolverKey {
+				err := walkTree(p.Val, func(keypath []string, val interface{}) error {
+					linkStr, valIsString := val.(string)
+					if len(keypath) > 0 && keypath[len(keypath)-1] == "link" && valIsString {
+						hash, err := HashFromHex(linkStr[len("ref:"):])
+						if err != nil {
+							return err
+						}
+						resolverRefs = append(resolverRefs, hash)
+					}
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		c.onReceivedRefs(resolverRefs)
+
+		var missingRefs bool
+		for _, refHash := range resolverRefs {
+			if !c.refStore.HaveObject(refHash) {
+				missingRefs = true
+				break
+			}
+		}
+
+		if missingRefs {
+			return ErrMissingCriticalRefs
+		}
 	}
 
-	// @@TODO: add to timeDAG
+	tx.Valid = true
+	c.validTxs[tx.Hash()] = tx
 
 	//
 	// Apply changes to the state tree
@@ -297,17 +448,44 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		if len(finalPatches) > 1 {
 			panic("noooo")
 		}
-		c.currentState = finalPatches[0].Val
+		nextState := finalPatches[0].Val
 
-		msgs, _ := M(c.currentState.(map[string]interface{})).GetValue("shrugisland", "talk0", "messages")
-		c.Warnf("state ~> %v", PrettyJSON(msgs))
+		// Set current state
+		c.currentState = nextState
+
+		// Notify the Host to start fetching any refs we don't have yet
+		var refs []Hash
+		err = walkTree(c.currentState, func(keypath []string, val interface{}) error {
+			linkStr, valIsString := val.(string)
+			if len(keypath) > 0 && keypath[len(keypath)-1] == "link" && valIsString {
+				hash, err := HashFromHex(linkStr[len("ref:"):])
+				if err != nil {
+					return err
+				}
+				refs = append(refs, hash)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		c.onReceivedRefs(refs)
+
+		// Unmark parents as leaves
+		for _, parentHash := range tx.Parents {
+			delete(c.leaves, parentHash)
+		}
+
+		// @@TODO: add to timeDAG
+
+		// msgs, _ := M(c.currentState.(map[string]interface{})).GetValue("shrugisland", "talk0", "messages")
+		// c.Warnf("state ~> %v", PrettyJSON(msgs))
 		// c.Warnf("controller state ~>", string(c.StateJSON()))
 
 		c.mostRecentTxHash = tx.Hash()
 
 		// Walk the tree and initialize validators and resolvers
 		// @@TODO: inefficient
-		// @@TODO: breaks stateful resolvers
 		newResolverTree := resolverTree{}
 		newResolverTree.addResolver([]string{}, &dumbResolver{})
 		newResolverTree.addValidator([]string{}, &permissionsValidator{})
@@ -315,6 +493,16 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			m, isMap := val.(map[string]interface{})
 			if !isMap {
 				return nil
+			}
+			resolverConfigMap, exists := M(m).GetMap("resolver")
+			if !exists {
+				return nil
+			}
+
+			// Don't actually inject the refs into the state tree
+			config, err := c.resolveRefs(DeepCopyJSValue(resolverConfigMap).(map[string]interface{}))
+			if err != nil {
+				return err
 			}
 
 			var resolverInternalState map[string]interface{}
@@ -325,11 +513,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 				resolverInternalState = oldResolver.InternalState()
 			}
 
-			resolverConfig, exists := M(m).GetMap("resolver")
-			if !exists {
-				return nil
-			}
-			resolver, err := initResolverFromConfig(resolverConfig, resolverInternalState)
+			resolver, err := initResolverFromConfig(config.(map[string]interface{}), resolverInternalState)
 			if err != nil {
 				return err
 			}
@@ -371,6 +555,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 
 var (
 	ErrNoParentYet           = errors.New("no parent yet")
+	ErrMissingCriticalRefs   = errors.New("missing critical refs")
 	ErrInvalidSignature      = errors.New("invalid signature")
 	ErrInvalidPrivateRootKey = errors.New("invalid private root key")
 	ErrDuplicateGenesis      = errors.New("already have a genesis tx")
@@ -403,7 +588,7 @@ func (c *controller) validateTxIntrinsics(tx *Tx) error {
 	if err != nil {
 		return errors.Wrap(ErrInvalidSignature, err.Error())
 	} else if sigPubKey.VerifySignature(tx.Hash(), tx.Sig) == false {
-		return errors.WithStack(ErrInvalidSignature)
+		return errors.Wrapf(ErrInvalidSignature, "cannot be verified")
 	} else if sigPubKey.Address() != tx.From {
 		return errors.Wrapf(ErrInvalidSignature, "address doesn't match (%v expected, %v received)", tx.From.Hex(), sigPubKey.Address().Hex())
 	}

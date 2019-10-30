@@ -3,6 +3,7 @@ package redwood
 import (
 	"context"
 	"encoding/json"
+	"io"
 
 	"github.com/pkg/errors"
 
@@ -14,13 +15,17 @@ type Host interface {
 	Ctx() *ctx.Context
 	Start() error
 
+	// Get(ctx context.Context, url string) (interface{}, error)
 	Subscribe(ctx context.Context, url string) error
 	SendTx(ctx context.Context, tx Tx) error
+	AddRef(reader io.ReadCloser, contentType string) (Hash, error)
 	AddPeer(ctx context.Context, multiaddrString string) error
 	Port() uint
 	Transport() Transport
 	Controller() Controller
 	Address() Address
+
+	OnTxReceived(Tx, Peer)
 }
 
 type host struct {
@@ -36,6 +41,7 @@ type host struct {
 	peerSeenTxs      map[string]map[Hash]bool
 
 	peerStore map[Address]storedPeer
+	refStore  RefStore
 }
 
 type storedPeer struct {
@@ -50,7 +56,7 @@ var (
 	ErrPeerIsSelf = errors.New("peer is self")
 )
 
-func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, controller Controller) (Host, error) {
+func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, controller Controller, refStore RefStore) (Host, error) {
 	h := &host{
 		Context:           &ctx.Context{},
 		port:              port,
@@ -60,6 +66,7 @@ func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypai
 		subscriptionsOut:  make(map[string]subscriptionOut),
 		peerSeenTxs:       make(map[string]map[Hash]bool),
 		peerStore:         make(map[Address]storedPeer),
+		refStore:          refStore,
 	}
 	return h, nil
 }
@@ -74,17 +81,20 @@ func (h *host) Start() error {
 		func() error {
 			h.SetLogLabel(h.Address().Pretty() + " host")
 
-			// transport, err := NewLibp2pTransport(h.Address(), h.port)
-			transport, err := NewHTTPTransport(h.Address(), h.port, h.controller)
+			transport, err := NewLibp2pTransport(h.Address(), h.port, h.refStore)
+			// transport, err := NewHTTPTransport(h.Address(), h.port, h.controller)
 			if err != nil {
 				return err
 			}
 
-			transport.SetTxHandler(h.onTxReceived)
+			transport.SetTxHandler(h.OnTxReceived)
 			transport.SetPrivateTxHandler(h.onPrivateTxReceived)
 			transport.SetAckHandler(h.onAckReceived)
 			transport.SetVerifyAddressHandler(h.onVerifyAddressReceived)
+			transport.SetFetchRefHandler(h.onFetchRefReceived)
 			h.transport = transport
+
+			h.controller.SetReceivedRefsHandler(h.onReceivedRefs)
 
 			h.CtxAddChild(h.transport.Ctx(), nil)
 			h.CtxAddChild(h.controller.Ctx(), nil)
@@ -118,7 +128,7 @@ func (h *host) Address() Address {
 	return h.signingKeypair.Address()
 }
 
-func (h *host) onTxReceived(tx Tx, peer Peer) {
+func (h *host) OnTxReceived(tx Tx, peer Peer) {
 	h.Infof(0, "tx %v received", tx.Hash().Pretty())
 	h.markTxSeenByPeer(peer.ID(), tx.Hash())
 
@@ -218,17 +228,25 @@ func (h *host) Subscribe(ctx context.Context, url string) error {
 	var peer Peer
 
 	// @@TODO: subscribe to more than one peer?
-	err := h.transport.ForEachProviderOfURL(ctx, url, func(p Peer) (bool, error) {
-		err := p.EnsureConnected(ctx)
-		if err != nil {
-			return true, err
-		}
-		peer = p
-		return false, nil
-	})
+	ctxFind, cancelFind := context.WithCancel(ctx)
+	defer cancelFind()
+	ch, err := h.transport.ForEachProviderOfURL(ctxFind, url)
 	if err != nil {
 		return errors.WithStack(err)
-	} else if peer == nil {
+	}
+
+	for p := range ch {
+		err := p.EnsureConnected(ctx)
+		if err != nil {
+			h.Errorf("error connecting to peer: %v", err)
+			continue
+		}
+		peer = p
+		cancelFind()
+		break
+	}
+
+	if peer == nil {
 		return errors.WithStack(ErrNoPeersForURL)
 	}
 
@@ -261,7 +279,7 @@ func (h *host) Subscribe(ctx context.Context, url string) error {
 
 			tx := msg.Payload.(Tx)
 			tx.URL = url
-			h.onTxReceived(tx, peer)
+			h.OnTxReceived(tx, peer)
 
 			// @@TODO: ACK the PUT
 		}
@@ -425,24 +443,30 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 		// @@TODO: do we need to trim the tx's patches' keypaths so that they don't include
 		// the keypath that the subscription is listening to?
 
-		err := h.transport.ForEachSubscriberToURL(ctx, tx.URL, func(peer Peer) (bool, error) {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		ch, err := h.transport.ForEachSubscriberToURL(ctx, tx.URL)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		for peer := range ch {
 			if h.peerSeenTxs[peer.ID()][tx.Hash()] {
-				return true, nil
+				continue
 			}
 
 			err := peer.EnsureConnected(context.TODO())
 			if err != nil {
-				// @@TODO: just log, don't break?
-				return true, errors.WithStack(err)
+				h.Errorf("error connecting to peer: %v", err)
+				continue
 			}
 
 			err = peer.WriteMsg(Msg{Type: MsgType_Put, Payload: tx})
 			if err != nil {
-				// @@TODO: just log, don't break?
-				return true, errors.WithStack(err)
+				h.Errorf("error writing tx to peer: %v", err)
+				continue
 			}
-			return true, nil
-		})
+		}
+
 		return err
 	}
 	return nil
@@ -475,4 +499,144 @@ func (h *host) SignTx(tx *Tx) error {
 	var err error
 	tx.Sig, err = h.signingKeypair.SignHash(tx.Hash())
 	return err
+}
+
+func (h *host) AddRef(reader io.ReadCloser, contentType string) (Hash, error) {
+	return h.refStore.StoreObject(reader, contentType)
+}
+
+func (h *host) onReceivedRefs(refs []Hash) {
+	for _, ref := range refs {
+		if !h.refStore.HaveObject(ref) {
+			ch, err := h.transport.ForEachProviderOfRef(context.TODO(), ref)
+			if err != nil {
+				h.Errorf("error finding ref providers: %v", err)
+				return
+			}
+
+		PeerLoop:
+			for peer := range ch {
+				err := peer.EnsureConnected(context.TODO())
+				if err != nil {
+					h.Errorf("error connecting to peer: %v", err)
+					continue
+				}
+
+				err = peer.WriteMsg(Msg{Type: MsgType_FetchRef, Payload: ref})
+				if err != nil {
+					h.Errorf("error writing to peer: %v", err)
+					continue
+				}
+
+				var msg Msg
+				msg, err = peer.ReadMsg()
+				if err != nil {
+					h.Errorf("error reading from peer: %v", err)
+					return
+				} else if msg.Type != MsgType_FetchRefResponse {
+					h.Errorf("protocol probs")
+					return
+				}
+
+				resp, is := msg.Payload.(FetchRefResponse)
+				if !is {
+					h.Errorf("protocol probs")
+					return
+				} else if resp.Header == nil {
+					h.Errorf("protocol probs")
+					return
+				}
+
+				pr, pw := io.Pipe()
+				go func() {
+					var err error
+					defer func() { pw.CloseWithError(err) }()
+
+					for {
+						var msg Msg
+						msg, err = peer.ReadMsg()
+						if err != nil {
+							return
+						} else if msg.Type != MsgType_FetchRefResponse {
+							err = errors.New("protocol probs")
+							return
+						}
+
+						resp, is := msg.Payload.(FetchRefResponse)
+						if !is {
+							err = errors.New("protocol probs")
+							return
+						} else if resp.Body == nil {
+							err = errors.New("protocol probs")
+							return
+						} else if resp.Body.End {
+							return
+						}
+
+						var n int
+						n, err = pw.Write(resp.Body.Data)
+						if err != nil {
+							return
+						} else if n < len(resp.Body.Data) {
+							err = io.ErrUnexpectedEOF
+							return
+						}
+					}
+				}()
+
+				hash, err := h.refStore.StoreObject(pr, resp.Header.ContentType)
+				if err != nil {
+					h.Errorf("protocol probs: %v", err)
+					continue PeerLoop
+				}
+				h.Infof(0, "stored ref %v", hash)
+				// @@TODO: check stored refHash against the one we requested
+				return
+			}
+		}
+	}
+}
+
+const (
+	REF_CHUNK_SIZE = 1024 // @@TODO: tunable buffer size?
+)
+
+func (h *host) onFetchRefReceived(refHash Hash, peer Peer) {
+	defer peer.CloseConn()
+
+	objectReader, contentType, err := h.refStore.Object(refHash)
+	if err != nil {
+		panic(err)
+	}
+
+	err = peer.WriteMsg(Msg{Type: MsgType_FetchRefResponse, Payload: FetchRefResponse{Header: &FetchRefResponseHeader{ContentType: contentType}}})
+	if err != nil {
+		h.Errorf("[ref server] %+v", errors.WithStack(err))
+		return
+	}
+
+	buf := make([]byte, REF_CHUNK_SIZE)
+	for {
+		n, err := io.ReadFull(objectReader, buf)
+		if err == io.EOF {
+			break
+		} else if err == io.ErrUnexpectedEOF {
+			buf = buf[:n]
+		} else if err != nil {
+			h.Errorf("[ref server] %+v", err)
+			return
+		}
+
+		err = peer.WriteMsg(Msg{Type: MsgType_FetchRefResponse, Payload: FetchRefResponse{Body: &FetchRefResponseBody{Data: buf}}})
+		if err != nil {
+			h.Errorf("[ref server] %+v", errors.WithStack(err))
+			return
+		}
+	}
+
+	err = peer.WriteMsg(Msg{Type: MsgType_FetchRefResponse, Payload: FetchRefResponse{Body: &FetchRefResponseBody{End: true}}})
+	if err != nil {
+		h.Errorf("[ref server] %+v", errors.WithStack(err))
+		return
+	}
 }
