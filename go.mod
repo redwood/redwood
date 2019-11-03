@@ -2,13 +2,13 @@ module github.com/brynbellomy/redwood
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/Conscience/protocol v0.0.0-20191019004358-ed227721ad7f
 	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d
 	github.com/ThomsonReutersEikon/go-ntlm v0.0.0-20181130171125-cf23bd1ecf18 // indirect
 	github.com/alecthomas/participle v0.3.0
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20191023202215-f096da5361bb // indirect
 	github.com/brynbellomy/debugcharts v0.0.0-20180826220201-c3f57e57ea6f
+	github.com/brynbellomy/ginkgo-reporter v0.0.0-20160306174404-9bf14cb7c4ae // indirect
 	github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d
 	github.com/brynbellomy/go-structomancer v1.0.1 // indirect
 	github.com/btcsuite/btcd v0.0.0-20190213025234-306aecffea32
@@ -24,6 +24,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/elastic/gosigar v0.10.5 // indirect
 	github.com/ethereum/go-ethereum v1.9.6
+	github.com/fatih/color v1.7.0 // indirect
 	github.com/gin-gonic/gin v1.4.0 // indirect
 	github.com/git-lfs/gitobj v1.4.1 // indirect
 	github.com/golang/protobuf v1.3.2

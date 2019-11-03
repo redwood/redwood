@@ -18,9 +18,9 @@ type (
 
 	Tx struct {
 		ID         ID        `json:"id"`
-		Parents    []Hash    `json:"parents"`
+		Parents    []ID      `json:"parents"`
 		From       Address   `json:"from"`
-		Sig        Signature `json:"sig"`
+		Sig        Signature `json:"sig,omitempty"`
 		URL        string    `json:"url"`
 		Patches    []Patch   `json:"patches"`
 		Recipients []Address `json:"recipients,omitempty"`
@@ -42,13 +42,21 @@ type (
 )
 
 var (
-	GenesisTxHash = HashBytes([]byte("genesis"))
-	EmptyHash     = Hash{}
+	GenesisTxID = IDFromString("genesis")
+	EmptyHash   = Hash{}
 )
 
 const (
 	KeypathSeparator = "."
 )
+
+func SignatureFromHex(hx string) (Signature, error) {
+	bs, err := hex.DecodeString(hx)
+	if err != nil {
+		return nil, err
+	}
+	return Signature(bs), nil
+}
 
 func (sig Signature) String() string {
 	return hex.EncodeToString(sig)
@@ -239,6 +247,16 @@ func RandomID() ID {
 	var id ID
 	rand.Read(id[:])
 	return id
+}
+
+func IDFromHex(h string) (ID, error) {
+	bs, err := hex.DecodeString(h)
+	if err != nil {
+		return ID{}, err
+	}
+	var id ID
+	copy(id[:], bs)
+	return id, nil
 }
 
 func IDFromString(s string) ID {

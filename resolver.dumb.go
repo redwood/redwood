@@ -12,7 +12,7 @@ func (r *dumbResolver) InternalState() map[string]interface{} {
 	return nil
 }
 
-func (r *dumbResolver) ResolveState(state interface{}, sender Address, txHash Hash, parents []Hash, ps []Patch) (interface{}, error) {
+func (r *dumbResolver) ResolveState(state interface{}, sender Address, txID ID, parents []ID, ps []Patch) (interface{}, error) {
 	for _, p := range ps {
 		setval := func(val interface{}) { state = val }
 		getval := func() interface{} { return state }

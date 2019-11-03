@@ -18,13 +18,12 @@ type Controller interface {
 	Start() error
 
 	AddTx(tx *Tx) error
-	RemoveTx(txHash Hash) error
-	FetchTxs() ([]Tx, error)
-	HaveTx(txHash Hash) bool
+	FetchTxs() TxIterator
+	HaveTx(txID ID) bool
 
 	State(keypath []string, resolveRefs bool) (interface{}, error)
 	StateJSON() []byte
-	MostRecentTxHash() Hash
+	MostRecentTxID() ID
 
 	SetResolver(keypath []string, resolver Resolver)
 	SetValidator(keypath []string, validator Validator)
@@ -37,17 +36,15 @@ type ReceivedRefsHandler func(refs []Hash)
 type controller struct {
 	*ctx.Context
 
-	address          Address
-	mu               sync.RWMutex
-	txs              map[Hash]*Tx
-	validTxs         map[Hash]*Tx
-	resolverTree     resolverTree
-	currentState     interface{}
-	stateHistory     map[Hash]interface{}
-	timeDAG          map[Hash]map[Hash]bool
-	leaves           map[Hash]bool
-	chMempool        chan *Tx
-	mostRecentTxHash Hash
+	address        Address
+	mu             sync.RWMutex
+	txs            map[ID]*Tx
+	validTxs       map[ID]*Tx
+	resolverTree   resolverTree
+	currentState   interface{}
+	leaves         map[ID]bool
+	chMempool      chan *Tx
+	mostRecentTxID ID
 
 	onReceivedRefs func(refs []Hash)
 
@@ -57,20 +54,18 @@ type controller struct {
 
 func NewController(address Address, genesisState interface{}, store Store, refStore RefStore) (Controller, error) {
 	c := &controller{
-		Context:          &ctx.Context{},
-		address:          address,
-		mu:               sync.RWMutex{},
-		txs:              make(map[Hash]*Tx),
-		validTxs:         make(map[Hash]*Tx),
-		resolverTree:     resolverTree{},
-		currentState:     genesisState,
-		stateHistory:     make(map[Hash]interface{}),
-		timeDAG:          make(map[Hash]map[Hash]bool),
-		leaves:           make(map[Hash]bool),
-		chMempool:        make(chan *Tx, 100),
-		mostRecentTxHash: GenesisTxHash,
-		store:            store,
-		refStore:         refStore,
+		Context:        &ctx.Context{},
+		address:        address,
+		mu:             sync.RWMutex{},
+		txs:            make(map[ID]*Tx),
+		validTxs:       make(map[ID]*Tx),
+		resolverTree:   resolverTree{},
+		currentState:   genesisState,
+		leaves:         make(map[ID]bool),
+		chMempool:      make(chan *Tx, 100),
+		mostRecentTxID: GenesisTxID,
+		store:          store,
+		refStore:       refStore,
 	}
 
 	return c, nil
@@ -210,8 +205,8 @@ func (c *controller) StateJSON() []byte {
 	return []byte(str)
 }
 
-func (c *controller) MostRecentTxHash() Hash {
-	return c.mostRecentTxHash
+func (c *controller) MostRecentTxID() ID {
+	return c.mostRecentTxID
 }
 
 func (c *controller) SetResolver(keypath []string, resolver Resolver) {
@@ -233,7 +228,7 @@ func (c *controller) AddTx(tx *Tx) error {
 	defer c.mu.Unlock()
 
 	// Ignore duplicates
-	if _, exists := c.txs[tx.Hash()]; exists {
+	if _, exists := c.txs[tx.ID]; exists {
 		c.Infof(0, "already know tx %v, skipping", tx.Hash().String())
 		return nil
 	}
@@ -241,7 +236,7 @@ func (c *controller) AddTx(tx *Tx) error {
 	c.Infof(0, "new tx %v", tx.Hash().Pretty())
 
 	// Store the tx (so we can ignore txs we've seen before)
-	c.txs[tx.Hash()] = tx
+	c.txs[tx.ID] = tx
 
 	c.addToMempool(tx)
 	return nil
@@ -397,8 +392,10 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		}
 	}
 
+	c.Warnf("valid tx ~> %v", PrettyJSON(tx))
+
 	tx.Valid = true
-	c.validTxs[tx.Hash()] = tx
+	c.validTxs[tx.ID] = tx
 
 	//
 	// Apply changes to the state tree
@@ -435,7 +432,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 
 			if node.resolver != nil {
 				var err error
-				newState, err := node.resolver.ResolveState(localStateMap, tx.From, tx.Hash(), tx.Parents, newPatches)
+				newState, err := node.resolver.ResolveState(localStateMap, tx.From, tx.ID, tx.Parents, newPatches)
 				if err != nil {
 					panic(err)
 				}
@@ -472,8 +469,8 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		c.onReceivedRefs(refs)
 
 		// Unmark parents as leaves
-		for _, parentHash := range tx.Parents {
-			delete(c.leaves, parentHash)
+		for _, parentID := range tx.Parents {
+			delete(c.leaves, parentID)
 		}
 
 		// @@TODO: add to timeDAG
@@ -482,7 +479,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		// c.Warnf("state ~> %v", PrettyJSON(msgs))
 		// c.Warnf("controller state ~>", string(c.StateJSON()))
 
-		c.mostRecentTxHash = tx.Hash()
+		c.mostRecentTxID = tx.ID
 
 		// Walk the tree and initialize validators and resolvers
 		// @@TODO: inefficient
@@ -565,13 +562,13 @@ var (
 func (c *controller) validateTxIntrinsics(tx *Tx) error {
 	if len(tx.Parents) == 0 {
 		return ErrTxMissingParents
-	} else if len(c.validTxs) > 0 && len(tx.Parents) == 1 && tx.Parents[0] == GenesisTxHash {
+	} else if len(c.validTxs) > 0 && len(tx.Parents) == 1 && tx.Parents[0] == GenesisTxID {
 		return ErrDuplicateGenesis
 	}
 
-	for _, parentHash := range tx.Parents {
-		if _, exists := c.validTxs[parentHash]; !exists && parentHash.Pretty() != GenesisTxHash.Pretty() {
-			return errors.Wrapf(ErrNoParentYet, "tx: %v", parentHash.Pretty())
+	for _, parentID := range tx.Parents {
+		if _, exists := c.validTxs[parentID]; !exists && parentID != GenesisTxID {
+			return errors.Wrapf(ErrNoParentYet, "tx: %v", parentID.Pretty())
 		}
 	}
 
@@ -606,47 +603,30 @@ func (c *controller) stateAtKeypath(keypath []string) interface{} {
 	return nil
 }
 
-func (c *controller) RemoveTx(txHash Hash) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	delete(c.txs, txHash)
-
-	return nil
-}
-
-func (c *controller) HaveTx(txHash Hash) bool {
-	_, have := c.txs[txHash]
+func (c *controller) HaveTx(txID ID) bool {
+	_, have := c.txs[txID]
 	return have
 }
 
-func (c *controller) FetchTxs() ([]Tx, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	var txs []Tx
-	for _, tx := range c.txs {
-		txs = append(txs, *tx)
-	}
-
-	return txs, nil
+func (c *controller) FetchTxs() TxIterator {
+	return c.store.AllTxs()
 }
 
-func (c *controller) getAncestors(hashes map[Hash]bool) map[Hash]bool {
-	ancestors := map[Hash]bool{}
-
-	var mark_ancestors func(id Hash)
-	mark_ancestors = func(txHash Hash) {
-		if !ancestors[txHash] {
-			ancestors[txHash] = true
-			for parentHash := range c.timeDAG[txHash] {
-				mark_ancestors(parentHash)
-			}
-		}
-	}
-	for parentHash := range hashes {
-		mark_ancestors(parentHash)
-	}
-
-	return ancestors
-}
+//func (c *controller) getAncestors(hashes map[Hash]bool) map[Hash]bool {
+//    ancestors := map[Hash]bool{}
+//
+//    var mark_ancestors func(id Hash)
+//    mark_ancestors = func(txHash Hash) {
+//        if !ancestors[txHash] {
+//            ancestors[txHash] = true
+//            for parentHash := range c.timeDAG[txHash] {
+//                mark_ancestors(parentHash)
+//            }
+//        }
+//    }
+//    for parentHash := range hashes {
+//        mark_ancestors(parentHash)
+//    }
+//
+//    return ancestors
+//}

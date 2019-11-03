@@ -1,4 +1,4 @@
-'use strict'
+require('@babel/polyfill')
 
 var ethers = require('ethers')
 
@@ -6,9 +6,12 @@ window.Braid = {
     identityFromMnemonic,
     identityFromPrivateKey,
     randomIdentity,
-    get,
+
+    subscribePatches,
+    subscribeStates,
     put,
     storeRef,
+
     util: {
         hashTx,
         serializeTx,
@@ -49,11 +52,65 @@ function _constructIdentity(wallet) {
     }
 }
 
-function get(keypath, cb) {
+async function subscribePatches(host, keypath, parents, cb) {
+    try {
+        const headers = {
+            'Subscribe-Host': host,
+            'Accept':         'application/json',
+            'Subscribe':      'keep-alive',
+        }
+        if (parents && parents.length > 0) {
+            headers['Parents'] = parents.join(',')
+        }
+
+        const res = await fetch(keypath, {
+            method: 'GET',
+            headers,
+        })
+        if (!res.ok) {
+            console.error('Fetch failed!', res)
+            cb('fetch failed')
+            return
+        }
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder('utf-8')
+        let buffer = ''
+
+        async function read() {
+            const x = await reader.read()
+            if (x.done) {
+                return
+            }
+
+            const newData = decoder.decode(x.value)
+            buffer += newData
+            let idx
+            while ((idx = buffer.indexOf('\n')) > -1) {
+                const line = buffer.substring(0, idx).trim()
+                if (line.length > 0) {
+                    const payloadStr = line.substring(5).trim() // remove "data:" prefix
+                    const payload = JSON.parse(payloadStr)
+                    cb(null, payload)
+                }
+                buffer = buffer.substring(idx+1)
+            }
+            read()
+        }
+        read()
+
+    } catch(err) {
+        console.log('Fetch GET failed:', err)
+        cb(err)
+    }
+}
+
+function subscribeStates(host, keypath, parents, cb) {
     setInterval(async () => {
         try {
             var resp = (await (await fetch(keypath, {
-                headers: { 'Accept': 'application/json' },
+                headers: {
+                    'Accept': 'application/json',
+                },
             })).json())
             cb(null, resp)
         } catch (err) {
@@ -64,10 +121,19 @@ function get(keypath, cb) {
 
 function put(tx, identity) {
     tx.from = identity.address
-    tx.sig = identity.signTx(tx)
+    var sig = identity.signTx(tx)
+
+    const headers = {
+        'Version': tx.id,
+        'Parents': tx.parents.join(','),
+        'Signature': sig,
+        'Patch-Type': 'braid',
+    }
+
     return fetch('/', {
         method: 'PUT',
-        body: JSON.stringify(tx),
+        body: tx.patches.join('\n'),
+        headers,
     })
 }
 

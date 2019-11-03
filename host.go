@@ -26,6 +26,7 @@ type Host interface {
 	Address() Address
 
 	OnTxReceived(Tx, Peer)
+	OnFetchHistoryRequestReceived(parents []ID, toVersion ID, peer Peer) error
 }
 
 type host struct {
@@ -56,10 +57,11 @@ var (
 	ErrPeerIsSelf = errors.New("peer is self")
 )
 
-func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, controller Controller, refStore RefStore) (Host, error) {
+func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, transport Transport, controller Controller, refStore RefStore) (Host, error) {
 	h := &host{
 		Context:           &ctx.Context{},
 		port:              port,
+		transport:         transport,
 		controller:        controller,
 		signingKeypair:    signingKeypair,
 		encryptingKeypair: encryptingKeypair,
@@ -81,25 +83,19 @@ func (h *host) Start() error {
 		func() error {
 			h.SetLogLabel(h.Address().Pretty() + " host")
 
-			transport, err := NewLibp2pTransport(h.Address(), h.port, h.refStore)
-			// transport, err := NewHTTPTransport(h.Address(), h.port, h.controller)
-			if err != nil {
-				return err
-			}
-
-			transport.SetTxHandler(h.OnTxReceived)
-			transport.SetPrivateTxHandler(h.onPrivateTxReceived)
-			transport.SetAckHandler(h.onAckReceived)
-			transport.SetVerifyAddressHandler(h.onVerifyAddressReceived)
-			transport.SetFetchRefHandler(h.onFetchRefReceived)
-			h.transport = transport
+			h.transport.SetFetchHistoryHandler(h.OnFetchHistoryRequestReceived)
+			h.transport.SetTxHandler(h.OnTxReceived)
+			h.transport.SetPrivateTxHandler(h.onPrivateTxReceived)
+			h.transport.SetAckHandler(h.onAckReceived)
+			h.transport.SetVerifyAddressHandler(h.onVerifyAddressReceived)
+			h.transport.SetFetchRefHandler(h.onFetchRefReceived)
 
 			h.controller.SetReceivedRefsHandler(h.onReceivedRefs)
 
 			h.CtxAddChild(h.transport.Ctx(), nil)
 			h.CtxAddChild(h.controller.Ctx(), nil)
 
-			err = h.controller.Start()
+			err := h.controller.Start()
 			if err != nil {
 				return err
 			}
@@ -132,7 +128,7 @@ func (h *host) OnTxReceived(tx Tx, peer Peer) {
 	h.Infof(0, "tx %v received", tx.Hash().Pretty())
 	h.markTxSeenByPeer(peer.ID(), tx.Hash())
 
-	if !h.controller.HaveTx(tx.Hash()) {
+	if !h.controller.HaveTx(tx.ID) {
 		err := h.controller.AddTx(&tx)
 		if err != nil {
 			h.Errorf("error adding tx to controller: %v", err)
@@ -172,7 +168,7 @@ func (h *host) onPrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
 		return
 	}
 
-	if !h.controller.HaveTx(tx.Hash()) {
+	if !h.controller.HaveTx(tx.ID) {
 		// Add to controller
 		err := h.controller.AddTx(&tx)
 		if err != nil {
@@ -205,7 +201,12 @@ func (h *host) markTxSeenByPeer(peerID string, txHash Hash) {
 }
 
 func (h *host) AddPeer(ctx context.Context, multiaddrString string) error {
-	peer, err := h.transport.GetPeer(ctx, multiaddrString)
+	peer, err := h.transport.GetPeerByConnString(ctx, multiaddrString)
+	if err != nil {
+		return err
+	}
+
+	err = peer.EnsureConnected(ctx)
 	if err != nil {
 		return err
 	}
@@ -216,6 +217,26 @@ func (h *host) AddPeer(ctx context.Context, multiaddrString string) error {
 	}
 
 	h.Infof(0, "added peer with address %v", sigpubkey.Address())
+	return nil
+}
+
+func (h *host) OnFetchHistoryRequestReceived(parents []ID, toVersion ID, peer Peer) error {
+	iter := h.controller.FetchTxs()
+	defer iter.Cancel()
+
+	for {
+		tx := iter.Next()
+		if iter.Error() != nil {
+			return iter.Error()
+		} else if tx == nil {
+			return nil
+		}
+
+		err := peer.WriteMsg(Msg{Type: MsgType_Put, Payload: *tx})
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -236,6 +257,7 @@ func (h *host) Subscribe(ctx context.Context, url string) error {
 	}
 
 	for p := range ch {
+		h.Errorf("found peer %v", p.ID())
 		err := p.EnsureConnected(ctx)
 		if err != nil {
 			h.Errorf("error connecting to peer: %v", err)

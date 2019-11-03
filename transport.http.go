@@ -1,8 +1,10 @@
 package redwood
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -24,11 +26,14 @@ import (
 type httpTransport struct {
 	*ctx.Context
 
-	address    Address
-	controller Controller
-	ownURL     string
-	port       uint
+	address         Address
+	controller      Controller
+	ownURL          string
+	port            uint
+	tlsCertFilename string
+	tlsKeyFilename  string
 
+	fetchHistoryHandler  FetchHistoryHandler
 	ackHandler           AckHandler
 	txHandler            TxHandler
 	privateTxHandler     PrivateTxHandler
@@ -41,13 +46,15 @@ type httpTransport struct {
 	refStore RefStore
 }
 
-func NewHTTPTransport(addr Address, port uint, controller Controller, refStore RefStore) (Transport, error) {
+func NewHTTPTransport(addr Address, port uint, controller Controller, refStore RefStore, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
 	t := &httpTransport{
 		Context:         &ctx.Context{},
 		address:         addr,
 		subscriptionsIn: make(map[string][]*httpSubscriptionIn),
 		controller:      controller,
 		port:            port,
+		tlsCertFilename: tlsCertFilename,
+		tlsKeyFilename:  tlsKeyFilename,
 		ownURL:          fmt.Sprintf("localhost:%v", port),
 		refStore:        refStore,
 	}
@@ -61,9 +68,27 @@ func (t *httpTransport) Start() error {
 			t.SetLogLabel(t.address.Pretty() + " transport")
 			t.Infof(0, "opening http transport at :%v", t.port)
 			go func() {
-				err := http.ListenAndServe(fmt.Sprintf(":%v", t.port), t)
+
+				//caCert, err := ioutil.ReadFile("client.crt")
+				//if err != nil {
+				//    log.Fatal(err)
+				//}
+				//caCertPool := x509.NewCertPool()
+				//caCertPool.AppendCertsFromPEM(caCert)
+				cfg := &tls.Config{
+					// ClientAuth: tls.RequireAndVerifyClientCert,
+					// ClientCAs:  caCertPool,
+				}
+
+				srv := &http.Server{
+					Addr:      fmt.Sprintf(":%v", t.port),
+					Handler:   t,
+					TLSConfig: cfg,
+				}
+				err := srv.ListenAndServeTLS(t.tlsCertFilename, t.tlsKeyFilename)
 				if err != nil {
-					panic(err.Error())
+					fmt.Printf("%+v\n", err.Error())
+					panic("http transport failed to start")
 				}
 			}()
 			return nil
@@ -86,8 +111,43 @@ func (s *httpSubscriptionIn) Close() error {
 	return nil
 }
 
+func (t *httpTransport) ensurePeerIDCookie(w http.ResponseWriter, r *http.Request) (ID, error) {
+	cookie, err := r.Cookie("peerid")
+	if errors.Cause(err) == http.ErrNoCookie {
+		return t.setPeerIDCookie(w), nil
+
+	} else if err == nil {
+		peerID, err := IDFromHex(cookie.Value)
+		if err != nil {
+			return t.setPeerIDCookie(w), nil
+		}
+		return peerID, nil
+
+	} else {
+		return ID{}, err
+	}
+}
+
+func (t *httpTransport) setPeerIDCookie(w http.ResponseWriter) ID {
+	peerID := RandomID()
+	cookie := http.Cookie{
+		Name:    "peerid",
+		Value:   peerID.String(),
+		Expires: time.Now().AddDate(0, 0, 1),
+	}
+	http.SetCookie(w, &cookie)
+	return peerID
+}
+
 func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+
+	peerID, err := t.ensurePeerIDCookie(w, r)
+	if err != nil {
+		t.Errorf("error reading peerID cookie: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	switch r.Method {
 	case "GET":
@@ -101,7 +161,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			peer := &httpPeer{t: t, Writer: w}
+			peer := &httpPeer{peerID: peerID, t: t, Writer: w}
 			err = t.verifyAddressHandler([]byte(challengeMsg), peer)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -133,17 +193,28 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("Connection", "keep-alive")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-			// w.Header().Set("Transfer-Encoding", "chunked")
+			w.Header().Set("Transfer-Encoding", "chunked")
 
 			sub := &httpSubscriptionIn{w, f, make(chan struct{})}
 
-			urlToSubscribe := r.Header.Get("Subscribe")
+			urlToSubscribe := r.Header.Get("Subscribe-Host")
 
 			t.subscriptionsInMu.Lock()
 			t.subscriptionsIn[urlToSubscribe] = append(t.subscriptionsIn[urlToSubscribe], sub)
 			t.subscriptionsInMu.Unlock()
 
 			f.Flush()
+
+			parents := r.Header.Get("Parents")
+			if parents != "" {
+				parents := []ID{}
+				toVersion := ID{}
+				err := t.fetchHistoryHandler(parents, toVersion, &httpPeer{peerID: peerID, t: t, Writer: w, Flusher: f})
+				if err != nil {
+					t.Errorf("error fetching history: %v", err)
+					// @@TODO: close subscription?
+				}
+			}
 
 			// Block until the subscription is canceled
 			<-sub.chDone
@@ -180,11 +251,12 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
+				// @@TODO: hacky
 				var resp struct {
-					MostRecentTxHash Hash        `json:"mostRecentTxHash"`
-					Data             interface{} `json:"data"`
+					MostRecentTxID ID          `json:"mostRecentTxID"`
+					Data           interface{} `json:"data"`
 				}
-				resp.MostRecentTxHash = t.controller.MostRecentTxHash() // @@TODO: hacky
+				resp.MostRecentTxID = t.controller.MostRecentTxID()
 
 				switch v := val.(type) {
 				case string:
@@ -265,7 +337,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		url := strings.Replace(r.RemoteAddr, "http://", "", -1)
-		t.ackHandler(txHash, &httpPeer{t: t, url: url, Writer: w})
+		t.ackHandler(txHash, &httpPeer{peerID: peerID, t: t, url: url, Writer: w})
 
 	case "PUT":
 		defer r.Body.Close()
@@ -280,7 +352,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			url := strings.Replace(r.RemoteAddr, "http://", "", -1)
-			t.privateTxHandler(encryptedTx, &httpPeer{t: t, url: url, Writer: w})
+			t.privateTxHandler(encryptedTx, &httpPeer{peerID: peerID, t: t, url: url, Writer: w})
 
 		} else if r.Header.Get("Ref") == "true" {
 			t.Infof(0, "incoming ref")
@@ -307,14 +379,80 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			t.Infof(0, "incoming tx")
 
-			var tx Tx
-			err := json.NewDecoder(r.Body).Decode(&tx)
-			if err != nil {
-				panic(err)
+			var err error
+
+			var sig Signature
+			sigHeaderStr := r.Header.Get("Signature")
+			if sigHeaderStr == "" {
+				http.Error(w, "missing Signature header", http.StatusBadRequest)
+				return
+			} else {
+				sig, err = SignatureFromHex(sigHeaderStr)
+				if err != nil {
+					http.Error(w, "bad Signature header", http.StatusBadRequest)
+					return
+				}
 			}
 
+			var txID ID
+			txIDStr := r.Header.Get("Version")
+			if txIDStr == "" {
+				txID = RandomID()
+			} else {
+				txID, err = IDFromHex(txIDStr)
+				if err != nil {
+					http.Error(w, "bad Version header", http.StatusBadRequest)
+					return
+				}
+			}
+
+			var parents []ID
+			parentsStr := r.Header.Get("Parents")
+			if parentsStr != "" {
+				parentsStrs := strings.Split(parentsStr, ",")
+				for _, pstr := range parentsStrs {
+					parentID, err := IDFromHex(strings.TrimSpace(pstr))
+					if err != nil {
+						http.Error(w, "bad Parents header", http.StatusBadRequest)
+						return
+					}
+					parents = append(parents, parentID)
+				}
+			}
+
+			var patches []Patch
+			scanner := bufio.NewScanner(r.Body)
+			for scanner.Scan() {
+				line := scanner.Text()
+				patch, err := ParsePatch(line)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("bad patch string: %v", line), http.StatusBadRequest)
+					return
+				}
+				patches = append(patches, patch)
+			}
+			if err := scanner.Err(); err != nil {
+				http.Error(w, fmt.Sprintf("internal server error: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			tx := Tx{
+				ID:      txID,
+				Parents: parents,
+				Sig:     sig,
+				Patches: patches,
+			}
+
+			// @@TODO: remove .From entirely
+			pubkey, err := RecoverSigningPubkey(tx.Hash(), sig)
+			if err != nil {
+				panic("bad sig")
+			}
+			tx.From = pubkey.Address()
+			////////////////////////////////
+
 			url := strings.Replace(r.RemoteAddr, "http://", "", -1)
-			t.txHandler(tx, &httpPeer{t: t, url: url, Writer: w})
+			t.txHandler(tx, &httpPeer{peerID: peerID, t: t, url: url, Writer: w})
 		}
 
 	default:
@@ -329,6 +467,10 @@ func respondJSON(resp http.ResponseWriter, data interface{}) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (t *httpTransport) SetFetchHistoryHandler(handler FetchHistoryHandler) {
+	t.fetchHistoryHandler = handler
 }
 
 func (t *httpTransport) SetTxHandler(handler TxHandler) {
@@ -351,7 +493,11 @@ func (t *httpTransport) SetFetchRefHandler(handler FetchRefHandler) {
 	t.fetchRefHandler = handler
 }
 
-func (t *httpTransport) GetPeer(ctx context.Context, addrString string) (Peer, error) {
+func (t *httpTransport) GetPeer(ctx context.Context, peerIDStr string) (Peer, error) {
+	panic("unimplemented, requires WebRTC")
+}
+
+func (t *httpTransport) GetPeerByConnString(ctx context.Context, addrString string) (Peer, error) {
 	return &httpPeer{t: t, url: addrString}, nil
 }
 
@@ -431,7 +577,8 @@ func (t *httpTransport) PeersClaimingAddress(ctx context.Context, address Addres
 }
 
 type httpPeer struct {
-	t *httpTransport
+	t      *httpTransport
+	peerID ID
 
 	// stream
 	url string
@@ -451,7 +598,7 @@ const (
 )
 
 func (p *httpPeer) ID() string {
-	return p.url
+	return p.peerID.String()
 }
 
 func (p *httpPeer) EnsureConnected(ctx context.Context) error {
@@ -473,10 +620,11 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		if err != nil {
 			return err
 		}
+		req.Header.Set("Subscribe-Host", urlToSubscribe)
 		req.Header.Set("Cache-Control", "no-cache")
 		req.Header.Set("Accept", "text/event-stream")
 		req.Header.Set("Connection", "keep-alive")
-		req.Header.Set("Subscribe", urlToSubscribe)
+		req.Header.Set("Subscribe", "keep-alive")
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -491,10 +639,25 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 	case MsgType_Put:
 		if p.Writer != nil {
 			// This peer is subscribed, so we have a connection open already
-			err := WriteMsg(p, msg)
+			tx, is := msg.Payload.(Tx)
+			if !is {
+				panic("protocol error")
+			}
+
+			bs, err := json.Marshal(tx)
 			if err != nil {
 				return err
 			}
+
+			event := []byte("data: " + string(bs) + "\n\n")
+
+			n, err := p.Write(event)
+			if err != nil {
+				return err
+			} else if n < len(event) {
+				return errors.New("didn't write enough")
+			}
+
 			if p.Flusher != nil {
 				p.Flusher.Flush()
 			}
@@ -625,15 +788,21 @@ func (p *httpPeer) ReadMsg() (Msg, error) {
 		return Msg{Type: MsgType_VerifyAddressResponse, Payload: verifyResp}, nil
 
 	case httpPeerState_ServingSubscription:
-		var msg Msg
-		err := ReadMsg(p.ReadCloser, &msg)
+		var tx Tx
+		r := bufio.NewReader(p.ReadCloser)
+		bs, err := r.ReadBytes(byte('\n'))
 		if err != nil {
-			return msg, err
-		} else if msg.Type != MsgType_Put {
-			panic("bad")
-		} else if _, is := msg.Payload.(Tx); !is {
-			panic("bad")
+			return Msg{}, err
 		}
+		bs = bytes.Trim(bs, "\n ")
+
+		err = json.Unmarshal(bs, &tx)
+		if err != nil {
+			return Msg{}, err
+		}
+
+		msg := Msg{Type: MsgType_Put, Payload: tx}
+
 		return msg, err
 
 	default:

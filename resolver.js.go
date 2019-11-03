@@ -40,7 +40,7 @@ func (r *jsResolver) InternalState() map[string]interface{} {
 	return r.internalState
 }
 
-func (r *jsResolver) ResolveState(state interface{}, sender Address, txHash Hash, parents []Hash, patches []Patch) (newState interface{}, err error) {
+func (r *jsResolver) ResolveState(state interface{}, sender Address, txID ID, parents []ID, patches []Patch) (newState interface{}, err error) {
 	defer annotate(&err, "jsResolver.ResolveState")
 
 	convertedPatches := make([]interface{}, len(patches))
@@ -63,7 +63,7 @@ func (r *jsResolver) ResolveState(state interface{}, sender Address, txHash Hash
 		parentsArr = append(parentsArr, parents[i].String())
 	}
 
-	val, err := r.vm.Call("global.resolve_state", nil, string(stateBytes), sender.String(), txHash.String(), parentsArr, convertedPatches)
+	val, err := r.vm.Call("global.resolve_state", nil, string(stateBytes), sender.String(), txID.String(), parentsArr, convertedPatches)
 	if err != nil {
 		return nil, err
 	}

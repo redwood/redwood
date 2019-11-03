@@ -23,7 +23,7 @@ func patchStrs(patches []Patch) []string {
 	return s
 }
 
-func (v *permissionsValidator) Validate(state interface{}, txs, validTxs map[Hash]*Tx, tx Tx) error {
+func (v *permissionsValidator) Validate(state interface{}, txs, validTxs map[ID]*Tx, tx Tx) error {
 	asMap, isMap := state.(map[string]interface{})
 	if !isMap {
 		return errors.Wrapf(Err403, "'state' is not a map")

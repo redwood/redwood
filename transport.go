@@ -12,13 +12,15 @@ type Transport interface {
 	Ctx() *ctx.Context
 	Start() error
 
+	SetFetchHistoryHandler(handler FetchHistoryHandler)
 	SetTxHandler(handler TxHandler)
 	SetPrivateTxHandler(handler PrivateTxHandler)
 	SetAckHandler(handler AckHandler)
 	SetVerifyAddressHandler(handler VerifyAddressHandler)
 	SetFetchRefHandler(handler FetchRefHandler)
 
-	GetPeer(ctx context.Context, multiaddr string) (Peer, error)
+	GetPeer(ctx context.Context, peerID string) (Peer, error)
+	GetPeerByConnString(ctx context.Context, multiaddr string) (Peer, error)
 	ForEachProviderOfURL(ctx context.Context, theURL string) (<-chan Peer, error)
 	ForEachProviderOfRef(ctx context.Context, refHash Hash) (<-chan Peer, error)
 	ForEachSubscriberToURL(ctx context.Context, theURL string) (<-chan Peer, error)
@@ -33,6 +35,7 @@ type Peer interface {
 	CloseConn() error
 }
 
+type FetchHistoryHandler func(parents []ID, toVersion ID, peer Peer) error
 type AckHandler func(txHash Hash, peer Peer)
 type TxHandler func(tx Tx, peer Peer)
 type PrivateTxHandler func(encryptedTx EncryptedTx, peer Peer)

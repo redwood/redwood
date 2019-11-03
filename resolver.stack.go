@@ -38,10 +38,10 @@ func NewStackResolver(params map[string]interface{}, internalState map[string]in
 	return &stackResolver{resolvers: resolvers}, nil
 }
 
-func (r *stackResolver) ResolveState(state interface{}, sender Address, txHash Hash, parents []Hash, patches []Patch) (interface{}, error) {
+func (r *stackResolver) ResolveState(state interface{}, sender Address, txID ID, parents []ID, patches []Patch) (interface{}, error) {
 	var err error
 	for _, resolver := range r.resolvers {
-		state, err = resolver.ResolveState(state, sender, txHash, parents, patches)
+		state, err = resolver.ResolveState(state, sender, txID, parents, patches)
 		if err != nil {
 			return nil, err
 		}

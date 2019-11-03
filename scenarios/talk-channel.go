@@ -18,7 +18,7 @@ type app struct {
 	ctx.Context
 }
 
-func makeHost(signingKeypairHex string, port uint, dbfile string, refStoreRoot string) rw.Host {
+func makeHost(signingKeypairHex string, port uint, dbfile string, refStoreRoot string, tlsCertFilename, tlsKeyFilename string) rw.Host {
 	signingKeypair, err := rw.SigningKeypairFromHex(signingKeypairHex)
 	if err != nil {
 		panic(err)
@@ -46,22 +46,69 @@ func makeHost(signingKeypairHex string, port uint, dbfile string, refStoreRoot s
 	if err != nil {
 		panic(err)
 	}
-	h, err := rw.NewHost(signingKeypair, encryptingKeypair, port, controller, refStore)
-	if err != nil {
-		panic(err)
-	}
-	tpt, err := rw.NewHTTPTransport(signingKeypair.Address(), port+1, controller, refStore)
+
+	p2ptransport, err := rw.NewLibp2pTransport(signingKeypair.Address(), port, refStore)
 	if err != nil {
 		panic(err)
 	}
 
-	err = tpt.Start()
+	httptransport, err := rw.NewHTTPTransport(signingKeypair.Address(), port+1, controller, refStore, tlsCertFilename, tlsKeyFilename)
 	if err != nil {
 		panic(err)
 	}
-	tpt.SetTxHandler(h.OnTxReceived)
+
+	transport := &bothTransports{p2ptransport, httptransport}
+
+	h, err := rw.NewHost(signingKeypair, encryptingKeypair, port, transport, controller, refStore)
+	if err != nil {
+		panic(err)
+	}
+
+	err = httptransport.Start()
+	if err != nil {
+		panic(err)
+	}
+	httptransport.SetTxHandler(h.OnTxReceived)
+	httptransport.SetFetchHistoryHandler(h.OnFetchHistoryRequestReceived)
 
 	return h
+}
+
+type bothTransports struct {
+	rw.Transport
+	httpTransport rw.Transport
+}
+
+func (t *bothTransports) Libp2pPeerID() string {
+	return t.Transport.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
+}
+
+func (t *bothTransports) ForEachSubscriberToURL(ctx context.Context, theURL string) (<-chan rw.Peer, error) {
+	chHttp, err := t.httpTransport.ForEachSubscriberToURL(ctx, theURL)
+	if err != nil {
+		//return nil, err
+	}
+	chOther, err := t.Transport.ForEachSubscriberToURL(ctx, theURL)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan rw.Peer)
+
+	go func() {
+		defer close(ch)
+
+		if chHttp != nil {
+			for p := range chHttp {
+				fmt.Println("HTTP PEER ~>", p)
+				ch <- p
+			}
+		}
+		for p := range chOther {
+			ch <- p
+		}
+	}()
+	return ch, nil
 }
 
 func main() {
@@ -72,8 +119,8 @@ func main() {
 
 	os.MkdirAll("/tmp/forest", 0700)
 
-	host1 := makeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/forest/badger1", "/tmp/forest/refs1")
-	host2 := makeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/forest/badger2", "/tmp/forest/refs2")
+	host1 := makeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/forest/badger1", "/tmp/forest/refs1", "server1.crt", "server1.key")
+	host2 := makeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/forest/badger2", "/tmp/forest/refs2", "server2.crt", "server2.key")
 
 	err := host1.Start()
 	if err != nil {
@@ -102,7 +149,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		err = host1.AddPeer(host2.Ctx(), "localhost:21241")
+		err = host1.AddPeer(host1.Ctx(), "localhost:21241")
 		if err != nil {
 			panic(err)
 		}
@@ -156,7 +203,7 @@ func sendTxs(host1, host2 rw.Host) {
 	// Setup talk channel using transactions
 	var tx1 = rw.Tx{
 		ID:      rw.IDFromString("one"),
-		Parents: []rw.Hash{rw.GenesisTxHash},
+		Parents: []rw.ID{rw.GenesisTxID},
 		From:    host1.Address(),
 		URL:     "localhost:21231",
 		Patches: []rw.Patch{
@@ -187,10 +234,12 @@ func sendTxs(host1, host2 rw.Host) {
 		host1.Errorf("%+v", err)
 	}
 
+	time.Sleep(5 * time.Second)
+
 	var (
 		tx2 = rw.Tx{
 			ID:      rw.IDFromString("two"),
-			Parents: []rw.Hash{tx1.Hash()},
+			Parents: []rw.ID{tx1.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
@@ -200,7 +249,7 @@ func sendTxs(host1, host2 rw.Host) {
 
 		tx3 = rw.Tx{
 			ID:      rw.IDFromString("three"),
-			Parents: []rw.Hash{tx2.Hash()},
+			Parents: []rw.ID{tx2.ID},
 			From:    host2.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
@@ -210,7 +259,7 @@ func sendTxs(host1, host2 rw.Host) {
 
 		tx4 = rw.Tx{
 			ID:      rw.IDFromString("four"),
-			Parents: []rw.Hash{tx3.Hash()},
+			Parents: []rw.ID{tx3.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
@@ -239,7 +288,7 @@ func sendTxs(host1, host2 rw.Host) {
 	//    recipients = []rw.Address{host1.Address(), host2.Address()}
 	//    tx5        = rw.Tx{
 	//        ID:      rw.IDFromString("four"),
-	//        Parents: []rw.Hash{tx4.Hash()},
+	//        Parents: []rw.Hash{tx4.ID},
 	//        From:    host2.Address(),
 	//        URL:     "localhost:21231",
 	//        Patches: []rw.Patch{

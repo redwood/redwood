@@ -110,7 +110,7 @@
     // Chat stuff
     //
 
-    var mostRecentTxHash = null
+    var mostRecentTxID = null
     var messages = []
     function refreshChatUI() {
         var messagesElem = document.getElementById('messages')
@@ -131,11 +131,11 @@
     }
 
     var debugStateElem = document.getElementById('debug-state')
-    Braid.get('/', (err, update) => {
+    Braid.subscribeStates('localhost:21231', '/', [], (err, update) => {
         if (err) {
             throw new Error(err)
         }
-        console.log(update.data)
+        console.log('msg', update)
         var j = JSON.stringify(update.data, null, 4)
         j = j.replace(/\\\\n/g, '\\n')
              .replace(/</g, '&lt;')
@@ -144,15 +144,22 @@
         debugStateElem.innerHTML = j
     })
 
-    Braid.get('/shrugisland/talk0/messages', (err, update) => {
+    Braid.subscribeStates('localhost:21231', '/shrugisland/talk0/messages', [], (err, update) => {
         if (err) {
             throw new Error(err)
-        } else if (mostRecentTxHash === update.mostRecentTxHash) {
+        } else if (mostRecentTxID === update.mostRecentTxID) {
             return
         }
         messages = update.data
-        mostRecentTxHash = update.mostRecentTxHash
+        mostRecentTxID = update.mostRecentTxID
         refreshChatUI()
+    })
+
+    Braid.subscribePatches('localhost:21231', '/shrugisland/talk0/messages', [], (err, update) => {
+        if (err) {
+            throw new Error(err)
+        } 
+        console.log('subscription ~>', update)
     })
 
     refreshChatUI()
@@ -167,7 +174,7 @@
 
         Braid.put({
             id: Braid.util.randomID(),
-            parents: [ mostRecentTxHash ],
+            parents: [ mostRecentTxID ],
             url: 'localhost:21231',
             patches: [
                 '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify([{

@@ -4,7 +4,7 @@
   "description": "",
   "main": "dist.js",
   "scripts": {
-    "build": "browserify braid-src.js > braid-dist.js",
+    "build-braid": "babel ./braid-src.js --out-file ./braid-temp.js && browserify braid-temp.js > braid-dist.js && rm braid-temp.js",
     "build-sync9": "babel ./sync9-src.js --out-file ./sync9-temp.js && browserify sync9-temp.js > sync9-dist.js && rm sync9-temp.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

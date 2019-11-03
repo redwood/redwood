@@ -5,7 +5,7 @@ import (
 
 	"github.com/brynbellomy/go-luaconv"
 	"github.com/pkg/errors"
-	"github.com/yuin/gopher-lua"
+	lua "github.com/yuin/gopher-lua"
 )
 
 type luaResolver struct {
@@ -31,7 +31,7 @@ func (r *luaResolver) InternalState() map[string]interface{} {
 	return nil
 }
 
-func (r *luaResolver) ResolveState(state interface{}, sender Address, txHash Hash, parents []Hash, patches []Patch) (newState interface{}, err error) {
+func (r *luaResolver) ResolveState(state interface{}, sender Address, txID ID, parents []ID, patches []Patch) (newState interface{}, err error) {
 	defer annotate(&err, "luaResolver.ResolveState")
 
 	luaPatches, err := luaconv.Wrap(r.L, reflect.ValueOf(patches))

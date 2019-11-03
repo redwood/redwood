@@ -24,6 +24,7 @@ import (
 	metrics "github.com/libp2p/go-libp2p-metrics"
 	netp2p "github.com/libp2p/go-libp2p-net"
 	peer "github.com/libp2p/go-libp2p-peer"
+	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 	protocol "github.com/libp2p/go-libp2p-protocol"
 	ma "github.com/multiformats/go-multiaddr"
@@ -43,6 +44,7 @@ type libp2pTransport struct {
 
 	address Address
 
+	fetchHistoryHandler  FetchHistoryHandler
 	txHandler            TxHandler
 	privateTxHandler     PrivateTxHandler
 	ackHandler           AckHandler
@@ -137,6 +139,10 @@ func (t *libp2pTransport) Peers() []pstore.PeerInfo {
 	return pstore.PeerInfos(t.libp2pHost.Peerstore(), t.libp2pHost.Peerstore().Peers())
 }
 
+func (t *libp2pTransport) SetFetchHistoryHandler(handler FetchHistoryHandler) {
+	t.fetchHistoryHandler = handler
+}
+
 func (t *libp2pTransport) SetTxHandler(handler TxHandler) {
 	t.txHandler = handler
 }
@@ -194,7 +200,9 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			return
 		}
 
-		peer := &libp2pPeer{t, stream.Conn().RemotePeer(), nil} // nil so that we open a new stream
+		peerID := stream.Conn().RemotePeer()
+		pinfo := t.libp2pHost.Peerstore().PeerInfo(peerID)
+		peer := &libp2pPeer{t, pinfo, nil} // nil so that we open a new stream
 		err := peer.EnsureConnected(context.TODO())
 		if err != nil {
 			t.Errorf("can't connect to peer %v", peer.ID())
@@ -212,7 +220,9 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			return
 		}
 
-		peer := &libp2pPeer{t, stream.Conn().RemotePeer(), nil}
+		peerID := stream.Conn().RemotePeer()
+		pinfo := t.libp2pHost.Peerstore().PeerInfo(peerID)
+		peer := &libp2pPeer{t, pinfo, nil}
 		err := peer.EnsureConnected(context.TODO())
 		if err != nil {
 			t.Errorf("can't connect to peer %v", peer.ID())
@@ -254,25 +264,26 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	}
 }
 
-func (t *libp2pTransport) GetPeer(ctx context.Context, multiaddrString string) (Peer, error) {
+func (t *libp2pTransport) GetPeer(ctx context.Context, peerIDStr string) (Peer, error) {
+	peerID, err := peer.IDFromString(peerIDStr)
+	if err != nil {
+		return nil, err
+	}
+
+	pinfo := t.libp2pHost.Peerstore().PeerInfo(peerID)
+	return &libp2pPeer{t: t, pinfo: pinfo}, nil
+}
+
+func (t *libp2pTransport) GetPeerByConnString(ctx context.Context, multiaddrString string) (Peer, error) {
 	addr, err := ma.NewMultiaddr(multiaddrString)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not parse multiaddr '%v'", multiaddrString)
 	}
-
 	pinfo, err := pstore.InfoFromP2pAddr(addr)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not parse PeerInfo from multiaddr '%v'", multiaddrString)
 	}
-
-	err = t.libp2pHost.Connect(ctx, *pinfo)
-	if err != nil {
-		return nil, errors.Wrapf(err, "could not connect to peer '%v'", multiaddrString)
-	}
-
-	t.Infof(0, "connected to %v", pinfo.ID)
-
-	return &libp2pPeer{t: t, peerID: pinfo.ID}, nil
+	return &libp2pPeer{t: t, pinfo: *pinfo}, nil
 }
 
 func (t *libp2pTransport) ForEachProviderOfURL(ctx context.Context, theURL string) (<-chan Peer, error) {
@@ -289,19 +300,22 @@ func (t *libp2pTransport) ForEachProviderOfURL(ctx context.Context, theURL strin
 	ch := make(chan Peer)
 	go func() {
 		defer close(ch)
-		for pinfo := range t.dht.FindProvidersAsync(ctx, urlCid, 8) {
-			if pinfo.ID == t.libp2pHost.ID() {
-				continue
-			}
+		for {
+			for pinfo := range t.dht.FindProvidersAsync(ctx, urlCid, 8) {
+				if pinfo.ID == t.libp2pHost.ID() {
+					continue
+				}
 
-			// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
-			// whitelist, etc.
+				// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
+				// whitelist, etc.
 
-			t.Infof(0, `found peer %v for url "%v"`, pinfo.ID, theURL)
+				t.Infof(0, `found peer %v for url "%v"`, pinfo.ID, theURL)
 
-			select {
-			case ch <- &libp2pPeer{t, pinfo.ID, nil}:
-			case <-ctx.Done():
+				select {
+				case ch <- &libp2pPeer{t, pinfo, nil}:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}()
@@ -327,7 +341,7 @@ func (t *libp2pTransport) ForEachProviderOfRef(ctx context.Context, refHash Hash
 				t.Infof(0, `found peer %v for ref "%v"`, pinfo.ID, refHash.String())
 
 				select {
-				case ch <- &libp2pPeer{t, pinfo.ID, nil}:
+				case ch <- &libp2pPeer{t, pinfo, nil}:
 				case <-ctx.Done():
 				}
 			}
@@ -350,8 +364,11 @@ func (t *libp2pTransport) ForEachSubscriberToURL(ctx context.Context, theURL str
 		defer t.subscriptionsInMu.RUnlock()
 		defer close(ch)
 		for _, sub := range t.subscriptionsIn[domain] {
+			peerID := sub.stream.Conn().RemotePeer()
+			pinfo := t.libp2pHost.Peerstore().PeerInfo(peerID)
+
 			select {
-			case ch <- &libp2pPeer{t, sub.stream.Conn().RemotePeer(), sub.stream}:
+			case ch <- &libp2pPeer{t, pinfo, sub.stream}:
 			case <-ctx.Done():
 			}
 		}
@@ -381,7 +398,7 @@ func (t *libp2pTransport) PeersClaimingAddress(ctx context.Context, address Addr
 				return
 			case <-t.Ctx().Done():
 				return
-			case ch <- &libp2pPeer{t, pinfo.ID, nil}:
+			case ch <- &libp2pPeer{t, pinfo, nil}:
 			}
 		}
 	}()
@@ -389,11 +406,11 @@ func (t *libp2pTransport) PeersClaimingAddress(ctx context.Context, address Addr
 	return ch, nil
 }
 
-func (t *libp2pTransport) ensureConnected(ctx context.Context, peerID peer.ID) error {
-	if len(t.libp2pHost.Network().ConnsToPeer(peerID)) == 0 {
-		err := t.libp2pHost.Connect(ctx, t.libp2pHost.Peerstore().PeerInfo(peerID))
+func (t *libp2pTransport) ensureConnected(ctx context.Context, pinfo peerstore.PeerInfo) error {
+	if len(t.libp2pHost.Network().ConnsToPeer(pinfo.ID)) == 0 {
+		err := t.libp2pHost.Connect(ctx, pinfo)
 		if err != nil {
-			return errors.Wrapf(err, "could not connect to peer %v", peerID)
+			return errors.Wrapf(err, "could not connect to peer %v", pinfo.ID)
 		}
 	}
 	return nil
@@ -485,22 +502,22 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 
 type libp2pPeer struct {
 	t      *libp2pTransport
-	peerID peer.ID
+	pinfo  peerstore.PeerInfo
 	stream netp2p.Stream
 }
 
 func (p *libp2pPeer) ID() string {
-	return p.peerID.String()
+	return p.pinfo.ID.String()
 }
 
 func (p *libp2pPeer) EnsureConnected(ctx context.Context) error {
 	if p.stream == nil {
-		err := p.t.ensureConnected(ctx, p.peerID)
+		err := p.t.ensureConnected(ctx, p.pinfo)
 		if err != nil {
 			return err
 		}
 
-		stream, err := p.t.libp2pHost.NewStream(ctx, p.peerID, PROTO_MAIN)
+		stream, err := p.t.libp2pHost.NewStream(ctx, p.pinfo.ID, PROTO_MAIN)
 		if err != nil {
 			return err
 		}

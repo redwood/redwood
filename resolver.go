@@ -5,14 +5,14 @@ import (
 )
 
 type Resolver interface {
-	ResolveState(state interface{}, sender Address, txHash Hash, parents []Hash, patches []Patch) (interface{}, error)
+	ResolveState(state interface{}, sender Address, txID ID, parents []ID, patches []Patch) (interface{}, error)
 	Keypath() []string
 	SetKeypath(keypath []string)
 	InternalState() map[string]interface{}
 }
 
 type Validator interface {
-	Validate(state interface{}, txs, validTxs map[Hash]*Tx, tx Tx) error
+	Validate(state interface{}, txs, validTxs map[ID]*Tx, tx Tx) error
 }
 
 type resolver struct {
