@@ -100,7 +100,6 @@ func (t *bothTransports) ForEachSubscriberToURL(ctx context.Context, theURL stri
 
 		if chHttp != nil {
 			for p := range chHttp {
-				fmt.Println("HTTP PEER ~>", p)
 				ch <- p
 			}
 		}
@@ -175,7 +174,7 @@ func main() {
 }
 
 func sendTxs(host1, host2 rw.Host) {
-	sync9, err := os.Open("../braidjs/sync9-dist.js")
+	sync9, err := os.Open("../braidjs/dist/sync9-otto.js")
 	if err != nil {
 		panic(err)
 	}

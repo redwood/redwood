@@ -1,29 +1,57 @@
 require('@babel/polyfill')
-const utils = require('./utils')
 
+// var s9state = sync9_create()
+// var v1 = sync9_guid()
+// var v2 = sync9_guid()
+// var v3 = sync9_guid()
+// var v4 = sync9_guid()
+// var v5 = sync9_guid()
+// sync9_add_version(s9state, v1, {}, [{keys: [], val: { messages: [] }}], null)
+// // sync9_add_version(s9state, v2, {[v1]: true}, [{keys: ['messages'], val: {}}], null)
+// // sync9_add_version(s9state, v3, {[v2]: true}, [{keys: ['messages', 'blah'], val: []}], null)
+// sync9_add_version(s9state, v2, {[v1]: true}, [{keys: ['messages'], range: [0, 0], val: [{text: 'hihihi', sender: 'bryn'}]}], null)
+// s9state = JSON.parse(JSON.stringify(s9state))
+// sync9_add_version(s9state, v3, {[v2]: true}, [{keys: ['messages'], range: [1, 1], val: [{text: 'yoyoyoyo', sender: 'bryn'}]}], null)
+// console.log(JSON.stringify(s9state, null, 4))
+// console.log(JSON.stringify(sync9_read(s9state), null, 4))
 
-module.exports = {
-    create: sync9_create,
-    resolve_state: resolve_state,
-    parse_change: sync9_parse_change,
-    read: sync9_read,
-    add_version: sync9_add_version,
-    create_with_genesis_state: create_with_genesis_state,
+global = global || {}
+global.init = init
+global.resolve_state = resolve_state
+
+var s9state
+var hasRun = false
+function init(internalStateJSON) {
+    var internalState = JSON.parse(internalStateJSON)
+    if (Object.keys(internalState).length === 0) {
+        s9state = sync9_create()
+    } else {
+        s9state = internalState.s9state
+        hasRun = internalState.hasRun
+    }
 }
 
+function resolve_state(stateJSON, sender, txHash, parents, patches) {
+    var parentsObj = {}
+    if (!hasRun) {
+        var state = JSON.parse(stateJSON)
+        var ps = {}
+        sync9_add_version(s9state, 'init', ps, [{keys: [], val: state}], null)
+        parentsObj['init'] = true
+    } else {
+        parents.forEach(function(p) {
+            parentsObj[p] = true
+        })
+    }
 
-function create_with_genesis_state(state) {
-    const s9 = sync9_create()
-    sync9_add_version(s9, utils.genesisTxID, {}, [{keys: [], val: state}], null)
-    return s9
-}
-
-function resolve_state(s9, sender, txHash, parents, patches) {
-    patches = patches.map(p => sync9_parse_change(p))
-    const parentsObj = {}
-    parents.forEach(p => parentsObj[p] = true)
-    sync9_add_version(s9, txHash, parentsObj, patches, null)
-    return sync9_read(s9)
+    sync9_add_version(s9state, txHash, parentsObj, patches, null)
+    return JSON.stringify({
+        state: sync9_read(s9state),
+        internalState: {
+            hasRun: true,
+            s9state: s9state,
+        },
+    })
 }
 
 function trimstr(s, n) {

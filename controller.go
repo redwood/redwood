@@ -392,8 +392,6 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		}
 	}
 
-	c.Warnf("valid tx ~> %v", PrettyJSON(tx))
-
 	tx.Valid = true
 	c.validTxs[tx.ID] = tx
 
@@ -407,20 +405,27 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			if !isMap {
 				localStateMap = make(map[string]interface{})
 			}
+
 			newPatches := []Patch{}
 			for key, child := range node.subkeys {
+				// Trim patches to be relative to this child's keypath
 				patchesTrimmed := make([]Patch, 0)
 				for _, p := range patches {
 					if len(p.Keys) > 0 && p.Keys[0] == key {
 						patchesTrimmed = append(patchesTrimmed, Patch{Keys: p.Keys[1:], Range: p.Range, Val: p.Val})
 					}
 				}
+
+				// Process the patches for the child node into (hopefully) fewer patches and then queue them up for processing at this node
 				processed := processNode(child, localStateMap[key], patchesTrimmed)
 				for i := range processed {
 					processed[i].Keys = append([]string{key}, processed[i].Keys...)
 				}
+
 				newPatches = append(newPatches, processed...)
 			}
+
+			// Also queue up any patches that weren't the responsibility of our child nodes
 			for _, p := range patches {
 				if len(p.Keys) == 0 {
 					continue
@@ -431,6 +436,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			}
 
 			if node.resolver != nil {
+				// If this is a node with a resolver, process this set of patches into a single patch for our parent
 				var err error
 				newState, err := node.resolver.ResolveState(localStateMap, tx.From, tx.ID, tx.Parents, newPatches)
 				if err != nil {
@@ -438,17 +444,17 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 				}
 				return []Patch{{Keys: node.keypath, Val: newState}}
 			} else {
+				// If this node isn't a resolver, just return the patches our children gave us
 				return newPatches
 			}
 		}
 		finalPatches := processNode(c.resolverTree.root, c.currentState, tx.Patches)
-		if len(finalPatches) > 1 {
+		if len(finalPatches) != 1 {
 			panic("noooo")
 		}
-		nextState := finalPatches[0].Val
 
 		// Set current state
-		c.currentState = nextState
+		c.currentState = finalPatches[0].Val
 
 		// Notify the Host to start fetching any refs we don't have yet
 		var refs []Hash
@@ -496,7 +502,8 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 				return nil
 			}
 
-			// Don't actually inject the refs into the state tree
+			// Resolve any refs (to code) in the resolver config object.  We deep copy the config so
+			// that we don't inject any refs into the state tree itself
 			config, err := c.resolveRefs(DeepCopyJSValue(resolverConfigMap).(map[string]interface{}))
 			if err != nil {
 				return err
@@ -586,8 +593,8 @@ func (c *controller) validateTxIntrinsics(tx *Tx) error {
 		return errors.Wrap(ErrInvalidSignature, err.Error())
 	} else if sigPubKey.VerifySignature(tx.Hash(), tx.Sig) == false {
 		return errors.Wrapf(ErrInvalidSignature, "cannot be verified")
-	} else if sigPubKey.Address() != tx.From {
-		return errors.Wrapf(ErrInvalidSignature, "address doesn't match (%v expected, %v received)", tx.From.Hex(), sigPubKey.Address().Hex())
+		//} else if sigPubKey.Address() != tx.From {
+		//return errors.Wrapf(ErrInvalidSignature, "address doesn't match (%v expected, %v received)", tx.From.Hex(), sigPubKey.Address().Hex())
 	}
 
 	return nil

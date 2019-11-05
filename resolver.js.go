@@ -21,6 +21,7 @@ func NewJSResolver(params map[string]interface{}, internalState map[string]inter
 
 	vm := otto.New()
 	vm.Set("global", map[string]interface{}{})
+	vm.Set("window", map[string]interface{}{})
 
 	_, err := vm.Run(src)
 	if err != nil {

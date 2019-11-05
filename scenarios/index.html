@@ -10,23 +10,27 @@
         }
         #chat-container {
             padding: 10px;
+            width: 33%;
         }
         #debug-state-container {
-            flex-grow: 1;
-        }
-        #debug-state {
+            width: 66%;
+            overflow-x: hidden;
             background: #eaeaea;
             font-size: 0.7rem;
             padding: 10px;
             margin: 0;
         }
-        #debug-state pre {
+        #debug-state,
+        #debug-txs {
             min-height: 100vh;
+        }
+        .hidden {
+            display: none;
         }
         #messages .message {
             padding: 10px;
             border-radius: 5px;
-            margin: 10px; 
+            margin: 10px;
         }
         #messages .message img {
             max-width: 80px;
@@ -48,7 +52,7 @@
             border-radius: 3px;
             color: white;
             cursor: pointer;
-            margin-left: 4px; 
+            margin-left: 4px;
         }
     </style>
 </head>
@@ -77,10 +81,20 @@
             </div>
         </div>
         <div id='debug-state-container'>
-            <code>
-                <pre id='debug-state'>
-                </pre>
-            </code>
+            <button id='btn-view-debug-state' disabled>State</button>
+            <button id='btn-view-debug-txs'>Transactions</button>
+            <div id='tab-state'>
+                <code>
+                    <pre id='debug-state'>
+                    </pre>
+                </code>
+            </div>
+            <div id='tab-txs' class='hidden'>
+                <code>
+                    <pre id='debug-txs'>
+                    </pre>
+                </code>
+            </div>
         </div>
     </div>
 </body>
@@ -91,8 +105,7 @@
     //
     // Identity stuff
     //
-
-    var identity = Braid.randomIdentity()
+    var identity = Braid.identity.random()
     function refreshIdentityUI() {
         document.getElementById('my-address').innerHTML = '<strong>Your address:</strong> ' + identity.address
     }
@@ -101,69 +114,127 @@
 
     var inputMnemonic = document.getElementById('input-mnemonic')
     document.getElementById('btn-login').addEventListener('click', () => {
-        identity = Braid.identityFromMnemonic(inputMnemonic.value)
+        identity = Braid.identity.fromMnemonic(inputMnemonic.value)
         refreshIdentityUI()
     })
 
 
     //
-    // Chat stuff
+    // Braid/sync9 setup
     //
+    var s9 = Braid.sync9.create_with_genesis_state({
+        shrugisland: {
+            talk0: {
+                messages: [],
+                permissions: {},
+                resolver: {},
+                validator: {},
+            },
+        },
+    })
 
-    var mostRecentTxID = null
+    var queue = Braid.utils.createTxQueue(
+        (from, vid, parents, patches) => Braid.sync9.resolve_state(s9, from, vid, parents, patches),
+        (tx, newState) => {
+            // Update the debug state UI
+            currentState = newState
+            txs.push(tx)
+            refreshDebugUI()
+
+            // Update the chat UI
+            messages = newState.shrugisland.talk0.messages
+            refreshChatUI()
+        }
+    )
+
+    Braid.subscribe('localhost:21231', '/', [ Braid.utils.genesisTxID ], queue.defaultTxHandler)
+
+
+    //
+    // Chat UI
+    //
+    var messagesElem = document.getElementById('messages')
     var messages = []
-    function refreshChatUI() {
-        var messagesElem = document.getElementById('messages')
+    async function refreshChatUI() {
+        var allRefsAvailable = true
         var html = ''
         for (var i = 0; i < messages.length; i++) {
             var msg = messages[i]
+            var refAvailable
+            if (msg.attachment) {
+                refAvailable = await available('/shrugisland/talk0/messages/' + i + '/attachment')
+                allRefsAvailable = allRefsAvailable && refAvailable
+            }
             html += '<div class="message" style="background-color: ' + intToRGB(hashCode(msg.sender)) + '">'
             html += '    <div><b>' + (msg.sender || '').substr(0, 6) + ':</b> </div>'
             html += '    <div>'
             html += '        <div>' + msg.text + '</div>'
             if (msg.attachment) {
+            if (refAvailable) {
             html += '        <img src="/shrugisland/talk0/messages/' + i + '/attachment" />'
+            } else {
+            refsStillLoading = true
+            html += '        <div>(loading...)</div>'
+            }
             }
             html += '    </div>'
             html += '</div>'
         }
         messagesElem.innerHTML = html
+
+        if (!allRefsAvailable) {
+            setTimeout(refreshChatUI, 1000)
+        }
+
     }
 
+    //
+    // Debug UI
+    //
+    var txs = []
+    var currentState = {}
+    var currentDebugTab = 'state'
+    var debugTabButtonState = document.getElementById('btn-view-debug-state')
+    var debugTabButtonTxs = document.getElementById('btn-view-debug-txs')
     var debugStateElem = document.getElementById('debug-state')
-    Braid.subscribeStates('localhost:21231', '/', [], (err, update) => {
-        if (err) {
-            throw new Error(err)
-        }
-        console.log('msg', update)
-        var j = JSON.stringify(update.data, null, 4)
-        j = j.replace(/\\\\n/g, '\\n')
+    var debugTxsElem = document.getElementById('debug-txs')
+    var debugStateTab = document.getElementById('tab-state')
+    var debugTxsTab = document.getElementById('tab-txs')
+    function refreshDebugUI() {
+        debugStateElem.innerHTML = JSON.stringify(currentState, null, 4)
+             .replace(/\\\\n/g, '\\n')
+             .replace(/</g, '&lt;')
+             .replace(/>/g, '&gt;')
+        debugTxsElem.innerHTML = JSON.stringify(txs, null, 4)
+             .replace(/\\\\n/g, '\\n')
              .replace(/</g, '&lt;')
              .replace(/>/g, '&gt;')
 
-        debugStateElem.innerHTML = j
-    })
-
-    Braid.subscribeStates('localhost:21231', '/shrugisland/talk0/messages', [], (err, update) => {
-        if (err) {
-            throw new Error(err)
-        } else if (mostRecentTxID === update.mostRecentTxID) {
-            return
+        if (currentDebugTab === 'state') {
+            debugStateTab.classList.remove('hidden')
+            debugTxsTab.classList.add('hidden')
+            debugTabButtonState.disabled = true
+            debugTabButtonTxs.disabled = false
+        } else if (currentDebugTab === 'txs') {
+            debugStateTab.classList.add('hidden')
+            debugTxsTab.classList.remove('hidden')
+            debugTabButtonState.disabled = false
+            debugTabButtonTxs.disabled = true
         }
-        messages = update.data
-        mostRecentTxID = update.mostRecentTxID
-        refreshChatUI()
+    }
+    debugTabButtonState.addEventListener('click', () => {
+        currentDebugTab = 'state'
+        refreshDebugUI()
+    })
+    debugTabButtonTxs.addEventListener('click', () => {
+        currentDebugTab = 'txs'
+        refreshDebugUI()
     })
 
-    Braid.subscribePatches('localhost:21231', '/shrugisland/talk0/messages', [], (err, update) => {
-        if (err) {
-            throw new Error(err)
-        } 
-        console.log('subscription ~>', update)
-    })
 
-    refreshChatUI()
-
+    //
+    // Send message UI
+    //
     var inputText = document.getElementById('input-text')
     var inputFile = document.getElementById('input-file')
     document.getElementById('btn-send').addEventListener('click', async () => {
@@ -173,8 +244,8 @@
         }
 
         Braid.put({
-            id: Braid.util.randomID(),
-            parents: [ mostRecentTxID ],
+            id: Braid.utils.randomID(),
+            parents: Object.keys(s9.leaves),
             url: 'localhost:21231',
             patches: [
                 '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify([{
@@ -188,13 +259,18 @@
         }, identity)
     })
 
+    async function available(url) {
+        const resp = await fetch(url)
+        return resp.status != 404
+    }
+
     function hashCode(str) {
         var hash = 0
         for (var i = 0; i < str.length; i++) {
            hash = str.charCodeAt(i) + ((hash << 5) - hash)
         }
         return hash
-    } 
+    }
 
     function intToRGB(i) {
         var c = (i & 0x00FFFFFF)
@@ -202,6 +278,6 @@
             .toUpperCase()
 
         return '00000'.substring(0, 6 - c.length) + c
-    } 
+    }
 </script>
 </html>

@@ -103,7 +103,8 @@ func (t *httpTransport) Start() error {
 type httpSubscriptionIn struct {
 	io.Writer
 	http.Flusher
-	chDone chan struct{}
+	chDoneCatchingUp chan struct{}
+	chDone           chan struct{}
 }
 
 func (s *httpSubscriptionIn) Close() error {
@@ -185,7 +186,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			notify := w.(http.CloseNotifier).CloseNotify()
 			go func() {
 				<-notify
-				t.Info(0, "http connection closed")
+				t.Errorf("http connection closed")
 			}()
 
 			// Set the headers related to event streaming.
@@ -195,7 +196,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Transfer-Encoding", "chunked")
 
-			sub := &httpSubscriptionIn{w, f, make(chan struct{})}
+			sub := &httpSubscriptionIn{w, f, make(chan struct{}), make(chan struct{})}
 
 			urlToSubscribe := r.Header.Get("Subscribe-Host")
 
@@ -205,9 +206,20 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			f.Flush()
 
-			parents := r.Header.Get("Parents")
-			if parents != "" {
-				parents := []ID{}
+			parentsHeader := r.Header.Get("Parents")
+			if parentsHeader != "" {
+				var parents []ID
+				parentStrs := strings.Split(parentsHeader, "/")
+				for _, parentStr := range parentStrs {
+					parent, err := IDFromHex(parentStr)
+					if err != nil {
+						// @@TODO: what to do?
+						parents = []ID{GenesisTxID}
+						break
+					}
+					parents = append(parents, parent)
+				}
+
 				toVersion := ID{}
 				err := t.fetchHistoryHandler(parents, toVersion, &httpPeer{peerID: peerID, t: t, Writer: w, Flusher: f})
 				if err != nil {
@@ -215,6 +227,8 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					// @@TODO: close subscription?
 				}
 			}
+
+			close(sub.chDoneCatchingUp)
 
 			// Block until the subscription is canceled
 			<-sub.chDone
@@ -441,6 +455,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Parents: parents,
 				Sig:     sig,
 				Patches: patches,
+				URL:     r.Header.Get("State-URL"), // @@TODO: bad
 			}
 
 			// @@TODO: remove .From entirely
@@ -563,6 +578,7 @@ func (t *httpTransport) ForEachSubscriberToURL(ctx context.Context, theURL strin
 		defer close(ch)
 
 		for _, sub := range t.subscriptionsIn[domain] {
+			<-sub.chDoneCatchingUp
 			select {
 			case ch <- &httpPeer{t: t, Writer: sub.Writer, Flusher: sub.Flusher}:
 			case <-ctx.Done():
@@ -582,6 +598,7 @@ type httpPeer struct {
 
 	// stream
 	url string
+	sync.Mutex
 	io.Writer
 	io.ReadCloser
 	http.Flusher
@@ -606,6 +623,9 @@ func (p *httpPeer) EnsureConnected(ctx context.Context) error {
 }
 
 func (p *httpPeer) WriteMsg(msg Msg) error {
+	p.Mutex.Lock()
+	defer p.Mutex.Unlock()
+
 	switch msg.Type {
 	case MsgType_Subscribe:
 		urlToSubscribe, ok := msg.Payload.(string)

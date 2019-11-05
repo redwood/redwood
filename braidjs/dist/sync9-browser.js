@@ -7198,7 +7198,6 @@ try {
 }
 
 },{}],308:[function(require,module,exports){
-(function (global){
 "use strict";
 
 function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _nonIterableRest(); }
@@ -7229,47 +7228,20 @@ require('@babel/polyfill'); // var s9state = sync9_create()
 // console.log(JSON.stringify(sync9_read(s9state), null, 4))
 
 
-global = global || {};
-var s9state;
-var hasRun = false;
+module.exports.create = sync9_create;
+module.exports.resolve_state = resolve_state;
+module.exports.parse_change = sync9_parse_change;
+module.exports.read = sync9_read;
+module.exports.add_version = sync9_add_version;
 
-global.init = function init(internalStateJSON) {
-  var internalState = JSON.parse(internalStateJSON);
-
-  if (Object.keys(internalState).length === 0) {
-    s9state = sync9_create();
-  } else {
-    s9state = internalState.s9state;
-    hasRun = internalState.hasRun;
-  }
-};
-
-global.resolve_state = function resolve_state(stateJSON, sender, txHash, parents, patches) {
+function resolve_state(s9, sender, txHash, parents, patches) {
   var parentsObj = {};
-
-  if (!hasRun) {
-    var state = JSON.parse(stateJSON);
-    var ps = {};
-    sync9_add_version(s9state, 'init', ps, [{
-      keys: [],
-      val: state
-    }], null);
-    parentsObj['init'] = true;
-  } else {
-    parents.forEach(function (p) {
-      parentsObj[p] = true;
-    });
-  }
-
-  sync9_add_version(s9state, txHash, parentsObj, patches, null);
-  return JSON.stringify({
-    state: sync9_read(s9state),
-    internalState: {
-      hasRun: true,
-      s9state: s9state
-    }
+  parents.forEach(function (p) {
+    return parentsObj[p] = true;
   });
-};
+  sync9_add_version(s9, txHash, parentsObj, patches, null);
+  return sync9_read(s9);
+}
 
 function trimstr(s, n) {
   if (s.length > n) return s.substr(0, n);
@@ -7614,6 +7586,8 @@ function sync9_create() {
 }
 
 function sync9_add_version(x, vid, parents, changes, is_anc) {
+  console.log('sync9_add_version ~>', changes);
+
   var make_lit = function make_lit(x) {
     return x && _typeof(x) == 'object' ? {
       t: 'lit',
@@ -8396,5 +8370,4 @@ function deep_equals(a, b) {
   return true;
 }
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"@babel/polyfill":1}]},{},[308]);
