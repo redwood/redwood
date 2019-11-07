@@ -11,10 +11,11 @@ import (
 )
 
 type (
-	ID        [32]byte
-	Address   [20]byte
-	Hash      [32]byte
-	Signature []byte
+	ID           [32]byte
+	Address      [20]byte
+	Hash         [32]byte
+	Signature    []byte
+	ChallengeMsg []byte
 
 	Tx struct {
 		ID         ID        `json:"id"`
@@ -75,6 +76,19 @@ func (sig *Signature) UnmarshalJSON(bs []byte) error {
 	return nil
 }
 
+func (c ChallengeMsg) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + hex.EncodeToString(c) + `"`), nil
+}
+
+func (c *ChallengeMsg) UnmarshalJSON(bs []byte) error {
+	bs, err := hex.DecodeString(string(bs[1 : len(bs)-1]))
+	if err != nil {
+		return err
+	}
+	*c = bs
+	return nil
+}
+
 func AddressFromHex(hx string) (Address, error) {
 	bs, err := hex.DecodeString(hx)
 	if err != nil {
@@ -83,6 +97,12 @@ func AddressFromHex(hx string) (Address, error) {
 	var addr Address
 	copy(addr[:], bs)
 	return addr, nil
+}
+
+func AddressFromBytes(bs []byte) Address {
+	var addr Address
+	copy(addr[:], bs)
+	return addr
 }
 
 func (a Address) String() string {
@@ -186,6 +206,25 @@ func (h Hash) Pretty() string {
 	return h.String()[:6]
 }
 
+func (p Patch) Copy() Patch {
+	keys := make([]string, len(p.Keys))
+	copy(keys, p.Keys)
+
+	var rng *Range
+	if p.Range != nil {
+		r := *p.Range
+		rng = &r
+	}
+
+	// @@TODO: val?
+
+	return Patch{
+		Keys:  keys,
+		Range: rng,
+		Val:   p.Val,
+	}
+}
+
 func (p Patch) RangeStart() int64 {
 	if p.Range == nil {
 		return -1
@@ -213,21 +252,6 @@ func (p *Patch) UnmarshalJSON(bs []byte) error {
 
 func (p Patch) MarshalJSON() ([]byte, error) {
 	return json.Marshal(p.String())
-}
-
-func (p Patch) Copy() Patch {
-	keys := make([]string, len(p.Keys))
-	copy(keys, p.Keys)
-
-	var rng *Range
-	if p.Range != nil {
-		*rng = *p.Range
-	}
-
-	return Patch{
-		Keys:  keys,
-		Range: rng,
-	}
 }
 
 func (id *ID) UnmarshalText(text []byte) error {
@@ -265,12 +289,22 @@ func IDFromString(s string) ID {
 	return id
 }
 
+func IDFromBytes(bs []byte) ID {
+	var id ID
+	copy(id[:], bs)
+	return id
+}
+
 func (id ID) Pretty() string {
 	return id.String()[:6]
 }
 
-func (id ID) String() string {
+func (id ID) Hex() string {
 	return hex.EncodeToString(id[:])
+}
+
+func (id ID) String() string {
+	return id.Hex()
 }
 
 func (tx *Tx) PrettyJSON() string {

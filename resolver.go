@@ -12,7 +12,9 @@ type Resolver interface {
 }
 
 type Validator interface {
-	Validate(state interface{}, txs, validTxs map[ID]*Tx, tx Tx) error
+	PruneForbiddenState(state interface{}, requestedKeypath []string, requester Address) error
+	PruneForbiddenPatches(state interface{}, patches []Patch, requester Address) ([]Patch, error)
+	ValidateTx(state interface{}, txs, validTxs map[ID]*Tx, tx Tx) error
 }
 
 type resolver struct {
@@ -36,7 +38,7 @@ var validatorRegistry map[string]ValidatorConstructor
 func init() {
 	validatorRegistry = map[string]ValidatorConstructor{
 		"permissions": NewPermissionsValidator,
-		"stack":       NewStackValidator,
+		// "stack":       NewStackValidator,
 	}
 	resolverRegistry = map[string]ResolverConstructor{
 		"dumb":  NewDumbResolver,
@@ -47,7 +49,7 @@ func init() {
 }
 
 func initResolverFromConfig(config map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
-	typ, exists := M(config).GetString("type")
+	typ, exists := getString(config, []string{"type"})
 	if !exists {
 		return nil, errors.New("cannot init resolver without a 'type' param")
 	}
@@ -59,7 +61,7 @@ func initResolverFromConfig(config map[string]interface{}, internalState map[str
 }
 
 func initValidatorFromConfig(config map[string]interface{}) (Validator, error) {
-	typ, exists := M(config).GetString("type")
+	typ, exists := getString(config, []string{"type"})
 	if !exists {
 		return nil, errors.New("cannot init validator without a 'type' param")
 	}
@@ -110,7 +112,9 @@ func (t *resolverTree) ensureNodeExists(keypath []string) *resolverTreeNode {
 		keypath = keypath[1:]
 
 		if current.subkeys[key] == nil {
-			current.subkeys[key] = &resolverTreeNode{subkeys: map[string]*resolverTreeNode{}, depth: depth, keypath: keypath}
+			nodeKeypath := make([]string, len(keypath))
+			copy(nodeKeypath, keypath)
+			current.subkeys[key] = &resolverTreeNode{subkeys: map[string]*resolverTreeNode{}, depth: depth, keypath: nodeKeypath}
 		}
 		current = current.subkeys[key]
 	}
@@ -146,12 +150,27 @@ func (t *resolverTree) deepestNodeInKeypathWhere(keypath []string, condition fun
 	return ancestor, closestAncestorKeypathIdx
 }
 
-func (t *resolverTree) nearestResolverForKeypath(keypath []string) (Resolver, int) {
-	node, idx := t.deepestNodeInKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.resolver != nil })
-	return node.resolver, idx
+func (t *resolverTree) nearestResolverNodeForKeypath(keypath []string) (*resolverTreeNode, int) {
+	return t.deepestNodeInKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.resolver != nil })
 }
 
-func (t *resolverTree) nearestValidatorForKeypath(keypath []string) (Validator, int) {
-	node, idx := t.deepestNodeInKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.validator != nil })
-	return node.validator, idx
+func (t *resolverTree) nearestValidatorNodeForKeypath(keypath []string) (*resolverTreeNode, int) {
+	return t.deepestNodeInKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.validator != nil })
+}
+
+func (t *resolverTree) groupPatchesByValidator(patches []Patch) (map[Validator][]Patch, map[Validator][]string) {
+	validators := make(map[Validator][]Patch)
+	validatorKeypaths := make(map[Validator][]string)
+	for _, patch := range patches {
+		node, idx := t.nearestValidatorNodeForKeypath(patch.Keys)
+		v := node.validator
+		keys := make([]string, len(patch.Keys)-(idx))
+		copy(keys, patch.Keys[idx:])
+		p := patch
+		p.Keys = keys
+
+		validators[v] = append(validators[v], p)
+		validatorKeypaths[v] = patch.Keys[:idx]
+	}
+	return validators, validatorKeypaths
 }

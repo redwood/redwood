@@ -14,14 +14,13 @@ type jsResolver struct {
 }
 
 func NewJSResolver(params map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
-	src, exists := M(params).GetString("src")
+	src, exists := getString(params, []string{"src"})
 	if !exists {
 		return nil, errors.New("js resolver needs a string 'src' param")
 	}
 
 	vm := otto.New()
 	vm.Set("global", map[string]interface{}{})
-	vm.Set("window", map[string]interface{}{})
 
 	_, err := vm.Run(src)
 	if err != nil {
@@ -46,16 +45,15 @@ func (r *jsResolver) ResolveState(state interface{}, sender Address, txID ID, pa
 
 	convertedPatches := make([]interface{}, len(patches))
 	for i, patch := range patches {
-		var rangeAsSlice []interface{}
-		if patch.Range != nil {
-			rangeAsSlice = []interface{}{patch.Range.Start, patch.Range.End}
+		convertedPatch := map[string]interface{}{
+			"keys": patch.Keys,
+			"val":  patch.Val,
 		}
 
-		convertedPatches[i] = map[string]interface{}{
-			"keys":  patch.Keys,
-			"range": rangeAsSlice,
-			"val":   patch.Val,
+		if patch.Range != nil {
+			convertedPatch["range"] = []interface{}{patch.Range.Start, patch.Range.End}
 		}
+		convertedPatches[i] = convertedPatch
 	}
 
 	stateBytes, _ := json.Marshal(state)
@@ -71,13 +69,13 @@ func (r *jsResolver) ResolveState(state interface{}, sender Address, txID ID, pa
 
 	x, err := val.Export()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	var output map[string]interface{}
 	err = json.Unmarshal([]byte(x.(string)), &output)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	r.internalState = output["internalState"].(map[string]interface{})

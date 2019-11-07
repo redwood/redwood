@@ -15,16 +15,9 @@ func annotate(err *error, msg string, args ...interface{}) {
 	}
 }
 
-func valueAtKeypath(x interface{}, keypath []string) (interface{}, bool) {
+func getValue(x interface{}, keypath []string) (interface{}, bool) {
 	for i := 0; i < len(keypath); i++ {
 		if asMap, isMap := x.(map[string]interface{}); isMap {
-			var exists bool
-			x, exists = asMap[keypath[i]]
-			if !exists {
-				return nil, false
-			}
-
-		} else if asMap, isMap := x.(M); isMap {
 			var exists bool
 			x, exists = asMap[keypath[i]]
 			if !exists {
@@ -39,6 +32,7 @@ func valueAtKeypath(x interface{}, keypath []string) (interface{}, bool) {
 				return nil, false
 			}
 			x = asSlice[sliceIdx]
+
 		} else {
 			return nil, false
 		}
@@ -46,21 +40,79 @@ func valueAtKeypath(x interface{}, keypath []string) (interface{}, bool) {
 	return x, true
 }
 
-func setValueAtKeypath(m map[string]interface{}, keypath []string, val interface{}) {
+func getString(m interface{}, keypath []string) (string, bool) {
+	x, exists := getValue(m, keypath)
+	if !exists {
+		return "", false
+	}
+	if s, isString := x.(string); isString {
+		return s, true
+	}
+	return "", false
+}
+
+func getMap(m interface{}, keypath []string) (map[string]interface{}, bool) {
+	x, exists := getValue(m, keypath)
+	if !exists {
+		return nil, false
+	}
+	if asMap, isMap := x.(map[string]interface{}); isMap {
+		return asMap, true
+	}
+	return nil, false
+}
+
+func getSlice(m interface{}, keypath []string) ([]interface{}, bool) {
+	x, exists := getValue(m, keypath)
+	if !exists {
+		return nil, false
+	}
+	if s, isSlice := x.([]interface{}); isSlice {
+		return s, true
+	}
+	return nil, false
+}
+
+func getBool(m interface{}, keypath []string) (bool, bool) {
+	x, exists := getValue(m, keypath)
+	if !exists {
+		return false, false
+	}
+	if b, isBool := x.(bool); isBool {
+		return b, true
+	}
+	return false, false
+}
+
+func setValueAtKeypath(x interface{}, keypath []string, val interface{}, clobber bool) {
 	if len(keypath) == 0 {
 		panic("bad")
 	}
 
-	var cur interface{} = m
+	var cur interface{} = x
 	for i := 0; i < len(keypath)-1; i++ {
-		var exists bool
-		cur, exists = m[keypath[i]]
-		if !exists {
-			m[keypath[i]] = make(map[string]interface{})
-		} else if _, isMap := cur.(map[string]interface{}); !isMap {
-			m[keypath[i]] = make(map[string]interface{})
+		key := keypath[i]
+
+		if asMap, isMap := cur.(map[string]interface{}); isMap {
+			var exists bool
+			cur, exists = asMap[key]
+			if !exists {
+				if !clobber {
+					return
+				}
+				asMap[key] = make(map[string]interface{})
+				cur = asMap[key]
+			}
+
+		} else if asSlice, isSlice := cur.([]interface{}); isSlice {
+			i, err := strconv.Atoi(key)
+			if err != nil {
+				panic(err)
+			}
+			cur = asSlice[i]
+		} else {
+			panic("bad")
 		}
-		cur = m[keypath[i]]
 	}
 	if asMap, isMap := cur.(map[string]interface{}); isMap {
 		asMap[keypath[len(keypath)-1]] = val
@@ -113,6 +165,53 @@ func walkTree(tree interface{}, fn func(keypath []string, val interface{}) error
 	return nil
 }
 
+func walkTree2(tree interface{}, fn func(keypath []string, parent interface{}, val interface{}) error) error {
+	type item struct {
+		val     interface{}
+		parent  interface{}
+		keypath []string
+	}
+
+	stack := []item{{val: tree, keypath: []string{}}}
+	var current item
+
+	for len(stack) > 0 {
+		current = stack[0]
+		stack = stack[1:]
+
+		err := fn(current.keypath, current.parent, current.val)
+		if err != nil {
+			return err
+		}
+
+		if asMap, isMap := current.val.(map[string]interface{}); isMap {
+			for key := range asMap {
+				kp := make([]string, len(current.keypath)+1)
+				copy(kp, current.keypath)
+				kp[len(kp)-1] = key
+				stack = append(stack, item{
+					val:     asMap[key],
+					parent:  asMap,
+					keypath: kp,
+				})
+			}
+
+		} else if asSlice, isSlice := current.val.([]interface{}); isSlice {
+			for i := len(asSlice) - 1; i >= 0; i-- {
+				kp := make([]string, len(current.keypath)+1)
+				copy(kp, current.keypath)
+				kp[len(kp)-1] = strconv.Itoa(i)
+				stack = append(stack, item{
+					val:     asSlice[i],
+					parent:  asSlice,
+					keypath: kp,
+				})
+			}
+		}
+	}
+	return nil
+}
+
 func filterEmptyStrings(s []string) []string {
 	var filtered []string
 	for i := range s {
@@ -122,67 +221,6 @@ func filterEmptyStrings(s []string) []string {
 		filtered = append(filtered, s[i])
 	}
 	return filtered
-}
-
-func prettyJSON(val interface{}) string {
-	j, _ := json.MarshalIndent(val, "", "    ")
-	return string(j)
-}
-
-type M map[string]interface{}
-
-func (m M) SetValue(keypath []string, val interface{}) {
-	setValueAtKeypath(m, keypath, val)
-}
-
-func (m M) GetValue(keypath ...string) (interface{}, bool) {
-	return valueAtKeypath(m, keypath)
-}
-
-func (m M) GetString(keypath ...string) (string, bool) {
-	x, exists := valueAtKeypath(m, keypath)
-	if !exists {
-		return "", false
-	}
-	if s, isString := x.(string); isString {
-		return s, true
-	}
-	return "", false
-}
-
-func (m M) GetSlice(keypath ...string) ([]interface{}, bool) {
-	x, exists := valueAtKeypath(m, keypath)
-	if !exists {
-		return nil, false
-	}
-	if s, isSlice := x.([]interface{}); isSlice {
-		return s, true
-	}
-	return nil, false
-}
-
-func (m M) GetStringSlice(keypath ...string) ([]string, bool) {
-	x, exists := valueAtKeypath(m, keypath)
-	if !exists {
-		return nil, false
-	}
-	if s, isSlice := x.([]string); isSlice {
-		return s, true
-	}
-	return nil, false
-}
-
-func (m M) GetMap(keypath ...string) (map[string]interface{}, bool) {
-	x, exists := valueAtKeypath(m, keypath)
-	if !exists {
-		return nil, false
-	}
-	if asMap, isMap := x.(map[string]interface{}); isMap {
-		return asMap, true
-	} else if asMap, isMap = x.(M); isMap {
-		return (map[string]interface{})(asMap), true
-	}
-	return nil, false
 }
 
 func braidURLToHTTP(url string) string {

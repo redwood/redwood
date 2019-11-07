@@ -15,7 +15,7 @@ func (r *stackResolver) InternalState() map[string]interface{} {
 }
 
 func NewStackResolver(params map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
-	children, exists := M(params).GetSlice("children")
+	children, exists := getSlice(params, []string{"children"})
 	if !exists {
 		return nil, errors.New("stack resolver needs an array 'children' param")
 	}

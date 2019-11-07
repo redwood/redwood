@@ -21,7 +21,7 @@ $ go run scenarios/talk-channel.go
 - [x] **Regular GET**
     ```
     GET /  
-    Version: deadbeef
+    [Version: deadbeef]
     ```
 
     Returns a single response containing a state.
@@ -41,7 +41,7 @@ $ go run scenarios/talk-channel.go
 - [x] **Subscribe and fetch history**
     ```
     GET /
-    [Parents: <abc, def | genesis>]
+    [Parents: <abc, def | genesis tx id>]
     Subscribe: keep-alive
     ```
 
@@ -55,15 +55,6 @@ $ go run scenarios/talk-channel.go
     ```
 
     Ends a subscription.  Over a regular HTTP transport, it's necessary to include a server-assigned `peerid` cookie to identify the requester.
-
-
-- [ ] **Verify-Credentials GET**
-    ```
-    GET /
-    Verify-Credentials: &lt;challenge message&gt;
-    ```
-    Requests that the receiving node sign the challenge message to prove which address represents their identity.
-
 
 
 ------------

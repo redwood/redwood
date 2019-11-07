@@ -7214,6 +7214,72 @@ function _defineProperty(obj, key, value) { if (key in obj) { Object.definePrope
 function _typeof(obj) { if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") { _typeof = function _typeof(obj) { return typeof obj; }; } else { _typeof = function _typeof(obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; } return _typeof(obj); }
 
 require('@babel/polyfill'); // var s9state = sync9_create()
+// sync9_add_version(s9state, 'init', {}, [
+//     {
+//         "keys": [],
+//         "val": {
+//             "index": {
+//                 "link": "ref:0dc2a391e9d4624c93d1b675d37910fc41c8a7223ede5a793ed2196a32280d37"
+//             },
+//             "messages": [],
+//             "permissions": {
+//                 "*": {
+//                     "^\\.index.*$": {
+//                         "read": true,
+//                         "write": false
+//                     },
+//                     "^\\.messages.*": {
+//                         "read": true,
+//                         "write": true
+//                     },
+//                     "^\\.permissions.*$": {
+//                         "read": true,
+//                         "write": false
+//                     }
+//                 },
+//                 "96216849c49358b10257cb55b28ea603c874b05e": {
+//                     "^.*$": {
+//                         "read": true,
+//                         "write": true
+//                     }
+//                 }
+//             },
+//             "resolver": {
+//                 "src": {
+//                     "link": "ref:7e4907f86a5e3adbfb5ee00f6841190e0318a7ebd6fdc78e51e9b31da5533b23"
+//                 },
+//                 "type": "js"
+//             },
+//             "validator": {
+//                 "type": "permissions"
+//             }
+//         }
+//     }
+// ])
+// sync9_add_version(s9state, '74776f0000000000000000000000000000000000000000000000000000000000', {"init":true}, [
+//     {
+//         "keys": [
+//             "messages"
+//         ],
+//         "range": [
+//             0,
+//             0
+//         ],
+//         "val": [
+//             {
+//                 "sender": "96216849c49358b10257cb55b28ea603c874b05e",
+//                 "text": "hello!"
+//             }
+//         ]
+//     },
+//     {
+//         "keys": [
+//             "secretthing"
+//         ],
+//         "val": {"blah":"hi"}
+//     }
+// ])
+// console.log(JSON.stringify(sync9_read(s9state), null, 4))
 // var v1 = sync9_guid()
 // var v2 = sync9_guid()
 // var v3 = sync9_guid()

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -30,8 +31,12 @@ type httpTransport struct {
 	controller      Controller
 	ownURL          string
 	port            uint
+	sigkeys         *SigningKeypair
+	cookieSecret    [32]byte
 	tlsCertFilename string
 	tlsKeyFilename  string
+
+	pendingAuthorizations map[ID][]byte
 
 	fetchHistoryHandler  FetchHistoryHandler
 	ackHandler           AckHandler
@@ -46,17 +51,19 @@ type httpTransport struct {
 	refStore RefStore
 }
 
-func NewHTTPTransport(addr Address, port uint, controller Controller, refStore RefStore, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
+func NewHTTPTransport(addr Address, port uint, controller Controller, refStore RefStore, sigkeys *SigningKeypair, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
 	t := &httpTransport{
-		Context:         &ctx.Context{},
-		address:         addr,
-		subscriptionsIn: make(map[string][]*httpSubscriptionIn),
-		controller:      controller,
-		port:            port,
-		tlsCertFilename: tlsCertFilename,
-		tlsKeyFilename:  tlsKeyFilename,
-		ownURL:          fmt.Sprintf("localhost:%v", port),
-		refStore:        refStore,
+		Context:               &ctx.Context{},
+		address:               addr,
+		subscriptionsIn:       make(map[string][]*httpSubscriptionIn),
+		controller:            controller,
+		port:                  port,
+		sigkeys:               sigkeys,
+		tlsCertFilename:       tlsCertFilename,
+		tlsKeyFilename:        tlsKeyFilename,
+		pendingAuthorizations: make(map[ID][]byte),
+		ownURL:                fmt.Sprintf("localhost:%v", port),
+		refStore:              refStore,
 	}
 	return t, nil
 }
@@ -67,6 +74,12 @@ func (t *httpTransport) Start() error {
 		func() error {
 			t.SetLogLabel(t.address.Pretty() + " transport")
 			t.Infof(0, "opening http transport at :%v", t.port)
+
+			_, err := rand.Read(t.cookieSecret[:])
+			if err != nil {
+				return err
+			}
+
 			go func() {
 
 				//caCert, err := ioutil.ReadFile("client.crt")
@@ -112,34 +125,6 @@ func (s *httpSubscriptionIn) Close() error {
 	return nil
 }
 
-func (t *httpTransport) ensurePeerIDCookie(w http.ResponseWriter, r *http.Request) (ID, error) {
-	cookie, err := r.Cookie("peerid")
-	if errors.Cause(err) == http.ErrNoCookie {
-		return t.setPeerIDCookie(w), nil
-
-	} else if err == nil {
-		peerID, err := IDFromHex(cookie.Value)
-		if err != nil {
-			return t.setPeerIDCookie(w), nil
-		}
-		return peerID, nil
-
-	} else {
-		return ID{}, err
-	}
-}
-
-func (t *httpTransport) setPeerIDCookie(w http.ResponseWriter) ID {
-	peerID := RandomID()
-	cookie := http.Cookie{
-		Name:    "peerid",
-		Value:   peerID.String(),
-		Expires: time.Now().AddDate(0, 0, 1),
-	}
-	http.SetCookie(w, &cookie)
-	return peerID
-}
-
 func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
@@ -150,26 +135,76 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	address := t.addressFromCookie(r)
+
 	switch r.Method {
-	case "GET":
-		if challengeMsgHex := r.Header.Get("Verify-Credentials"); challengeMsgHex != "" {
-			//
-			// Address verification request
-			//
+	case "AUTHORIZE":
+		//
+		// Address verification requests (2 kinds)
+		//
+		if challengeMsgHex := r.Header.Get("Challenge"); challengeMsgHex != "" {
+			// 1. Remote node is reaching out to us with a challenge
 			challengeMsg, err := hex.DecodeString(challengeMsgHex)
 			if err != nil {
-				http.Error(w, "Verify-Credentials header: bad challenge message", http.StatusBadRequest)
+				http.Error(w, "Challenge header: bad challenge message", http.StatusBadRequest)
 				return
 			}
 
-			peer := &httpPeer{peerID: peerID, t: t, Writer: w}
+			peer := &httpPeer{peerID: peerID, address: address, t: t, Writer: w}
 			err = t.verifyAddressHandler([]byte(challengeMsg), peer)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
-		} else if r.Header.Get("Subscribe") != "" {
+		} else if responseHex := r.Header.Get("Response"); responseHex != "" {
+			// 2b. Remote node wanted a challenge, this is their response
+			challenge, exists := t.pendingAuthorizations[peerID]
+			if !exists {
+				http.Error(w, "no pending authorization", http.StatusBadRequest)
+				return
+			}
+
+			sig, err := hex.DecodeString(responseHex)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			sigpubkey, err := RecoverSigningPubkey(HashBytes(challenge), sig)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			addr := sigpubkey.Address()
+			err = t.setSignedCookie(w, "address", addr[:])
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			delete(t.pendingAuthorizations, peerID) // @@TODO: expiration/garbage collection for failed auths
+
+		} else {
+			// 2a. Remote node wants a challenge, so we send it
+			challenge, err := GenerateChallengeMsg()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			t.pendingAuthorizations[peerID] = challenge
+
+			challengeHex := hex.EncodeToString(challenge)
+			_, err = w.Write([]byte(challengeHex))
+			if err != nil {
+				t.Errorf("error writing challenge message: %v", err)
+				return
+			}
+		}
+
+	case "GET":
+		if r.Header.Get("Subscribe") != "" {
 			//
 			// Subscription request
 			//
@@ -220,8 +255,15 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					parents = append(parents, parent)
 				}
 
-				toVersion := ID{}
-				err := t.fetchHistoryHandler(parents, toVersion, &httpPeer{peerID: peerID, t: t, Writer: w, Flusher: f})
+				var toVersion ID
+				if versionHeader := r.Header.Get("Version"); versionHeader != "" {
+					toVersion, err = IDFromHex(versionHeader)
+					if err != nil {
+						// @@TODO: what to do?
+					}
+				}
+
+				err := t.fetchHistoryHandler(parents, toVersion, &httpPeer{peerID: peerID, address: address, t: t, Writer: w, Flusher: f})
 				if err != nil {
 					t.Errorf("error fetching history: %v", err)
 					// @@TODO: close subscription?
@@ -230,7 +272,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			close(sub.chDoneCatchingUp)
 
-			// Block until the subscription is canceled
+			// Block until the subscription is canceled so that net/http doesn't close the connection
 			<-sub.chDone
 
 		} else {
@@ -259,7 +301,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			keypath := filterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
 
 			if r.Header.Get("Accept") == "application/json" {
-				val, err := t.controller.State(keypath, false)
+				val, err := t.controller.State(keypath, address, false)
 				if err != nil {
 					http.Error(w, "not found", http.StatusNotFound)
 					return
@@ -297,7 +339,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 
 			} else {
-				val, err := t.controller.State(keypath, true)
+				val, err := t.controller.State(keypath, address, true)
 				if err != nil {
 					http.Error(w, "not found: "+err.Error(), http.StatusNotFound)
 					return
@@ -351,7 +393,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		url := strings.Replace(r.RemoteAddr, "http://", "", -1)
-		t.ackHandler(txHash, &httpPeer{peerID: peerID, t: t, url: url, Writer: w})
+		t.ackHandler(txHash, &httpPeer{peerID: peerID, address: address, t: t, url: url, Writer: w})
 
 	case "PUT":
 		defer r.Body.Close()
@@ -366,7 +408,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			url := strings.Replace(r.RemoteAddr, "http://", "", -1)
-			t.privateTxHandler(encryptedTx, &httpPeer{peerID: peerID, t: t, url: url, Writer: w})
+			t.privateTxHandler(encryptedTx, &httpPeer{peerID: peerID, address: address, t: t, url: url, Writer: w})
 
 		} else if r.Header.Get("Ref") == "true" {
 			t.Infof(0, "incoming ref")
@@ -467,7 +509,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			////////////////////////////////
 
 			url := strings.Replace(r.RemoteAddr, "http://", "", -1)
-			t.txHandler(tx, &httpPeer{peerID: peerID, t: t, url: url, Writer: w})
+			t.txHandler(tx, &httpPeer{peerID: peerID, address: address, t: t, url: url, Writer: w})
 		}
 
 	default:
@@ -592,9 +634,79 @@ func (t *httpTransport) PeersClaimingAddress(ctx context.Context, address Addres
 	panic("unimplemented")
 }
 
+func (t *httpTransport) AnnounceRef(refHash Hash) error {
+	panic("unimplemented")
+}
+
+var (
+	ErrBadCookie = errors.New("bad cookie")
+)
+
+func (t *httpTransport) ensurePeerIDCookie(w http.ResponseWriter, r *http.Request) (ID, error) {
+	peerIDBytes, err := t.signedCookie(r, "peerid")
+	if err != nil {
+		t.Errorf("error reading signed peerID cookie: %v", err)
+		return t.setPeerIDCookie(w)
+	}
+	return IDFromBytes(peerIDBytes), nil
+}
+
+func (t *httpTransport) setPeerIDCookie(w http.ResponseWriter) (ID, error) {
+	peerID := RandomID()
+	err := t.setSignedCookie(w, "peerid", peerID[:])
+	return peerID, err
+}
+
+func (t *httpTransport) setSignedCookie(w http.ResponseWriter, name string, value []byte) error {
+	sig, err := t.sigkeys.SignHash(HashBytes(append(value, t.cookieSecret[:]...)))
+	if err != nil {
+		return err
+	}
+	cookie := http.Cookie{
+		Name:    name,
+		Value:   hex.EncodeToString(value) + ":" + hex.EncodeToString(sig),
+		Expires: time.Now().AddDate(0, 0, 1),
+	}
+	http.SetCookie(w, &cookie)
+	return nil
+}
+
+func (t *httpTransport) signedCookie(r *http.Request, name string) ([]byte, error) {
+	cookie, err := r.Cookie(name)
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.Split(cookie.Value, ":")
+	if len(parts) != 2 {
+		return nil, errors.Wrapf(ErrBadCookie, "cookie '%v' has %v parts", name, len(parts))
+	}
+
+	value, err := hex.DecodeString(parts[0])
+	if err != nil {
+		return nil, errors.Wrapf(ErrBadCookie, "cookie '%v' bad hex value: %v", name, err)
+	}
+
+	sig, err := hex.DecodeString(parts[1])
+	if err != nil {
+		return nil, errors.Wrapf(ErrBadCookie, "cookie '%v' bad hex signature: %v", name, err)
+	} else if !t.sigkeys.VerifySignature(HashBytes(append(value, t.cookieSecret[:]...)), sig) {
+		return nil, errors.Wrapf(ErrBadCookie, "cookie '%v' has invalid signature (value: %0x)", name, value)
+	}
+	return value, nil
+}
+
+func (t *httpTransport) addressFromCookie(r *http.Request) Address {
+	addressBytes, err := t.signedCookie(r, "address")
+	if err != nil {
+		return Address{}
+	}
+	return AddressFromBytes(addressBytes)
+}
+
 type httpPeer struct {
-	t      *httpTransport
-	peerID ID
+	t       *httpTransport
+	peerID  ID
+	address Address
 
 	// stream
 	url string
@@ -616,6 +728,14 @@ const (
 
 func (p *httpPeer) ID() string {
 	return p.peerID.String()
+}
+
+func (p *httpPeer) Address() Address {
+	return p.address
+}
+
+func (p *httpPeer) SetAddress(addr Address) {
+	p.address = addr
 }
 
 func (p *httpPeer) EnsureConnected(ctx context.Context) error {
@@ -730,17 +850,17 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		defer resp.Body.Close()
 
 	case MsgType_VerifyAddress:
-		challengeMsg, ok := msg.Payload.([]byte)
+		challengeMsg, ok := msg.Payload.(ChallengeMsg)
 		if !ok {
 			return errors.WithStack(ErrProtocol)
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("GET", "http://"+p.url, nil)
+		req, err := http.NewRequest("AUTHORIZE", "http://"+p.url, nil)
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Verify-Credentials", hex.EncodeToString(challengeMsg))
+		req.Header.Set("Challenge", hex.EncodeToString(challengeMsg))
 
 		resp, err := client.Do(req)
 		if err != nil {

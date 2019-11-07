@@ -25,10 +25,13 @@ type Transport interface {
 	ForEachProviderOfRef(ctx context.Context, refHash Hash) (<-chan Peer, error)
 	ForEachSubscriberToURL(ctx context.Context, theURL string) (<-chan Peer, error)
 	PeersClaimingAddress(ctx context.Context, address Address) (<-chan Peer, error)
+	AnnounceRef(refHash Hash) error
 }
 
 type Peer interface {
 	ID() string
+	Address() Address
+	SetAddress(addr Address)
 	EnsureConnected(ctx context.Context) error
 	WriteMsg(msg Msg) error
 	ReadMsg() (Msg, error)
@@ -39,7 +42,7 @@ type FetchHistoryHandler func(parents []ID, toVersion ID, peer Peer) error
 type AckHandler func(txHash Hash, peer Peer)
 type TxHandler func(tx Tx, peer Peer)
 type PrivateTxHandler func(encryptedTx EncryptedTx, peer Peer)
-type VerifyAddressHandler func(challengeMsg []byte, peer Peer) error
+type VerifyAddressHandler func(challengeMsg ChallengeMsg, peer Peer) error
 type FetchRefHandler func(refHash Hash, peer Peer)
 
 type subscriptionOut struct {

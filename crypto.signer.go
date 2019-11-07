@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/pkg/errors"
 )
 
 type (
@@ -56,7 +57,11 @@ func (pubkey *signingPublicKey) String() string {
 }
 
 func (privkey *signingPrivateKey) SignHash(hash Hash) ([]byte, error) {
-	return crypto.Sign(hash[:], privkey.PrivateKey)
+	sig, err := crypto.Sign(hash[:], privkey.PrivateKey)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return sig, nil
 }
 
 func (privkey *signingPrivateKey) Bytes() []byte {
@@ -70,7 +75,7 @@ func (privkey *signingPrivateKey) String() string {
 func GenerateSigningKeypair() (*SigningKeypair, error) {
 	pk, err := crypto.GenerateKey()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	return &SigningKeypair{
 		SigningPrivateKey: &signingPrivateKey{pk},
@@ -81,7 +86,7 @@ func GenerateSigningKeypair() (*SigningKeypair, error) {
 func SigningKeypairFromHex(s string) (*SigningKeypair, error) {
 	pk, err := crypto.HexToECDSA(s)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	return &SigningKeypair{
 		SigningPrivateKey: &signingPrivateKey{pk},
@@ -92,7 +97,7 @@ func SigningKeypairFromHex(s string) (*SigningKeypair, error) {
 func RecoverSigningPubkey(hash Hash, signature []byte) (SigningPublicKey, error) {
 	ecdsaPubkey, err := crypto.SigToPub(hash[:], signature)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	return &signingPublicKey{ecdsaPubkey}, nil
 }

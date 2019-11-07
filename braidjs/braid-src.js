@@ -9,6 +9,7 @@ window.Braid = {
     subscribe,
     put,
     storeRef,
+    authorize,
 
     // submodules
     identity,
@@ -113,6 +114,21 @@ async function storeRef(file) {
     })
 
     return (await resp.json()).hash
+}
+
+async function authorize(identity) {
+    const resp = await fetch(`/`, {
+        method: 'AUTHORIZE',
+    })
+
+    const challengeHex = await resp.text()
+    const challenge = Buffer.from(challengeHex, 'hex')
+    const sigHex = identity.signBytes(challenge)
+
+    const resp2 = await fetch(`/`, {
+        method: 'AUTHORIZE',
+        headers: { 'Response': sigHex },
+    })
 }
 
 

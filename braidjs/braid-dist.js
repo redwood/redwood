@@ -1,4 +1,5 @@
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+(function (Buffer){
 "use strict";
 
 function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { Promise.resolve(value).then(_next, _throw); } }
@@ -18,6 +19,7 @@ window.Braid = {
   subscribe: subscribe,
   put: put,
   storeRef: storeRef,
+  authorize: authorize,
   // submodules
   identity: identity,
   sync9: sync9,
@@ -266,7 +268,56 @@ function _storeRef() {
   return _storeRef.apply(this, arguments);
 }
 
-},{"./identity":2,"./sync9-src":314,"./utils":315,"@babel/polyfill":3}],2:[function(require,module,exports){
+function authorize(_x7) {
+  return _authorize.apply(this, arguments);
+}
+
+function _authorize() {
+  _authorize = _asyncToGenerator(
+  /*#__PURE__*/
+  regeneratorRuntime.mark(function _callee5(identity) {
+    var resp, challengeHex, challenge, sigHex, resp2;
+    return regeneratorRuntime.wrap(function _callee5$(_context5) {
+      while (1) {
+        switch (_context5.prev = _context5.next) {
+          case 0:
+            _context5.next = 2;
+            return fetch("/", {
+              method: 'AUTHORIZE'
+            });
+
+          case 2:
+            resp = _context5.sent;
+            _context5.next = 5;
+            return resp.text();
+
+          case 5:
+            challengeHex = _context5.sent;
+            challenge = Buffer.from(challengeHex, 'hex');
+            sigHex = identity.signBytes(challenge);
+            _context5.next = 10;
+            return fetch("/", {
+              method: 'AUTHORIZE',
+              headers: {
+                'Response': sigHex
+              }
+            });
+
+          case 10:
+            resp2 = _context5.sent;
+
+          case 11:
+          case "end":
+            return _context5.stop();
+        }
+      }
+    }, _callee5);
+  }));
+  return _authorize.apply(this, arguments);
+}
+
+}).call(this,require("buffer").Buffer)
+},{"./identity":2,"./sync9-src":314,"./utils":315,"@babel/polyfill":3,"buffer":6}],2:[function(require,module,exports){
 const ethers = require('ethers')
 const utils = require('./utils')
 
@@ -297,9 +348,14 @@ function _constructIdentity(wallet) {
     return {
         wallet: wallet,
         address: address,
-        signTx: function(tx) {
+        signTx: (tx) => {
             const txHash = utils.hashTx(tx)
             const signed = wallet.signingKey.signDigest(txHash)
+            return signed.r.slice(2) + signed.s.slice(2) + '0' + signed.recoveryParam
+        },
+        signBytes: (bytes) => {
+            const hash = ethers.utils.keccak256(bytes) //.toString('hex')
+            const signed = wallet.signingKey.signDigest(hash)
             return signed.r.slice(2) + signed.s.slice(2) + '0' + signed.recoveryParam
         },
     }

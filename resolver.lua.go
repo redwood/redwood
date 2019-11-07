@@ -14,7 +14,7 @@ type luaResolver struct {
 }
 
 func NewLuaResolver(params map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
-	src, exists := M(params).GetString("src")
+	src, exists := getString(params, []string{"src"})
 	if !exists {
 		return nil, errors.New("lua resolver needs a string 'src' param")
 	}

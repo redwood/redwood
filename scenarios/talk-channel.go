@@ -52,7 +52,7 @@ func makeHost(signingKeypairHex string, port uint, dbfile string, refStoreRoot s
 		panic(err)
 	}
 
-	httptransport, err := rw.NewHTTPTransport(signingKeypair.Address(), port+1, controller, refStore, tlsCertFilename, tlsKeyFilename)
+	httptransport, err := rw.NewHTTPTransport(signingKeypair.Address(), port+1, controller, refStore, signingKeypair, tlsCertFilename, tlsKeyFilename)
 	if err != nil {
 		panic(err)
 	}
@@ -214,7 +214,15 @@ func sendTxs(host1, host2 rw.Host) {
                     }
                 },
                 "*": {
-                    "^\\.messages.*$": {
+                    "^\\.permissions.*$": {
+                        "read": true,
+                        "write": false
+                    },
+                    "^\\.index.*$": {
+                        "read": true,
+                        "write": false
+                    },
+                    "^\\.messages.*": {
                         "read": true,
                         "write": true
                     }
@@ -243,6 +251,7 @@ func sendTxs(host1, host2 rw.Host) {
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[0:0] = [{"text":"hello!","sender":"` + host1.Address().String() + `"}]`),
+				mustParsePatch(`.shrugisland.talk0.secretThing = {"welcome":"you've stumbled upon a secret place!","sensitiveInformation":[1,2,3]}`),
 			},
 		}
 
@@ -283,24 +292,24 @@ func sendTxs(host1, host2 rw.Host) {
 		host1.Errorf("yyy %+v", err)
 	}
 
-	//var (
-	//    recipients = []rw.Address{host1.Address(), host2.Address()}
-	//    tx5        = rw.Tx{
-	//        ID:      rw.IDFromString("four"),
-	//        Parents: []rw.Hash{tx4.ID},
-	//        From:    host2.Address(),
-	//        URL:     "localhost:21231",
-	//        Patches: []rw.Patch{
-	//            mustParsePatch(`.` + rw.PrivateRootKeyForRecipients(recipients) + `.shrugisland.talk0.messages[2:2] = [{"text":"private message for you!"}]`),
-	//        },
-	//        Recipients: recipients,
-	//    }
-	//)
-	//
-	//err = host2.SendTx(context.Background(), tx5)
-	//if err != nil {
-	//    host2.Errorf("yyy %+v", err)
-	//}
+	// var (
+	// 	recipients = []rw.Address{host1.Address(), host2.Address()}
+	// 	tx5        = rw.Tx{
+	// 		ID:      rw.IDFromString("five"),
+	// 		Parents: []rw.ID{tx4.ID},
+	// 		From:    host2.Address(),
+	// 		URL:     "localhost:21231",
+	// 		Patches: []rw.Patch{
+	// 			mustParsePatch(`.` + rw.PrivateRootKeyForRecipients(recipients) + `.shrugisland.talk0.messages[0:0] = [{"text":"private message for you!"}]`),
+	// 		},
+	// 		Recipients: recipients,
+	// 	}
+	// )
+
+	// err = host2.SendTx(context.Background(), tx5)
+	// if err != nil {
+	// 	host2.Errorf("qqq %+v", err)
+	// }
 }
 
 func mustParsePatch(s string) rw.Patch {

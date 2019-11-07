@@ -21,9 +21,9 @@ type Controller interface {
 	FetchTxs() TxIterator
 	HaveTx(txID ID) bool
 
-	State(keypath []string, resolveRefs bool) (interface{}, error)
-	StateJSON() []byte
-	MostRecentTxID() ID
+	State(keypath []string, requester Address, resolveRefs bool) (interface{}, error)
+	PruneForbiddenPatches(patches []Patch, requester Address) ([]Patch, error)
+	MostRecentTxID() ID // @@TODO: should be .Leaves()
 
 	SetResolver(keypath []string, resolver Resolver)
 	SetValidator(keypath []string, validator Validator)
@@ -107,16 +107,33 @@ func (c *controller) SetReceivedRefsHandler(handler ReceivedRefsHandler) {
 	c.onReceivedRefs = handler
 }
 
-func (c *controller) State(keypath []string, resolveRefs bool) (interface{}, error) {
-	val, exists := M(c.currentState.(map[string]interface{})).GetValue(keypath...)
-	if !exists {
-		return nil, nil
-	}
+func (c *controller) State(keypath []string, requester Address, resolveRefs bool) (interface{}, error) {
+	var processNode func(node *resolverTreeNode, keypath []string, localState interface{}) interface{}
+	processNode = func(node *resolverTreeNode, keypath []string, localState interface{}) interface{} {
+		for key, child := range node.subkeys {
+			val, exists := getValue(localState, []string{key})
+			if exists {
+				childKeypath := append(keypath, key)
+				processed := processNode(child, childKeypath, val)
+				setValueAtKeypath(localState, []string{key}, processed, true)
+			}
+		}
 
-	copied := DeepCopyJSValue(val)
+		if node.validator != nil {
+			err := node.validator.PruneForbiddenState(localState, []string{}, requester)
+			if err != nil {
+				panic(err)
+			}
+		}
+		return localState
+	}
+	state := DeepCopyJSValue(c.currentState)
+	processed := processNode(c.resolverTree.root, []string{}, state)
+
+	processed, _ = getValue(processed, keypath)
 
 	if resolveRefs {
-		asMap, isMap := copied.(map[string]interface{})
+		asMap, isMap := processed.(map[string]interface{})
 		if isMap {
 			resolved, err := c.resolveRefs(asMap)
 			if err != nil {
@@ -125,8 +142,33 @@ func (c *controller) State(keypath []string, resolveRefs bool) (interface{}, err
 			return resolved, nil
 		}
 	}
+	return processed, nil
+}
 
-	return copied, nil
+func (c *controller) PruneForbiddenPatches(patches []Patch, requester Address) ([]Patch, error) {
+	var prunedPatches []Patch
+
+	validators, validatorKeypaths := c.resolverTree.groupPatchesByValidator(patches)
+	for validator, patchesForValidator := range validators {
+		if len(patchesForValidator) == 0 {
+			continue
+		}
+
+		keypath := validatorKeypaths[validator]
+		newPatches, err := validator.PruneForbiddenPatches(c.stateAtKeypath(keypath), patchesForValidator, requester)
+		if err != nil {
+			return nil, err
+		}
+
+		for i := range newPatches {
+			copied := make([]string, len(keypath))
+			copy(copied, keypath)
+			newPatches[i].Keys = append(copied, newPatches[i].Keys...)
+		}
+
+		prunedPatches = append(prunedPatches, newPatches...)
+	}
+	return prunedPatches, nil
 }
 
 func (c *controller) resolveRefs(m map[string]interface{}) (interface{}, error) {
@@ -142,7 +184,7 @@ func (c *controller) resolveRefs(m map[string]interface{}) (interface{}, error) 
 			return nil
 		}
 
-		link, exists := M(asMap).GetString("link")
+		link, exists := getString(asMap, []string{"link"})
 		if !exists {
 			return nil
 		}
@@ -186,7 +228,7 @@ func (c *controller) resolveRefs(m map[string]interface{}) (interface{}, error) 
 
 	for _, res := range resolutions {
 		if len(res.keypath) > 0 {
-			M(m).SetValue(res.keypath, res.val)
+			setValueAtKeypath(m, res.keypath, res.val, true)
 		} else {
 			// This tends to come up when a browser is fetching individual resources that are refs
 			return res.val, nil
@@ -305,18 +347,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 	// Validate the tx's extrinsics
 	//
 	{
-		validators := make(map[Validator][]Patch)
-		validatorKeypaths := make(map[Validator][]string)
-		for _, patch := range tx.Patches {
-			v, idx := c.resolverTree.nearestValidatorForKeypath(patch.Keys)
-			keys := make([]string, len(patch.Keys)-(idx))
-			copy(keys, patch.Keys[idx:])
-			p := patch
-			p.Keys = keys
-
-			validators[v] = append(validators[v], p)
-			validatorKeypaths[v] = patch.Keys[:idx]
-		}
+		validators, validatorKeypaths := c.resolverTree.groupPatchesByValidator(tx.Patches)
 
 		for validator, patches := range validators {
 			if len(patches) == 0 {
@@ -326,7 +357,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			txCopy := *tx
 			txCopy.Patches = patches
 
-			err := validator.Validate(c.stateAtKeypath(validatorKeypaths[validator]), c.txs, c.validTxs, txCopy)
+			err := validator.ValidateTx(c.stateAtKeypath(validatorKeypaths[validator]), c.txs, c.validTxs, txCopy)
 			if err != nil {
 				return err
 			}
@@ -412,7 +443,8 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 				patchesTrimmed := make([]Patch, 0)
 				for _, p := range patches {
 					if len(p.Keys) > 0 && p.Keys[0] == key {
-						patchesTrimmed = append(patchesTrimmed, Patch{Keys: p.Keys[1:], Range: p.Range, Val: p.Val})
+						pcopy := p.Copy()
+						patchesTrimmed = append(patchesTrimmed, Patch{Keys: pcopy.Keys[1:], Range: pcopy.Range, Val: pcopy.Val})
 					}
 				}
 
@@ -431,13 +463,12 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 					continue
 				}
 				if _, exists := node.subkeys[p.Keys[0]]; !exists {
-					newPatches = append(newPatches, p)
+					newPatches = append(newPatches, p.Copy())
 				}
 			}
 
 			if node.resolver != nil {
 				// If this is a node with a resolver, process this set of patches into a single patch for our parent
-				var err error
 				newState, err := node.resolver.ResolveState(localStateMap, tx.From, tx.ID, tx.Parents, newPatches)
 				if err != nil {
 					panic(err)
@@ -497,7 +528,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			if !isMap {
 				return nil
 			}
-			resolverConfigMap, exists := M(m).GetMap("resolver")
+			resolverConfigMap, exists := getMap(m, []string{"resolver"})
 			if !exists {
 				return nil
 			}
@@ -510,11 +541,11 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			}
 
 			var resolverInternalState map[string]interface{}
-			oldResolver, depth := c.resolverTree.nearestResolverForKeypath(keypath)
+			oldResolverNode, depth := c.resolverTree.nearestResolverNodeForKeypath(keypath)
 			if depth != len(keypath) {
 				resolverInternalState = make(map[string]interface{})
 			} else {
-				resolverInternalState = oldResolver.InternalState()
+				resolverInternalState = oldResolverNode.resolver.InternalState()
 			}
 
 			resolver, err := initResolverFromConfig(config.(map[string]interface{}), resolverInternalState)
@@ -523,7 +554,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			}
 			newResolverTree.addResolver(keypath, resolver)
 
-			validatorConfig, exists := M(m).GetMap("validator")
+			validatorConfig, exists := getMap(m, []string{"validator"})
 			if !exists {
 				return nil
 			}
@@ -551,7 +582,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 	// 	return err
 	// }
 	// c.Infof(0, "state = %v", string(j))
-	// v, _ := valueAtKeypath(c.currentState.(map[string]interface{}), []string{"shrugisland", "talk0", "messages"})
+	// v, _ := getValue(c.currentState.(map[string]interface{}), []string{"shrugisland", "talk0", "messages"})
 	// c.Infof(0, "state = %v", string(PrettyJSON(v)))
 
 	return nil
@@ -604,7 +635,7 @@ func (c *controller) stateAtKeypath(keypath []string) interface{} {
 	if len(keypath) == 0 {
 		return c.currentState
 	} else if stateMap, isMap := c.currentState.(map[string]interface{}); isMap {
-		val, _ := M(stateMap).GetValue(keypath...)
+		val, _ := getValue(stateMap, keypath)
 		return val
 	}
 	return nil

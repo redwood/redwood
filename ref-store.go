@@ -112,7 +112,7 @@ func (s *refStore) contentType(hash Hash) (string, error) {
 		return "", err
 	}
 
-	contentType, exists := M(metadata).GetString(hash.String(), "contentType")
+	contentType, exists := getString(metadata, []string{hash.String(), "contentType"})
 	if !exists {
 		return "", nil
 	}
@@ -138,7 +138,7 @@ func (s *refStore) setContentType(hash Hash, contentType string) error {
 		return err
 	}
 
-	M(metadata).SetValue([]string{hash.String(), "contentType"}, contentType)
+	setValueAtKeypath(metadata, []string{hash.String(), "contentType"}, contentType, true)
 
 	_, err = f.Seek(0, 0)
 	if err != nil {

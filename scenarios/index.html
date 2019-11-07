@@ -109,6 +109,7 @@
     function refreshIdentityUI() {
         document.getElementById('my-address').innerHTML = '<strong>Your address:</strong> ' + identity.address
     }
+    (async function() { await Braid.authorize(identity) })()
 
     refreshIdentityUI()
 
@@ -135,8 +136,9 @@
 
     var queue = Braid.utils.createTxQueue(
         (from, vid, parents, patches) => Braid.sync9.resolve_state(s9, from, vid, parents, patches),
-        (tx, newState) => {
+        async (tx, newState) => {
             // Update the debug state UI
+            // currentState = await (await fetch('/')).json()
             currentState = newState
             txs.push(tx)
             refreshDebugUI()
@@ -237,7 +239,16 @@
     //
     var inputText = document.getElementById('input-text')
     var inputFile = document.getElementById('input-file')
-    document.getElementById('btn-send').addEventListener('click', async () => {
+    document.getElementById('btn-send').addEventListener('click', sendMessage)
+    document.getElementById('input-text').addEventListener('keydown', function (evt) {
+        if (evt.code === 'Enter' && evt.ctrlKey) {
+            evt.stopPropagation()
+            evt.preventDefault()
+            sendMessage()
+        }
+    })
+
+    async function sendMessage() {
         var refHash
         if (inputFile.files.length > 0) {
             refHash = await Braid.storeRef(inputFile.files[0])
@@ -257,7 +268,10 @@
                 }]),
             ],
         }, identity)
-    })
+
+        inputText.value = ''
+        inputFile.value = null
+    }
 
     async function available(url) {
         const resp = await fetch(url)

@@ -232,7 +232,16 @@ func (h *host) OnFetchHistoryRequestReceived(parents []ID, toVersion ID, peer Pe
 			return nil
 		}
 
-		err := peer.WriteMsg(Msg{Type: MsgType_Put, Payload: *tx})
+		prunedPatches, err := h.controller.PruneForbiddenPatches(tx.Patches, peer.Address())
+		if err != nil {
+			h.Errorf("error pruning patches for peer: %v", err)
+			continue
+		}
+
+		txCopy := *tx
+		txCopy.Patches = prunedPatches
+
+		err = peer.WriteMsg(Msg{Type: MsgType_Put, Payload: txCopy})
 		if err != nil {
 			return err
 		}
@@ -257,7 +266,6 @@ func (h *host) Subscribe(ctx context.Context, url string) error {
 	}
 
 	for p := range ch {
-		h.Errorf("found peer %v", p.ID())
 		err := p.EnsureConnected(ctx)
 		if err != nil {
 			h.Errorf("error connecting to peer: %v", err)
@@ -321,7 +329,7 @@ func (h *host) requestPeerCredentials(ctx context.Context, peer Peer) (SigningPu
 		return nil, nil, err
 	}
 
-	err = peer.WriteMsg(Msg{Type: MsgType_VerifyAddress, Payload: challengeMsg})
+	err = peer.WriteMsg(Msg{Type: MsgType_VerifyAddress, Payload: ChallengeMsg(challengeMsg)})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -345,19 +353,20 @@ func (h *host) requestPeerCredentials(ctx context.Context, peer Peer) (SigningPu
 
 	encpubkey := EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey)
 
+	peer.SetAddress(sigpubkey.Address())
+
 	h.peerStore[sigpubkey.Address()] = storedPeer{peer.ID(), sigpubkey, encpubkey}
 
 	return sigpubkey, encpubkey, nil
 }
 
-func (h *host) onVerifyAddressReceived(challengeMsg []byte, peer Peer) error {
+func (h *host) onVerifyAddressReceived(challengeMsg ChallengeMsg, peer Peer) error {
 	defer peer.CloseConn()
 
 	sig, err := h.signingKeypair.SignHash(HashBytes(challengeMsg))
 	if err != nil {
 		return err
 	}
-
 	return peer.WriteMsg(Msg{Type: MsgType_VerifyAddressResponse, Payload: VerifyAddressResponse{
 		Signature:           sig,
 		EncryptingPublicKey: h.encryptingKeypair.EncryptingPublicKey.Bytes(),
@@ -366,7 +375,7 @@ func (h *host) onVerifyAddressReceived(challengeMsg []byte, peer Peer) error {
 
 func (h *host) peerWithAddress(ctx context.Context, address Address) (Peer, EncryptingPublicKey, error) {
 	if address == h.Address() {
-		return nil, nil, ErrPeerIsSelf
+		return nil, nil, errors.WithStack(ErrPeerIsSelf)
 	}
 
 	if storedPeer, exists := h.peerStore[address]; exists {
@@ -395,7 +404,7 @@ func (h *host) peerWithAddress(ctx context.Context, address Address) (Peer, Encr
 		if err != nil {
 			continue
 		} else if signingPubkey.Address() != address {
-			return nil, nil, ErrInvalidSignature
+			return nil, nil, errors.WithStack(ErrInvalidSignature)
 		}
 
 		return peer, encryptingPubkey, nil
@@ -407,13 +416,13 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 	// @@TODO: should we also send all PUTs to some set of authoritative peers (like a central server)?
 
 	if len(tx.Sig) == 0 {
-		return ErrUnsignedTx
+		return errors.WithStack(ErrUnsignedTx)
 	}
 
 	if len(tx.Recipients) > 0 {
 		marshalledTx, err := json.Marshal(tx)
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		for _, recipientAddr := range tx.Recipients {
@@ -482,7 +491,16 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 				continue
 			}
 
-			err = peer.WriteMsg(Msg{Type: MsgType_Put, Payload: tx})
+			prunedPatches, err := h.controller.PruneForbiddenPatches(tx.Patches, peer.Address())
+			if err != nil {
+				h.Errorf("error pruning patches for peer: %v", err)
+				continue
+			}
+
+			txCopy := tx
+			txCopy.Patches = prunedPatches
+
+			err = peer.WriteMsg(Msg{Type: MsgType_Put, Payload: txCopy})
 			if err != nil {
 				h.Errorf("error writing tx to peer: %v", err)
 				continue
@@ -613,6 +631,12 @@ func (h *host) onReceivedRefs(refs []Hash) {
 				}
 				h.Infof(0, "stored ref %v", hash)
 				// @@TODO: check stored refHash against the one we requested
+
+				err = h.transport.AnnounceRef(hash)
+				if err != nil {
+					h.Errorf("error announcing ref %v: %v", hash.String(), err)
+				}
+
 				return
 			}
 		}

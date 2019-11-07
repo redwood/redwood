@@ -28,9 +28,14 @@ function _constructIdentity(wallet) {
     return {
         wallet: wallet,
         address: address,
-        signTx: function(tx) {
+        signTx: (tx) => {
             const txHash = utils.hashTx(tx)
             const signed = wallet.signingKey.signDigest(txHash)
+            return signed.r.slice(2) + signed.s.slice(2) + '0' + signed.recoveryParam
+        },
+        signBytes: (bytes) => {
+            const hash = ethers.utils.keccak256(bytes) //.toString('hex')
+            const signed = wallet.signingKey.signDigest(hash)
             return signed.r.slice(2) + signed.s.slice(2) + '0' + signed.recoveryParam
         },
     }

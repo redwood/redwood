@@ -113,7 +113,7 @@ func WriteUint64(w io.Writer, n uint64) error {
 	if err != nil {
 		return err
 	} else if written < 8 {
-		return errors.Wrap(err, "WriteUint64")
+		return errors.New("WriteUint64: wrote too few bytes")
 	}
 	return nil
 }
@@ -159,7 +159,12 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		msg.Payload = ep
 
 	case MsgType_VerifyAddress:
-		msg.Payload = []byte(m.PayloadBytes)
+		var challenge ChallengeMsg
+		err := json.Unmarshal(m.PayloadBytes, &challenge)
+		if err != nil {
+			return err
+		}
+		msg.Payload = challenge
 
 	case MsgType_VerifyAddressResponse:
 		var resp VerifyAddressResponse
