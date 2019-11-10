@@ -4,8 +4,8 @@
   "description": "",
   "main": "dist.js",
   "scripts": {
-    "build-braid":         "mkdir -p dist && babel ./braid-src.js  --out-file ./braid-temp.js && browserify braid-temp.js > braid-dist.js && rm braid-temp.js",
-    "build-sync9-otto":    "mkdir -p dist && babel ./sync9-otto.js --out-file ./sync9-otto-temp.js && browserify sync9-otto-temp.js > dist/sync9-otto.js && rm sync9-otto-temp.js",
+    "build-braid": "mkdir -p dist && babel ./braid-src.js  --out-file ./braid-temp.js && browserify braid-temp.js > braid-dist.js && rm braid-temp.js",
+    "build-sync9-otto": "mkdir -p dist && babel ./sync9-otto.js --out-file ./sync9-otto-temp.js && browserify sync9-otto-temp.js > dist/sync9-otto.js && rm sync9-otto-temp.js",
     "build-sync9-browser": "mkdir -p dist && babel ./sync9-src.js  --out-file ./sync9-browser-temp.js && browserify sync9-browser-temp.js > dist/sync9-browser.js && rm sync9-browser-temp.js",
     "build": "npm run build-braid && npm run build-sync9-otto",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -13,7 +13,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ethers": "^4.0.38"
+    "ethers": "^4.0.38",
+    "peerjs": "^1.1.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.5.5",

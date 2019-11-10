@@ -1,15 +1,13 @@
 require('@babel/polyfill')
 
-var identity = require('./identity')
-var sync9 = require('./sync9-src')
-var utils = require('./utils')
+const identity = require('./identity')
+const sync9 = require('./sync9-src')
+const utils = require('./utils')
+const httpTransport = require('./braid.transport.http')
+const webrtcTransport = require('./braid.transport.webrtc')
 
 window.Braid = {
-    get,
-    subscribe,
-    put,
-    storeRef,
-    authorize,
+    createPeer,
 
     // submodules
     identity,
@@ -17,119 +15,86 @@ window.Braid = {
     utils,
 }
 
+function createPeer(opts) {
+    const { identity, webrtc, onFoundPeersCallback } = opts
 
-async function subscribe(host, keypath, parents, cb) {
-    try {
-        const headers = {
-            'Subscribe-Host': host,
-            'Accept':         'application/json',
-            'Subscribe':      'keep-alive',
-        }
-        if (parents && parents.length > 0) {
-            headers['Parents'] = parents.join(',')
-        }
+    const transports = [ httpTransport({ onFoundPeers }) ]
+    if (webrtc === true) {
+        transports.push(webrtcTransport({ onFoundPeers }))
+    }
 
-        const res = await fetch(keypath, {
-            method: 'GET',
-            headers,
-        })
-        if (!res.ok) {
-            console.error('Fetch failed!', res)
-            cb('fetch failed')
-            return
-        }
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder('utf-8')
-        let buffer = ''
-
-        async function read() {
-            const x = await reader.read()
-            if (x.done) {
-                return
+    const knownPeers = {}
+    function onFoundPeers(peers) {
+        for (let transportName of Object.keys(peers)) {
+            knownPeers[transportName] = {
+                ...knownPeers[transportName],
+                ...peers[transportName],
             }
+        }
 
-            const newData = decoder.decode(x.value)
-            buffer += newData
-            let idx
-            while ((idx = buffer.indexOf('\n')) > -1) {
-                const line = buffer.substring(0, idx).trim()
-                if (line.length > 0) {
-                    const payloadStr = line.substring(5).trim() // remove "data:" prefix
-                    let payload
-                    try {
-                        payload = JSON.parse(payloadStr)
-                    } catch (err) {
-                        console.error('Error parsing JSON:', payloadStr)
-                        throw err
-                    }
-                    cb(null, payload)
+        transports.forEach(tpt => tpt.foundPeers(knownPeers))
+
+        if (onFoundPeersCallback) {
+            onFoundPeersCallback(knownPeers)
+        }
+    }
+
+    async function subscribe(stateURI, keypath, parents, onTxReceived) {
+        for (let tpt of transports) {
+            if (tpt.subscribe) {
+                tpt.subscribe(stateURI, keypath, parents, onTxReceived)
+            }
+        }
+    }
+
+    async function get(stateURI, keypath) {
+        for (let tpt of transports) {
+            if (tpt.get) {
+                return tpt.get(stateURI, keypath)
+            }
+        }
+    }
+
+    async function put(tx) {
+        tx.from = identity.address
+        tx.sig = identity.signTx(tx)
+
+        for (let tpt of transports) {
+            if (tpt.put) {
+                try {
+                    await tpt.put(tx)
+                } catch (err) {
+                    console.error('error PUTting to peer ~>', err)
                 }
-                buffer = buffer.substring(idx+1)
             }
-            read()
         }
-        read()
-
-    } catch(err) {
-        console.log('Fetch GET failed:', err)
-        cb(err)
-    }
-}
-
-async function get(keypath) {
-    return (await (await fetch(keypath, {
-        headers: {
-            'Accept': 'application/json',
-        },
-    })).json())
-}
-
-function put(tx, identity) {
-    tx.from = identity.address
-    var sig = identity.signTx(tx)
-
-    const headers = {
-        'Version': tx.id,
-        'Parents': tx.parents.join(','),
-        'Signature': sig,
-        'Patch-Type': 'braid',
-        'State-URL': tx.url, // @@TODO: bad
     }
 
-    return fetch('/', {
-        method: 'PUT',
-        body: tx.patches.join('\n'),
-        headers,
-    })
+    async function storeRef(file) {
+        let hash
+        for (let tpt of transports) {
+            if (tpt.storeRef) {
+                hash = await tpt.storeRef(file)
+            }
+        }
+        // @@TODO: check if different?
+        return hash
+    }
+
+    async function authorize() {
+        for (let tpt of transports) {
+            if (tpt.authorize) {
+                await tpt.authorize(identity)
+            }
+        }
+    }
+
+    return {
+        get,
+        subscribe,
+        put,
+        storeRef,
+        authorize,
+    }
 }
-
-async function storeRef(file) {
-    const formData = new FormData()
-    formData.append(`ref`, file)
-
-    const resp = await fetch(`/`, {
-        method: 'PUT',
-        headers: { 'Ref': 'true' },
-        body: formData,
-    })
-
-    return (await resp.json()).hash
-}
-
-async function authorize(identity) {
-    const resp = await fetch(`/`, {
-        method: 'AUTHORIZE',
-    })
-
-    const challengeHex = await resp.text()
-    const challenge = Buffer.from(challengeHex, 'hex')
-    const sigHex = identity.signBytes(challenge)
-
-    const resp2 = await fetch(`/`, {
-        method: 'AUTHORIZE',
-        headers: { 'Response': sigHex },
-    })
-}
-
-
 

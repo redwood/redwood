@@ -22,7 +22,7 @@ func (v *permissionsValidator) permsForUser(state map[string]interface{}, user A
 	if !exists {
 		perms, exists = getMap(state, []string{"permissions", "*"})
 		if !exists {
-			return nil, errors.Wrapf(Err403, "permissions key for user '%v' does not exist", user.Hex())
+			return nil, errors.WithStack(errors.Wrapf(Err403, "permissions key for user '%v' does not exist", user.Hex()))
 		}
 	}
 	return perms, nil

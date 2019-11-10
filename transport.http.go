@@ -49,9 +49,11 @@ type httpTransport struct {
 	subscriptionsInMu sync.RWMutex
 
 	refStore RefStore
+
+	otherKnownPeers map[string]struct{}
 }
 
-func NewHTTPTransport(addr Address, port uint, controller Controller, refStore RefStore, sigkeys *SigningKeypair, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
+func NewHTTPTransport(addr Address, port uint, controller Controller, refStore RefStore, sigkeys *SigningKeypair, cookieSecret [32]byte, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
 	t := &httpTransport{
 		Context:               &ctx.Context{},
 		address:               addr,
@@ -59,11 +61,13 @@ func NewHTTPTransport(addr Address, port uint, controller Controller, refStore R
 		controller:            controller,
 		port:                  port,
 		sigkeys:               sigkeys,
+		cookieSecret:          cookieSecret,
 		tlsCertFilename:       tlsCertFilename,
 		tlsKeyFilename:        tlsKeyFilename,
 		pendingAuthorizations: make(map[ID][]byte),
 		ownURL:                fmt.Sprintf("localhost:%v", port),
 		refStore:              refStore,
+		otherKnownPeers:       make(map[string]struct{}),
 	}
 	return t, nil
 }
@@ -75,13 +79,14 @@ func (t *httpTransport) Start() error {
 			t.SetLogLabel(t.address.Pretty() + " transport")
 			t.Infof(0, "opening http transport at :%v", t.port)
 
-			_, err := rand.Read(t.cookieSecret[:])
-			if err != nil {
-				return err
+			if t.cookieSecret == [32]byte{} {
+				_, err := rand.Read(t.cookieSecret[:])
+				if err != nil {
+					return err
+				}
 			}
 
 			go func() {
-
 				//caCert, err := ioutil.ReadFile("client.crt")
 				//if err != nil {
 				//    log.Fatal(err)
@@ -137,7 +142,25 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	address := t.addressFromCookie(r)
 
+	// On every incoming request, advertise other peers via the Alt-Svc header
+	var others []string
+	for peer := range t.otherKnownPeers {
+		others = append(others, peer)
+	}
+	w.Header().Set("Alt-Svc", strings.Join(others, ", "))
+
+	// Similarly, if other peers give us Alt-Svc headers, track them
+	if altSvcHeader := r.Header.Get("Alt-Svc"); altSvcHeader != "" {
+		parts := strings.Split(altSvcHeader, ";")
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
+		}
+		t.otherKnownPeers[parts[0]] = struct{}{}
+	}
+
 	switch r.Method {
+	case "HEAD":
+
 	case "AUTHORIZE":
 		//
 		// Address verification requests (2 kinds)
@@ -208,7 +231,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			//
 			// Subscription request
 			//
-			t.Infof(0, "incoming subscription")
+			t.Infof(0, "incoming subscription (peerID: %v, address: %v)", peerID, address)
 
 			// Make sure that the writer supports flushing.
 			f, ok := w.(http.Flusher)
@@ -233,7 +256,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			sub := &httpSubscriptionIn{w, f, make(chan struct{}), make(chan struct{})}
 
-			urlToSubscribe := r.Header.Get("Subscribe-Host")
+			urlToSubscribe := r.Header.Get("State-URI")
 
 			t.subscriptionsInMu.Lock()
 			t.subscriptionsIn[urlToSubscribe] = append(t.subscriptionsIn[urlToSubscribe], sub)
@@ -497,7 +520,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Parents: parents,
 				Sig:     sig,
 				Patches: patches,
-				URL:     r.Header.Get("State-URL"), // @@TODO: bad
+				URL:     r.Header.Get("State-URI"), // @@TODO: bad
 			}
 
 			// @@TODO: remove .From entirely
@@ -658,16 +681,19 @@ func (t *httpTransport) setPeerIDCookie(w http.ResponseWriter) (ID, error) {
 }
 
 func (t *httpTransport) setSignedCookie(w http.ResponseWriter, name string, value []byte) error {
+	w.Header().Del("Set-Cookie")
+
 	sig, err := t.sigkeys.SignHash(HashBytes(append(value, t.cookieSecret[:]...)))
 	if err != nil {
 		return err
 	}
-	cookie := http.Cookie{
+
+	http.SetCookie(w, &http.Cookie{
 		Name:    name,
 		Value:   hex.EncodeToString(value) + ":" + hex.EncodeToString(sig),
 		Expires: time.Now().AddDate(0, 0, 1),
-	}
-	http.SetCookie(w, &cookie)
+		Path:    "/",
+	})
 	return nil
 }
 
@@ -760,7 +786,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Subscribe-Host", urlToSubscribe)
+		req.Header.Set("State-URI", urlToSubscribe)
 		req.Header.Set("Cache-Control", "no-cache")
 		req.Header.Set("Accept", "text/event-stream")
 		req.Header.Set("Connection", "keep-alive")

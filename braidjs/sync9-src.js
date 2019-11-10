@@ -8,18 +8,22 @@ module.exports = {
     parse_change: sync9_parse_change,
     read: sync9_read,
     add_version: sync9_add_version,
-    create_with_genesis_state: create_with_genesis_state,
 }
 
-
-function create_with_genesis_state(state) {
-    const s9 = sync9_create()
-    sync9_add_version(s9, utils.genesisTxID, {}, [{keys: [], val: state}], null)
-    return s9
-}
+// var p1 = `. = {"permissions":{"*":{"^.*$":{"read":true,"write":false}},"96216849c49358b10257cb55b28ea603c874b05e":{"^.*$":{"read":true,"write":true}}},"providers":["localhost:21231","localhost:21241"]}`
+// var p2 = `.shrugisland = {}`
+// var p3 = `.shrugisland.talk0 = {}`
+// var p4 = sync9_parse_change(`.shrugisland.talk0.permissions = {"*":{"^\\\\.index.*$":{"read":true,"write":false},"^\\\\.messages.*":{"read":true,"write":true},"^\\\\.permissions.*$":{"read":true,"write":false}},"96216849c49358b10257cb55b28ea603c874b05e":{"^.*$":{"read":true,"write":true}}}`)
+// var p5 = sync9_parse_change(`.shrugisland.talk0.messages = []`)
+// var x = sync9_create()
+// sync9_add_version(x, utils.genesisTxID, {}, [p1])
+// sync9_add_version(x, 'p2', {[utils.genesisTxID]: true}, [p2, p3])
+// sync9_add_version(x, 'p3', {p2: true}, [p3])
+// sync9_add_version(x, 'p4', {p3: true}, [p4])
+// sync9_add_version(x, 'p5', {p4: true}, [p5])
+// console.log(sync9_read(x))
 
 function resolve_state(s9, sender, txHash, parents, patches) {
-    patches = patches.map(p => sync9_parse_change(p))
     const parentsObj = {}
     parents.forEach(p => parentsObj[p] = true)
     sync9_add_version(s9, txHash, parentsObj, patches, null)
@@ -311,7 +315,7 @@ function sync9_add_version(x, vid, parents, changes, is_anc) {
     let make_lit = x => (x && typeof(x) == 'object') ? {t: 'lit', S: x} : x
 
     if (!vid && Object.keys(x.T).length == 0) {
-        // var parse = sync9_parse_change(changes[0])
+        var parse = sync9_parse_change(changes[0])
         x.val = make_lit(changes[0].val)
         return
     } else if (!vid) return
@@ -334,6 +338,7 @@ function sync9_add_version(x, vid, parents, changes, is_anc) {
     }
 
     changes.forEach(change => {
+        change = sync9_parse_change(change)
         var cur = x.val
         if (!cur || typeof(cur) != 'object' || cur.t == 'lit')
             cur = x.val = {t: 'val', S: sync9_create_space_dag_node(null, [cur])}

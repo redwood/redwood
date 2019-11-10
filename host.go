@@ -234,7 +234,7 @@ func (h *host) OnFetchHistoryRequestReceived(parents []ID, toVersion ID, peer Pe
 
 		prunedPatches, err := h.controller.PruneForbiddenPatches(tx.Patches, peer.Address())
 		if err != nil {
-			h.Errorf("error pruning patches for peer: %v", err)
+			h.Errorf("error pruning patches for peer: %+v", err)
 			continue
 		}
 
@@ -624,12 +624,13 @@ func (h *host) onReceivedRefs(refs []Hash) {
 					}
 				}()
 
+				// h.Warnf("storing ref %v", )
 				hash, err := h.refStore.StoreObject(pr, resp.Header.ContentType)
 				if err != nil {
 					h.Errorf("protocol probs: %v", err)
 					continue PeerLoop
 				}
-				h.Infof(0, "stored ref %v", hash)
+				h.Warnf("stored ref %v", hash)
 				// @@TODO: check stored refHash against the one we requested
 
 				err = h.transport.AnnounceRef(hash)

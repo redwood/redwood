@@ -158,11 +158,16 @@ func (t *resolverTree) nearestValidatorNodeForKeypath(keypath []string) (*resolv
 	return t.deepestNodeInKeypathWhere(keypath, func(node *resolverTreeNode) bool { return node.validator != nil })
 }
 
-func (t *resolverTree) groupPatchesByValidator(patches []Patch) (map[Validator][]Patch, map[Validator][]string) {
+func (t *resolverTree) groupPatchesByValidator(patches []Patch) (map[Validator][]Patch, map[Validator][]string, []Patch) {
 	validators := make(map[Validator][]Patch)
 	validatorKeypaths := make(map[Validator][]string)
+	var notValidated []Patch
 	for _, patch := range patches {
 		node, idx := t.nearestValidatorNodeForKeypath(patch.Keys)
+		if node == nil {
+			notValidated = append(notValidated, patch)
+			continue
+		}
 		v := node.validator
 		keys := make([]string, len(patch.Keys)-(idx))
 		copy(keys, patch.Keys[idx:])
@@ -172,5 +177,5 @@ func (t *resolverTree) groupPatchesByValidator(patches []Patch) (map[Validator][
 		validators[v] = append(validators[v], p)
 		validatorKeypaths[v] = patch.Keys[:idx]
 	}
-	return validators, validatorKeypaths
+	return validators, validatorKeypaths, notValidated
 }

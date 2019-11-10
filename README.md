@@ -14,6 +14,14 @@ The current demo is a simple chat application.  You can run it with the followin
 $ go run scenarios/talk-channel.go
 ```
 
+This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
+- <https://localhost:21232>
+- <https://localhost:21242>
+
+**(Note: due to the self-signed TLS certificates, your browser will complain that you're "not safe")**
+
+Now you have four nodes (two in Go, two in the browser) that can talk with one another.
+
 
 
 ## HTTP Requests

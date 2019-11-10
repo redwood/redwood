@@ -206,6 +206,23 @@ func (h Hash) Pretty() string {
 	return h.String()[:6]
 }
 
+func (p Patch) String() string {
+	s := KeypathSeparator + strings.Join(p.Keys, KeypathSeparator)
+
+	if p.Range != nil {
+		s += fmt.Sprintf("[%v:%v]", p.Range.Start, p.Range.End)
+	}
+
+	val, err := json.Marshal(p.Val)
+	if err != nil {
+		panic(err)
+	}
+
+	s += " = " + string(val)
+
+	return s
+}
+
 func (p Patch) Copy() Patch {
 	keys := make([]string, len(p.Keys))
 	copy(keys, p.Keys)
@@ -221,7 +238,7 @@ func (p Patch) Copy() Patch {
 	return Patch{
 		Keys:  keys,
 		Range: rng,
-		Val:   p.Val,
+		Val:   DeepCopyJSValue(p.Val),
 	}
 }
 
@@ -310,71 +327,4 @@ func (id ID) String() string {
 func (tx *Tx) PrettyJSON() string {
 	j, _ := json.MarshalIndent(tx, "", "    ")
 	return string(j)
-}
-
-// var (
-// 	patchRegexp = regexp.MustCompile(`\.?([^\.\[ =]+)|\[((\-?\d+)(:\-?\d+)?|'(\\'|[^'])*'|"(\\"|[^"])*")\]|\s*=\s*([.\n]*)`)
-// 	ErrBadPatch = errors.New("bad patch string")
-// )
-
-// func ParsePatch(txt string) (Patch, error) {
-// 	matches := patchRegexp.FindAllStringSubmatch(txt, -1)
-
-// 	for i, m := range matches {
-// 		fmt.Println(i, "---------------------")
-// 		for j := range m {
-// 			fmt.Println("  - ", j, m[j])
-// 		}
-// 	}
-
-// 	var patch Patch
-// 	for i, m := range matches {
-// 		switch {
-// 		case len(m[1]) > 0:
-// 			patch.Keys = append(patch.Keys, m[1])
-
-// 		case len(m[2]) > 0 && len(m[4]) > 0:
-// 			start, err := strconv.ParseInt(m[3], 10, 64)
-// 			if err != nil {
-// 				return Patch{}, errors.Wrap(ErrBadPatch, err.Error())
-// 			}
-// 			end, err := strconv.ParseInt(m[4][1:], 10, 64)
-// 			if err != nil {
-// 				return Patch{}, errors.Wrap(ErrBadPatch, err.Error())
-// 			}
-
-// 			patch.Range = &[2]int64{start, end}
-
-// 		case len(m[2]) > 0:
-// 			patch.Keys = append(patch.Keys, m[2][1:len(m[2])-1])
-
-// 		case len(m[7]) > 0:
-// 			err := json.Unmarshal([]byte(m[7]), &patch.Val)
-// 			if err != nil {
-// 				return Patch{}, errors.Wrap(ErrBadPatch, err.Error())
-// 			}
-
-// 		default:
-// 			return Patch{}, errors.Wrap(ErrBadPatch, "syntax error: "+txt)
-// 		}
-// 	}
-
-// 	return patch, nil
-// }
-
-func (p Patch) String() string {
-	s := KeypathSeparator + strings.Join(p.Keys, KeypathSeparator)
-
-	if p.Range != nil {
-		s += fmt.Sprintf("[%v:%v]", p.Range.Start, p.Range.End)
-	}
-
-	val, err := json.Marshal(p.Val)
-	if err != nil {
-		panic(err)
-	}
-
-	s += " = " + string(val)
-
-	return s
 }

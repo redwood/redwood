@@ -2,6 +2,7 @@ package redwood
 
 import (
 	"encoding/json"
+	goerrors "errors"
 	"io"
 	"io/ioutil"
 	"os"
@@ -21,6 +22,7 @@ type RefStore interface {
 
 type refStore struct {
 	rootPath   string
+	fileMu     sync.Mutex
 	metadataMu sync.Mutex
 }
 
@@ -33,6 +35,9 @@ func (s *refStore) ensureRootPath() error {
 }
 
 func (s *refStore) Object(hash Hash) (io.ReadCloser, string, error) {
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
+
 	err := s.ensureRootPath()
 	if err != nil {
 		return nil, "", err
@@ -52,6 +57,8 @@ func (s *refStore) Object(hash Hash) (io.ReadCloser, string, error) {
 }
 
 func (s *refStore) StoreObject(reader io.ReadCloser, contentType string) (h Hash, err error) {
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
 	defer annotate(&err, "refStore.StoreObject")
 
 	err = s.ensureRootPath()
@@ -59,16 +66,21 @@ func (s *refStore) StoreObject(reader io.ReadCloser, contentType string) (h Hash
 		return Hash{}, err
 	}
 
-	f, err := ioutil.TempFile(s.rootPath, "temp-")
+	tmpFile, err := ioutil.TempFile(s.rootPath, "temp-")
 	if err != nil {
 		return Hash{}, err
 	}
-	defer f.Close()
+	defer func() {
+		closeErr := tmpFile.Close()
+		if closeErr != nil && !goerrors.Is(closeErr, os.ErrClosed) {
+			err = closeErr
+		}
+	}()
 
 	hasher := sha3.NewLegacyKeccak256()
 	tee := io.TeeReader(reader, hasher)
 
-	_, err = io.Copy(f, tee)
+	_, err = io.Copy(tmpFile, tee)
 	if err != nil {
 		return Hash{}, err
 	}
@@ -77,9 +89,12 @@ func (s *refStore) StoreObject(reader io.ReadCloser, contentType string) (h Hash
 	var hash Hash
 	copy(hash[:], bs)
 
-	f.Close()
+	err = tmpFile.Close()
+	if err != nil {
+		return Hash{}, err
+	}
 
-	err = os.Rename(f.Name(), filepath.Join(s.rootPath, "ref-"+hash.String()))
+	err = os.Rename(tmpFile.Name(), filepath.Join(s.rootPath, "ref-"+hash.String()))
 	if err != nil {
 		return hash, err
 	}
@@ -93,6 +108,8 @@ func (s *refStore) StoreObject(reader io.ReadCloser, contentType string) (h Hash
 }
 
 func (s *refStore) HaveObject(hash Hash) bool {
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
 	return fileExists(filepath.Join(s.rootPath, "ref-"+hash.String()))
 }
 
@@ -112,7 +129,7 @@ func (s *refStore) contentType(hash Hash) (string, error) {
 		return "", err
 	}
 
-	contentType, exists := getString(metadata, []string{hash.String(), "contentType"})
+	contentType, exists := getString(metadata, []string{hash.String(), "Content-Type"})
 	if !exists {
 		return "", nil
 	}
@@ -138,7 +155,7 @@ func (s *refStore) setContentType(hash Hash, contentType string) error {
 		return err
 	}
 
-	setValueAtKeypath(metadata, []string{hash.String(), "contentType"}, contentType, true)
+	setValueAtKeypath(metadata, []string{hash.String(), "Content-Type"}, contentType, true)
 
 	_, err = f.Seek(0, 0)
 	if err != nil {
@@ -153,6 +170,9 @@ func (s *refStore) setContentType(hash Hash, contentType string) error {
 }
 
 func (s *refStore) AllHashes() ([]Hash, error) {
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
+
 	err := s.ensureRootPath()
 	if err != nil {
 		return nil, err

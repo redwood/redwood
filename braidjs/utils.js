@@ -20,7 +20,7 @@ module.exports = {
 
 function createTxQueue(resolverFn, txProcessedCallback) {
     let queue = []
-    let haveTxs = {[genesisTxID]: true}
+    let haveTxs = {}
 
     function addTx(tx) {
         queue.push(tx)

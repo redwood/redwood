@@ -12,7 +12,7 @@
             padding: 10px;
             width: 33%;
         }
-        #debug-state-container {
+        #debug-container {
             width: 66%;
             overflow-x: hidden;
             background: #eaeaea;
@@ -21,7 +21,8 @@
             margin: 0;
         }
         #debug-state,
-        #debug-txs {
+        #debug-txs,
+        #debug-network {
             min-height: 100vh;
         }
         .hidden {
@@ -80,9 +81,10 @@
                 <button id='btn-send'>Send</button>
             </div>
         </div>
-        <div id='debug-state-container'>
+        <div id='debug-container'>
             <button id='btn-view-debug-state' disabled>State</button>
             <button id='btn-view-debug-txs'>Transactions</button>
+            <button id='btn-view-debug-network'>Network</button>
             <div id='tab-state'>
                 <code>
                     <pre id='debug-state'>
@@ -95,13 +97,19 @@
                     </pre>
                 </code>
             </div>
+            <div id='tab-network' class='hidden'>
+                <code>
+                    <pre id='debug-network'>
+                    </pre>
+                </code>
+            </div>
         </div>
     </div>
 </body>
 
+<script src="https://unpkg.com/peerjs@1.0.0/dist/peerjs.min.js"></script>
 <script src='/braid.js'></script>
 <script>
-
     //
     // Identity stuff
     //
@@ -109,8 +117,6 @@
     function refreshIdentityUI() {
         document.getElementById('my-address').innerHTML = '<strong>Your address:</strong> ' + identity.address
     }
-    (async function() { await Braid.authorize(identity) })()
-
     refreshIdentityUI()
 
     var inputMnemonic = document.getElementById('input-mnemonic')
@@ -123,16 +129,7 @@
     //
     // Braid/sync9 setup
     //
-    var s9 = Braid.sync9.create_with_genesis_state({
-        shrugisland: {
-            talk0: {
-                messages: [],
-                permissions: {},
-                resolver: {},
-                validator: {},
-            },
-        },
-    })
+    var s9 = Braid.sync9.create()
 
     var queue = Braid.utils.createTxQueue(
         (from, vid, parents, patches) => Braid.sync9.resolve_state(s9, from, vid, parents, patches),
@@ -144,12 +141,25 @@
             refreshDebugUI()
 
             // Update the chat UI
-            messages = newState.shrugisland.talk0.messages
+            if (newState.shrugisland && newState.shrugisland.talk0 && newState.shrugisland.talk0.messages) {
+                messages = newState.shrugisland.talk0.messages
+            }
             refreshChatUI()
         }
     )
 
-    Braid.subscribe('localhost:21231', '/', [ Braid.utils.genesisTxID ], queue.defaultTxHandler)
+    var braidClient = Braid.createPeer({
+        identity: identity,
+        webrtc: true,
+        onFoundPeersCallback: (peers) => {
+            knownPeers = peers
+            refreshDebugUI()
+        }
+    })
+
+    braidClient.authorize().then(() => {
+        braidClient.subscribe('localhost:21231', '/', [ Braid.utils.genesisTxID ], queue.defaultTxHandler)
+    })
 
 
     //
@@ -167,7 +177,7 @@
                 refAvailable = await available('/shrugisland/talk0/messages/' + i + '/attachment')
                 allRefsAvailable = allRefsAvailable && refAvailable
             }
-            html += '<div class="message" style="background-color: ' + intToRGB(hashCode(msg.sender)) + '">'
+            html += '<div class="message" style="background-color: ' + strToColor(msg.sender) + '">'
             html += '    <div><b>' + (msg.sender || '').substr(0, 6) + ':</b> </div>'
             html += '    <div>'
             html += '        <div>' + msg.text + '</div>'
@@ -195,13 +205,17 @@
     //
     var txs = []
     var currentState = {}
+    var knownPeers = {}
     var currentDebugTab = 'state'
     var debugTabButtonState = document.getElementById('btn-view-debug-state')
     var debugTabButtonTxs = document.getElementById('btn-view-debug-txs')
+    var debugTabButtonNetwork = document.getElementById('btn-view-debug-network')
     var debugStateElem = document.getElementById('debug-state')
     var debugTxsElem = document.getElementById('debug-txs')
+    var debugNetworkElem = document.getElementById('debug-network')
     var debugStateTab = document.getElementById('tab-state')
     var debugTxsTab = document.getElementById('tab-txs')
+    var debugNetworkTab = document.getElementById('tab-network')
     function refreshDebugUI() {
         debugStateElem.innerHTML = JSON.stringify(currentState, null, 4)
              .replace(/\\\\n/g, '\\n')
@@ -211,17 +225,32 @@
              .replace(/\\\\n/g, '\\n')
              .replace(/</g, '&lt;')
              .replace(/>/g, '&gt;')
+        debugNetworkElem.innerHTML = JSON.stringify(knownPeers, null, 4)
+             .replace(/\\\\n/g, '\\n')
+             .replace(/</g, '&lt;')
+             .replace(/>/g, '&gt;')
 
         if (currentDebugTab === 'state') {
             debugStateTab.classList.remove('hidden')
             debugTxsTab.classList.add('hidden')
+            debugNetworkTab.classList.add('hidden')
             debugTabButtonState.disabled = true
             debugTabButtonTxs.disabled = false
+            debugTabButtonNetwork.disabled = false
         } else if (currentDebugTab === 'txs') {
             debugStateTab.classList.add('hidden')
             debugTxsTab.classList.remove('hidden')
+            debugNetworkTab.classList.add('hidden')
             debugTabButtonState.disabled = false
             debugTabButtonTxs.disabled = true
+            debugTabButtonNetwork.disabled = false
+        } else if (currentDebugTab === 'network') {
+            debugStateTab.classList.add('hidden')
+            debugTxsTab.classList.add('hidden')
+            debugNetworkTab.classList.remove('hidden')
+            debugTabButtonState.disabled = false
+            debugTabButtonTxs.disabled = false
+            debugTabButtonNetwork.disabled = true
         }
     }
     debugTabButtonState.addEventListener('click', () => {
@@ -230,6 +259,10 @@
     })
     debugTabButtonTxs.addEventListener('click', () => {
         currentDebugTab = 'txs'
+        refreshDebugUI()
+    })
+    debugTabButtonNetwork.addEventListener('click', () => {
+        currentDebugTab = 'network'
         refreshDebugUI()
     })
 
@@ -251,10 +284,10 @@
     async function sendMessage() {
         var refHash
         if (inputFile.files.length > 0) {
-            refHash = await Braid.storeRef(inputFile.files[0])
+            refHash = await braidClient.storeRef(inputFile.files[0])
         }
 
-        Braid.put({
+        var tx = {
             id: Braid.utils.randomID(),
             parents: Object.keys(s9.leaves),
             url: 'localhost:21231',
@@ -267,31 +300,107 @@
                     text: inputText.value,
                 }]),
             ],
-        }, identity)
+        }
+
+        queue.addTx(tx)
+
+        try {
+            braidClient.put(tx)
+        } catch (err) {
+            console.error('error sending to peer ~>', err)
+        }
 
         inputText.value = ''
         inputFile.value = null
     }
 
     async function available(url) {
-        const resp = await fetch(url)
-        return resp.status != 404
+        try {
+            const resp = await fetch(url)
+            return resp.status != 404
+        } catch (err) {
+            return false
+        }
     }
 
-    function hashCode(str) {
+    function strToColor(str) {
+        return colors[getHashCode(str) % colors.length]
+    }
+
+    function getHashCode(str) {
         var hash = 0
+        if (str.length === 0) { return hash }
         for (var i = 0; i < str.length; i++) {
-           hash = str.charCodeAt(i) + ((hash << 5) - hash)
+            hash = str.charCodeAt(i) + ((hash << 5) - hash)
+            hash = hash & hash // Convert to 32bit integer
+        }
+        if (hash < 0) {
+            hash *= -1
         }
         return hash
     }
 
-    function intToRGB(i) {
-        var c = (i & 0x00FFFFFF)
-            .toString(16)
-            .toUpperCase()
-
-        return '00000'.substring(0, 6 - c.length) + c
-    }
+    var colors = [
+        '#FF8A80',
+        // '#FF5252',
+        // '#FF1744',
+        // '#D50000',
+        // '#FF80AB',
+        '#FF4081',
+        // '#F50057',
+        // '#C51162',
+        // '#EA80FC',
+        '#E040FB',
+        // '#AA00FF',
+        '#B388FF',
+        '#7C4DFF',
+        '#651FFF',
+        '#6200EA',
+        '#8C9EFF',
+        '#536DFE',
+        '#3D5AFE',
+        '#304FFE',
+        '#82B1FF',
+        '#448AFF',
+        '#2979FF',
+        '#2962FF',
+        '#80D8FF',
+        '#40C4FF',
+        '#00B0FF',
+        '#0091EA',
+        '#26C6DA',
+        '#00BCD4',
+        '#00ACC1',
+        '#0097A7',
+        '#00838F',
+        '#006064',
+        '#4DB6AC',
+        '#26A69A',
+        '#009688',
+        '#00897B',
+        '#00796B',
+        '#00695C',
+        '#004D40',
+        '#66BB6A',
+        '#4CAF50',
+        '#43A047',
+        '#388E3C',
+        '#2E7D32',
+        '#1B5E20',
+        '#FDD835',
+        '#FBC02D',
+        '#F9A825',
+        '#F57F17',
+        '#FB8C00',
+        '#F57C00',
+        '#EF6C00',
+        '#E65100',
+        '#E64A19',
+        '#D84315',
+        '#BF360C',
+        '#607D8B',
+        '#546E7A',
+        '#455A64',
+    ]
 </script>
 </html>

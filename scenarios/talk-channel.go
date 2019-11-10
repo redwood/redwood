@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
@@ -18,7 +17,7 @@ type app struct {
 	ctx.Context
 }
 
-func makeHost(signingKeypairHex string, port uint, dbfile string, refStoreRoot string, tlsCertFilename, tlsKeyFilename string) rw.Host {
+func makeHost(signingKeypairHex string, port uint, dbfile, refStoreRoot, cookieSecretStr, tlsCertFilename, tlsKeyFilename string) rw.Host {
 	signingKeypair, err := rw.SigningKeypairFromHex(signingKeypairHex)
 	if err != nil {
 		panic(err)
@@ -52,7 +51,9 @@ func makeHost(signingKeypairHex string, port uint, dbfile string, refStoreRoot s
 		panic(err)
 	}
 
-	httptransport, err := rw.NewHTTPTransport(signingKeypair.Address(), port+1, controller, refStore, signingKeypair, tlsCertFilename, tlsKeyFilename)
+	var cookieSecret [32]byte
+	copy(cookieSecret[:], []byte(cookieSecretStr))
+	httptransport, err := rw.NewHTTPTransport(signingKeypair.Address(), port+1, controller, refStore, signingKeypair, cookieSecret, tlsCertFilename, tlsKeyFilename)
 	if err != nil {
 		panic(err)
 	}
@@ -118,8 +119,8 @@ func main() {
 
 	os.MkdirAll("/tmp/forest", 0700)
 
-	host1 := makeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/forest/badger1", "/tmp/forest/refs1", "server1.crt", "server1.key")
-	host2 := makeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/forest/badger2", "/tmp/forest/refs2", "server2.crt", "server2.key")
+	host1 := makeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/forest/badger1", "/tmp/forest/refs1", "cookiesecret1", "server1.crt", "server1.key")
+	host2 := makeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/forest/badger2", "/tmp/forest/refs2", "cookiesecret2", "server2.crt", "server2.key")
 
 	err := host1.Start()
 	if err != nil {
@@ -180,7 +181,7 @@ func sendTxs(host1, host2 rw.Host) {
 	}
 	sync9Hash, err := host1.AddRef(sync9, "application/js")
 	if err != nil {
-		panic(fmt.Sprintf("%+v", err))
+		panic(err)
 	}
 	indexHTML, err := os.Open("./index.html")
 	if err != nil {
@@ -206,32 +207,36 @@ func sendTxs(host1, host2 rw.Host) {
 		From:    host1.Address(),
 		URL:     "localhost:21231",
 		Patches: []rw.Patch{
-			mustParsePatch(`.shrugisland.talk0.permissions = {
-                "96216849c49358b10257cb55b28ea603c874b05e": {
-                    "^.*$": {
-                        "read": true,
-                        "write": true
-                    }
-                },
-                "*": {
-                    "^\\.permissions.*$": {
-                        "read": true,
-                        "write": false
-                    },
-                    "^\\.index.*$": {
-                        "read": true,
-                        "write": false
-                    },
-                    "^\\.messages.*": {
-                        "read": true,
-                        "write": true
+			mustParsePatch(`.shrugisland = ` + deterministicJSON(`{
+                "talk0": {
+                    "index": {"link": "ref:`+indexHTMLHash.String()+`"},
+                    "messages": [],
+                    "resolver": {"type": "js", "src": { "link": "ref:`+sync9Hash.String()+`" }},
+                    "validator": {"type": "permissions"},
+                    "permissions": {
+                        "96216849c49358b10257cb55b28ea603c874b05e": {
+                            "^.*$": {
+                                "read": true,
+                                "write": true
+                            }
+                        },
+                        "*": {
+                            "^\\.permissions.*$": {
+                                "read": true,
+                                "write": false
+                            },
+                            "^\\.index.*$": {
+                                "read": true,
+                                "write": false
+                            },
+                            "^\\.messages.*": {
+                                "read": true,
+                                "write": true
+                            }
+                        }
                     }
                 }
-            }`),
-			mustParsePatch(`.shrugisland.talk0.messages = []`),
-			mustParsePatch(`.shrugisland.talk0.validator = {"type": "permissions"}`),
-			mustParsePatch(`.shrugisland.talk0.resolver = {"type":"js", "src": { "link": "ref:` + sync9Hash.String() + `" }}`),
-			mustParsePatch(`.shrugisland.talk0.index = { "link": "ref:` + indexHTMLHash.String() + `" }`),
+            }`)),
 		},
 	}
 
@@ -251,7 +256,7 @@ func sendTxs(host1, host2 rw.Host) {
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[0:0] = [{"text":"hello!","sender":"` + host1.Address().String() + `"}]`),
-				mustParsePatch(`.shrugisland.talk0.secretThing = {"welcome":"you've stumbled upon a secret place!","sensitiveInformation":[1,2,3]}`),
+				// mustParsePatch(`.shrugisland.talk0.secretThing = {"welcome":"you've stumbled upon a secret place!","sensitiveInformation":[1,2,3]}`),
 			},
 		}
 
@@ -318,4 +323,18 @@ func mustParsePatch(s string) rw.Patch {
 		panic(err.Error() + ": " + s)
 	}
 	return p
+}
+
+func deterministicJSON(s string) string {
+	var x interface{}
+	err := json.Unmarshal([]byte(s), &x)
+	if err != nil {
+		panic(err)
+	}
+
+	bs, err := json.Marshal(x)
+	if err != nil {
+		panic(err)
+	}
+	return string(bs)
 }
