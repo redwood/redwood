@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -324,7 +325,18 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			keypath := filterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
 
 			if r.Header.Get("Accept") == "application/json" {
-				val, err := t.controller.State(keypath, address, false)
+				var resolveRefs bool
+				resolveRefsStr := r.URL.Query().Get("resolve_refs")
+				if resolveRefsStr != "" {
+					var err error
+					resolveRefs, err = strconv.ParseBool(resolveRefsStr)
+					if err != nil {
+						http.Error(w, "invalid resolveRefs param", http.StatusNotFound)
+						return
+					}
+				}
+
+				val, err := t.controller.State(keypath, resolveRefs)
 				if err != nil {
 					http.Error(w, "not found", http.StatusNotFound)
 					return
@@ -362,9 +374,10 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 
 			} else {
-				val, err := t.controller.State(keypath, address, true)
+				val, err := t.controller.State(keypath, true)
 				if err != nil {
-					http.Error(w, "not found: "+err.Error(), http.StatusNotFound)
+					t.Errorf("errrr %+v", err)
+					http.Error(w, fmt.Sprintf("not found: %+v", err.Error()), http.StatusNotFound)
 					return
 				}
 

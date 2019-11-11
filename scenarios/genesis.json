@@ -2,14 +2,12 @@
     "permissions": {
         "96216849c49358b10257cb55b28ea603c874b05e": {
             "^.*$": {
-                "read":  true,
                 "write": true
             }
         },
         "*": {
-            "^.*$": {
-                "read":  true,
-                "write": false
+            "^\\.private-.*": {
+                "write": true
             }
         }
     },

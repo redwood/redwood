@@ -22,8 +22,7 @@ type Controller interface {
 	FetchTxs() TxIterator
 	HaveTx(txID ID) bool
 
-	State(keypath []string, requester Address, resolveRefs bool) (interface{}, error)
-	PruneForbiddenPatches(patches []Patch, requester Address) ([]Patch, error)
+	State(keypath []string, resolveRefs bool) (interface{}, error)
 	MostRecentTxID() ID // @@TODO: should be .Leaves()
 
 	SetResolver(keypath []string, resolver Resolver)
@@ -119,33 +118,15 @@ func (c *controller) SetReceivedRefsHandler(handler ReceivedRefsHandler) {
 	c.onReceivedRefs = handler
 }
 
-func (c *controller) State(keypath []string, requester Address, resolveRefs bool) (interface{}, error) {
-	var processNode func(node *resolverTreeNode, keypath []string, localState interface{}) interface{}
-	processNode = func(node *resolverTreeNode, keypath []string, localState interface{}) interface{} {
-		for key, child := range node.subkeys {
-			val, exists := getValue(localState, []string{key})
-			if exists {
-				childKeypath := append(keypath, key)
-				processed := processNode(child, childKeypath, val)
-				setValueAtKeypath(localState, []string{key}, processed, true)
-			}
-		}
-
-		if node.validator != nil {
-			err := node.validator.PruneForbiddenState(localState, []string{}, requester)
-			if err != nil {
-				panic(err)
-			}
-		}
-		return localState
+func (c *controller) State(keypath []string, resolveRefs bool) (interface{}, error) {
+	val, exists := getValue(c.currentState, keypath)
+	if !exists {
+		return nil, nil
 	}
-	state := DeepCopyJSValue(c.currentState)
-	processed := processNode(c.resolverTree.root, []string{}, state)
-
-	processed, _ = getValue(processed, keypath)
+	copied := DeepCopyJSValue(val)
 
 	if resolveRefs {
-		asMap, isMap := processed.(map[string]interface{})
+		asMap, isMap := copied.(map[string]interface{})
 		if isMap {
 			resolved, _, err := c.resolveRefs(asMap)
 			if err != nil {
@@ -154,37 +135,10 @@ func (c *controller) State(keypath []string, requester Address, resolveRefs bool
 			return resolved, nil
 		}
 	}
-	return processed, nil
+	return copied, nil
 }
 
-func (c *controller) PruneForbiddenPatches(patches []Patch, requester Address) ([]Patch, error) {
-	var prunedPatches []Patch
-
-	validators, validatorKeypaths, notValidated := c.resolverTree.groupPatchesByValidator(patches)
-	for validator, patchesForValidator := range validators {
-		if len(patchesForValidator) == 0 {
-			continue
-		}
-
-		keypath := validatorKeypaths[validator]
-		newPatches, err := validator.PruneForbiddenPatches(c.stateAtKeypath(keypath), patchesForValidator, requester)
-		if err != nil {
-			return nil, err
-		}
-
-		for i := range newPatches {
-			copied := make([]string, len(keypath))
-			copy(copied, keypath)
-			newPatches[i].Keys = append(copied, newPatches[i].Keys...)
-		}
-
-		prunedPatches = append(prunedPatches, newPatches...)
-	}
-	prunedPatches = append(prunedPatches, notValidated...)
-	return prunedPatches, nil
-}
-
-func (c *controller) resolveRefs(m map[string]interface{}) (interface{}, bool, error) {
+func (c *controller) resolveRefs(input interface{}) (interface{}, bool, error) {
 	type resolution struct {
 		keypath []string
 		val     interface{}
@@ -192,49 +146,56 @@ func (c *controller) resolveRefs(m map[string]interface{}) (interface{}, bool, e
 	resolutions := []resolution{}
 
 	var anyMissing bool
-	err := walkTree(m, func(keypath []string, val interface{}) error {
-		asMap, isMap := val.(map[string]interface{})
-		if !isMap {
-			return nil
-		}
-
-		link, exists := getString(asMap, []string{"link"})
+	err := walkTree(input, func(keypath []string, val interface{}) error {
+		link, exists := getString(val, []string{"link"})
 		if !exists {
 			return nil
 		}
 
-		hash, err := HashFromHex(link[len("ref:"):])
-		if err != nil {
-			return err
+		linkType := DetermineLinkType(link)
+		if linkType == LinkTypeRef {
+			hash, err := HashFromHex(link[len("ref:"):])
+			if err != nil {
+				return err
+			}
+
+			objectReader, contentType, err := c.refStore.Object(hash)
+			if goerrors.Is(err, os.ErrNotExist) {
+				// If we don't have a given ref, we leave it as-is, but inform the caller.
+				anyMissing = true
+				return nil
+			} else if err != nil {
+				return err
+			}
+			defer objectReader.Close()
+
+			bs, err := ioutil.ReadAll(objectReader)
+			if err != nil {
+				return err
+			}
+
+			switch {
+			case contentType == "application/json",
+				contentType == "application/js",
+				contentType[:5] == "text/":
+				resolutions = append(resolutions, resolution{keypath, string(bs)})
+
+			case contentType[:6] == "image/":
+				resolutions = append(resolutions, resolution{keypath, bs})
+
+			default:
+				panic("unknown content type")
+			}
+
+		} else if linkType == LinkTypePath {
+			otherKeypath := strings.Split(link[1:], "/")
+			val, err := c.State(otherKeypath, true)
+			if err != nil {
+				return err
+			}
+			resolutions = append(resolutions, resolution{keypath, val})
 		}
 
-		objectReader, contentType, err := c.refStore.Object(hash)
-		if goerrors.Is(err, os.ErrNotExist) {
-			// If we don't have a given ref, we just don't fill it in
-			anyMissing = true
-			return nil
-		} else if err != nil {
-			return err
-		}
-		defer objectReader.Close()
-
-		bs, err := ioutil.ReadAll(objectReader)
-		if err != nil {
-			return err
-		}
-
-		switch {
-		case contentType == "application/json",
-			contentType == "application/js",
-			contentType[:5] == "text/":
-			resolutions = append(resolutions, resolution{keypath, string(bs)})
-
-		case contentType[:6] == "image/":
-			resolutions = append(resolutions, resolution{keypath, bs})
-
-		default:
-			panic("unknown content type")
-		}
 		return nil
 	})
 	if err != nil {
@@ -243,13 +204,13 @@ func (c *controller) resolveRefs(m map[string]interface{}) (interface{}, bool, e
 
 	for _, res := range resolutions {
 		if len(res.keypath) > 0 {
-			setValueAtKeypath(m, res.keypath, res.val, true)
+			setValueAtKeypath(input, res.keypath, res.val, true)
 		} else {
 			// This tends to come up when a browser is fetching individual resources that are refs
 			return res.val, anyMissing, nil
 		}
 	}
-	return m, anyMissing, nil
+	return input, anyMissing, nil
 }
 
 func (c *controller) StateJSON() []byte {
@@ -339,12 +300,12 @@ func (c *controller) mempoolLoop() {
 					select {
 					case <-c.Context.Done():
 					case <-time.After(500 * time.Millisecond):
-						c.Infof(0, "readding to mempool %v (%v)", tx.Hash(), err)
+						c.Infof(0, "readding to mempool %v (%v)", tx.ID.Pretty(), err)
 						c.addToMempool(tx)
 					}
 				}()
 			} else if err != nil {
-				c.Errorf("invalid tx %+v: %v", *tx, err)
+				c.Errorf("invalid tx %+v: %+v", *tx, err)
 			} else {
 				c.Infof(0, "tx added to chain (%v)", tx.Hash().Pretty())
 			}
@@ -377,70 +338,6 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 				return err
 			}
 		}
-	}
-
-	//
-	// Check incoming patches to see if any refs will be modified (necessitating that we fetch them before updating the state tree)
-	//
-	{
-		// 	var resolverRefs []Hash
-
-		// 	log := func(msg string, args ...interface{}) {
-		// 		a := c.address.Hex()
-		// 		if a[0] == 'b' {
-		// 			c.Warnf(msg, args...)
-		// 		}
-		// 	}
-
-		// CheckPatchesForRefs:
-		// 	for _, p := range tx.Patches {
-		// 		var foundResolverKey bool
-		// 		log("patch: %v", p.String())
-
-		// 		for i, key := range p.Keys {
-		// 			log("key: %v", key)
-		// 			if key == "resolver" || key == "validator" {
-		// 				log("found resolver key")
-		// 				foundResolverKey = true
-		// 				continue
-		// 			}
-		// 			if foundResolverKey && key == "link" && i == len(p.Keys)-1 {
-		// 				log("found link key")
-		// 				if linkStr, isString := p.Val.(string); isString {
-		// 					hash, err := HashFromHex(linkStr[len("ref:"):])
-		// 					if err != nil {
-		// 						return err
-		// 					}
-		// 					resolverRefs = append(resolverRefs, hash)
-		// 					continue CheckPatchesForRefs
-		// 				}
-		// 			}
-		// 		}
-		// 		if foundResolverKey {
-		// 			err := walkTree(p.Val, func(keypath []string, val interface{}) error {
-		// 				linkStr, valIsString := val.(string)
-		// 				if len(keypath) > 0 && keypath[len(keypath)-1] == "link" && valIsString {
-		// 					hash, err := HashFromHex(linkStr[len("ref:"):])
-		// 					if err != nil {
-		// 						return err
-		// 					}
-		// 					resolverRefs = append(resolverRefs, hash)
-		// 				}
-		// 				return nil
-		// 			})
-		// 			if err != nil {
-		// 				return err
-		// 			}
-		// 		}
-		// 	}
-
-		// 	c.onReceivedRefs(resolverRefs)
-
-		// 	for _, refHash := range resolverRefs {
-		// 		if !c.refStore.HaveObject(refHash) {
-		// 			return ErrMissingCriticalRefs
-		// 		}
-		// 	}
 	}
 
 	//
@@ -508,11 +405,13 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		err = walkTree(newState, func(keypath []string, val interface{}) error {
 			linkStr, valIsString := val.(string)
 			if len(keypath) > 0 && keypath[len(keypath)-1] == "link" && valIsString {
-				hash, err := HashFromHex(linkStr[len("ref:"):])
-				if err != nil {
-					return err
+				if DetermineLinkType(linkStr) == LinkTypeRef {
+					hash, err := HashFromHex(linkStr[len("ref:"):])
+					if err != nil {
+						return err
+					}
+					refs = append(refs, hash)
 				}
-				refs = append(refs, hash)
 			}
 			return nil
 		})
@@ -583,6 +482,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 
 	// Finally, set current state
 	c.currentState = newState
+	// c.Warnf("state ~> %v", PrettyJSON(newState))
 
 	tx.Valid = true
 	c.validTxs[tx.ID] = tx

@@ -12,8 +12,6 @@ type Resolver interface {
 }
 
 type Validator interface {
-	PruneForbiddenState(state interface{}, requestedKeypath []string, requester Address) error
-	PruneForbiddenPatches(state interface{}, patches []Patch, requester Address) ([]Patch, error)
 	ValidateTx(state interface{}, txs, validTxs map[ID]*Tx, tx Tx) error
 }
 

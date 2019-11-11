@@ -200,6 +200,19 @@ func sendTxs(host1, host2 rw.Host) {
 		panic(err)
 	}
 
+	hostsByAddress := map[rw.Address]rw.Host{
+		host1.Address(): host1,
+		host2.Address(): host2,
+	}
+
+	sendTx := func(tx rw.Tx) {
+		host := hostsByAddress[tx.From]
+		err := host.SendTx(context.Background(), tx)
+		if err != nil {
+			host.Errorf("%+v", err)
+		}
+	}
+
 	// Setup talk channel using transactions
 	var tx1 = rw.Tx{
 		ID:      rw.IDFromString("one"),
@@ -216,21 +229,17 @@ func sendTxs(host1, host2 rw.Host) {
                     "permissions": {
                         "96216849c49358b10257cb55b28ea603c874b05e": {
                             "^.*$": {
-                                "read": true,
                                 "write": true
                             }
                         },
                         "*": {
                             "^\\.permissions.*$": {
-                                "read": true,
                                 "write": false
                             },
                             "^\\.index.*$": {
-                                "read": true,
                                 "write": false
                             },
                             "^\\.messages.*": {
-                                "read": true,
                                 "write": true
                             }
                         }
@@ -241,22 +250,65 @@ func sendTxs(host1, host2 rw.Host) {
 	}
 
 	host1.Info(1, "sending tx to initialize talk channel...")
-	err = host1.SendTx(context.Background(), tx1)
-	if err != nil {
-		host1.Errorf("%+v", err)
-	}
-
-	time.Sleep(5 * time.Second)
+	sendTx(tx1)
 
 	var (
-		tx2 = rw.Tx{
-			ID:      rw.IDFromString("two"),
+		ptx1 = rw.Tx{
+			ID:      rw.IDFromString("ptx1"),
 			Parents: []rw.ID{tx1.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
+				mustParsePatch(`.users = {}`),
+			},
+		}
+
+		ptx2 = rw.Tx{
+			ID:      rw.IDFromString("ptx2"),
+			Parents: []rw.ID{ptx1.ID},
+			From:    host1.Address(),
+			URL:     "localhost:21231",
+			Patches: []rw.Patch{
+				mustParsePatch(`.users.` + host1.Address().Hex() + ` = ` + deterministicJSON(`{
+                    "name": "Paul Stamets",
+                    "occupation": "Astromycologist"
+                }`)),
+			},
+		}
+
+		ptx3recipients = []rw.Address{host1.Address()}
+		ptx3           = rw.Tx{
+			ID:      rw.IDFromString("ptx3"),
+			Parents: []rw.ID{ptx2.ID},
+			From:    host1.Address(),
+			URL:     "localhost:21231",
+			Patches: []rw.Patch{
+				mustParsePatch(`.` + rw.PrivateRootKeyForRecipients(ptx3recipients) + `.profile = ` + deterministicJSON(`{
+                    "public": {
+                        "link": "/users/`+host1.Address().Hex()+`"
+                    },
+                    "secrets": {
+                        "catName": "Stanley",
+                        "favoriteDonutShape": "toroidal"
+                    }
+                }`)),
+			},
+			Recipients: ptx3recipients,
+		}
+	)
+
+	sendTx(ptx1)
+	sendTx(ptx2)
+	sendTx(ptx3)
+
+	var (
+		tx2 = rw.Tx{
+			ID:      rw.IDFromString("two"),
+			Parents: []rw.ID{ptx3.ID},
+			From:    host1.Address(),
+			URL:     "localhost:21231",
+			Patches: []rw.Patch{
 				mustParsePatch(`.shrugisland.talk0.messages[0:0] = [{"text":"hello!","sender":"` + host1.Address().String() + `"}]`),
-				// mustParsePatch(`.shrugisland.talk0.secretThing = {"welcome":"you've stumbled upon a secret place!","sensitiveInformation":[1,2,3]}`),
 			},
 		}
 
@@ -281,21 +333,9 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 	)
 
-	host1.Info(1, "sending tx 4...")
-	err = host1.SendTx(context.Background(), tx4)
-	if err != nil {
-		host1.Errorf("xxx %+v", err)
-	}
-	host2.Info(1, "sending tx 3...")
-	err = host2.SendTx(context.Background(), tx3)
-	if err != nil {
-		host2.Errorf("zzz %+v", err)
-	}
-	host1.Info(1, "sending tx 2...")
-	err = host1.SendTx(context.Background(), tx2)
-	if err != nil {
-		host1.Errorf("yyy %+v", err)
-	}
+	sendTx(tx4)
+	sendTx(tx3)
+	sendTx(tx2)
 
 	// var (
 	// 	recipients = []rw.Address{host1.Address(), host2.Address()}

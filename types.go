@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/pkg/errors"
 )
 
 type (
@@ -40,6 +41,8 @@ type (
 		Start int64
 		End   int64
 	}
+
+	LinkType int
 )
 
 var (
@@ -51,10 +54,26 @@ const (
 	KeypathSeparator = "."
 )
 
+const (
+	LinkTypeUnknown LinkType = iota
+	LinkTypeRef
+	LinkTypePath
+	LinkTypeURL // @@TODO
+)
+
+func DetermineLinkType(linkStr string) LinkType {
+	if strings.Index(linkStr, "ref:") == 0 {
+		return LinkTypeRef
+	} else if linkStr[0] == '/' {
+		return LinkTypePath
+	}
+	return LinkTypeUnknown
+}
+
 func SignatureFromHex(hx string) (Signature, error) {
 	bs, err := hex.DecodeString(hx)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	return Signature(bs), nil
 }
@@ -70,7 +89,7 @@ func (sig Signature) MarshalJSON() ([]byte, error) {
 func (sig *Signature) UnmarshalJSON(bs []byte) error {
 	bs, err := hex.DecodeString(string(bs[1 : len(bs)-1]))
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	*sig = bs
 	return nil
@@ -83,7 +102,7 @@ func (c ChallengeMsg) MarshalJSON() ([]byte, error) {
 func (c *ChallengeMsg) UnmarshalJSON(bs []byte) error {
 	bs, err := hex.DecodeString(string(bs[1 : len(bs)-1]))
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	*c = bs
 	return nil
@@ -92,7 +111,7 @@ func (c *ChallengeMsg) UnmarshalJSON(bs []byte) error {
 func AddressFromHex(hx string) (Address, error) {
 	bs, err := hex.DecodeString(hx)
 	if err != nil {
-		return Address{}, err
+		return Address{}, errors.WithStack(err)
 	}
 	var addr Address
 	copy(addr[:], bs)
@@ -124,7 +143,7 @@ func (a Address) MarshalText() ([]byte, error) {
 func (a *Address) UnmarshalText(asHex []byte) error {
 	bs, err := hex.DecodeString(string(asHex))
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	copy((*a)[:], bs)
 	return nil
@@ -165,7 +184,7 @@ func PrivateRootKeyForRecipients(recipients []Address) string {
 	for _, r := range recipients {
 		bs = append(bs, r[:]...)
 	}
-	return "private" + HashBytes(bs).String()
+	return "private-" + HashBytes(bs).String()
 }
 
 func (tx Tx) PrivateRootKey() string {
@@ -188,7 +207,7 @@ func HashFromHex(hexStr string) (Hash, error) {
 func (h *Hash) UnmarshalText(text []byte) error {
 	bs, err := hex.DecodeString(string(text))
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	copy((*h)[:], bs)
 	return nil
@@ -274,7 +293,7 @@ func (p Patch) MarshalJSON() ([]byte, error) {
 func (id *ID) UnmarshalText(text []byte) error {
 	bs, err := hex.DecodeString(string(text))
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	copy((*id)[:], bs)
 	return nil
@@ -293,7 +312,7 @@ func RandomID() ID {
 func IDFromHex(h string) (ID, error) {
 	bs, err := hex.DecodeString(h)
 	if err != nil {
-		return ID{}, err
+		return ID{}, errors.WithStack(err)
 	}
 	var id ID
 	copy(id[:], bs)

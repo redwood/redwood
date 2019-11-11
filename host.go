@@ -232,16 +232,24 @@ func (h *host) OnFetchHistoryRequestReceived(parents []ID, toVersion ID, peer Pe
 			return nil
 		}
 
-		prunedPatches, err := h.controller.PruneForbiddenPatches(tx.Patches, peer.Address())
-		if err != nil {
-			h.Errorf("error pruning patches for peer: %+v", err)
-			continue
+		isARecipient := !tx.IsPrivate()
+		for _, recipient := range tx.Recipients {
+			if peer.Address() == recipient {
+				isARecipient = true
+			}
 		}
 
-		txCopy := *tx
-		txCopy.Patches = prunedPatches
-
-		err = peer.WriteMsg(Msg{Type: MsgType_Put, Payload: txCopy})
+		// @@TODO: temporary hack until we have multiple channels
+		if !isARecipient {
+			tx = &Tx{
+				ID:      tx.ID,
+				From:    tx.From,
+				Parents: tx.Parents,
+				Patches: []Patch{},
+				URL:     tx.URL,
+			}
+		}
+		err := peer.WriteMsg(Msg{Type: MsgType_Put, Payload: *tx})
 		if err != nil {
 			return err
 		}
@@ -419,7 +427,7 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 		return errors.WithStack(ErrUnsignedTx)
 	}
 
-	if len(tx.Recipients) > 0 {
+	if tx.IsPrivate() {
 		marshalledTx, err := json.Marshal(tx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -461,13 +469,24 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 				if err != nil {
 					return err
 				}
+				// @@TODO: wait for ack?
 				return nil
 			}()
 			if err != nil {
 				return err
 			}
+		}
 
-			// @@TODO: wait for ack?
+		// @@TODO: temporary hack until we have multiple channels
+		err = h.SendTx(ctx, Tx{
+			ID:      tx.ID,
+			From:    tx.From,
+			Parents: tx.Parents,
+			Patches: []Patch{},
+			URL:     tx.URL,
+		})
+		if err != nil {
+			return err
 		}
 
 	} else {
@@ -491,16 +510,7 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 				continue
 			}
 
-			prunedPatches, err := h.controller.PruneForbiddenPatches(tx.Patches, peer.Address())
-			if err != nil {
-				h.Errorf("error pruning patches for peer: %v", err)
-				continue
-			}
-
-			txCopy := tx
-			txCopy.Patches = prunedPatches
-
-			err = peer.WriteMsg(Msg{Type: MsgType_Put, Payload: txCopy})
+			err = peer.WriteMsg(Msg{Type: MsgType_Put, Payload: tx})
 			if err != nil {
 				h.Errorf("error writing tx to peer: %v", err)
 				continue
@@ -624,13 +634,12 @@ func (h *host) onReceivedRefs(refs []Hash) {
 					}
 				}()
 
-				// h.Warnf("storing ref %v", )
 				hash, err := h.refStore.StoreObject(pr, resp.Header.ContentType)
 				if err != nil {
 					h.Errorf("protocol probs: %v", err)
 					continue PeerLoop
 				}
-				h.Warnf("stored ref %v", hash)
+				h.Infof(0, "stored ref %v", hash)
 				// @@TODO: check stored refHash against the one we requested
 
 				err = h.transport.AnnounceRef(hash)

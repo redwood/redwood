@@ -54,7 +54,7 @@ func EncryptingPublicKeyFromBytes(bs []byte) EncryptingPublicKey {
 func EncryptingPublicKeyFromHex(s string) (EncryptingPublicKey, error) {
 	bs, err := hex.DecodeString(s)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	var pk encryptingPublicKey
@@ -65,7 +65,7 @@ func EncryptingPublicKeyFromHex(s string) (EncryptingPublicKey, error) {
 func EncryptingPrivateKeyFromHex(s string) (EncryptingPrivateKey, error) {
 	bs, err := hex.DecodeString(s)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	var pk encryptingPrivateKey
