@@ -35,21 +35,21 @@ var validatorRegistry map[string]ValidatorConstructor
 
 func init() {
 	validatorRegistry = map[string]ValidatorConstructor{
-		"permissions": NewPermissionsValidator,
+		"validator/permissions": NewPermissionsValidator,
 		// "stack":       NewStackValidator,
 	}
 	resolverRegistry = map[string]ResolverConstructor{
-		"dumb":  NewDumbResolver,
-		"stack": NewStackResolver,
-		"lua":   NewLuaResolver,
-		"js":    NewJSResolver,
+		"resolver/dumb":  NewDumbResolver,
+		"resolver/stack": NewStackResolver,
+		"resolver/lua":   NewLuaResolver,
+		"resolver/js":    NewJSResolver,
 	}
 }
 
 func initResolverFromConfig(config map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
-	typ, exists := getString(config, []string{"type"})
+	typ, exists := getString(config, []string{"Content-Type"})
 	if !exists {
-		return nil, errors.New("cannot init resolver without a 'type' param")
+		return nil, errors.New("cannot init resolver without a 'Content-Type' param")
 	}
 	ctor, exists := resolverRegistry[typ]
 	if !exists {
@@ -59,9 +59,9 @@ func initResolverFromConfig(config map[string]interface{}, internalState map[str
 }
 
 func initValidatorFromConfig(config map[string]interface{}) (Validator, error) {
-	typ, exists := getString(config, []string{"type"})
+	typ, exists := getString(config, []string{"Content-Type"})
 	if !exists {
-		return nil, errors.New("cannot init validator without a 'type' param")
+		return nil, errors.New("cannot init validator without a 'Content-Type' param")
 	}
 	ctor, exists := validatorRegistry[typ]
 	if !exists {

@@ -22,7 +22,7 @@ type Controller interface {
 	FetchTxs() TxIterator
 	HaveTx(txID ID) bool
 
-	State(keypath []string, resolveRefs bool) (interface{}, error)
+	State(keypath []string, resolveRefs bool) (interface{}, bool, error)
 	MostRecentTxID() ID // @@TODO: should be .Leaves()
 
 	SetResolver(keypath []string, resolver Resolver)
@@ -118,24 +118,20 @@ func (c *controller) SetReceivedRefsHandler(handler ReceivedRefsHandler) {
 	c.onReceivedRefs = handler
 }
 
-func (c *controller) State(keypath []string, resolveRefs bool) (interface{}, error) {
+func (c *controller) State(keypath []string, resolveRefs bool) (interface{}, bool, error) {
 	val, exists := getValue(c.currentState, keypath)
 	if !exists {
-		return nil, nil
+		return nil, false, nil
 	}
 	copied := DeepCopyJSValue(val)
 
 	if resolveRefs {
 		asMap, isMap := copied.(map[string]interface{})
 		if isMap {
-			resolved, _, err := c.resolveRefs(asMap)
-			if err != nil {
-				return nil, err
-			}
-			return resolved, nil
+			return c.resolveRefs(asMap)
 		}
 	}
-	return copied, nil
+	return copied, false, nil
 }
 
 func (c *controller) resolveRefs(input interface{}) (interface{}, bool, error) {
@@ -146,13 +142,7 @@ func (c *controller) resolveRefs(input interface{}) (interface{}, bool, error) {
 	resolutions := []resolution{}
 
 	var anyMissing bool
-	err := walkTree(input, func(keypath []string, val interface{}) error {
-		link, exists := getString(val, []string{"link"})
-		if !exists {
-			return nil
-		}
-
-		linkType := DetermineLinkType(link)
+	err := walkLinks(input, func(linkType LinkType, link string, keypath []string, val map[string]interface{}) error {
 		if linkType == LinkTypeRef {
 			hash, err := HashFromHex(link[len("ref:"):])
 			if err != nil {
@@ -189,13 +179,12 @@ func (c *controller) resolveRefs(input interface{}) (interface{}, bool, error) {
 
 		} else if linkType == LinkTypePath {
 			otherKeypath := strings.Split(link[1:], "/")
-			val, err := c.State(otherKeypath, true)
+			val, _, err := c.State(otherKeypath, true)
 			if err != nil {
 				return err
 			}
 			resolutions = append(resolutions, resolution{keypath, val})
 		}
-
 		return nil
 	})
 	if err != nil {
@@ -402,16 +391,13 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 
 		// Notify the Host to start fetching any refs we don't have yet
 		var refs []Hash
-		err = walkTree(newState, func(keypath []string, val interface{}) error {
-			linkStr, valIsString := val.(string)
-			if len(keypath) > 0 && keypath[len(keypath)-1] == "link" && valIsString {
-				if DetermineLinkType(linkStr) == LinkTypeRef {
-					hash, err := HashFromHex(linkStr[len("ref:"):])
-					if err != nil {
-						return err
-					}
-					refs = append(refs, hash)
+		err := walkLinks(newState, func(linkType LinkType, link string, keypath []string, val map[string]interface{}) error {
+			if linkType == LinkTypeRef {
+				hash, err := HashFromHex(link[len("ref:"):])
+				if err != nil {
+					return err
 				}
+				refs = append(refs, hash)
 			}
 			return nil
 		})
@@ -434,43 +420,49 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		newResolverTree.addResolver([]string{}, &dumbResolver{})
 		newResolverTree.addValidator([]string{}, &permissionsValidator{})
 		err = walkTree(newState, func(keypath []string, val interface{}) error {
-			resolverConfigMap, exists := getMap(val, []string{"resolver"})
-			if !exists {
-				return nil
+			resolverConfig, exists := getValue(val, []string{"Merge-Type"})
+			if exists {
+				// Resolve any refs (to code) in the resolver config object.  We deep copy the config so
+				// that we don't inject any refs into the state tree itself
+				config, anyMissing, err := c.resolveRefs(DeepCopyJSValue(resolverConfig).(map[string]interface{}))
+				if err != nil {
+					return err
+				} else if anyMissing {
+					return ErrMissingCriticalRefs
+				}
+
+				var resolverInternalState map[string]interface{}
+				oldResolverNode, depth := c.resolverTree.nearestResolverNodeForKeypath(keypath)
+				if depth != len(keypath) {
+					resolverInternalState = make(map[string]interface{})
+				} else {
+					resolverInternalState = oldResolverNode.resolver.InternalState()
+				}
+
+				resolver, err := initResolverFromConfig(config.(map[string]interface{}), resolverInternalState)
+				if err != nil {
+					return err
+				}
+				newResolverTree.addResolver(keypath, resolver)
 			}
 
-			// Resolve any refs (to code) in the resolver config object.  We deep copy the config so
-			// that we don't inject any refs into the state tree itself
-			config, anyMissing, err := c.resolveRefs(DeepCopyJSValue(resolverConfigMap).(map[string]interface{}))
-			if err != nil {
-				return err
-			} else if anyMissing {
-				return ErrMissingCriticalRefs
-			}
+			validatorConfig, exists := getValue(val, []string{"Validator"})
+			if exists {
+				// Resolve any refs (to code) in the validator config object.  We deep copy the config so
+				// that we don't inject any refs into the state tree itself
+				config, anyMissing, err := c.resolveRefs(DeepCopyJSValue(validatorConfig).(map[string]interface{}))
+				if err != nil {
+					return err
+				} else if anyMissing {
+					return ErrMissingCriticalRefs
+				}
 
-			var resolverInternalState map[string]interface{}
-			oldResolverNode, depth := c.resolverTree.nearestResolverNodeForKeypath(keypath)
-			if depth != len(keypath) {
-				resolverInternalState = make(map[string]interface{})
-			} else {
-				resolverInternalState = oldResolverNode.resolver.InternalState()
+				validator, err := initValidatorFromConfig(config.(map[string]interface{}))
+				if err != nil {
+					return err
+				}
+				newResolverTree.addValidator(keypath, validator)
 			}
-
-			resolver, err := initResolverFromConfig(config.(map[string]interface{}), resolverInternalState)
-			if err != nil {
-				return err
-			}
-			newResolverTree.addResolver(keypath, resolver)
-
-			validatorConfig, exists := getMap(val, []string{"validator"})
-			if !exists {
-				return nil
-			}
-			validator, err := initValidatorFromConfig(validatorConfig)
-			if err != nil {
-				return err
-			}
-			newResolverTree.addValidator(keypath, validator)
 
 			return nil
 		})

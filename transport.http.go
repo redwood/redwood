@@ -331,12 +331,12 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					var err error
 					resolveRefs, err = strconv.ParseBool(resolveRefsStr)
 					if err != nil {
-						http.Error(w, "invalid resolveRefs param", http.StatusNotFound)
+						http.Error(w, "invalid resolve_refs param", http.StatusNotFound)
 						return
 					}
 				}
 
-				val, err := t.controller.State(keypath, resolveRefs)
+				val, _, err := t.controller.State(keypath, resolveRefs)
 				if err != nil {
 					http.Error(w, "not found", http.StatusNotFound)
 					return
@@ -374,31 +374,40 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 
 			} else {
-				val, err := t.controller.State(keypath, true)
+				val, anyMissing, err := t.controller.State(keypath, true)
 				if err != nil {
 					t.Errorf("errrr %+v", err)
 					http.Error(w, fmt.Sprintf("not found: %+v", err.Error()), http.StatusNotFound)
 					return
 				}
 
+				statusCode := http.StatusOK
+				if anyMissing {
+					statusCode = http.StatusPartialContent
+				}
+
 				switch v := val.(type) {
 				case string:
+					w.WriteHeader(statusCode)
 					_, err := io.Copy(w, bytes.NewBuffer([]byte(v)))
 					if err != nil {
 						panic(err)
 					}
 
 				case []byte:
+					w.WriteHeader(statusCode)
 					_, err := io.Copy(w, bytes.NewBuffer(v))
 					if err != nil {
 						panic(err)
 					}
 
 				case map[string]interface{}, []interface{}:
+					w.Header().Set("Subscribe", "Allow")
 					j, err := json.Marshal(v)
 					if err != nil {
 						panic(err)
 					}
+					w.WriteHeader(statusCode)
 					_, err = io.Copy(w, bytes.NewBuffer(j))
 					if err != nil {
 						panic(err)
@@ -795,7 +804,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		// url = braidURLToHTTP(url)
 
 		client := http.Client{}
-		req, err := http.NewRequest("GET", "http://"+p.url, nil)
+		req, err := http.NewRequest("GET", p.url, nil)
 		if err != nil {
 			return err
 		}
@@ -849,7 +858,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 			}
 
 			client := http.Client{}
-			req, err := http.NewRequest("PUT", "http://"+p.url, bytes.NewReader(bs))
+			req, err := http.NewRequest("PUT", p.url, bytes.NewReader(bs))
 			if err != nil {
 				return err
 			}
@@ -875,7 +884,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("ACK", "http://"+p.url, bytes.NewReader(vidBytes))
+		req, err := http.NewRequest("ACK", p.url, bytes.NewReader(vidBytes))
 		if err != nil {
 			return err
 		}
@@ -895,7 +904,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("AUTHORIZE", "http://"+p.url, nil)
+		req, err := http.NewRequest("AUTHORIZE", p.url, nil)
 		if err != nil {
 			return err
 		}
@@ -936,7 +945,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("PUT", "http://"+p.url, bytes.NewReader(encPutBytes))
+		req, err := http.NewRequest("PUT", p.url, bytes.NewReader(encPutBytes))
 		if err != nil {
 			return err
 		}

@@ -8,48 +8,45 @@ import (
 )
 
 type permissionsValidator struct {
-	name string
+	permissions map[string]interface{}
 }
 
 func NewPermissionsValidator(params map[string]interface{}) (Validator, error) {
-	return &permissionsValidator{}, nil
+	permissions, exists := getMap(params, []string{"permissions"})
+	if !exists {
+		return nil, errors.New("permissions validator needs a 'permissions' param")
+	}
+
+	return &permissionsValidator{permissions: permissions}, nil
 }
 
 var Err403 = errors.New("403: nope")
 
-func (v *permissionsValidator) permsForUser(state map[string]interface{}, user Address) (map[string]interface{}, error) {
-	perms, exists := getMap(state, []string{"permissions", user.Hex()})
+func (v *permissionsValidator) ValidateTx(state interface{}, txs, validTxs map[ID]*Tx, tx Tx) error {
+	perms, exists := v.permissions[tx.From.Hex()]
 	if !exists {
-		perms, exists = getMap(state, []string{"permissions", "*"})
+		perms, exists = v.permissions["*"]
 		if !exists {
-			return nil, errors.WithStack(errors.Wrapf(Err403, "permissions key for user '%v' does not exist", user.Hex()))
+			return errors.WithStack(errors.Wrapf(Err403, "permissions key for user '%v' does not exist", tx.From.Hex()))
 		}
 	}
-	return perms, nil
-}
-
-func (v *permissionsValidator) ValidateTx(state interface{}, txs, validTxs map[ID]*Tx, tx Tx) error {
-	asMap, isMap := state.(map[string]interface{})
+	permsMap, isMap := perms.(map[string]interface{})
 	if !isMap {
-		return errors.Wrapf(Err403, "'state' is not a map")
-	}
-	perms, err := v.permsForUser(asMap, tx.From)
-	if err != nil {
-		return err
+		return errors.WithStack(errors.Wrapf(Err403, "permissions key for user '%v' does not contain a map", tx.From.Hex()))
 	}
 
 	for _, patch := range tx.Patches {
 		var valid bool
 
 		keypath := KeypathSeparator + strings.Join(patch.Keys, KeypathSeparator)
-		for pattern := range perms {
+		for pattern := range permsMap {
 			matched, err := regexp.MatchString(pattern, keypath)
 			if err != nil {
 				return errors.Wrapf(Err403, "error executing regex")
 			}
 
 			if matched {
-				canWrite, _ := getValue(perms, []string{pattern, "write"})
+				canWrite, _ := getValue(permsMap, []string{pattern, "write"})
 				if canWrite == true {
 					valid = true
 					break

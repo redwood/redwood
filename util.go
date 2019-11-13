@@ -212,6 +212,36 @@ func walkTree2(tree interface{}, fn func(keypath []string, parent interface{}, v
 	return nil
 }
 
+func walkContentTypes(state interface{}, contentTypes []string, fn func(contentType string, keypath []string, val map[string]interface{}) error) error {
+	return walkTree(state, func(keypath []string, val interface{}) error {
+		asMap, isMap := val.(map[string]interface{})
+		if !isMap {
+			return nil
+		}
+
+		for _, ct := range contentTypes {
+			contentType, exists := getString(asMap, []string{"Content-Type"})
+			if !exists || contentType != ct {
+				continue
+			}
+			return fn(contentType, keypath, asMap)
+		}
+		return nil
+	})
+}
+
+func walkLinks(state interface{}, fn func(linkType LinkType, linkStr string, keypath []string, val map[string]interface{}) error) error {
+	return walkContentTypes(state, []string{"link"}, func(contentType string, keypath []string, val map[string]interface{}) error {
+		linkStr, exists := getString(val, []string{"value"})
+		if !exists {
+			return nil
+		}
+
+		linkType := DetermineLinkType(linkStr)
+		return fn(linkType, linkStr, keypath, val)
+	})
+}
+
 func filterEmptyStrings(s []string) []string {
 	var filtered []string
 	for i := range s {

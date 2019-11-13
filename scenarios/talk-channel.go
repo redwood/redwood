@@ -141,15 +141,15 @@ func main() {
 		nil,
 	)
 
-	// Connect the two consumers
+	// Connect the two peers
 	if libp2pTransport, is := host1.Transport().(interface{ Libp2pPeerID() string }); is {
 		host2.AddPeer(host2.Ctx(), "/ip4/0.0.0.0/tcp/21231/p2p/"+libp2pTransport.Libp2pPeerID())
 	} else {
-		err := host2.AddPeer(host2.Ctx(), "localhost:21231")
+		err := host2.AddPeer(host2.Ctx(), "https://localhost:21232")
 		if err != nil {
 			panic(err)
 		}
-		err = host1.AddPeer(host1.Ctx(), "localhost:21241")
+		err = host1.AddPeer(host1.Ctx(), "https://localhost:21242")
 		if err != nil {
 			panic(err)
 		}
@@ -220,32 +220,43 @@ func sendTxs(host1, host2 rw.Host) {
 		From:    host1.Address(),
 		URL:     "localhost:21231",
 		Patches: []rw.Patch{
-			mustParsePatch(`.shrugisland = ` + deterministicJSON(`{
+			mustParsePatch(`.shrugisland = {
                 "talk0": {
-                    "index": {"link": "ref:`+indexHTMLHash.String()+`"},
                     "messages": [],
-                    "resolver": {"type": "js", "src": { "link": "ref:`+sync9Hash.String()+`" }},
-                    "validator": {"type": "permissions"},
-                    "permissions": {
-                        "96216849c49358b10257cb55b28ea603c874b05e": {
-                            "^.*$": {
-                                "write": true
-                            }
-                        },
-                        "*": {
-                            "^\\.permissions.*$": {
-                                "write": false
-                            },
-                            "^\\.index.*$": {
-                                "write": false
-                            },
-                            "^\\.messages.*": {
-                                "write": true
-                            }
-                        }
-                    }
+                    "index": {
+						"Content-Type": "link",
+						"value": "ref:` + indexHTMLHash.String() + `"
+					},
+                    "Merge-Type": {
+						"Content-Type": "resolver/js",
+						"src": {
+							"Content-Type": "link",
+							"value": "ref:` + sync9Hash.String() + `"
+						}
+					},
+                    "Validator": {
+						"Content-Type": "validator/permissions",
+						"permissions": {
+							"96216849c49358b10257cb55b28ea603c874b05e": {
+								"^.*$": {
+									"write": true
+								}
+							},
+							"*": {
+								"^\\.permissions.*$": {
+									"write": false
+								},
+								"^\\.index.*$": {
+									"write": false
+								},
+								"^\\.messages.*": {
+									"write": true
+								}
+							}
+						}
+					}
                 }
-            }`)),
+            }`),
 		},
 	}
 
@@ -269,10 +280,10 @@ func sendTxs(host1, host2 rw.Host) {
 			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
-				mustParsePatch(`.users.` + host1.Address().Hex() + ` = ` + deterministicJSON(`{
+				mustParsePatch(`.users.` + host1.Address().Hex() + ` = {
                     "name": "Paul Stamets",
                     "occupation": "Astromycologist"
-                }`)),
+                }`),
 			},
 		}
 
@@ -283,15 +294,16 @@ func sendTxs(host1, host2 rw.Host) {
 			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
-				mustParsePatch(`.` + rw.PrivateRootKeyForRecipients(ptx3recipients) + `.profile = ` + deterministicJSON(`{
+				mustParsePatch(`.` + rw.PrivateRootKeyForRecipients(ptx3recipients) + `.profile = {
                     "public": {
-                        "link": "/users/`+host1.Address().Hex()+`"
+						"Content-Type": "link",
+                        "value": "/users/` + host1.Address().Hex() + `"
                     },
                     "secrets": {
                         "catName": "Stanley",
                         "favoriteDonutShape": "toroidal"
                     }
-                }`)),
+                }`),
 			},
 			Recipients: ptx3recipients,
 		}
@@ -328,7 +340,14 @@ func sendTxs(host1, host2 rw.Host) {
 			From:    host1.Address(),
 			URL:     "localhost:21231",
 			Patches: []rw.Patch{
-				mustParsePatch(`.shrugisland.talk0.messages[2:2] = [{"text":"who needs a meme?","sender":"` + host1.Address().String() + `","attachment":{"link":"ref:` + memeHash.String() + `"}}]`),
+				mustParsePatch(`.shrugisland.talk0.messages[2:2] = [{
+					"text": "who needs a meme?",
+					"sender": "` + host1.Address().String() + `",
+					"attachment": {
+						"Content-Type": "link",
+						"value":"ref:` + memeHash.String() + `"
+					}
+				}]`),
 			},
 		}
 	)

@@ -174,7 +174,7 @@
             var msg = messages[i]
             var refAvailable
             if (msg.attachment) {
-                refAvailable = await available('/shrugisland/talk0/messages/' + i + '/attachment')
+                refAvailable = await available('/shrugisland/talk0/messages/' + i + '/attachment?resolve_refs=true')
                 allRefsAvailable = allRefsAvailable && refAvailable
             }
             html += '<div class="message" style="background-color: ' + strToColor(msg.sender) + '">'
@@ -282,9 +282,13 @@
     })
 
     async function sendMessage() {
-        var refHash
+        var attachment = null
         if (inputFile.files.length > 0) {
-            refHash = await braidClient.storeRef(inputFile.files[0])
+            var refHash = await braidClient.storeRef(inputFile.files[0])
+            attachment = {
+                'Content-Type': 'link',
+                'value': 'ref:' + refHash,
+            }
         }
 
         var tx = {
@@ -295,7 +299,7 @@
                 '.shrugisland.talk0.messages[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify([{
                     // @@TODO: the browser encodes this in alphabetical order, whereas Go does not seem to.
                     //         As a result, the signatures on either end will differ.  Need to fix.
-                    attachment: refHash ? { link: 'ref:' + refHash } : null,
+                    attachment: attachment,
                     sender: identity.address,
                     text: inputText.value,
                 }]),
@@ -317,7 +321,8 @@
     async function available(url) {
         try {
             const resp = await fetch(url)
-            return resp.status != 404
+            console.log('available ~>', resp)
+            return resp.status == 200
         } catch (err) {
             return false
         }
