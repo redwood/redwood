@@ -1,7 +1,7 @@
 
 
 module.exports = function (opts) {
-    const { onFoundPeers } = opts
+    const { httpHost, onFoundPeers } = opts
 
     let knownPeers = {}
     pollForPeers()
@@ -126,7 +126,7 @@ module.exports = function (opts) {
             ...options.headers,
         }
 
-        const resp = await fetch(path, options)
+        const resp = await fetch(httpHost + path, options)
         const altSvcHeader = resp.headers.get('Alt-Svc')
         if (altSvcHeader) {
             const peers = {}

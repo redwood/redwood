@@ -1,0 +1,30 @@
+{
+  "name": "braid",
+  "version": "1.003",
+  "description": "provides some braid support",
+  "permissions": ["activeTab", "<all_urls>", "webRequest","webRequestBlocking"],
+  "externally_connectable": {
+      "ids": ["*"],
+      "matches": ["http://*/*", "https://*/*"]
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content-script.js"]
+    }
+  ],
+  "browser_action": {
+      "default_icon": "128.png"
+  },
+  "icons": {
+    "16": "16.png",
+    "32": "32.png",
+    "48": "48.png",
+    "128": "128.png"
+  },  
+  "manifest_version": 2
+}

@@ -6,7 +6,7 @@ const utils = require('./utils')
 const httpTransport = require('./braid.transport.http')
 const webrtcTransport = require('./braid.transport.webrtc')
 
-window.Braid = {
+var Braid = {
     createPeer,
 
     // submodules
@@ -15,10 +15,17 @@ window.Braid = {
     utils,
 }
 
-function createPeer(opts) {
-    const { identity, webrtc, onFoundPeersCallback } = opts
+if (window) {
+    window.Braid = Braid
+}
+if (module && module.exports) {
+    module.exports = Braid
+}
 
-    const transports = [ httpTransport({ onFoundPeers }) ]
+function createPeer(opts) {
+    const { httpHost, identity, webrtc, onFoundPeersCallback } = opts
+
+    const transports = [ httpTransport({ onFoundPeers, httpHost }) ]
     if (webrtc === true) {
         transports.push(webrtcTransport({ onFoundPeers }))
     }

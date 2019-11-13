@@ -1,5 +1,6 @@
 braid-dist.js linguist-generated=true
 sync9-dist.js linguist-generated=true
+background.js linguist-generated=true
 package.json linguist-generated=true
 package-lock.json linguist-generated=true
 

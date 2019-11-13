@@ -1,3 +1,4 @@
 *.key
 .DS_Store
 _sandbox/
+node_modules/
