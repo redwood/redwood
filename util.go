@@ -257,13 +257,6 @@ func filterEmptyStrings(s []string) []string {
 	return filtered
 }
 
-func braidURLToHTTP(url string) string {
-	if url[:6] == "braid:" {
-		return "http:" + url[6:]
-	}
-	return url
-}
-
 func RedwoodConfigDirPath() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
@@ -302,4 +295,22 @@ func DeepCopyJSValue(val interface{}) interface{} {
 		panic(err)
 	}
 	return copied
+}
+
+type StringSet map[string]struct{}
+
+func NewStringSet(vals []string) StringSet {
+	set := map[string]struct{}{}
+	for _, val := range vals {
+		set[val] = struct{}{}
+	}
+	return set
+}
+
+func (s StringSet) Add(val string) {
+	s[val] = struct{}{}
+}
+
+func (s StringSet) Remove(val string) {
+	delete(s, val)
 }

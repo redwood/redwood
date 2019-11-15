@@ -5,12 +5,6 @@ function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) { try
 
 function _asyncToGenerator(fn) { return function () { var self = this, args = arguments; return new Promise(function (resolve, reject) { var gen = fn.apply(self, args); function _next(value) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "next", value); } function _throw(err) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "throw", err); } _next(undefined); }); }; }
 
-function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
-
-function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i] != null ? arguments[i] : {}; if (i % 2) { ownKeys(source, true).forEach(function (key) { _defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys(source).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
-
-function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
-
 require('@babel/polyfill');
 
 var identity = require('./identity');
@@ -46,23 +40,21 @@ function createPeer(opts) {
       onFoundPeersCallback = opts.onFoundPeersCallback;
   var transports = [httpTransport({
     onFoundPeers: onFoundPeers,
-    httpHost: httpHost
+    httpHost: httpHost,
+    peerID: identity.peerID
   })];
 
   if (webrtc === true) {
     transports.push(webrtcTransport({
-      onFoundPeers: onFoundPeers
+      onFoundPeers: onFoundPeers,
+      peerID: identity.peerID
     }));
   }
 
   var knownPeers = {};
 
   function onFoundPeers(peers) {
-    for (var _i = 0, _Object$keys = Object.keys(peers); _i < _Object$keys.length; _i++) {
-      var transportName = _Object$keys[_i];
-      knownPeers[transportName] = _objectSpread({}, knownPeers[transportName], {}, peers[transportName]);
-    }
-
+    knownPeers = utils.deepmerge(knownPeers, peers);
     transports.forEach(function (tpt) {
       return tpt.foundPeers(knownPeers);
     });
@@ -513,7 +505,7 @@ function createPeer(opts) {
 
 
 module.exports = function (opts) {
-    const { httpHost, onFoundPeers } = opts
+    const { httpHost, onFoundPeers, peerID } = opts
 
     let knownPeers = {}
     pollForPeers()
@@ -643,11 +635,11 @@ module.exports = function (opts) {
             const peers = {}
             const peerHeaders = altSvcHeader.split(',').map(x => x.trim())
             for (let peer of peerHeaders) {
-                const x = peer.match(/(\w+)="([^"]+)"/)
+                const x = peer.match(/^\s*(\w+)="([^"]+)"/)
                 const tptName = x[1]
-                const peerID = x[2]
+                const reachableAt = x[2]
                 peers[tptName] = peers[tptName] || {}
-                peers[tptName][peerID] = true
+                peers[tptName][reachableAt] = true
             }
             onFoundPeers(peers)
         }
@@ -669,8 +661,8 @@ module.exports = function (opts) {
         const headers = {}
         const altSvc = []
         for (let tptName of Object.keys(knownPeers)) {
-            for (let addr of Object.keys(knownPeers[tptName])) {
-                altSvc.push(`${tptName}="${addr}"`)
+            for (let reachableAt of Object.keys(knownPeers[tptName])) {
+                altSvc.push(`${tptName}="${reachableAt}"`)
             }
         }
         if (altSvc.length > 0) {
@@ -702,14 +694,14 @@ module.exports = function (opts) {
 module.exports = function (opts) {
     const { onFoundPeers } = opts
 
-    let myPeerID
+    let webrtcPeerID
     let onTxReceived
     let knownPeers = {}
     const conns = {}
     const me = new Peer()
-    me.on('open', async (_myPeerID) => {
-        myPeerID = _myPeerID
-        onFoundPeers({ webrtc: { [myPeerID]: true } })
+    me.on('open', async (_webrtcPeerID) => {
+        webrtcPeerID = _webrtcPeerID
+        onFoundPeers({ webrtc: { [webrtcPeerID]: true } })
     })
     me.on('connection', (conn) => {
         conns[conn.peer] = conn
@@ -749,15 +741,16 @@ module.exports = function (opts) {
 
     return {
         transportName:   () => 'webrtc',
-        altSvcAddresses: () =>  myPeerID ? [myPeerID] : [],
+        altSvcAddresses: () =>  webrtcPeerID ? [webrtcPeerID] : [],
         subscribe,
 
         foundPeers: (peers) => {
             knownPeers = peers
-            Object.keys(peers.webrtc || {})
-                .filter(p => p !== myPeerID)
-                .filter(p => !conns[p])
-                .forEach(p => connect(p))
+            for (let reachableAt of Object.keys(peers.webrtc || {})) {
+                if (reachableAt !== webrtcPeerID && !conns[reachableAt]) {
+                    connect(reachableAt)
+                }
+            }
         },
 
         put: (tx) => {
@@ -771,6 +764,7 @@ module.exports = function (opts) {
         },
     }
 }
+
 },{}],4:[function(require,module,exports){
 const ethers = require('ethers')
 const utils = require('./utils')
@@ -800,6 +794,7 @@ function _constructIdentity(wallet) {
     var address = wallet.address.slice(2)
 
     return {
+        peerID: utils.randomID(),
         wallet: wallet,
         address: address,
         signTx: (tx) => {
@@ -11029,6 +11024,7 @@ module.exports = {
     randomString,
     hexToUint8Array,
     uint8ArrayToHex,
+    deepmerge,
 }
 
 
@@ -11128,6 +11124,77 @@ function hexToUint8Array(hexString) {
 
 function uint8ArrayToHex(bytes) {
     return bytes.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '')
+}
+
+function isMergeableObject(val) {
+    var nonNullObject = val && typeof val === 'object'
+
+    return nonNullObject
+        && Object.prototype.toString.call(val) !== '[object RegExp]'
+        && Object.prototype.toString.call(val) !== '[object Date]'
+}
+
+function emptyTarget(val) {
+    return Array.isArray(val) ? [] : {}
+}
+
+function cloneIfNecessary(value, optionsArgument) {
+    var clone = optionsArgument && optionsArgument.clone === true
+    return (clone && isMergeableObject(value)) ? deepmerge(emptyTarget(value), value, optionsArgument) : value
+}
+
+function defaultArrayMerge(target, source, optionsArgument) {
+    var destination = target.slice()
+    source.forEach(function(e, i) {
+        if (typeof destination[i] === 'undefined') {
+            destination[i] = cloneIfNecessary(e, optionsArgument)
+        } else if (isMergeableObject(e)) {
+            destination[i] = deepmerge(target[i], e, optionsArgument)
+        } else if (target.indexOf(e) === -1) {
+            destination.push(cloneIfNecessary(e, optionsArgument))
+        }
+    })
+    return destination
+}
+
+function mergeObject(target, source, optionsArgument) {
+    var destination = {}
+    if (isMergeableObject(target)) {
+        Object.keys(target).forEach(function (key) {
+            destination[key] = cloneIfNecessary(target[key], optionsArgument)
+        })
+    }
+    Object.keys(source).forEach(function (key) {
+        if (!isMergeableObject(source[key]) || !target[key]) {
+            destination[key] = cloneIfNecessary(source[key], optionsArgument)
+        } else {
+            destination[key] = deepmerge(target[key], source[key], optionsArgument)
+        }
+    })
+    return destination
+}
+
+function deepmerge(target, source, optionsArgument) {
+    var array = Array.isArray(source);
+    var options = optionsArgument || { arrayMerge: defaultArrayMerge }
+    var arrayMerge = options.arrayMerge || defaultArrayMerge
+
+    if (array) {
+        return Array.isArray(target) ? arrayMerge(target, source, optionsArgument) : cloneIfNecessary(source, optionsArgument)
+    } else {
+        return mergeObject(target, source, optionsArgument)
+    }
+}
+
+deepmerge.all = function deepmergeAll(array, optionsArgument) {
+    if (!Array.isArray(array) || array.length < 2) {
+        throw new Error('first argument should be an array with at least two elements')
+    }
+
+    // we are sure there are at least 2 values, so it is safe to have no initial value
+    return array.reduce(function(prev, next) {
+        return deepmerge(prev, next, optionsArgument)
+    })
 }
 
 }).call(this,require("buffer").Buffer)

@@ -3,14 +3,14 @@
 module.exports = function (opts) {
     const { onFoundPeers } = opts
 
-    let myPeerID
+    let webrtcPeerID
     let onTxReceived
     let knownPeers = {}
     const conns = {}
     const me = new Peer()
-    me.on('open', async (_myPeerID) => {
-        myPeerID = _myPeerID
-        onFoundPeers({ webrtc: { [myPeerID]: true } })
+    me.on('open', async (_webrtcPeerID) => {
+        webrtcPeerID = _webrtcPeerID
+        onFoundPeers({ webrtc: { [webrtcPeerID]: true } })
     })
     me.on('connection', (conn) => {
         conns[conn.peer] = conn
@@ -50,15 +50,16 @@ module.exports = function (opts) {
 
     return {
         transportName:   () => 'webrtc',
-        altSvcAddresses: () =>  myPeerID ? [myPeerID] : [],
+        altSvcAddresses: () =>  webrtcPeerID ? [webrtcPeerID] : [],
         subscribe,
 
         foundPeers: (peers) => {
             knownPeers = peers
-            Object.keys(peers.webrtc || {})
-                .filter(p => p !== myPeerID)
-                .filter(p => !conns[p])
-                .forEach(p => connect(p))
+            for (let reachableAt of Object.keys(peers.webrtc || {})) {
+                if (reachableAt !== webrtcPeerID && !conns[reachableAt]) {
+                    connect(reachableAt)
+                }
+            }
         },
 
         put: (tx) => {

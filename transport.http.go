@@ -12,15 +12,18 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/publicsuffix"
 
 	"github.com/brynbellomy/redwood/ctx"
 )
@@ -36,6 +39,7 @@ type httpTransport struct {
 	cookieSecret    [32]byte
 	tlsCertFilename string
 	tlsKeyFilename  string
+	cookieJar       http.CookieJar
 
 	pendingAuthorizations map[ID][]byte
 
@@ -49,13 +53,16 @@ type httpTransport struct {
 	subscriptionsIn   map[string][]*httpSubscriptionIn
 	subscriptionsInMu sync.RWMutex
 
-	refStore RefStore
-
-	otherKnownPeers   map[string]struct{}
-	otherKnownPeersMu sync.Mutex
+	refStore  RefStore
+	peerStore PeerStore
 }
 
-func NewHTTPTransport(addr Address, port uint, controller Controller, refStore RefStore, sigkeys *SigningKeypair, cookieSecret [32]byte, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
+func NewHTTPTransport(addr Address, port uint, controller Controller, refStore RefStore, peerStore PeerStore, sigkeys *SigningKeypair, cookieSecret [32]byte, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
+	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	if err != nil {
+		return nil, err
+	}
+
 	t := &httpTransport{
 		Context:               &ctx.Context{},
 		address:               addr,
@@ -66,10 +73,11 @@ func NewHTTPTransport(addr Address, port uint, controller Controller, refStore R
 		cookieSecret:          cookieSecret,
 		tlsCertFilename:       tlsCertFilename,
 		tlsKeyFilename:        tlsKeyFilename,
+		cookieJar:             jar,
 		pendingAuthorizations: make(map[ID][]byte),
 		ownURL:                fmt.Sprintf("localhost:%v", port),
 		refStore:              refStore,
-		otherKnownPeers:       make(map[string]struct{}),
+		peerStore:             peerStore,
 	}
 	return t, nil
 }
@@ -111,6 +119,9 @@ func (t *httpTransport) Start() error {
 					panic("http transport failed to start")
 				}
 			}()
+
+			t.peerStore.AddReachableAddresses(t.Name(), NewStringSet([]string{t.ownURL}))
+
 			return nil
 		},
 		nil,
@@ -132,35 +143,59 @@ func (s *httpSubscriptionIn) Close() error {
 	return nil
 }
 
+func (t *httpTransport) Name() string {
+	return "http"
+}
+
+var altSvcRegexp1 = regexp.MustCompile(`\s*(\w+)="([^"]+)"\s*(;[^,]*)?`)
+var altSvcRegexp2 = regexp.MustCompile(`\s*;\s*(\w+)=(\w+)`)
+
+func forEachAltSvcHeaderPeer(header string, fn func(transportName, reachableAt string, metadata map[string]string)) {
+	result := altSvcRegexp1.FindAllStringSubmatch(header, -1)
+	for i := range result {
+		transportName := result[i][1]
+		reachableAt := result[i][2]
+		metadata := make(map[string]string)
+		if result[i][3] != "" {
+			result2 := altSvcRegexp2.FindAllStringSubmatch(result[i][3], -1)
+			for i := range result2 {
+				key := result2[i][1]
+				val := result2[i][2]
+				metadata[key] = val
+			}
+		}
+		fn(transportName, reachableAt, metadata)
+	}
+}
+
 func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	peerID, err := t.ensurePeerIDCookie(w, r)
+	sessionID, err := t.ensureSessionIDCookie(w, r)
 	if err != nil {
-		t.Errorf("error reading peerID cookie: %v", err)
+		t.Errorf("error reading sessionID cookie: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	address := t.addressFromCookie(r)
 
-	t.otherKnownPeersMu.Lock()
-	// On every incoming request, advertise other peers via the Alt-Svc header
-	var others []string
-	for peer := range t.otherKnownPeers {
-		others = append(others, peer)
-	}
-	w.Header().Set("Alt-Svc", strings.Join(others, ", "))
-
-	// Similarly, if other peers give us Alt-Svc headers, track them
-	if altSvcHeader := r.Header.Get("Alt-Svc"); altSvcHeader != "" {
-		parts := strings.Split(altSvcHeader, ";")
-		for i := range parts {
-			parts[i] = strings.TrimSpace(parts[i])
+	// Peer discovery
+	{
+		// On every incoming request, advertise other peers via the Alt-Svc header
+		var others []string
+		for _, tuple := range t.peerStore.PeerTuples() {
+			others = append(others, fmt.Sprintf(`%s="%s"`, tuple.TransportName, tuple.ReachableAt))
 		}
-		t.otherKnownPeers[parts[0]] = struct{}{}
+		w.Header().Set("Alt-Svc", strings.Join(others, ", "))
+
+		// Similarly, if other peers give us Alt-Svc headers, track them
+		if altSvcHeader := r.Header.Get("Alt-Svc"); altSvcHeader != "" {
+			forEachAltSvcHeaderPeer(altSvcHeader, func(transportName, reachableAt string, metadata map[string]string) {
+				t.peerStore.AddReachableAddresses(transportName, NewStringSet([]string{reachableAt}))
+			})
+		}
 	}
-	t.otherKnownPeersMu.Unlock()
 
 	switch r.Method {
 	case "HEAD":
@@ -177,7 +212,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			peer := &httpPeer{peerID: peerID, address: address, t: t, Writer: w}
+			peer := &httpPeer{address: address, t: t, Writer: w}
 			err = t.verifyAddressHandler([]byte(challengeMsg), peer)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -186,7 +221,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		} else if responseHex := r.Header.Get("Response"); responseHex != "" {
 			// 2b. Remote node wanted a challenge, this is their response
-			challenge, exists := t.pendingAuthorizations[peerID]
+			challenge, exists := t.pendingAuthorizations[sessionID]
 			if !exists {
 				http.Error(w, "no pending authorization", http.StatusBadRequest)
 				return
@@ -210,7 +245,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			delete(t.pendingAuthorizations, peerID) // @@TODO: expiration/garbage collection for failed auths
+			delete(t.pendingAuthorizations, sessionID) // @@TODO: expiration/garbage collection for failed auths
 
 		} else {
 			// 2a. Remote node wants a challenge, so we send it
@@ -220,7 +255,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			t.pendingAuthorizations[peerID] = challenge
+			t.pendingAuthorizations[sessionID] = challenge
 
 			challengeHex := hex.EncodeToString(challenge)
 			_, err = w.Write([]byte(challengeHex))
@@ -235,7 +270,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			//
 			// Subscription request
 			//
-			t.Infof(0, "incoming subscription (peerID: %v, address: %v)", peerID, address)
+			t.Infof(0, "incoming subscription (address: %v)", address)
 
 			// Make sure that the writer supports flushing.
 			f, ok := w.(http.Flusher)
@@ -290,7 +325,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 
-				err := t.fetchHistoryHandler(parents, toVersion, &httpPeer{peerID: peerID, address: address, t: t, Writer: w, Flusher: f})
+				err := t.fetchHistoryHandler(parents, toVersion, &httpPeer{address: address, t: t, Writer: w, Flusher: f})
 				if err != nil {
 					t.Errorf("error fetching history: %v", err)
 					// @@TODO: close subscription?
@@ -481,16 +516,15 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var txHash Hash
-		err = txHash.UnmarshalText(bs)
+		var txID ID
+		err = txID.UnmarshalText(bs)
 		if err != nil {
 			t.Errorf("error reading ACK body: %v", err)
 			http.Error(w, "error reading body", http.StatusBadRequest)
 			return
 		}
 
-		url := strings.Replace(r.RemoteAddr, "http://", "", -1)
-		t.ackHandler(txHash, &httpPeer{peerID: peerID, address: address, t: t, url: url, Writer: w})
+		t.ackHandler(txID, &httpPeer{address: address, t: t, Writer: w})
 
 	case "PUT":
 		defer r.Body.Close()
@@ -504,8 +538,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				panic(err)
 			}
 
-			url := strings.Replace(r.RemoteAddr, "http://", "", -1)
-			t.privateTxHandler(encryptedTx, &httpPeer{peerID: peerID, address: address, t: t, url: url, Writer: w})
+			t.privateTxHandler(encryptedTx, &httpPeer{address: address, t: t, Writer: w})
 
 		} else if r.Header.Get("Ref") == "true" {
 			t.Infof(0, "incoming ref")
@@ -605,8 +638,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			tx.From = pubkey.Address()
 			////////////////////////////////
 
-			url := strings.Replace(r.RemoteAddr, "http://", "", -1)
-			t.txHandler(tx, &httpPeer{peerID: peerID, address: address, t: t, url: url, Writer: w})
+			t.txHandler(tx, &httpPeer{address: address, t: t, Writer: w})
 		}
 
 	default:
@@ -660,17 +692,17 @@ func (t *httpTransport) SetFetchRefHandler(handler FetchRefHandler) {
 	t.fetchRefHandler = handler
 }
 
-func (t *httpTransport) GetPeer(ctx context.Context, peerIDStr string) (Peer, error) {
-	panic("unimplemented, requires WebRTC")
-}
-
-func (t *httpTransport) GetPeerByConnString(ctx context.Context, addrString string) (Peer, error) {
-	return &httpPeer{t: t, url: addrString}, nil
+func (t *httpTransport) GetPeerByConnStrings(ctx context.Context, reachableAt StringSet) (Peer, error) {
+	if len(reachableAt) != 1 {
+		panic("weird")
+	}
+	for ra := range reachableAt {
+		return &httpPeer{t: t, reachableAt: ra}, nil
+	}
+	panic("unreachable")
 }
 
 func (t *httpTransport) ForEachProviderOfURL(ctx context.Context, theURL string) (<-chan Peer, error) {
-	// theURL = braidURLToHTTP(theURL)
-
 	u, err := url.Parse("http://" + theURL)
 	if err != nil {
 		return nil, err
@@ -701,7 +733,7 @@ func (t *httpTransport) ForEachProviderOfURL(ctx context.Context, theURL string)
 			}
 
 			select {
-			case ch <- &httpPeer{t: t, url: providerURL}:
+			case ch <- &httpPeer{t: t, reachableAt: providerURL}:
 			case <-ctx.Done():
 			}
 		}
@@ -710,12 +742,10 @@ func (t *httpTransport) ForEachProviderOfURL(ctx context.Context, theURL string)
 }
 
 func (t *httpTransport) ForEachProviderOfRef(ctx context.Context, refHash Hash) (<-chan Peer, error) {
-	panic("unimplemented")
+	return nil, errors.New("unimplemented")
 }
 
 func (t *httpTransport) ForEachSubscriberToURL(ctx context.Context, theURL string) (<-chan Peer, error) {
-	// theURL = braidURLToHTTP(theURL)
-
 	u, err := url.Parse("http://" + theURL)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -741,30 +771,30 @@ func (t *httpTransport) ForEachSubscriberToURL(ctx context.Context, theURL strin
 }
 
 func (t *httpTransport) PeersClaimingAddress(ctx context.Context, address Address) (<-chan Peer, error) {
-	panic("unimplemented")
+	return nil, errors.New("unimplemented")
 }
 
 func (t *httpTransport) AnnounceRef(refHash Hash) error {
-	panic("unimplemented")
+	return errors.New("unimplemented")
 }
 
 var (
 	ErrBadCookie = errors.New("bad cookie")
 )
 
-func (t *httpTransport) ensurePeerIDCookie(w http.ResponseWriter, r *http.Request) (ID, error) {
-	peerIDBytes, err := t.signedCookie(r, "peerid")
+func (t *httpTransport) ensureSessionIDCookie(w http.ResponseWriter, r *http.Request) (ID, error) {
+	sessionIDBytes, err := t.signedCookie(r, "sessionid")
 	if err != nil {
-		t.Errorf("error reading signed peerID cookie: %v", err)
-		return t.setPeerIDCookie(w)
+		t.Errorf("error reading signed sessionid cookie: %v", err)
+		return t.setSessionIDCookie(w)
 	}
-	return IDFromBytes(peerIDBytes), nil
+	return IDFromBytes(sessionIDBytes), nil
 }
 
-func (t *httpTransport) setPeerIDCookie(w http.ResponseWriter) (ID, error) {
-	peerID := RandomID()
-	err := t.setSignedCookie(w, "peerid", peerID[:])
-	return peerID, err
+func (t *httpTransport) setSessionIDCookie(w http.ResponseWriter) (ID, error) {
+	sessionID := RandomID()
+	err := t.setSignedCookie(w, "sessionid", sessionID[:])
+	return sessionID, err
 }
 
 func (t *httpTransport) setSignedCookie(w http.ResponseWriter, name string, value []byte) error {
@@ -818,11 +848,10 @@ func (t *httpTransport) addressFromCookie(r *http.Request) Address {
 
 type httpPeer struct {
 	t       *httpTransport
-	peerID  ID
 	address Address
 
 	// stream
-	url string
+	reachableAt string
 	sync.Mutex
 	io.Writer
 	io.ReadCloser
@@ -839,8 +868,12 @@ const (
 	httpPeerState_VerifyingAddress
 )
 
-func (p *httpPeer) ID() string {
-	return p.peerID.String()
+func (p *httpPeer) Transport() Transport {
+	return p.t
+}
+
+func (p *httpPeer) ReachableAt() StringSet {
+	return NewStringSet([]string{p.reachableAt})
 }
 
 func (p *httpPeer) Address() Address {
@@ -861,19 +894,17 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 
 	switch msg.Type {
 	case MsgType_Subscribe:
-		urlToSubscribe, ok := msg.Payload.(string)
+		stateURI, ok := msg.Payload.(string)
 		if !ok {
 			return errors.WithStack(ErrProtocol)
 		}
 
-		// url = braidURLToHTTP(url)
-
 		client := http.Client{}
-		req, err := http.NewRequest("GET", p.url, nil)
+		req, err := http.NewRequest("GET", p.reachableAt, nil)
 		if err != nil {
 			return err
 		}
-		req.Header.Set("State-URI", urlToSubscribe)
+		req.Header.Set("State-URI", stateURI)
 		req.Header.Set("Cache-Control", "no-cache")
 		req.Header.Set("Accept", "text/event-stream")
 		req.Header.Set("Connection", "keep-alive")
@@ -923,7 +954,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 			}
 
 			client := http.Client{}
-			req, err := http.NewRequest("PUT", p.url, bytes.NewReader(bs))
+			req, err := http.NewRequest("PUT", p.reachableAt, bytes.NewReader(bs))
 			if err != nil {
 				return err
 			}
@@ -938,18 +969,18 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 	case MsgType_Ack:
-		txHash, ok := msg.Payload.(Hash)
+		txID, ok := msg.Payload.(ID)
 		if !ok {
 			return errors.WithStack(ErrProtocol)
 		}
 
-		vidBytes, err := txHash.MarshalText()
+		txIDBytes, err := txID.MarshalText()
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("ACK", p.url, bytes.NewReader(vidBytes))
+		req, err := http.NewRequest("ACK", p.reachableAt, bytes.NewReader(txIDBytes))
 		if err != nil {
 			return err
 		}
@@ -969,7 +1000,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("AUTHORIZE", p.url, nil)
+		req, err := http.NewRequest("AUTHORIZE", p.reachableAt, nil)
 		if err != nil {
 			return err
 		}
@@ -1010,7 +1041,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("PUT", p.url, bytes.NewReader(encPutBytes))
+		req, err := http.NewRequest("PUT", p.reachableAt, bytes.NewReader(encPutBytes))
 		if err != nil {
 			return err
 		}

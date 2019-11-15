@@ -6,11 +6,6 @@
                 "^.*$": {
                     "write": true
                 }
-            },
-            "*": {
-                "^\\.private-.*": {
-                    "write": true
-                }
             }
         }
     },

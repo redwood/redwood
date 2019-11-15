@@ -38,6 +38,14 @@ type logger struct {
 	logLabel  string
 }
 
+func NewLogger(label string) Logger {
+	l := &logger{}
+	if label != "" {
+		l.SetLogLabel(label)
+	}
+	return l
+}
+
 // Fatalf -- see Fatalf (above)
 func Fatalf(inFormat string, args ...interface{}) {
 	gLogger.Fatalf(inFormat, args...)

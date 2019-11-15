@@ -41,74 +41,31 @@ func makeHost(signingKeypairHex string, port uint, dbfile, refStoreRoot, cookieS
 	store := rw.NewBadgerStore(dbfile, signingKeypair.Address())
 	// store := remotestore.NewClient("0.0.0.0:4567", signingKeypair.Address(), signingKeypair.SigningPrivateKey)
 	refStore := rw.NewRefStore(refStoreRoot)
+	peerStore := rw.NewPeerStore(signingKeypair.Address())
 	controller, err := rw.NewController(signingKeypair.Address(), genesis, store, refStore)
 	if err != nil {
 		panic(err)
 	}
 
-	p2ptransport, err := rw.NewLibp2pTransport(signingKeypair.Address(), port, refStore)
+	p2ptransport, err := rw.NewLibp2pTransport(signingKeypair.Address(), port, refStore, peerStore)
 	if err != nil {
 		panic(err)
 	}
 
 	var cookieSecret [32]byte
 	copy(cookieSecret[:], []byte(cookieSecretStr))
-	httptransport, err := rw.NewHTTPTransport(signingKeypair.Address(), port+1, controller, refStore, signingKeypair, cookieSecret, tlsCertFilename, tlsKeyFilename)
+	httptransport, err := rw.NewHTTPTransport(signingKeypair.Address(), port+1, controller, refStore, peerStore, signingKeypair, cookieSecret, tlsCertFilename, tlsKeyFilename)
 	if err != nil {
 		panic(err)
 	}
 
-	transport := &bothTransports{p2ptransport, httptransport}
+	transports := []rw.Transport{p2ptransport, httptransport}
 
-	h, err := rw.NewHost(signingKeypair, encryptingKeypair, port, transport, controller, refStore)
+	h, err := rw.NewHost(signingKeypair, encryptingKeypair, port, transports, controller, refStore, peerStore)
 	if err != nil {
 		panic(err)
 	}
-
-	err = httptransport.Start()
-	if err != nil {
-		panic(err)
-	}
-	httptransport.SetTxHandler(h.OnTxReceived)
-	httptransport.SetFetchHistoryHandler(h.OnFetchHistoryRequestReceived)
-
 	return h
-}
-
-type bothTransports struct {
-	rw.Transport
-	httpTransport rw.Transport
-}
-
-func (t *bothTransports) Libp2pPeerID() string {
-	return t.Transport.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
-}
-
-func (t *bothTransports) ForEachSubscriberToURL(ctx context.Context, theURL string) (<-chan rw.Peer, error) {
-	chHttp, err := t.httpTransport.ForEachSubscriberToURL(ctx, theURL)
-	if err != nil {
-		//return nil, err
-	}
-	chOther, err := t.Transport.ForEachSubscriberToURL(ctx, theURL)
-	if err != nil {
-		return nil, err
-	}
-
-	ch := make(chan rw.Peer)
-
-	go func() {
-		defer close(ch)
-
-		if chHttp != nil {
-			for p := range chHttp {
-				ch <- p
-			}
-		}
-		for p := range chOther {
-			ch <- p
-		}
-	}()
-	return ch, nil
 }
 
 func main() {
@@ -117,10 +74,10 @@ func main() {
 	flag.Set("logtostderr", "true")
 	flag.Set("v", "2")
 
-	os.MkdirAll("/tmp/forest", 0700)
+	os.MkdirAll("/tmp/redwood", 0700)
 
-	host1 := makeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/forest/badger1", "/tmp/forest/refs1", "cookiesecret1", "server1.crt", "server1.key")
-	host2 := makeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/forest/badger2", "/tmp/forest/refs2", "cookiesecret2", "server2.crt", "server2.key")
+	host1 := makeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/redwood/badger1", "/tmp/redwood/refs1", "cookiesecret1", "server1.crt", "server1.key")
+	host2 := makeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/redwood/badger2", "/tmp/redwood/refs2", "cookiesecret2", "server2.crt", "server2.key")
 
 	err := host1.Start()
 	if err != nil {
@@ -142,30 +99,28 @@ func main() {
 	)
 
 	// Connect the two peers
-	if libp2pTransport, is := host1.Transport().(interface{ Libp2pPeerID() string }); is {
-		host2.AddPeer(host2.Ctx(), "/ip4/0.0.0.0/tcp/21231/p2p/"+libp2pTransport.Libp2pPeerID())
-	} else {
-		err := host2.AddPeer(host2.Ctx(), "https://localhost:21232")
-		if err != nil {
-			panic(err)
-		}
-		err = host1.AddPeer(host1.Ctx(), "https://localhost:21242")
-		if err != nil {
-			panic(err)
-		}
-	}
+	libp2pTransport := host1.Transport("libp2p").(interface{ Libp2pPeerID() string })
+	host2.AddPeer(host2.Ctx(), "libp2p", rw.NewStringSet([]string{"/ip4/0.0.0.0/tcp/21231/p2p/" + libp2pTransport.Libp2pPeerID()}))
+	//err = host2.AddPeer(host2.Ctx(), "http", "https://localhost:21232")
+	//if err != nil {
+	//    panic(err)
+	//}
+	//err = host1.AddPeer(host1.Ctx(), "http", "https://localhost:21242")
+	//if err != nil {
+	//    panic(err)
+	//}
 
 	time.Sleep(2 * time.Second)
 
 	// Both consumers subscribe to the URL
-	err = host2.Subscribe(host2.Ctx(), "localhost:21231")
-	if err != nil {
-		panic(err)
+	anySucceeded, _ := host2.Subscribe(host2.Ctx(), "localhost:21231")
+	if !anySucceeded {
+		panic("host2 could not subscribe")
 	}
 
-	err = host1.Subscribe(host1.Ctx(), "localhost:21231")
-	if err != nil {
-		panic(err)
+	anySucceeded, _ = host1.Subscribe(host1.Ctx(), "localhost:21231")
+	if !anySucceeded {
+		panic("host1 could not subscribe")
 	}
 
 	sendTxs(host1, host2)
@@ -175,7 +130,7 @@ func main() {
 }
 
 func sendTxs(host1, host2 rw.Host) {
-	sync9, err := os.Open("../braidjs/dist/sync9-otto.js")
+	sync9, err := os.Open("./sync9-otto.js")
 	if err != nil {
 		panic(err)
 	}

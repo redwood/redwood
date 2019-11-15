@@ -28,6 +28,7 @@ const (
 	MsgType_VerifyAddressResponse MsgType = "verify address response"
 	MsgType_FetchRef              MsgType = "fetch ref"
 	MsgType_FetchRefResponse      MsgType = "fetch ref response"
+	MsgType_AdvertisePeers        MsgType = "advertise peers"
 )
 
 type VerifyAddressResponse struct {
@@ -50,7 +51,7 @@ type FetchRefResponseBody struct {
 }
 
 type EncryptedTx struct {
-	TxHash           Hash   `json:"txHash"`
+	TxID             ID     `json:"txID"`
 	EncryptedPayload []byte `json:"encryptedPayload"`
 	SenderPublicKey  []byte `json:"senderPublicKey"`
 }
@@ -190,6 +191,14 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 			return err
 		}
 		msg.Payload = resp
+
+	case MsgType_AdvertisePeers:
+		var peerTuples []peerTuple
+		err := json.Unmarshal([]byte(m.PayloadBytes), &peerTuples)
+		if err != nil {
+			return err
+		}
+		msg.Payload = peerTuples
 
 	default:
 		return errors.New("bad msg")

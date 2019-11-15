@@ -1,7 +1,7 @@
 
 
 module.exports = function (opts) {
-    const { httpHost, onFoundPeers } = opts
+    const { httpHost, onFoundPeers, peerID } = opts
 
     let knownPeers = {}
     pollForPeers()
@@ -131,11 +131,11 @@ module.exports = function (opts) {
             const peers = {}
             const peerHeaders = altSvcHeader.split(',').map(x => x.trim())
             for (let peer of peerHeaders) {
-                const x = peer.match(/(\w+)="([^"]+)"/)
+                const x = peer.match(/^\s*(\w+)="([^"]+)"/)
                 const tptName = x[1]
-                const peerID = x[2]
+                const reachableAt = x[2]
                 peers[tptName] = peers[tptName] || {}
-                peers[tptName][peerID] = true
+                peers[tptName][reachableAt] = true
             }
             onFoundPeers(peers)
         }
@@ -157,8 +157,8 @@ module.exports = function (opts) {
         const headers = {}
         const altSvc = []
         for (let tptName of Object.keys(knownPeers)) {
-            for (let addr of Object.keys(knownPeers[tptName])) {
-                altSvc.push(`${tptName}="${addr}"`)
+            for (let reachableAt of Object.keys(knownPeers[tptName])) {
+                altSvc.push(`${tptName}="${reachableAt}"`)
             }
         }
         if (altSvc.length > 0) {

@@ -44,7 +44,7 @@ You can run the chat demo with the following commands (note: Go 1.13+ is require
 
 ```sh
 $ cd scenarios/talk-channel
-$ go run talk-channel.go
+$ go run main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:

@@ -26,6 +26,7 @@ function _constructIdentity(wallet) {
     var address = wallet.address.slice(2)
 
     return {
+        peerID: utils.randomID(),
         wallet: wallet,
         address: address,
         signTx: (tx) => {

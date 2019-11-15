@@ -1,119 +1,140 @@
 package redwood
 
-// import (
-// 	"context"
-// 	"sync"
+import (
+	"sync"
 
-// 	"github.com/plan-systems/plan-core/tools/ctx"
-// )
+	"github.com/brynbellomy/redwood/ctx"
+)
 
-// type PeerStore interface {
-// 	PeersForURL(ctx context.Context, url string) ([]*Peer, error)
-// }
+type PeerStore interface {
+	AddReachableAddresses(transportName string, reachableAt StringSet)
+	AddVerifiedCredentials(transportName string, reachableAt StringSet, address Address, sigpubkey SigningPublicKey, encpubkey EncryptingPublicKey)
+	PeerTuples() []peerTuple
+	PeersWithAddress(address Address) []*storedPeer
+}
 
-// type peerStore struct {
-// 	ctx.Context
+type peerStore struct {
+	ctx.Logger
 
-// 	peersForURL map[string][]*Peer
-// 	peersByAddr map[Address]*Peer
-// 	muPeers     sync.RWMutex
-// }
+	muPeers          sync.RWMutex
+	peers            map[peerTuple]*storedPeer
+	peersWithAddress map[Address]map[peerTuple]*storedPeer
+	maybePeers       map[peerTuple]struct{}
+}
 
-// type Peer struct {
-// 	URL     string  `json:"url"`
-// 	Address Address `json:"address"`
-// }
+type peerTuple struct {
+	TransportName string
+	ReachableAt   string
+}
 
-// func NewPeerStore(addr Address) *peerStore {
-// 	s := &peerStore{
-// 		peersForURL: make(map[string][]*Peer),
-// 		peersByAddr: make(map[Address]*Peer),
-// 	}
+type storedPeer struct {
+	transportName string
+	reachableAt   StringSet
+	address       Address
+	sigpubkey     SigningPublicKey
+	encpubkey     EncryptingPublicKey
+}
 
-// 	err = t.CtxStart(
-// 		// on startup
-// 		func() error {
-// 			c.SetLogLabel(addr.Pretty() + " peer store")
-// 			go s.periodicallyUpdatePeerLists()
-// 			return nil
-// 		},
-// 		nil,
-// 		nil,
-// 		nil,
-// 	)
+func NewPeerStore(addr Address) *peerStore {
+	s := &peerStore{
+		Logger:           ctx.NewLogger("peer store " + addr.Pretty()),
+		peers:            make(map[peerTuple]*storedPeer),
+		peersWithAddress: make(map[Address]map[peerTuple]*storedPeer),
+		maybePeers:       make(map[peerTuple]struct{}),
+	}
 
-// 	return s
-// }
+	return s
+}
 
-// func (s *peerStore) PeersForURL(ctx context.Context, url string) ([]Peer, error) {
-// 	s.muPeers.RLock()
-// 	peers, have := s.peersForURL[url]
-// 	s.muPeers.RUnlock()
+func peerTuples(peer Peer) []peerTuple {
+	var tuples []peerTuple
+	transportName := peer.Transport().Name()
+	for reachableAt := range peer.ReachableAt() {
+		tuples = append(tuples, peerTuple{transportName, reachableAt})
+	}
+	return tuples
+}
 
-// 	if !have {
-// 		s.muPeers.Lock()
-// 		defer s.muPeers.Unlock()
+func (s *peerStore) AddReachableAddresses(transportName string, reachableAt StringSet) {
+	s.muPeers.Lock()
+	defer s.muPeers.Unlock()
 
-// 		var err error
-// 		peers, err = s.fetchPeerList(ctx, url)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 	}
-// 	return peers, nil
-// }
+	for ra := range reachableAt {
+		key := peerTuple{transportName, ra}
+		_, exists := s.peers[key]
+		if !exists {
+			s.maybePeers[key] = struct{}{}
+		}
+	}
+}
 
-// func (s *peerStore) periodicallyUpdatePeerLists() {
-// 	for {
-// 		select {
-// 		case <-s.Ctx.Done():
-// 			return
-// 		default:
-// 		}
+func (s *peerStore) AddVerifiedCredentials(transportName string, reachableAt StringSet, address Address, sigpubkey SigningPublicKey, encpubkey EncryptingPublicKey) {
+	s.muPeers.Lock()
+	defer s.muPeers.Unlock()
 
-// 		func() {
-// 			s.muPeers.Lock()
-// 			defer s.muPeers.Unlock()
+	if len(reachableAt) == 0 {
+		return
+	}
 
-// 			for url := range s.peersForURL {
-// 				func() {
-// 					s.Infof(0, `fetching peer list for "%v"`, url)
-// 					ctx, cancel := context.WithTimeout(s.Ctx, 10*time.Second)
-// 					defer cancel()
+	var peer *storedPeer
+	for ra := range reachableAt {
+		if p, exists := s.peers[peerTuple{transportName, ra}]; exists {
+			peer = p
+			break
+		}
+	}
+	if peer == nil {
+		peer = &storedPeer{transportName: transportName, reachableAt: NewStringSet(nil)}
+	}
 
-// 					_, err := s.fetchPeerList(ctx, url)
-// 					if err != nil {
-// 						s.Errorf(`error fetching peer list for url "%v": %v`, url)
-// 					}
-// 				}()
-// 			}
-// 		}()
+	if _, exists := s.peersWithAddress[address]; !exists {
+		s.peersWithAddress[address] = make(map[peerTuple]*storedPeer)
+	}
 
-// 		time.Sleep(60 * time.Second)
-// 	}
-// }
+	for ra := range reachableAt {
+		tuple := peerTuple{transportName, ra}
+		delete(s.maybePeers, tuple)
+		s.peers[tuple] = peer
+		s.peersWithAddress[address][tuple] = peer
+		peer.reachableAt.Add(ra)
+	}
 
-// // muPeers must be write-locked by the caller prior to calling this function.
-// func (s *peerStore) fetchPeerList(ctx context.Context, url string) ([]peer, error) {
-// 	url = braidURLToHTTP(url)
+	peer.address = address
+	peer.sigpubkey = sigpubkey
+	peer.encpubkey = encpubkey
+}
 
-// 	req := http.NewRequest("GET", url+"/peers.json", nil).WithContext(ctx)
-// 	resp, err := http.DefaultClient.Do(req)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer resp.Body.Close()
+func (s *peerStore) PeerTuples() []peerTuple {
+	s.muPeers.RLock()
+	defer s.muPeers.RUnlock()
 
-// 	var peerList []*Peer
-// 	err = json.NewDecoder(resp.Body).Decode(&peerList)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	var peers []peerTuple
+	for tuple := range s.peers {
+		peers = append(peers, tuple)
+	}
+	for tuple := range s.maybePeers {
+		peers = append(peers, tuple)
+	}
+	return peers
+}
 
-// 	t.peersForURL[url] = peerList
-// 	for _, peer := range peerList {
-// 		s.peersByAddr[peer.Address] = peer
-// 	}
+func (s *peerStore) PeersWithAddress(address Address) []*storedPeer {
+	s.muPeers.RLock()
+	defer s.muPeers.RUnlock()
 
-// 	return peerList, nil
-// }
+	var peers []*storedPeer
+	if _, exists := s.peersWithAddress[address]; exists {
+		for _, peer := range s.peersWithAddress[address] {
+			peers = append(peers, peer)
+		}
+	}
+	return peers
+}
+
+func (sp *storedPeer) Tuples() []peerTuple {
+	var tuples []peerTuple
+	for reachableAt := range sp.reachableAt {
+		tuples = append(tuples, peerTuple{sp.transportName, reachableAt})
+	}
+	return tuples
+}

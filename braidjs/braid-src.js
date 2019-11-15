@@ -25,19 +25,14 @@ if (module && module.exports) {
 function createPeer(opts) {
     const { httpHost, identity, webrtc, onFoundPeersCallback } = opts
 
-    const transports = [ httpTransport({ onFoundPeers, httpHost }) ]
+    const transports = [ httpTransport({ onFoundPeers, httpHost, peerID: identity.peerID }) ]
     if (webrtc === true) {
-        transports.push(webrtcTransport({ onFoundPeers }))
+        transports.push(webrtcTransport({ onFoundPeers, peerID: identity.peerID }))
     }
 
-    const knownPeers = {}
+    let knownPeers = {}
     function onFoundPeers(peers) {
-        for (let transportName of Object.keys(peers)) {
-            knownPeers[transportName] = {
-                ...knownPeers[transportName],
-                ...peers[transportName],
-            }
-        }
+        knownPeers = utils.deepmerge(knownPeers, peers)
 
         transports.forEach(tpt => tpt.foundPeers(knownPeers))
 
