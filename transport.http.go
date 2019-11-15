@@ -307,10 +307,8 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// @@TODO: this is hacky
 			if r.URL.Path == "/braid.js" {
 				var filename string
-				if fileExists("./braidjs/braid-dist.js") {
-					filename = "./braidjs/braid-dist.js"
-				} else if fileExists("../braidjs/braid-dist.js") {
-					filename = "../braidjs/braid-dist.js"
+				if fileExists("./braid.js") {
+					filename = "./braid.js"
 				}
 				f, err := os.Open(filename)
 				if err != nil {
@@ -393,7 +391,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 					val, _ = getValue(val, []string{"src"})
 
-					allowSubscribe = true
+					allowSubscribe = contentType != "text/html"
 
 					if valStr, isStr := val.(string); isStr {
 						respBuf = bytes.NewBuffer([]byte(valStr))

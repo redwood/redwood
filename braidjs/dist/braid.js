@@ -562,7 +562,6 @@ module.exports = function (opts) {
                             onTxReceived('http transport: ' + err)
                             return
                         }
-                        console.log('incoming tx ~>', payload)
                         onTxReceived(null, payload)
                     }
                     buffer = buffer.substring(idx+1)

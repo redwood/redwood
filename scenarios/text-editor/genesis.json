@@ -1,0 +1,21 @@
+{
+    "Validator": {
+        "Content-Type": "validator/permissions",
+        "permissions": {
+            "96216849c49358b10257cb55b28ea603c874b05e": {
+                "^.*$": {
+                    "write": true
+                }
+            },
+            "*": {
+                "^\\.private-.*": {
+                    "write": true
+                }
+            }
+        }
+    },
+    "providers": [
+        "localhost:21231",
+        "localhost:21241"
+    ]
+}
