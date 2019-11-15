@@ -325,15 +325,10 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			keypath := filterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
 
 			if r.Header.Get("Accept") == "application/json" {
-				var resolveRefs bool
-				resolveRefsStr := r.URL.Query().Get("resolve_refs")
-				if resolveRefsStr != "" {
-					var err error
-					resolveRefs, err = strconv.ParseBool(resolveRefsStr)
-					if err != nil {
-						http.Error(w, "invalid resolve_refs param", http.StatusNotFound)
-						return
-					}
+				resolveRefs, err := parseResolveRefsParam(r)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
 				}
 
 				val, _, err := t.controller.State(keypath, resolveRefs)
@@ -374,47 +369,103 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 
 			} else {
-				val, anyMissing, err := t.controller.State(keypath, true)
+				// No "Accept" header, so we have to try to intelligently guess
+
+				val, _, err := t.controller.State(keypath, false)
 				if err != nil {
 					t.Errorf("errrr %+v", err)
 					http.Error(w, fmt.Sprintf("not found: %+v", err.Error()), http.StatusNotFound)
 					return
 				}
 
-				statusCode := http.StatusOK
-				if anyMissing {
-					statusCode = http.StatusPartialContent
-				}
+				contentType, _ := getString(val, []string{"Content-Type"})
 
-				switch v := val.(type) {
-				case string:
-					w.WriteHeader(statusCode)
-					_, err := io.Copy(w, bytes.NewBuffer([]byte(v)))
-					if err != nil {
-						panic(err)
-					}
+				var allowSubscribe bool
+				var anyMissing bool
+				var respBuf io.Reader
 
-				case []byte:
-					w.WriteHeader(statusCode)
-					_, err := io.Copy(w, bytes.NewBuffer(v))
+				switch contentType {
+				case "text/plain", "text/html", "application/js":
+					val, anyMissing, err = t.controller.ResolveRefs(val)
 					if err != nil {
 						panic(err)
 					}
 
-				case map[string]interface{}, []interface{}:
-					w.Header().Set("Subscribe", "Allow")
-					j, err := json.Marshal(v)
+					val, _ = getValue(val, []string{"src"})
+
+					allowSubscribe = true
+
+					if valStr, isStr := val.(string); isStr {
+						respBuf = bytes.NewBuffer([]byte(valStr))
+					} else if valBytes, isBytes := val.([]byte); isBytes {
+						respBuf = bytes.NewBuffer(valBytes)
+					} else {
+						contentType = "application/json"
+						j, err := json.Marshal(val)
+						if err != nil {
+							panic(err)
+						}
+						respBuf = bytes.NewBuffer(j)
+					}
+
+				case "image/png", "image/jpg", "image/jpeg":
+					val, anyMissing, err = t.controller.ResolveRefs(val)
 					if err != nil {
 						panic(err)
 					}
-					w.WriteHeader(statusCode)
-					_, err = io.Copy(w, bytes.NewBuffer(j))
+
+					val, _ = getValue(val, []string{"src"})
+
+					if valBytes, isBytes := val.([]byte); isBytes {
+						respBuf = bytes.NewBuffer(valBytes)
+					} else {
+						contentType = "application/json"
+						j, err := json.Marshal(val)
+						if err != nil {
+							panic(err)
+						}
+						respBuf = bytes.NewBuffer(j)
+					}
+
+				case "application/json", "":
+					resolveRefs, err := parseResolveRefsParam(r)
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusBadRequest)
+						return
+					}
+
+					if resolveRefs {
+						val, anyMissing, err = t.controller.ResolveRefs(val)
+						if err != nil {
+							panic(err)
+						}
+					}
+
+					j, err := json.Marshal(val)
 					if err != nil {
 						panic(err)
 					}
+					respBuf = bytes.NewBuffer(j)
+					allowSubscribe = true
+					contentType = "application/json"
 
 				default:
 					http.Error(w, "not found", http.StatusNotFound)
+					return
+				}
+
+				w.Header().Set("Content-Type", contentType)
+				if allowSubscribe {
+					w.Header().Set("Subscribe", "Allow")
+				}
+
+				if anyMissing {
+					w.WriteHeader(http.StatusPartialContent)
+				}
+
+				_, err = io.Copy(w, respBuf)
+				if err != nil {
+					panic(err)
 				}
 			}
 		}
@@ -560,6 +611,19 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "unsupported method", http.StatusMethodNotAllowed)
 	}
+}
+
+func parseResolveRefsParam(r *http.Request) (bool, error) {
+	resolveRefsStr := r.URL.Query().Get("resolve_refs")
+	if resolveRefsStr == "" {
+		return false, nil
+	}
+
+	resolveRefs, err := strconv.ParseBool(resolveRefsStr)
+	if err != nil {
+		return false, errors.New("invalid resolve_refs param")
+	}
+	return resolveRefs, nil
 }
 
 func respondJSON(resp http.ResponseWriter, data interface{}) {

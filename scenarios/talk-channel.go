@@ -224,8 +224,11 @@ func sendTxs(host1, host2 rw.Host) {
                 "talk0": {
                     "messages": [],
                     "index": {
-						"Content-Type": "link",
-						"value": "ref:` + indexHTMLHash.String() + `"
+						"Content-Type": "text/html",
+						"src": {
+							"Content-Type": "link",
+							"value": "ref:` + indexHTMLHash.String() + `"
+						}
 					},
                     "Merge-Type": {
 						"Content-Type": "resolver/js",
@@ -344,8 +347,11 @@ func sendTxs(host1, host2 rw.Host) {
 					"text": "who needs a meme?",
 					"sender": "` + host1.Address().String() + `",
 					"attachment": {
-						"Content-Type": "link",
-						"value":"ref:` + memeHash.String() + `"
+						"Content-Type": "image/jpg",
+						"src": {
+							"Content-Type": "link",
+							"value":"ref:` + memeHash.String() + `"
+						}
 					}
 				}]`),
 			},

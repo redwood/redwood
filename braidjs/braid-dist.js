@@ -35,16 +35,18 @@ if (window) {
   window.Braid = Braid;
 }
 
-if (modules && modules.exports) {
-  modules.exports = Braid;
+if (module && module.exports) {
+  module.exports = Braid;
 }
 
 function createPeer(opts) {
-  var identity = opts.identity,
+  var httpHost = opts.httpHost,
+      identity = opts.identity,
       webrtc = opts.webrtc,
       onFoundPeersCallback = opts.onFoundPeersCallback;
   var transports = [httpTransport({
-    onFoundPeers: onFoundPeers
+    onFoundPeers: onFoundPeers,
+    httpHost: httpHost
   })];
 
   if (webrtc === true) {
@@ -511,7 +513,7 @@ function createPeer(opts) {
 
 
 module.exports = function (opts) {
-    const { onFoundPeers } = opts
+    const { httpHost, onFoundPeers } = opts
 
     let knownPeers = {}
     pollForPeers()
@@ -636,7 +638,7 @@ module.exports = function (opts) {
             ...options.headers,
         }
 
-        const resp = await fetch(path, options)
+        const resp = await fetch(httpHost + path, options)
         const altSvcHeader = resp.headers.get('Alt-Svc')
         if (altSvcHeader) {
             const peers = {}
@@ -693,6 +695,7 @@ module.exports = function (opts) {
         foundPeers,
     }
 }
+
 }).call(this,require("buffer").Buffer)
 },{"buffer":8}],3:[function(require,module,exports){
 

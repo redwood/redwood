@@ -23,6 +23,7 @@ type Controller interface {
 	HaveTx(txID ID) bool
 
 	State(keypath []string, resolveRefs bool) (interface{}, bool, error)
+	ResolveRefs(input interface{}) (interface{}, bool, error)
 	MostRecentTxID() ID // @@TODO: should be .Leaves()
 
 	SetResolver(keypath []string, resolver Resolver)
@@ -128,13 +129,13 @@ func (c *controller) State(keypath []string, resolveRefs bool) (interface{}, boo
 	if resolveRefs {
 		asMap, isMap := copied.(map[string]interface{})
 		if isMap {
-			return c.resolveRefs(asMap)
+			return c.ResolveRefs(asMap)
 		}
 	}
 	return copied, false, nil
 }
 
-func (c *controller) resolveRefs(input interface{}) (interface{}, bool, error) {
+func (c *controller) ResolveRefs(input interface{}) (interface{}, bool, error) {
 	type resolution struct {
 		keypath []string
 		val     interface{}
@@ -424,7 +425,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			if exists {
 				// Resolve any refs (to code) in the resolver config object.  We deep copy the config so
 				// that we don't inject any refs into the state tree itself
-				config, anyMissing, err := c.resolveRefs(DeepCopyJSValue(resolverConfig).(map[string]interface{}))
+				config, anyMissing, err := c.ResolveRefs(DeepCopyJSValue(resolverConfig).(map[string]interface{}))
 				if err != nil {
 					return err
 				} else if anyMissing {
@@ -450,7 +451,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			if exists {
 				// Resolve any refs (to code) in the validator config object.  We deep copy the config so
 				// that we don't inject any refs into the state tree itself
-				config, anyMissing, err := c.resolveRefs(DeepCopyJSValue(validatorConfig).(map[string]interface{}))
+				config, anyMissing, err := c.ResolveRefs(DeepCopyJSValue(validatorConfig).(map[string]interface{}))
 				if err != nil {
 					return err
 				} else if anyMissing {

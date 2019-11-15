@@ -286,8 +286,11 @@
         if (inputFile.files.length > 0) {
             var refHash = await braidClient.storeRef(inputFile.files[0])
             attachment = {
-                'Content-Type': 'link',
-                'value': 'ref:' + refHash,
+                'Content-Type': inputFile.files[0].type,
+                'src': {
+                    'Content-Type': 'link',
+                    'value': 'ref:' + refHash,
+                },
             }
         }
 
