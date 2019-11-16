@@ -6,8 +6,12 @@ import (
 	"path/filepath"
 	"strconv"
 
+	// "github.com/json-iterator/go"
 	"github.com/pkg/errors"
 )
+
+//var json = jsoniter.ConfigFastest
+//var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 func annotate(err *error, msg string, args ...interface{}) {
 	if *err != nil {

@@ -556,6 +556,14 @@ func (h *host) AddRef(reader io.ReadCloser, contentType string) (Hash, error) {
 }
 
 func (h *host) onReceivedRefs(refs []Hash) {
+	var fetchedAny bool
+	defer func() {
+		if fetchedAny {
+			h.controller.OnDownloadedRef()
+		}
+	}()
+
+RefLoop:
 	for _, ref := range refs {
 		if !h.refStore.HaveObject(ref) {
 			ch, err := h.transport.ForEachProviderOfRef(context.TODO(), ref)
@@ -647,8 +655,9 @@ func (h *host) onReceivedRefs(refs []Hash) {
 					h.Errorf("error announcing ref %v: %v", hash.String(), err)
 				}
 
-				return
+				continue RefLoop
 			}
+			fetchedAny = true
 		}
 	}
 }

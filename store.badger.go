@@ -13,6 +13,7 @@ type badgerStore struct {
 	db         *badger.DB
 	dbFilename string
 	address    Address
+	temp       []*Tx
 }
 
 func NewBadgerStore(dbFilename string, address Address) Store {

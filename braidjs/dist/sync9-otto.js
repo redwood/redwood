@@ -7235,9 +7235,7 @@ global.resolve_state = resolve_state;
 var s9state;
 var hasRun = false;
 
-function init(internalStateJSON) {
-  var internalState = JSON.parse(internalStateJSON);
-
+function init(internalState) {
   if (Object.keys(internalState).length === 0) {
     s9state = sync9_create();
   } else {
@@ -7246,11 +7244,10 @@ function init(internalStateJSON) {
   }
 }
 
-function resolve_state(stateJSON, sender, txHash, parents, patches) {
+function resolve_state(state, sender, txHash, parents, patches) {
   var parentsObj = {};
 
   if (!hasRun) {
-    var state = JSON.parse(stateJSON);
     var ps = {};
     sync9_add_version(s9state, 'init', ps, [{
       keys: [],

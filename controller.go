@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/pkg/errors"
 
@@ -26,10 +25,10 @@ type Controller interface {
 	ResolveRefs(input interface{}) (interface{}, bool, error)
 	MostRecentTxID() ID // @@TODO: should be .Leaves()
 
-	SetResolver(keypath []string, resolver Resolver)
-	SetValidator(keypath []string, validator Validator)
-
 	SetReceivedRefsHandler(handler ReceivedRefsHandler)
+	OnDownloadedRef()
+
+	DebugLockResolvers()
 }
 
 type ReceivedRefsHandler func(refs []Hash)
@@ -45,33 +44,43 @@ type controller struct {
 	currentState   interface{}
 	genesisState   interface{}
 	leaves         map[ID]bool
-	chMempool      chan *Tx
 	mostRecentTxID ID
 
-	onReceivedRefs func(refs []Hash)
+	chMempool chan *Tx
+	mempool   []*Tx
+
+	onReceivedRefs    func(refs []Hash)
+	chOnDownloadedRef chan struct{}
 
 	store    Store
 	refStore RefStore
+
+	resolversLocked bool
 }
 
 func NewController(address Address, genesisState interface{}, store Store, refStore RefStore) (Controller, error) {
 	c := &controller{
-		Context:        &ctx.Context{},
-		address:        address,
-		mu:             sync.RWMutex{},
-		txs:            make(map[ID]*Tx),
-		validTxs:       make(map[ID]*Tx),
-		resolverTree:   resolverTree{},
-		genesisState:   genesisState,
-		currentState:   map[string]interface{}{},
-		leaves:         make(map[ID]bool),
-		chMempool:      make(chan *Tx, 100),
-		mostRecentTxID: GenesisTxID,
-		store:          store,
-		refStore:       refStore,
+		Context:           &ctx.Context{},
+		address:           address,
+		mu:                sync.RWMutex{},
+		txs:               make(map[ID]*Tx),
+		validTxs:          make(map[ID]*Tx),
+		resolverTree:      resolverTree{},
+		genesisState:      genesisState,
+		currentState:      map[string]interface{}{},
+		leaves:            make(map[ID]bool),
+		chMempool:         make(chan *Tx, 100),
+		chOnDownloadedRef: make(chan struct{}),
+		mostRecentTxID:    GenesisTxID,
+		store:             store,
+		refStore:          refStore,
 	}
 
 	return c, nil
+}
+
+func (c *controller) DebugLockResolvers() {
+	c.resolversLocked = true
 }
 
 func (c *controller) Start() error {
@@ -80,8 +89,7 @@ func (c *controller) Start() error {
 		func() error {
 			c.SetLogLabel(c.address.Pretty() + " controller")
 
-			c.SetResolver([]string{}, &dumbResolver{})
-			// c.SetValidator([]string{}, &permissionsValidator{})
+			c.resolverTree.addResolver([]string{}, &dumbResolver{})
 
 			c.CtxAddChild(c.store.Ctx(), nil)
 
@@ -117,6 +125,10 @@ func (c *controller) Start() error {
 
 func (c *controller) SetReceivedRefsHandler(handler ReceivedRefsHandler) {
 	c.onReceivedRefs = handler
+}
+
+func (c *controller) OnDownloadedRef() {
+	c.chOnDownloadedRef <- struct{}{}
 }
 
 func (c *controller) State(keypath []string, resolveRefs bool) (interface{}, bool, error) {
@@ -217,20 +229,6 @@ func (c *controller) MostRecentTxID() ID {
 	return c.mostRecentTxID
 }
 
-func (c *controller) SetResolver(keypath []string, resolver Resolver) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.resolverTree.addResolver(keypath, resolver)
-}
-
-func (c *controller) SetValidator(keypath []string, validator Validator) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.resolverTree.addValidator(keypath, validator)
-}
-
 func (c *controller) AddTx(tx *Tx) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -284,21 +282,34 @@ func (c *controller) mempoolLoop() {
 		case <-c.Context.Done():
 			return
 		case tx := <-c.chMempool:
+			c.mempool = append(c.mempool, tx)
+			c.processMempool()
+		case <-c.chOnDownloadedRef:
+			c.processMempool()
+		}
+	}
+}
+
+func (c *controller) processMempool() {
+	for {
+		var anySucceeded bool
+		var newMempool []*Tx
+
+		for _, tx := range c.mempool {
 			err := c.processMempoolTx(tx)
 			if errors.Cause(err) == ErrNoParentYet || errors.Cause(err) == ErrMissingCriticalRefs {
-				go func() {
-					select {
-					case <-c.Context.Done():
-					case <-time.After(500 * time.Millisecond):
-						c.Infof(0, "readding to mempool %v (%v)", tx.ID.Pretty(), err)
-						c.addToMempool(tx)
-					}
-				}()
+				c.Infof(0, "readding to mempool %v (%v)", tx.ID.Pretty(), err)
+				newMempool = append(newMempool, tx)
 			} else if err != nil {
 				c.Errorf("invalid tx %+v: %+v", *tx, err)
 			} else {
+				anySucceeded = true
 				c.Infof(0, "tx added to chain (%v)", tx.Hash().Pretty())
 			}
+		}
+		c.mempool = newMempool
+		if !anySucceeded {
+			return
 		}
 	}
 }
@@ -323,10 +334,13 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			txCopy := *tx
 			txCopy.Patches = patches
 
+			c.mu.RLock()
 			err := validator.ValidateTx(c.stateAtKeypath(validatorKeypaths[validator]), c.txs, c.validTxs, txCopy)
 			if err != nil {
+				c.mu.RUnlock()
 				return err
 			}
+			c.mu.RUnlock()
 		}
 	}
 
@@ -417,60 +431,62 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 
 		// Walk the tree and initialize validators and resolvers
 		// @@TODO: inefficient
-		newResolverTree := resolverTree{}
-		newResolverTree.addResolver([]string{}, &dumbResolver{})
-		newResolverTree.addValidator([]string{}, &permissionsValidator{})
-		err = walkTree(newState, func(keypath []string, val interface{}) error {
-			resolverConfig, exists := getValue(val, []string{"Merge-Type"})
-			if exists {
-				// Resolve any refs (to code) in the resolver config object.  We deep copy the config so
-				// that we don't inject any refs into the state tree itself
-				config, anyMissing, err := c.ResolveRefs(DeepCopyJSValue(resolverConfig).(map[string]interface{}))
-				if err != nil {
-					return err
-				} else if anyMissing {
-					return ErrMissingCriticalRefs
+		if !c.resolversLocked {
+			newResolverTree := resolverTree{}
+			newResolverTree.addResolver([]string{}, &dumbResolver{})
+			newResolverTree.addValidator([]string{}, &permissionsValidator{})
+			err = walkTree(newState, func(keypath []string, val interface{}) error {
+				resolverConfig, exists := getValue(val, []string{"Merge-Type"})
+				if exists {
+					// Resolve any refs (to code) in the resolver config object.  We deep copy the config so
+					// that we don't inject any refs into the state tree itself
+					config, anyMissing, err := c.ResolveRefs(DeepCopyJSValue(resolverConfig).(map[string]interface{}))
+					if err != nil {
+						return err
+					} else if anyMissing {
+						return ErrMissingCriticalRefs
+					}
+
+					var resolverInternalState map[string]interface{}
+					oldResolverNode, depth := c.resolverTree.nearestResolverNodeForKeypath(keypath)
+					if depth != len(keypath) {
+						resolverInternalState = make(map[string]interface{})
+					} else {
+						resolverInternalState = oldResolverNode.resolver.InternalState()
+					}
+
+					resolver, err := initResolverFromConfig(config.(map[string]interface{}), resolverInternalState)
+					if err != nil {
+						return err
+					}
+					newResolverTree.addResolver(keypath, resolver)
 				}
 
-				var resolverInternalState map[string]interface{}
-				oldResolverNode, depth := c.resolverTree.nearestResolverNodeForKeypath(keypath)
-				if depth != len(keypath) {
-					resolverInternalState = make(map[string]interface{})
-				} else {
-					resolverInternalState = oldResolverNode.resolver.InternalState()
+				validatorConfig, exists := getValue(val, []string{"Validator"})
+				if exists {
+					// Resolve any refs (to code) in the validator config object.  We deep copy the config so
+					// that we don't inject any refs into the state tree itself
+					config, anyMissing, err := c.ResolveRefs(DeepCopyJSValue(validatorConfig).(map[string]interface{}))
+					if err != nil {
+						return err
+					} else if anyMissing {
+						return ErrMissingCriticalRefs
+					}
+
+					validator, err := initValidatorFromConfig(config.(map[string]interface{}))
+					if err != nil {
+						return err
+					}
+					newResolverTree.addValidator(keypath, validator)
 				}
 
-				resolver, err := initResolverFromConfig(config.(map[string]interface{}), resolverInternalState)
-				if err != nil {
-					return err
-				}
-				newResolverTree.addResolver(keypath, resolver)
+				return nil
+			})
+			if err != nil {
+				return err
 			}
-
-			validatorConfig, exists := getValue(val, []string{"Validator"})
-			if exists {
-				// Resolve any refs (to code) in the validator config object.  We deep copy the config so
-				// that we don't inject any refs into the state tree itself
-				config, anyMissing, err := c.ResolveRefs(DeepCopyJSValue(validatorConfig).(map[string]interface{}))
-				if err != nil {
-					return err
-				} else if anyMissing {
-					return ErrMissingCriticalRefs
-				}
-
-				validator, err := initValidatorFromConfig(config.(map[string]interface{}))
-				if err != nil {
-					return err
-				}
-				newResolverTree.addValidator(keypath, validator)
-			}
-
-			return nil
-		})
-		if err != nil {
-			return err
+			c.resolverTree = newResolverTree
 		}
-		c.resolverTree = newResolverTree
 	}
 
 	// Finally, set current state
@@ -549,6 +565,8 @@ func (c *controller) stateAtKeypath(keypath []string) interface{} {
 }
 
 func (c *controller) HaveTx(txID ID) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	_, have := c.txs[txID]
 	return have
 }

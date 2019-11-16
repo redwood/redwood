@@ -51,7 +51,8 @@ type httpTransport struct {
 
 	refStore RefStore
 
-	otherKnownPeers map[string]struct{}
+	otherKnownPeers   map[string]struct{}
+	otherKnownPeersMu sync.Mutex
 }
 
 func NewHTTPTransport(addr Address, port uint, controller Controller, refStore RefStore, sigkeys *SigningKeypair, cookieSecret [32]byte, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
@@ -143,6 +144,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	address := t.addressFromCookie(r)
 
+	t.otherKnownPeersMu.Lock()
 	// On every incoming request, advertise other peers via the Alt-Svc header
 	var others []string
 	for peer := range t.otherKnownPeers {
@@ -158,6 +160,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		t.otherKnownPeers[parts[0]] = struct{}{}
 	}
+	t.otherKnownPeersMu.Unlock()
 
 	switch r.Method {
 	case "HEAD":

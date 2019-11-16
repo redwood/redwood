@@ -112,7 +112,6 @@ func (t *bothTransports) ForEachSubscriberToURL(ctx context.Context, theURL stri
 }
 
 func main() {
-
 	flag.Parse()
 	flag.Set("logtostderr", "true")
 	flag.Set("v", "2")
@@ -249,6 +248,11 @@ func sendTxs(host1, host2 rw.Host) {
 
 	host1.Info(1, "sending tx to initialize talk channel...")
 	sendTx(tx1)
+
+	go func() {
+		time.Sleep(2 * time.Second)
+		host1.Controller().DebugLockResolvers()
+	}()
 }
 
 func mustParsePatch(s string) rw.Patch {
