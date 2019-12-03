@@ -95,7 +95,7 @@ Found a bug with upstream Slate? Go ahead and [submit an issue](https://github.c
 Contributors
 --------------------
 
-Slate was built by [Robert Lord](https://lord.io) while interning at [TripIt](https://www.tripit.com/).
+Slate was built by [Robert Lord](https://lord.io) while at [TripIt](https://www.tripit.com/). The project is now maintained by [Matthew Peveler](https://github.com/MasterOdin) and [Mike Ralphson](https://github.com/MikeRalphson).
 
 Thanks to the following people who have submitted major pull requests:
 
