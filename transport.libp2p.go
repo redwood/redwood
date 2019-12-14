@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,29 +51,30 @@ type libp2pTransport struct {
 	verifyAddressHandler VerifyAddressHandler
 	fetchRefHandler      FetchRefHandler
 
-	subscriptionsIn   map[string][]libp2pSubscriptionIn
+	subscriptionsIn   map[string]map[*libp2pSubscriptionIn]struct{}
 	subscriptionsInMu sync.RWMutex
 
-	refStore  RefStore
-	peerStore PeerStore
+	metacontroller Metacontroller
+	refStore       RefStore
+	peerStore      PeerStore
 }
 
 type libp2pSubscriptionIn struct {
-	domain  string
-	keypath []string
-	stream  netp2p.Stream
+	stateURI string
+	stream   netp2p.Stream
 }
 
 const (
 	PROTO_MAIN protocol.ID = "/redwood/main/1.0.0"
 )
 
-func NewLibp2pTransport(addr Address, port uint, refStore RefStore, peerStore PeerStore) (Transport, error) {
+func NewLibp2pTransport(addr Address, port uint, metacontroller Metacontroller, refStore RefStore, peerStore PeerStore) (Transport, error) {
 	t := &libp2pTransport{
 		Context:         &ctx.Context{},
 		port:            port,
 		address:         addr,
-		subscriptionsIn: make(map[string][]libp2pSubscriptionIn),
+		subscriptionsIn: make(map[string]map[*libp2pSubscriptionIn]struct{}),
+		metacontroller:  metacontroller,
 		refStore:        refStore,
 		peerStore:       peerStore,
 	}
@@ -186,24 +186,28 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 
 	switch msg.Type {
 	case MsgType_Subscribe:
-		urlStr, ok := msg.Payload.(string)
+		stateURI, ok := msg.Payload.(string)
 		if !ok {
 			t.Errorf("Subscribe message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
 
-		u, err := url.Parse(urlStr)
-		if err != nil {
-			t.Errorf("Subscribe message: bad url (%v): %v", urlStr, err)
-			return
-		}
-
-		domain := u.Host
-		keypath := strings.Split(u.Path, "/")
-
 		t.subscriptionsInMu.Lock()
 		defer t.subscriptionsInMu.Unlock()
-		t.subscriptionsIn[domain] = append(t.subscriptionsIn[domain], libp2pSubscriptionIn{domain, keypath, stream})
+		if _, exists := t.subscriptionsIn[stateURI]; !exists {
+			t.subscriptionsIn[stateURI] = make(map[*libp2pSubscriptionIn]struct{})
+		}
+		sub := &libp2pSubscriptionIn{stateURI, stream}
+		t.subscriptionsIn[stateURI][sub] = struct{}{}
+
+		parents := []ID{}
+		toVersion := ID{}
+		pinfo := t.libp2pHost.Peerstore().PeerInfo(stream.Conn().RemotePeer())
+		err := t.fetchHistoryHandler(stateURI, parents, toVersion, &libp2pPeer{t: t, pinfo: pinfo, stream: stream})
+		if err != nil {
+			t.Errorf("error fetching history: %v", err)
+			// @@TODO: close subscription?
+		}
 
 	case MsgType_Put:
 		defer stream.Close()
@@ -319,13 +323,8 @@ func (t *libp2pTransport) GetPeerByConnStrings(ctx context.Context, reachableAt 
 	return &libp2pPeer{t: t, pinfo: *pinfo}, nil
 }
 
-func (t *libp2pTransport) ForEachProviderOfURL(ctx context.Context, theURL string) (<-chan Peer, error) {
-	// u, err := url.Parse(theURL)
-	// if err != nil {
-	// 	return errors.WithStack(err)
-	// }
-
-	urlCid, err := cidForString("serve:" + theURL)
+func (t *libp2pTransport) ForEachProviderOfStateURI(ctx context.Context, stateURI string) (<-chan Peer, error) {
+	urlCid, err := cidForString("serve:" + stateURI)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -334,6 +333,11 @@ func (t *libp2pTransport) ForEachProviderOfURL(ctx context.Context, theURL strin
 	go func() {
 		defer close(ch)
 		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			for pinfo := range t.dht.FindProvidersAsync(ctx, urlCid, 8) {
 				if pinfo.ID == t.libp2pHost.ID() {
 					continue
@@ -342,7 +346,7 @@ func (t *libp2pTransport) ForEachProviderOfURL(ctx context.Context, theURL strin
 				// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
 				// whitelist, etc.
 
-				t.Infof(0, `found peer %v for url "%v"`, pinfo.ID, theURL)
+				t.Infof(0, `found peer %v for stateURI "%v"`, pinfo.ID, stateURI)
 
 				select {
 				case ch <- &libp2pPeer{t: t, pinfo: pinfo, stream: nil}:
@@ -350,6 +354,7 @@ func (t *libp2pTransport) ForEachProviderOfURL(ctx context.Context, theURL strin
 					return
 				}
 			}
+			time.Sleep(1 * time.Second) // @@TODO: make configurable?
 		}
 	}()
 	return ch, nil
@@ -388,20 +393,13 @@ func (t *libp2pTransport) ForEachProviderOfRef(ctx context.Context, refHash Hash
 	return ch, nil
 }
 
-func (t *libp2pTransport) ForEachSubscriberToURL(ctx context.Context, theURL string) (<-chan Peer, error) {
-	u, err := url.Parse(theURL)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	domain := u.Host
-
+func (t *libp2pTransport) ForEachSubscriberToStateURI(ctx context.Context, stateURI string) (<-chan Peer, error) {
 	ch := make(chan Peer)
 	go func() {
 		t.subscriptionsInMu.RLock()
 		defer t.subscriptionsInMu.RUnlock()
 		defer close(ch)
-		for _, sub := range t.subscriptionsIn[domain] {
+		for sub := range t.subscriptionsIn[stateURI] {
 			peerID := sub.stream.Conn().RemotePeer()
 			pinfo := t.libp2pHost.Peerstore().PeerInfo(peerID)
 
@@ -454,14 +452,6 @@ func (t *libp2pTransport) ensureConnected(ctx context.Context, pinfo peerstore.P
 	return nil
 }
 
-var URLS_TO_ADVERTISE = []string{
-	"localhost:21231",
-	"localhost:21241",
-	"axon.science",
-	"plan-systems.org",
-	"braid.news",
-}
-
 // Periodically announces our repos and objects to the network.
 func (t *libp2pTransport) periodicallyAnnounceContent() {
 	for {
@@ -474,7 +464,7 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 		t.Info(0, "announce")
 
 		// Announce the URLs we're serving
-		for _, url := range URLS_TO_ADVERTISE {
+		for _, url := range t.metacontroller.KnownStateURIs() {
 			go func(url string) {
 				ctxInner, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)
 				defer cancel()

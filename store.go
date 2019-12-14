@@ -9,9 +9,12 @@ type Store interface {
 	Start() error
 
 	AddTx(tx *Tx) error
-	RemoveTx(txHash Hash) error
-	FetchTx(txHash Hash) (*Tx, error)
+	RemoveTx(stateURI string, txID ID) error
+	FetchTx(stateURI string, txID ID) (*Tx, error)
 	AllTxs() TxIterator
+	AllTxsForStateURI(stateURI string) TxIterator
+	AddState(version ID, state interface{}) error
+	FetchState(version ID) (interface{}, error)
 }
 
 type TxIterator interface {

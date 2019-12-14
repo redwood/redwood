@@ -14,7 +14,7 @@ import (
 )
 
 type RefStore interface {
-	Object(hash Hash) (io.ReadCloser, string, error)
+	Object(hash Hash) (io.ReadCloser, int64, error)
 	StoreObject(reader io.ReadCloser, contentType string) (Hash, error)
 	HaveObject(hash Hash) bool
 	AllHashes() ([]Hash, error)
@@ -34,26 +34,32 @@ func (s *refStore) ensureRootPath() error {
 	return os.MkdirAll(s.rootPath, 0755)
 }
 
-func (s *refStore) Object(hash Hash) (io.ReadCloser, string, error) {
+func (s *refStore) Object(hash Hash) (io.ReadCloser, int64, error) {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 
 	err := s.ensureRootPath()
 	if err != nil {
-		return nil, "", err
+		return nil, 0, err
 	}
 
-	f, err := os.Open(filepath.Join(s.rootPath, "ref-"+hash.String()))
+	filename := filepath.Join(s.rootPath, "ref-"+hash.String())
+	stat, err := os.Stat(filename)
 	if err != nil {
-		return nil, "", err
+		return nil, 0, err
 	}
 
-	contentType, err := s.contentType(hash)
+	f, err := os.Open(filename)
 	if err != nil {
-		return nil, "", err
+		return nil, 0, err
 	}
 
-	return f, contentType, nil
+	//contentType, err := s.contentType(hash)
+	//if err != nil {
+	//    return nil, "", err
+	//}
+
+	return f, stat.Size(), nil
 }
 
 func (s *refStore) StoreObject(reader io.ReadCloser, contentType string) (h Hash, err error) {

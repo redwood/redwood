@@ -10,6 +10,7 @@ Its flexibility allows developers to use a single, simple programming model to c
 - Realtime collaborative document editors
 - Peer-to-peer encrypted messaging
 - Blockchains
+- Git-style version control systems
 
 ## 🧬 The Braid protocol
 
@@ -17,8 +18,13 @@ Redwood is part of the [Braid project](https://braid.news), and uses the Braid p
 
 ## ✔️ Redwood's features
 
-- **Javascript client:** Redwood ships with Braid.js, a Javascript client that allows browsers to communicate with one another and with Redwood's Go nodes.
-- **Accounts/identity:** Redwood uses ECDSA asymmetric cryptography to assign a decentralized identity (also known as a DID, but in this project usually referred to as an "address") to every peer.
+⚠️  **Redwood is still pre-alpha software** ⚠️ , but it already includes a number of compelling features.  The quality of these features are being improved continually, and new features are added on a regular basis.
+
+Keep an eye on our [Github project board](https://github.com/brynbellomy/redwood/projects/1) if you're interested in our roadmap.
+
+### Features
+
+- **Accounts/identity and access control:** Redwood uses ECDSA asymmetric cryptography to assign a decentralized identity (also known as a DID, but in this project usually referred to as an "address") to every peer.  Access control is easy to configure, and can be applied to any subtree.
 - **Transaction model:** Every update to the database is a transaction, signed by its sender, that can contain one or more patches.  Patches use a simple Javascript-like language to describe updates to the state tree.
 - **Private transactions and subtrees:** Users can send private, encrypted transactions to single peers or groups.  The recipients will all share a private subtree that's invisible to the rest of the swarm.
 - **Merge resolution:** Redwood expects downtime, loss of connectivity, and simultaneous conflicting edits.  To address these obstacles, it allows the developer to configure the state tree with a variety of merge resolvers.  The main one in use at the moment is called Sync9.  Different keypaths can have different resolvers.  Custom resolvers can be written in:
@@ -26,12 +32,18 @@ Redwood is part of the [Braid project](https://braid.news), and uses the Braid p
     - Javascript (executed using Chrome's V8 engine)
     - Lua
 - **Asset storage:** Assets like HTML and Javascript files can be stored in the state tree as well.  The state tree _is_ your application.  See the included demos for examples.
-- **Transports:** Redwood implements several transports, including [libp2p](https://libp2p.io), [Braid-over-HTTP](https://braid.news), and WebRTC.
+- **Transports:** Redwood implements several transports, including [libp2p](https://libp2p.io), [Braid-over-HTTP](https://braid.news), and [WebRTC](https://webrtc.org/).
     - The Go nodes communicate with one another over libp2p or HTTP (configurable)
     - The browser nodes communicate with one another over WebRTC
     - The browser nodes communicate with the Go nodes over HTTP
     - After a set of browser nodes connect with one another, you can kill the Go nodes, and the browsers can still talk to one another.
-- **Git integration:** (WIP) Soon, Redwood will be able to manage a Git repository for you.  When you push updates to the code and assets in your application, commits will be created and pushed to traditional Git remotes.  Redwood will also be able to understand incoming Git commits as Redwood transactions.  See [git-resolver/resolver.git.go](https://github.com/brynbellomy/redwood/blob/master/git-resolver/resolver.git.go) for a draft version of this functionality.
+- **Clients:**
+    - **Braid.js:** Redwood ships with Braid.js, a Javascript client that allows browsers to communicate with one another and with Redwood's Go nodes.
+    - **Go HTTP client:** Redwood includes a Go implementation of a Braid HTTP client.
+    - **Go protobuf client (forthcoming):** Redwood will include a Go protobuf client in the very near future.
+- **Git integration:**
+    - Redwood can act as a Git server.  With the included Git remote helper plugin, you can do things like `git clone redwood://mysite.com/git`, and also push and pull, without actually setting up a Git server of any kind.
+    - When you push updates to the code and assets in your application, they will be deployed instantly with zero downtime.  No more blue-green deploys.  See [git-remote-helper/main.go](https://github.com/brynbellomy/redwood/blob/master/git-remote-helper/main.go) for the remote helper itself, and [scenarios/git-integration/main.go](https://github.com/brynbellomy/redwood/blob/master/scenarios/git-integration/main.go), the fully-featured demo, for more information.  Instructions for running the Git demo are provided below.
 
 
 ## The demos
@@ -43,17 +55,19 @@ Each demo comes with a debugging view that allows you to inspect the current sta
 You can run the chat demo with the following commands (note: Go 1.13+ is required).
 
 ```sh
-$ cd scenarios/talk-channel
+$ cd scenarios/chat
 $ go run main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/shrugisland/talk0/index>
-- <https://localhost:21242/shrugisland/talk0/index>
+- <https://localhost:21232/shrugisland/talk0/index.html>
+- <https://localhost:21242/shrugisland/talk0/index.html>
 
 **(Note: due to the self-signed TLS certificates, your browser will complain that you're "not safe")**
 
 You now have four nodes (two in Go, two in the browser) that can talk with one another.
+
+---
 
 ### Demo #2: collaborative text editor
 
@@ -65,12 +79,49 @@ $ go run main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/editor/index>
-- <https://localhost:21242/editor/index>
+- <https://localhost:21232/editor/index.html>
+- <https://localhost:21242/editor/index.html>
 
 **(Note: due to the self-signed TLS certificates, your browser will complain that you're "not safe")**
 
 As with the chat room demo, you now have four nodes (two in Go, two in the browser) that can talk with one another.
 
+---
+
+### Demo #3: Git integration
+
+Before running the Git demo, you'll need to build the Git remote helper and install it into your `$PATH`:
+
+```sh
+$ cd git-remote-helper
+$ go build --tags static -o /usr/bin/git-remote-redwood main.go
+```
+
+Once the helper is installed, you can run the git demo with the following commands (note: Go 1.13+ is required).
+
+```sh
+$ cd scenarios/git-integration
+$ go run main.go
+```
+
+This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
+- <https://localhost:21232/gitdemo/index.html>
+- <https://localhost:21242/gitdemo/index.html>
+
+Now, let's clone the demo repo:
+
+```sh
+$ git clone redwood://localhost:21231/git /tmp/redwood-git
+$ cd /tmp/redwood-git
+```
+
+You'll notice that the file tree is identical to the one shown in your browser.  Also, notice that you can navigate to these files directly in the web browser -- the contents of the Git repo are served directly by Redwood (there are ways to handle staging/dev setups, but they're not covered by the demo).
+
+Let's try pushing some commits.
+
+- Try editing README.md, committing, and pushing.  You'll see that the browser updates the contents of the file instantly.
+- Try copying a new JPEG image over `redwood.jpg`.  Commit and push.  The image will instantly update in the browser.
+
+If you push updates to `index.html` or `script.js`, you'll need to refresh the demo page in the browser to see your changes (but they will still have occurred instantly).
 
 

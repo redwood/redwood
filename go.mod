@@ -4,11 +4,11 @@ require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d
 	github.com/ThomsonReutersEikon/go-ntlm v0.0.0-20181130171125-cf23bd1ecf18 // indirect
-	github.com/alecthomas/participle v0.3.0
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20191023202215-f096da5361bb // indirect
 	github.com/brynbellomy/debugcharts v0.0.0-20180826220201-c3f57e57ea6f
 	github.com/brynbellomy/ginkgo-reporter v0.0.0-20160306174404-9bf14cb7c4ae // indirect
+	github.com/brynbellomy/git2go v0.0.0-20191127205451-32796717b4d5
 	github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d
 	github.com/brynbellomy/go-structomancer v1.0.1 // indirect
 	github.com/btcsuite/btcd v0.0.0-20190213025234-306aecffea32
@@ -33,7 +33,6 @@ require (
 	github.com/ipfs/go-cid v0.0.1
 	github.com/ipfs/go-datastore v0.0.2
 	github.com/kkdai/bstream v0.0.0-20181106074824-b3251f7901ec // indirect
-	github.com/libgit2/git2go v0.0.0-20190813182810-37e5b53f742d // indirect
 	github.com/libp2p/go-libp2p v0.0.1
 	github.com/libp2p/go-libp2p-crypto v0.0.1
 	github.com/libp2p/go-libp2p-host v0.0.1
@@ -53,12 +52,10 @@ require (
 	github.com/plan-systems/klog v0.0.0-20190618231738-14c6677fa6ea
 	github.com/plan-systems/plan-core v0.0.3
 	github.com/rjeczalik/notify v0.9.2 // indirect
-	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d
 	github.com/sirupsen/logrus v1.4.2
 	github.com/src-d/go-git v4.7.0+incompatible // indirect
 	github.com/tyler-smith/go-bip39 v1.0.0
 	github.com/urfave/cli v1.20.0
-	github.com/yorhodes/otto v0.0.0-20180617131154-15f95af6e78d
 	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4
 	golang.org/x/net v0.0.0-20190912160710-24e19bdeb0f2
@@ -67,6 +64,7 @@ require (
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/src-d/go-git.v4 v4.13.1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20190502103701-55513cacd4ae
+	rogchap.com/v8go v0.1.0
 )
 
 go 1.13

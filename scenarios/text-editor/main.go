@@ -2,71 +2,17 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
-	"io/ioutil"
 	"os"
 	"time"
 
 	rw "github.com/brynbellomy/redwood"
 	"github.com/brynbellomy/redwood/ctx"
-	// "github.com/brynbellomy/redwood/remotestore"
+	"github.com/brynbellomy/redwood/scenarios/demoutils"
 )
 
 type app struct {
 	ctx.Context
-}
-
-func makeHost(signingKeypairHex string, port uint, dbfile, refStoreRoot, cookieSecretStr, tlsCertFilename, tlsKeyFilename string) rw.Host {
-	signingKeypair, err := rw.SigningKeypairFromHex(signingKeypairHex)
-	if err != nil {
-		panic(err)
-	}
-
-	encryptingKeypair, err := rw.GenerateEncryptingKeypair()
-	if err != nil {
-		panic(err)
-	}
-
-	genesisBytes, err := ioutil.ReadFile("genesis.json")
-	if err != nil {
-		panic(err)
-	}
-
-	var genesis map[string]interface{}
-	err = json.Unmarshal(genesisBytes, &genesis)
-	if err != nil {
-		panic(err)
-	}
-	store := rw.NewBadgerStore(dbfile, signingKeypair.Address())
-	// store := remotestore.NewClient("0.0.0.0:4567", signingKeypair.Address(), signingKeypair.SigningPrivateKey)
-	refStore := rw.NewRefStore(refStoreRoot)
-	peerStore := rw.NewPeerStore(signingKeypair.Address())
-	controller, err := rw.NewController(signingKeypair.Address(), genesis, store, refStore)
-	if err != nil {
-		panic(err)
-	}
-
-	p2ptransport, err := rw.NewLibp2pTransport(signingKeypair.Address(), port, refStore, peerStore)
-	if err != nil {
-		panic(err)
-	}
-
-	var cookieSecret [32]byte
-	copy(cookieSecret[:], []byte(cookieSecretStr))
-	httptransport, err := rw.NewHTTPTransport(signingKeypair.Address(), port+1, controller, refStore, peerStore, signingKeypair, cookieSecret, tlsCertFilename, tlsKeyFilename)
-	if err != nil {
-		panic(err)
-	}
-
-	transports := []rw.Transport{p2ptransport, httptransport}
-
-	h, err := rw.NewHost(signingKeypair, encryptingKeypair, port, transports, controller, refStore, peerStore)
-	if err != nil {
-		panic(err)
-	}
-
-	return h
 }
 
 func main() {
@@ -76,8 +22,8 @@ func main() {
 
 	os.MkdirAll("/tmp/redwood/text-editor", 0700)
 
-	host1 := makeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/redwood/text-editor/badger1", "/tmp/redwood/text-editor/refs1", "cookiesecret1", "server1.crt", "server1.key")
-	host2 := makeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/redwood/text-editor/badger2", "/tmp/redwood/text-editor/refs2", "cookiesecret2", "server2.crt", "server2.key")
+	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/redwood/text-editor/badger1", "/tmp/redwood/text-editor/refs1", "cookiesecret1", "server1.crt", "server1.key")
+	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/redwood/text-editor/badger2", "/tmp/redwood/text-editor/refs2", "cookiesecret2", "server2.crt", "server2.key")
 
 	err := host1.Start()
 	if err != nil {
@@ -110,18 +56,21 @@ func main() {
 	//    panic(err)
 	//}
 
-	time.Sleep(2 * time.Second)
-
 	// Both consumers subscribe to the URL
-	anySucceeded, _ := host2.Subscribe(host2.Ctx(), "localhost:21231")
-	if !anySucceeded {
-		panic("host2 could not subscribe")
-	}
+	ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
+	go func() {
+		anySucceeded, _ := host2.Subscribe(ctx, "localhost:21231/editor")
+		if !anySucceeded {
+			panic("host2 could not subscribe")
+		}
+	}()
 
-	anySucceeded, _ = host1.Subscribe(host1.Ctx(), "localhost:21231")
-	if !anySucceeded {
-		panic("host1 could not subscribe")
-	}
+	go func() {
+		anySucceeded, _ := host1.Subscribe(ctx, "localhost:21231/editor")
+		if !anySucceeded {
+			panic("host1 could not subscribe")
+		}
+	}()
 
 	sendTxs(host1, host2)
 
@@ -130,6 +79,9 @@ func main() {
 }
 
 func sendTxs(host1, host2 rw.Host) {
+	// Before sending any transactions, we upload some resources we're going to need
+	// into the RefStore of the node.  These resources can be referred to in the state
+	// tree by their hash.
 	sync9, err := os.Open("./sync9-otto.js")
 	if err != nil {
 		panic(err)
@@ -147,6 +99,7 @@ func sendTxs(host1, host2 rw.Host) {
 		panic(err)
 	}
 
+	// These are just convenience utils
 	hostsByAddress := map[rw.Address]rw.Host{
 		host1.Address(): host1,
 		host2.Address(): host2,
@@ -160,50 +113,66 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 	}
 
-	// Setup talk channel using transactions
-	var tx1 = rw.Tx{
-		ID:      rw.IDFromString("one"),
-		Parents: []rw.ID{rw.GenesisTxID},
-		From:    host1.Address(),
-		URL:     "localhost:21231",
-		Patches: []rw.Patch{
-			mustParsePatch(`.editor = {
-				"text": "",
-				"index": {
-					"Content-Type": "text/html",
-					"src": {
-						"Content-Type": "link",
-						"value": "ref:` + indexHTMLHash.String() + `"
-					}
-				},
-				"Merge-Type": {
-					"Content-Type": "resolver/js",
-					"src": {
-						"Content-Type": "link",
-						"value": "ref:` + sync9Hash.String() + `"
-					}
-				},
-				"Validator": {
-					"Content-Type": "validator/permissions",
-					"permissions": {
-						"96216849c49358b10257cb55b28ea603c874b05e": {
-							"^.*$": {
-								"write": true
-							}
-						},
-						"*": {
-							"^\\.text.*": {
-								"write": true
+	//
+	// Setup our text editor using a single transaction.  This channel has:
+	//   - an string containing the document's text
+	//   - an index.html page (for interacting with the editor from a web browser)
+	//   - a "sync9" merge resolver (which is good at intelligently merging concurrent updates
+	//       from multiple users).  Notice that we uploaded the Javascript code for this resolver
+	//       to the node above ^, and we're now referring to it by its hash.
+	//   - a "permissions" validator (which says that any user may write to the .text key)
+	//
+	var (
+		genesisTx = rw.Tx{
+			ID:      rw.GenesisTxID,
+			Parents: []rw.ID{},
+			From:    host1.Address(),
+			URL:     "localhost:21231/editor",
+			Patches: []rw.Patch{
+				mustParsePatch(` = {
+					"text": "",
+					"index.html": {
+						"Content-Type": "text/html",
+						"value": {
+							"Content-Type": "link",
+							"value": "ref:` + indexHTMLHash.String() + `"
+						}
+					},
+					"Merge-Type": {
+						"Content-Type": "resolver/js",
+						"value": {
+							"src": {
+								"Content-Type": "link",
+								"value": "ref:` + sync9Hash.String() + `"
 							}
 						}
-					}
-				}
-            }`),
-		},
-	}
+					},
+					"Validator": {
+						"Content-Type": "validator/permissions",
+						"value": {
+							"96216849c49358b10257cb55b28ea603c874b05e": {
+								"^.*$": {
+									"write": true
+								}
+							},
+							"*": {
+								"^\\.text.*": {
+									"write": true
+								}
+							}
+						}
+					},
+					"providers": [
+						"localhost:21231",
+						"localhost:21241"
+					]
+				}`),
+			},
+		}
+	)
 
-	host1.Info(1, "sending tx to initialize talk channel...")
-	sendTx(tx1)
+	host1.Info(1, "sending tx to initialize text editor channel...")
+	sendTx(genesisTx)
 
 	go func() {
 		time.Sleep(2 * time.Second)

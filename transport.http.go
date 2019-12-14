@@ -32,7 +32,8 @@ type httpTransport struct {
 	*ctx.Context
 
 	address         Address
-	controller      Controller
+	controller      Metacontroller
+	defaultStateURI string
 	ownURL          string
 	port            uint
 	sigkeys         *SigningKeypair
@@ -50,14 +51,14 @@ type httpTransport struct {
 	verifyAddressHandler VerifyAddressHandler
 	fetchRefHandler      FetchRefHandler
 
-	subscriptionsIn   map[string][]*httpSubscriptionIn
+	subscriptionsIn   map[string]map[*httpSubscriptionIn]struct{}
 	subscriptionsInMu sync.RWMutex
 
 	refStore  RefStore
 	peerStore PeerStore
 }
 
-func NewHTTPTransport(addr Address, port uint, controller Controller, refStore RefStore, peerStore PeerStore, sigkeys *SigningKeypair, cookieSecret [32]byte, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
+func NewHTTPTransport(addr Address, port uint, defaultStateURI string, controller Metacontroller, refStore RefStore, peerStore PeerStore, sigkeys *SigningKeypair, cookieSecret [32]byte, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
@@ -66,9 +67,10 @@ func NewHTTPTransport(addr Address, port uint, controller Controller, refStore R
 	t := &httpTransport{
 		Context:               &ctx.Context{},
 		address:               addr,
-		subscriptionsIn:       make(map[string][]*httpSubscriptionIn),
+		subscriptionsIn:       make(map[string]map[*httpSubscriptionIn]struct{}),
 		controller:            controller,
 		port:                  port,
+		defaultStateURI:       defaultStateURI,
 		sigkeys:               sigkeys,
 		cookieSecret:          cookieSecret,
 		tlsCertFilename:       tlsCertFilename,
@@ -134,6 +136,7 @@ func (t *httpTransport) Start() error {
 type httpSubscriptionIn struct {
 	io.Writer
 	http.Flusher
+	address          Address
 	chDoneCatchingUp chan struct{}
 	chDone           chan struct{}
 }
@@ -201,444 +204,47 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "HEAD":
 
 	case "AUTHORIZE":
-		//
 		// Address verification requests (2 kinds)
-		//
 		if challengeMsgHex := r.Header.Get("Challenge"); challengeMsgHex != "" {
-			// 1. Remote node is reaching out to us with a challenge
-			challengeMsg, err := hex.DecodeString(challengeMsgHex)
-			if err != nil {
-				http.Error(w, "Challenge header: bad challenge message", http.StatusBadRequest)
-				return
-			}
-
-			peer := &httpPeer{address: address, t: t, Writer: w}
-			err = t.verifyAddressHandler([]byte(challengeMsg), peer)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-
-		} else if responseHex := r.Header.Get("Response"); responseHex != "" {
-			// 2b. Remote node wanted a challenge, this is their response
-			challenge, exists := t.pendingAuthorizations[sessionID]
-			if !exists {
-				http.Error(w, "no pending authorization", http.StatusBadRequest)
-				return
-			}
-
-			sig, err := hex.DecodeString(responseHex)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			sigpubkey, err := RecoverSigningPubkey(HashBytes(challenge), sig)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			addr := sigpubkey.Address()
-			err = t.setSignedCookie(w, "address", addr[:])
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			delete(t.pendingAuthorizations, sessionID) // @@TODO: expiration/garbage collection for failed auths
-
+			// 1. Remote node is reaching out to us with a challenge, and we respond
+			t.serveAuthorizeSelf(w, r, address, challengeMsgHex)
 		} else {
-			// 2a. Remote node wants a challenge, so we send it
-			challenge, err := GenerateChallengeMsg()
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-
-			t.pendingAuthorizations[sessionID] = challenge
-
-			challengeHex := hex.EncodeToString(challenge)
-			_, err = w.Write([]byte(challengeHex))
-			if err != nil {
-				t.Errorf("error writing challenge message: %v", err)
-				return
+			responseHex := r.Header.Get("Response")
+			if responseHex == "" {
+				// 2a. Remote node wants a challenge, so we send it
+				t.serveAuthorizeOtherIssueChallenge(w, r, sessionID)
+			} else {
+				// 2b. Remote node wanted a challenge, this is their response
+				t.serveAuthorizeOtherCheckResponse(w, r, sessionID, responseHex)
 			}
 		}
 
 	case "GET":
 		if r.Header.Get("Subscribe") != "" {
-			//
-			// Subscription request
-			//
-			t.Infof(0, "incoming subscription (address: %v)", address)
-
-			// Make sure that the writer supports flushing.
-			f, ok := w.(http.Flusher)
-			if !ok {
-				http.Error(w, "streaming unsupported", http.StatusInternalServerError)
-				return
-			}
-
-			// Listen to the closing of the http connection via the CloseNotifier
-			notify := w.(http.CloseNotifier).CloseNotify()
-			go func() {
-				<-notify
-				t.Errorf("http connection closed")
-			}()
-
-			// Set the headers related to event streaming.
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.Header().Set("Cache-Control", "no-cache")
-			w.Header().Set("Connection", "keep-alive")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Transfer-Encoding", "chunked")
-
-			sub := &httpSubscriptionIn{w, f, make(chan struct{}), make(chan struct{})}
-
-			urlToSubscribe := r.Header.Get("State-URI")
-
-			t.subscriptionsInMu.Lock()
-			t.subscriptionsIn[urlToSubscribe] = append(t.subscriptionsIn[urlToSubscribe], sub)
-			t.subscriptionsInMu.Unlock()
-
-			f.Flush()
-
-			parentsHeader := r.Header.Get("Parents")
-			if parentsHeader != "" {
-				var parents []ID
-				parentStrs := strings.Split(parentsHeader, "/")
-				for _, parentStr := range parentStrs {
-					parent, err := IDFromHex(parentStr)
-					if err != nil {
-						// @@TODO: what to do?
-						parents = []ID{GenesisTxID}
-						break
-					}
-					parents = append(parents, parent)
-				}
-
-				var toVersion ID
-				if versionHeader := r.Header.Get("Version"); versionHeader != "" {
-					toVersion, err = IDFromHex(versionHeader)
-					if err != nil {
-						// @@TODO: what to do?
-					}
-				}
-
-				err := t.fetchHistoryHandler(parents, toVersion, &httpPeer{address: address, t: t, Writer: w, Flusher: f})
-				if err != nil {
-					t.Errorf("error fetching history: %v", err)
-					// @@TODO: close subscription?
-				}
-			}
-
-			close(sub.chDoneCatchingUp)
-
-			// Block until the subscription is canceled so that net/http doesn't close the connection
-			<-sub.chDone
-
+			t.serveSubscription(w, r, address)
 		} else {
-			//
-			// Regular HTTP GET request (from browsers, etc.)
-			//
-
-			// @@TODO: this is hacky
 			if r.URL.Path == "/braid.js" {
-				var filename string
-				if fileExists("./braid.js") {
-					filename = "./braid.js"
-				}
-				f, err := os.Open(filename)
-				if err != nil {
-					http.Error(w, "can't find braidjs", http.StatusNotFound)
-					return
-				}
-				defer f.Close()
-				http.ServeContent(w, r, "./braidjs/braid-dist.js", time.Now(), f)
-				return
-			}
-
-			keypath := filterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
-
-			if r.Header.Get("Accept") == "application/json" {
-				resolveRefs, err := parseResolveRefsParam(r)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-
-				val, _, err := t.controller.State(keypath, resolveRefs)
-				if err != nil {
-					http.Error(w, "not found", http.StatusNotFound)
-					return
-				}
-
-				// @@TODO: hacky
-				var resp struct {
-					MostRecentTxID ID          `json:"mostRecentTxID"`
-					Data           interface{} `json:"data"`
-				}
-				resp.MostRecentTxID = t.controller.MostRecentTxID()
-
-				switch v := val.(type) {
-				case string:
-					resp.Data = v
-
-				case []byte:
-					resp.Data = string(v) // @@TODO: probably don't want this
-
-				case map[string]interface{}, []interface{}:
-					resp.Data = v
-
-				default:
-					http.Error(w, "not found", http.StatusNotFound)
-				}
-
-				j, err := json.Marshal(resp)
-				if err != nil {
-					panic(err)
-				}
-
-				_, err = io.Copy(w, bytes.NewBuffer(j))
-				if err != nil {
-					panic(err)
-				}
-
+				// @@TODO: this is hacky
+				t.serveBraidJS(w, r)
+			} else if strings.HasPrefix(r.URL.Path, "/__tx/") {
+				t.serveGetTx(w, r)
 			} else {
-				// No "Accept" header, so we have to try to intelligently guess
-
-				val, _, err := t.controller.State(keypath, false)
-				if err != nil {
-					t.Errorf("errrr %+v", err)
-					http.Error(w, fmt.Sprintf("not found: %+v", err.Error()), http.StatusNotFound)
-					return
-				}
-
-				contentType, _ := getString(val, []string{"Content-Type"})
-
-				var allowSubscribe bool
-				var anyMissing bool
-				var respBuf io.Reader
-
-				switch contentType {
-				case "text/plain", "text/html", "application/js":
-					val, anyMissing, err = t.controller.ResolveRefs(val)
-					if err != nil {
-						panic(err)
-					}
-
-					val, _ = getValue(val, []string{"src"})
-
-					allowSubscribe = contentType != "text/html"
-
-					if valStr, isStr := val.(string); isStr {
-						respBuf = bytes.NewBuffer([]byte(valStr))
-					} else if valBytes, isBytes := val.([]byte); isBytes {
-						respBuf = bytes.NewBuffer(valBytes)
-					} else {
-						contentType = "application/json"
-						j, err := json.Marshal(val)
-						if err != nil {
-							panic(err)
-						}
-						respBuf = bytes.NewBuffer(j)
-					}
-
-				case "image/png", "image/jpg", "image/jpeg":
-					val, anyMissing, err = t.controller.ResolveRefs(val)
-					if err != nil {
-						panic(err)
-					}
-
-					val, _ = getValue(val, []string{"src"})
-
-					if valBytes, isBytes := val.([]byte); isBytes {
-						respBuf = bytes.NewBuffer(valBytes)
-					} else {
-						contentType = "application/json"
-						j, err := json.Marshal(val)
-						if err != nil {
-							panic(err)
-						}
-						respBuf = bytes.NewBuffer(j)
-					}
-
-				case "application/json", "":
-					resolveRefs, err := parseResolveRefsParam(r)
-					if err != nil {
-						http.Error(w, err.Error(), http.StatusBadRequest)
-						return
-					}
-
-					if resolveRefs {
-						val, anyMissing, err = t.controller.ResolveRefs(val)
-						if err != nil {
-							panic(err)
-						}
-					}
-
-					j, err := json.Marshal(val)
-					if err != nil {
-						panic(err)
-					}
-					respBuf = bytes.NewBuffer(j)
-					allowSubscribe = true
-					contentType = "application/json"
-
-				default:
-					http.Error(w, "not found", http.StatusNotFound)
-					return
-				}
-
-				w.Header().Set("Content-Type", contentType)
-				if allowSubscribe {
-					w.Header().Set("Subscribe", "Allow")
-				}
-
-				if anyMissing {
-					w.WriteHeader(http.StatusPartialContent)
-				}
-
-				_, err = io.Copy(w, respBuf)
-				if err != nil {
-					panic(err)
-				}
+				t.serveGetState(w, r)
 			}
 		}
 
 	case "ACK":
-		defer r.Body.Close()
-
-		bs, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			t.Errorf("error reading ACK body: %v", err)
-			http.Error(w, "error reading body", http.StatusBadRequest)
-			return
-		}
-
-		var txID ID
-		err = txID.UnmarshalText(bs)
-		if err != nil {
-			t.Errorf("error reading ACK body: %v", err)
-			http.Error(w, "error reading body", http.StatusBadRequest)
-			return
-		}
-
-		t.ackHandler(txID, &httpPeer{address: address, t: t, Writer: w})
+		t.serveAck(w, r, address)
 
 	case "PUT":
-		defer r.Body.Close()
-
 		if r.Header.Get("Private") == "true" {
-			t.Infof(0, "incoming private tx")
-
-			var encryptedTx EncryptedTx
-			err := json.NewDecoder(r.Body).Decode(&encryptedTx)
-			if err != nil {
-				panic(err)
-			}
-
-			t.privateTxHandler(encryptedTx, &httpPeer{address: address, t: t, Writer: w})
+			t.servePostPrivateTx(w, r, address)
 
 		} else if r.Header.Get("Ref") == "true" {
-			t.Infof(0, "incoming ref")
-
-			file, header, err := r.FormFile("ref")
-			if err != nil {
-				panic(err)
-			}
-			defer file.Close()
-
-			hash, err := t.refStore.StoreObject(file, header.Header.Get("Content-Type"))
-			if err != nil {
-				t.Errorf("error storing ref: %v", err)
-				http.Error(w, "internal server error", http.StatusInternalServerError)
-				return
-			}
-
-			respondJSON(w, struct {
-				Hash Hash `json:"hash"`
-			}{hash})
-
-			return
+			t.servePostRef(w, r)
 
 		} else {
-			t.Infof(0, "incoming tx")
-
-			var err error
-
-			var sig Signature
-			sigHeaderStr := r.Header.Get("Signature")
-			if sigHeaderStr == "" {
-				http.Error(w, "missing Signature header", http.StatusBadRequest)
-				return
-			} else {
-				sig, err = SignatureFromHex(sigHeaderStr)
-				if err != nil {
-					http.Error(w, "bad Signature header", http.StatusBadRequest)
-					return
-				}
-			}
-
-			var txID ID
-			txIDStr := r.Header.Get("Version")
-			if txIDStr == "" {
-				txID = RandomID()
-			} else {
-				txID, err = IDFromHex(txIDStr)
-				if err != nil {
-					http.Error(w, "bad Version header", http.StatusBadRequest)
-					return
-				}
-			}
-
-			var parents []ID
-			parentsStr := r.Header.Get("Parents")
-			if parentsStr != "" {
-				parentsStrs := strings.Split(parentsStr, ",")
-				for _, pstr := range parentsStrs {
-					parentID, err := IDFromHex(strings.TrimSpace(pstr))
-					if err != nil {
-						http.Error(w, "bad Parents header", http.StatusBadRequest)
-						return
-					}
-					parents = append(parents, parentID)
-				}
-			}
-
-			var patches []Patch
-			scanner := bufio.NewScanner(r.Body)
-			for scanner.Scan() {
-				line := scanner.Text()
-				patch, err := ParsePatch(line)
-				if err != nil {
-					http.Error(w, fmt.Sprintf("bad patch string: %v", line), http.StatusBadRequest)
-					return
-				}
-				patches = append(patches, patch)
-			}
-			if err := scanner.Err(); err != nil {
-				http.Error(w, fmt.Sprintf("internal server error: %v", err), http.StatusInternalServerError)
-				return
-			}
-
-			tx := Tx{
-				ID:      txID,
-				Parents: parents,
-				Sig:     sig,
-				Patches: patches,
-				URL:     r.Header.Get("State-URI"), // @@TODO: bad
-			}
-
-			// @@TODO: remove .From entirely
-			pubkey, err := RecoverSigningPubkey(tx.Hash(), sig)
-			if err != nil {
-				panic("bad sig")
-			}
-			tx.From = pubkey.Address()
-			////////////////////////////////
-
-			t.txHandler(tx, &httpPeer{address: address, t: t, Writer: w})
+			t.servePostTx(w, r, address)
 		}
 
 	default:
@@ -646,17 +252,430 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func parseResolveRefsParam(r *http.Request) (bool, error) {
-	resolveRefsStr := r.URL.Query().Get("resolve_refs")
-	if resolveRefsStr == "" {
-		return false, nil
+func (t *httpTransport) serveAuthorizeSelf(w http.ResponseWriter, r *http.Request, address Address, challengeMsgHex string) {
+	challengeMsg, err := hex.DecodeString(challengeMsgHex)
+	if err != nil {
+		http.Error(w, "Challenge header: bad challenge message", http.StatusBadRequest)
+		return
 	}
 
-	resolveRefs, err := strconv.ParseBool(resolveRefsStr)
+	peer := &httpPeer{address: address, t: t, Writer: w}
+	err = t.verifyAddressHandler([]byte(challengeMsg), peer)
 	if err != nil {
-		return false, errors.New("invalid resolve_refs param")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	return resolveRefs, nil
+}
+
+func (t *httpTransport) serveAuthorizeOtherIssueChallenge(w http.ResponseWriter, r *http.Request, sessionID ID) {
+	challenge, err := GenerateChallengeMsg()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	t.pendingAuthorizations[sessionID] = challenge
+
+	challengeHex := hex.EncodeToString(challenge)
+	_, err = w.Write([]byte(challengeHex))
+	if err != nil {
+		t.Errorf("error writing challenge message: %v", err)
+		return
+	}
+}
+
+func (t *httpTransport) serveAuthorizeOtherCheckResponse(w http.ResponseWriter, r *http.Request, sessionID ID, responseHex string) {
+	challenge, exists := t.pendingAuthorizations[sessionID]
+	if !exists {
+		http.Error(w, "no pending authorization", http.StatusBadRequest)
+		return
+	}
+
+	sig, err := hex.DecodeString(responseHex)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	sigpubkey, err := RecoverSigningPubkey(HashBytes(challenge), sig)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	addr := sigpubkey.Address()
+	err = t.setSignedCookie(w, "address", addr[:])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	delete(t.pendingAuthorizations, sessionID) // @@TODO: expiration/garbage collection for failed auths
+}
+
+func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request, address Address) {
+	t.Infof(0, "incoming subscription (address: %v)", address)
+
+	// @@TODO: ensure we actually have this stateURI
+	stateURI := r.Header.Get("State-URI")
+	if stateURI == "" {
+		stateURI = t.defaultStateURI
+	}
+
+	// Make sure that the writer supports flushing.
+	f, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	// Set the headers related to event streaming.
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Transfer-Encoding", "chunked")
+
+	sub := &httpSubscriptionIn{w, f, address, make(chan struct{}), make(chan struct{})}
+
+	t.trackSubscription(stateURI, sub)
+
+	// Listen to the closing of the http connection via the CloseNotifier
+	notify := w.(http.CloseNotifier).CloseNotify()
+	go func() {
+		<-notify
+		t.Infof(0, "http connection closed")
+		t.untrackSubscription(stateURI, sub)
+	}()
+
+	f.Flush()
+
+	parentsHeader := r.Header.Get("Parents")
+	if parentsHeader != "" {
+		var parents []ID
+		parentStrs := strings.Split(parentsHeader, ",")
+		for _, parentStr := range parentStrs {
+			parent, err := IDFromHex(parentStr)
+			if err != nil {
+				// @@TODO: what to do?
+				parents = []ID{GenesisTxID}
+				break
+			}
+			parents = append(parents, parent)
+		}
+
+		var toVersion ID
+		if versionHeader := r.Header.Get("Version"); versionHeader != "" {
+			var err error
+			toVersion, err = IDFromHex(versionHeader)
+			if err != nil {
+				// @@TODO: what to do?
+			}
+		}
+
+		err := t.fetchHistoryHandler(stateURI, parents, toVersion, &httpPeer{address: address, t: t, Writer: w, Flusher: f})
+		if err != nil {
+			t.Errorf("error fetching history: %v", err)
+			// @@TODO: close subscription?
+		}
+	}
+
+	close(sub.chDoneCatchingUp)
+
+	// Block until the subscription is canceled so that net/http doesn't close the connection
+	<-sub.chDone
+}
+
+func (t *httpTransport) serveBraidJS(w http.ResponseWriter, r *http.Request) {
+	var filename string
+	if fileExists("./braid.js") {
+		filename = "./braid.js"
+	}
+	f, err := os.Open(filename)
+	if err != nil {
+		http.Error(w, "can't find braidjs", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	http.ServeContent(w, r, "./braidjs/braid-dist.js", time.Now(), f)
+	return
+}
+
+func (t *httpTransport) serveGetTx(w http.ResponseWriter, r *http.Request) {
+	stateURI := r.Header.Get("State-URI")
+	if stateURI == "" {
+		http.Error(w, "missing State-URI header", http.StatusBadRequest)
+		return
+	}
+
+	parts := strings.Split(r.URL.Path[1:], "/")
+	txIDStr := parts[1]
+	txID, err := IDFromHex(txIDStr)
+	if err != nil {
+		http.Error(w, "bad tx id", http.StatusBadRequest)
+		return
+	}
+
+	tx, err := t.controller.FetchTx(stateURI, txID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("not found: %v", err), http.StatusNotFound)
+		return
+	}
+
+	respondJSON(w, tx)
+}
+
+func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
+	keypath := filterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
+
+	stateURI := r.Header.Get("State-URI")
+	if stateURI == "" {
+		stateURI = strings.Join([]string{t.defaultStateURI, keypath[0]}, "/")
+		keypath = keypath[1:]
+	}
+
+	var version *ID
+	if vstr := r.Header.Get("Version"); vstr != "" {
+		v, err := IDFromHex(vstr)
+		if err != nil {
+			http.Error(w, "bad Version header", http.StatusBadRequest)
+			return
+		}
+		version = &v
+	}
+
+	val, parents, err := t.controller.State(stateURI, keypath, version)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("not found: %+v", err.Error()), http.StatusNotFound)
+		return
+	}
+
+	var parentStrs []string
+	for _, pid := range parents {
+		parentStrs = append(parentStrs, pid.Hex())
+	}
+	w.Header().Add("Parents", strings.Join(parentStrs, ","))
+
+	raw, err := parseRawParam(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	} else if raw {
+		respondJSON(w, val)
+		return
+	}
+
+	val, anyMissing, err := t.controller.ResolveRefs(val)
+	if err != nil {
+		panic(err)
+	}
+
+	var contentType string
+	var contentLength int64
+	var respBuf io.ReadCloser
+	if n, is := val.(*NelSON); is {
+		contentType = n.ContentType()
+		if contentType == "application/octet-stream" {
+			contentType = GuessContentTypeFromFilename(keypath[len(keypath)-1])
+		}
+
+		contentLength = n.ContentLength()
+		reader, err := n.ValueReader()
+		if err != nil {
+			panic(err)
+		}
+		respBuf = reader
+
+	} else {
+		contentType = "application/json"
+		j, err := json.Marshal(val)
+		if err != nil {
+			panic(err)
+		}
+		respBuf = ioutil.NopCloser(bytes.NewBuffer(j))
+	}
+	defer respBuf.Close()
+
+	w.Header().Set("Content-Type", contentType)
+	if contentLength > 0 {
+		w.Header().Set("Content-Length", strconv.Itoa(int(contentLength)))
+	}
+
+	// Right now, this is just to facilitate the Chrome extension
+	allowSubscribe := map[string]bool{
+		"application/json": true,
+		"application/js":   true,
+		"text/plain":       true,
+	}
+	if allowSubscribe[contentType] {
+		w.Header().Set("Subscribe", "Allow")
+	}
+	if anyMissing {
+		w.WriteHeader(http.StatusPartialContent)
+	}
+
+	_, err = io.Copy(w, respBuf)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (t *httpTransport) serveAck(w http.ResponseWriter, r *http.Request, address Address) {
+	defer r.Body.Close()
+
+	bs, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		t.Errorf("error reading ACK body: %v", err)
+		http.Error(w, "error reading body", http.StatusBadRequest)
+		return
+	}
+
+	var txID ID
+	err = txID.UnmarshalText(bs)
+	if err != nil {
+		t.Errorf("error reading ACK body: %v", err)
+		http.Error(w, "error reading body", http.StatusBadRequest)
+		return
+	}
+
+	t.ackHandler(txID, &httpPeer{address: address, t: t, Writer: w})
+}
+
+func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, address Address) {
+	t.Infof(0, "incoming private tx")
+
+	var encryptedTx EncryptedTx
+	err := json.NewDecoder(r.Body).Decode(&encryptedTx)
+	if err != nil {
+		panic(err)
+	}
+
+	t.privateTxHandler(encryptedTx, &httpPeer{address: address, t: t, Writer: w})
+}
+
+func (t *httpTransport) servePostRef(w http.ResponseWriter, r *http.Request) {
+	t.Infof(0, "incoming ref")
+
+	err := r.ParseForm()
+	if err != nil {
+		panic(err)
+	}
+
+	file, header, err := r.FormFile("ref")
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	hash, err := t.refStore.StoreObject(file, header.Header.Get("Content-Type"))
+	if err != nil {
+		t.Errorf("error storing ref: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, StoreRefResponse{hash})
+}
+
+func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, address Address) {
+	t.Infof(0, "incoming tx")
+
+	var err error
+
+	var sig Signature
+	sigHeaderStr := r.Header.Get("Signature")
+	if sigHeaderStr == "" {
+		http.Error(w, "missing Signature header", http.StatusBadRequest)
+		return
+	} else {
+		sig, err = SignatureFromHex(sigHeaderStr)
+		if err != nil {
+			http.Error(w, "bad Signature header", http.StatusBadRequest)
+			return
+		}
+	}
+
+	var txID ID
+	txIDStr := r.Header.Get("Version")
+	if txIDStr == "" {
+		txID = RandomID()
+	} else {
+		txID, err = IDFromHex(txIDStr)
+		if err != nil {
+			http.Error(w, "bad Version header", http.StatusBadRequest)
+			return
+		}
+	}
+
+	var parents []ID
+	parentsStr := r.Header.Get("Parents")
+	if parentsStr != "" {
+		parentsStrs := strings.Split(parentsStr, ",")
+		for _, pstr := range parentsStrs {
+			parentID, err := IDFromHex(strings.TrimSpace(pstr))
+			if err != nil {
+				http.Error(w, "bad Parents header", http.StatusBadRequest)
+				return
+			}
+			parents = append(parents, parentID)
+		}
+	}
+
+	var checkpoint bool
+	if checkpointStr := r.Header.Get("Checkpoint"); checkpointStr == "true" {
+		checkpoint = true
+	}
+
+	var patches []Patch
+	scanner := bufio.NewScanner(r.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		patch, err := ParsePatch(line)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("bad patch string: %v", line), http.StatusBadRequest)
+			return
+		}
+		patches = append(patches, patch)
+	}
+	if err := scanner.Err(); err != nil {
+		http.Error(w, fmt.Sprintf("internal server error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	stateURI := r.Header.Get("State-URI")
+	if stateURI == "" {
+		stateURI = t.defaultStateURI
+	}
+
+	tx := Tx{
+		ID:         txID,
+		Parents:    parents,
+		Sig:        sig,
+		Patches:    patches,
+		URL:        stateURI,
+		Checkpoint: checkpoint,
+	}
+
+	// @@TODO: remove .From entirely
+	pubkey, err := RecoverSigningPubkey(tx.Hash(), sig)
+	if err != nil {
+		panic("bad sig")
+	}
+	tx.From = pubkey.Address()
+	////////////////////////////////
+
+	t.txHandler(tx, &httpPeer{address: address, t: t, Writer: w})
+}
+
+func parseRawParam(r *http.Request) (bool, error) {
+	rawStr := r.URL.Query().Get("raw")
+	if rawStr == "" {
+		return false, nil
+	}
+	raw, err := strconv.ParseBool(rawStr)
+	if err != nil {
+		return false, errors.New("invalid raw param")
+	}
+	return raw, nil
 }
 
 func respondJSON(resp http.ResponseWriter, data interface{}) {
@@ -666,6 +685,26 @@ func respondJSON(resp http.ResponseWriter, data interface{}) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (t *httpTransport) trackSubscription(stateURI string, sub *httpSubscriptionIn) {
+	t.subscriptionsInMu.Lock()
+	defer t.subscriptionsInMu.Unlock()
+
+	if _, exists := t.subscriptionsIn[stateURI]; !exists {
+		t.subscriptionsIn[stateURI] = make(map[*httpSubscriptionIn]struct{})
+	}
+	t.subscriptionsIn[stateURI][sub] = struct{}{}
+}
+
+func (t *httpTransport) untrackSubscription(stateURI string, sub *httpSubscriptionIn) {
+	t.subscriptionsInMu.Lock()
+	defer t.subscriptionsInMu.Unlock()
+
+	if _, exists := t.subscriptionsIn[stateURI]; !exists {
+		return
+	}
+	delete(t.subscriptionsIn[stateURI], sub)
 }
 
 func (t *httpTransport) SetFetchHistoryHandler(handler FetchHistoryHandler) {
@@ -702,7 +741,7 @@ func (t *httpTransport) GetPeerByConnStrings(ctx context.Context, reachableAt St
 	panic("unreachable")
 }
 
-func (t *httpTransport) ForEachProviderOfURL(ctx context.Context, theURL string) (<-chan Peer, error) {
+func (t *httpTransport) ForEachProviderOfStateURI(ctx context.Context, theURL string) (<-chan Peer, error) {
 	u, err := url.Parse("http://" + theURL)
 	if err != nil {
 		return nil, err
@@ -745,21 +784,18 @@ func (t *httpTransport) ForEachProviderOfRef(ctx context.Context, refHash Hash) 
 	return nil, errors.New("unimplemented")
 }
 
-func (t *httpTransport) ForEachSubscriberToURL(ctx context.Context, theURL string) (<-chan Peer, error) {
-	u, err := url.Parse("http://" + theURL)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	domain := u.Host
-
+func (t *httpTransport) ForEachSubscriberToStateURI(ctx context.Context, stateURI string) (<-chan Peer, error) {
 	ch := make(chan Peer)
 	go func() {
 		t.subscriptionsInMu.RLock()
 		defer t.subscriptionsInMu.RUnlock()
 		defer close(ch)
 
-		for _, sub := range t.subscriptionsIn[domain] {
+		if _, exists := t.subscriptionsIn[stateURI]; !exists {
+			return
+		}
+
+		for sub := range t.subscriptionsIn[stateURI] {
 			<-sub.chDoneCatchingUp
 			select {
 			case ch <- &httpPeer{t: t, Writer: sub.Writer, Flusher: sub.Flusher}:
@@ -899,7 +935,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 			return errors.WithStack(ErrProtocol)
 		}
 
-		client := http.Client{}
+		var client http.Client
 		req, err := http.NewRequest("GET", p.reachableAt, nil)
 		if err != nil {
 			return err

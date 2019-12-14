@@ -84,14 +84,30 @@
         (from, vid, parents, patches) => Braid.sync9.resolve_state(s9, from, vid, parents, patches),
         async (tx, newState) => {
             // Update the debug state UI
-            // currentState = await (await fetch('/')).json()
             currentState = newState
+            if (knownTxs[tx.id]) {
+                return
+            }
+
             txs.push(tx)
+            knownTxs[tx.id] = true
             refreshDebugUI()
 
             // Update the editor UI
-            if (newState && newState.editor && newState.editor.text) {
-                editor.value = newState.editor.text
+            if (newState && newState.text) {
+                let n = 0
+                for (let patch of tx.patches) {
+                    let parsed = Braid.sync9.parse_change(patch)
+                    if (parsed.range[0] <= editor.selectionStart) {
+                        n += parsed.val.length - (parsed.range[1] - parsed.range[0])
+                    }
+                }
+                let selectionStart = editor.selectionStart + n
+                let selectionEnd = editor.selectionEnd + n
+
+                editor.value = newState.text
+                editor.selectionStart = selectionStart
+                editor.selectionEnd = selectionEnd
             }
         }
     )
@@ -107,7 +123,7 @@
     })
 
     braidClient.authorize().then(() => {
-        braidClient.subscribe('localhost:21231', '/', [ Braid.utils.genesisTxID ], queue.defaultTxHandler)
+        braidClient.subscribe('localhost:21231/editor', '/', [ Braid.utils.genesisTxID ], queue.defaultTxHandler)
     })
 
 
@@ -115,6 +131,10 @@
     // Editor UI
     //
     editor.addEventListener('keydown', (event) => {
+        if (['UP', 'DOWN', 'LEFT', 'RIGHT'].indexOf(keyboardNameMap[event.keyCode]) > -1) {
+            return
+        }
+
         event.stopPropagation()
         event.preventDefault()
         var char = getPressedChar(event)
@@ -124,9 +144,9 @@
         var tx = {
             id: Braid.utils.randomID(),
             parents: Object.keys(s9.leaves),
-            url: 'localhost:21231',
+            url: 'localhost:21231/editor',
             patches: [
-                '.editor.text[' + editor.selectionStart + ':' + editor.selectionEnd + '] = ' + JSON.stringify(char),
+                '.text[' + editor.selectionStart + ':' + editor.selectionEnd + '] = ' + JSON.stringify(char),
             ],
         }
 
@@ -143,6 +163,7 @@
     // Debug UI
     //
     var txs = []
+    var knownTxs = {}
     var currentState = {}
     var knownPeers = {}
     var currentDebugTab = 'state'
@@ -157,17 +178,8 @@
     var debugNetworkTab = document.getElementById('tab-network')
     function refreshDebugUI() {
         debugStateElem.innerHTML = JSON.stringify(currentState, null, 4)
-             //.replace(/\\\\n/g, '\\n')
-             //.replace(/</g, '&lt;')
-             //.replace(/>/g, '&gt;')
         debugTxsElem.innerHTML = JSON.stringify(txs, null, 4)
-             //.replace(/\\\\n/g, '\\n')
-             //.replace(/</g, '&lt;')
-             //.replace(/>/g, '&gt;')
         debugNetworkElem.innerHTML = JSON.stringify(knownPeers, null, 4)
-             //.replace(/\\\\n/g, '\\n')
-             //.replace(/</g, '&lt;')
-             //.replace(/>/g, '&gt;')
     }
 
     function changeDebugUITab() {

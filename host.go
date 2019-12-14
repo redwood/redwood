@@ -18,13 +18,13 @@ type Host interface {
 	Start() error
 
 	// Get(ctx context.Context, url string) (interface{}, error)
-	Subscribe(ctx context.Context, url string) (bool, []error)
+	Subscribe(ctx context.Context, stateURI string) (bool, []error)
 	SendTx(ctx context.Context, tx Tx) error
 	AddRef(reader io.ReadCloser, contentType string) (Hash, error)
 	AddPeer(ctx context.Context, transportName string, reachableAt StringSet) error
 	Port() uint
 	Transport(name string) Transport
-	Controller() Controller
+	Controller() Metacontroller
 	Address() Address
 }
 
@@ -33,7 +33,7 @@ type host struct {
 
 	port              uint
 	transports        map[string]Transport
-	controller        Controller
+	controller        Metacontroller
 	signingKeypair    *SigningKeypair
 	encryptingKeypair *EncryptingKeypair
 
@@ -41,6 +41,7 @@ type host struct {
 	peerSeenTxs      map[peerTuple]map[ID]bool
 	peerSeenTxsMu    sync.RWMutex
 
+	store     Store
 	peerStore PeerStore
 	refStore  RefStore
 
@@ -55,7 +56,7 @@ var (
 	ErrPeerIsSelf = errors.New("peer is self")
 )
 
-func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, transports []Transport, controller Controller, refStore RefStore, peerStore PeerStore) (Host, error) {
+func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, transports []Transport, controller Metacontroller, refStore RefStore, peerStore PeerStore) (Host, error) {
 	transportsMap := make(map[string]Transport)
 	for _, tpt := range transports {
 		transportsMap[tpt.Name()] = tpt
@@ -132,7 +133,7 @@ func (h *host) Transport(name string) Transport {
 	return h.transports[name]
 }
 
-func (h *host) Controller() Controller {
+func (h *host) Controller() Metacontroller {
 	return h.controller
 }
 
@@ -144,7 +145,7 @@ func (h *host) onTxReceived(tx Tx, peer Peer) {
 	h.Infof(0, "tx %v received", tx.ID.Pretty())
 	h.markTxSeenByPeer(peer, tx.ID)
 
-	if !h.controller.HaveTx(tx.ID) {
+	if !h.controller.HaveTx(tx.URL, tx.ID) {
 		err := h.controller.AddTx(&tx)
 		if err != nil {
 			h.Errorf("error adding tx to controller: %v", err)
@@ -156,7 +157,7 @@ func (h *host) onTxReceived(tx Tx, peer Peer) {
 		}
 	}
 
-	err := peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.Hash()})
+	err := peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.ID})
 	if err != nil {
 		h.Errorf("error ACKing peer: %v", err)
 	}
@@ -184,7 +185,7 @@ func (h *host) onPrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
 		return
 	}
 
-	if !h.controller.HaveTx(tx.ID) {
+	if !h.controller.HaveTx(tx.URL, tx.ID) {
 		// Add to controller
 		err := h.controller.AddTx(&tx)
 		if err != nil {
@@ -198,7 +199,7 @@ func (h *host) onPrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
 		}
 	}
 
-	err = peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.Hash()})
+	err = peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.ID})
 	if err != nil {
 		h.Errorf("error ACKing peer: %v", err)
 	}
@@ -222,6 +223,10 @@ func (h *host) markTxSeenByPeer(peer Peer, txID ID) {
 }
 
 func (h *host) txSeenByPeer(peer Peer, txID ID) bool {
+	if peer.Address() == (Address{}) {
+		return false
+	}
+
 	h.peerSeenTxsMu.Lock()
 	defer h.peerSeenTxsMu.Unlock()
 
@@ -258,8 +263,8 @@ func (h *host) AddPeer(ctx context.Context, transportName string, reachableAt St
 	return nil
 }
 
-func (h *host) onFetchHistoryRequestReceived(parents []ID, toVersion ID, peer Peer) error {
-	iter := h.controller.FetchTxs()
+func (h *host) onFetchHistoryRequestReceived(stateURI string, parents []ID, toVersion ID, peer Peer) error {
+	iter := h.controller.FetchTxs(stateURI)
 	defer iter.Cancel()
 
 	for {
@@ -270,23 +275,6 @@ func (h *host) onFetchHistoryRequestReceived(parents []ID, toVersion ID, peer Pe
 			return nil
 		}
 
-		isARecipient := !tx.IsPrivate()
-		for _, recipient := range tx.Recipients {
-			if peer.Address() == recipient {
-				isARecipient = true
-			}
-		}
-
-		// @@TODO: temporary hack until we have multiple channels
-		if !isARecipient {
-			tx = &Tx{
-				ID:      tx.ID,
-				From:    tx.From,
-				Parents: tx.Parents,
-				Patches: []Patch{},
-				URL:     tx.URL,
-			}
-		}
 		err := peer.WriteMsg(Msg{Type: MsgType_Put, Payload: *tx})
 		if err != nil {
 			return err
@@ -312,7 +300,7 @@ func (h *host) Subscribe(ctx context.Context, stateURI string) (bool, []error) {
 func (h *host) subscribeWithTransport(ctx context.Context, transport Transport, stateURI string) error {
 	ctxFind, cancelFind := context.WithCancel(ctx)
 	defer cancelFind()
-	ch, err := transport.ForEachProviderOfURL(ctxFind, stateURI)
+	ch, err := transport.ForEachProviderOfStateURI(ctxFind, stateURI)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -375,7 +363,6 @@ func (h *host) subscribeWithTransport(ctx context.Context, transport Transport, 
 			}
 
 			tx := msg.Payload.(Tx)
-			tx.URL = stateURI
 			h.onTxReceived(tx, peer)
 
 			// @@TODO: ACK the PUT
@@ -617,18 +604,6 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 		}
 		wg.Wait()
 
-		// @@TODO: temporary hack until we have multiple channels
-		err = h.SendTx(ctx, Tx{
-			ID:      tx.ID,
-			From:    tx.From,
-			Parents: tx.Parents,
-			Patches: []Patch{},
-			URL:     tx.URL,
-		})
-		if err != nil {
-			return err
-		}
-
 	} else {
 		// @@TODO: do we need to trim the tx's patches' keypaths so that they don't include
 		// the keypath that the subscription is listening to?
@@ -643,7 +618,7 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 
 				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
-				ch, err := transport.ForEachSubscriberToURL(ctx, tx.URL)
+				ch, err := transport.ForEachSubscriberToStateURI(ctx, tx.URL)
 				if err != nil {
 					h.Errorf("error fetching subscribers to url '%v' from transport %v", tx.URL, transport.Name())
 					return
@@ -652,8 +627,10 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 				var peerWg sync.WaitGroup
 				for peer := range ch {
 					if h.txSeenByPeer(peer, tx.ID) {
+						h.Errorf("tx already seen by peer %v %v", peer.Transport().Name(), peer.Address())
 						continue
 					}
+					h.Errorf("tx NOT already seen by peer %v %v", peer.Transport().Name(), peer.Address())
 
 					peerWg.Add(1)
 					peer := peer
@@ -682,7 +659,7 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 }
 
 func (h *host) SendTx(ctx context.Context, tx Tx) error {
-	h.Info(0, "adding tx ", tx.Hash().Pretty())
+	h.Info(0, "adding tx ", tx.ID.Pretty())
 
 	if len(tx.Sig) == 0 {
 		err := h.SignTx(&tx)
@@ -884,7 +861,7 @@ func (h *host) fetchRef(ref Hash) bool {
 			}
 		}()
 
-		hash, err := h.refStore.StoreObject(pr, resp.Header.ContentType)
+		hash, err := h.refStore.StoreObject(pr, "application/octet-stream")
 		if err != nil {
 			h.Errorf("protocol probs: %v", err)
 			continue
@@ -911,13 +888,13 @@ const (
 func (h *host) onFetchRefReceived(refHash Hash, peer Peer) {
 	defer peer.CloseConn()
 
-	objectReader, contentType, err := h.refStore.Object(refHash)
+	objectReader, _, err := h.refStore.Object(refHash)
 	// @@TODO: handle the case where we don't have the ref more gracefully
 	if err != nil {
 		panic(err)
 	}
 
-	err = peer.WriteMsg(Msg{Type: MsgType_FetchRefResponse, Payload: FetchRefResponse{Header: &FetchRefResponseHeader{ContentType: contentType}}})
+	err = peer.WriteMsg(Msg{Type: MsgType_FetchRefResponse, Payload: FetchRefResponse{Header: &FetchRefResponseHeader{}}})
 	if err != nil {
 		h.Errorf("[ref server] %+v", errors.WithStack(err))
 		return

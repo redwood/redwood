@@ -41,13 +41,15 @@ type FetchRefResponse struct {
 	Body   *FetchRefResponseBody   `json:"body,omitempty"`
 }
 
-type FetchRefResponseHeader struct {
-	ContentType string `json:"contentType"`
-}
+type FetchRefResponseHeader struct{}
 
 type FetchRefResponseBody struct {
 	Data []byte `json:"data"`
 	End  bool   `json:"end"`
+}
+
+type StoreRefResponse struct {
+	Hash Hash `json:"hash"`
 }
 
 type EncryptedTx struct {

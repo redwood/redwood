@@ -13,14 +13,21 @@ type luaResolver struct {
 	L *lua.LState
 }
 
-func NewLuaResolver(params map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
-	src, exists := getString(params, []string{"src"})
+func NewLuaResolver(r RefResolver, config *NelSON, internalState map[string]interface{}) (Resolver, error) {
+	resolvedConfig, anyMissing, err := r.ResolveRefs(config.Value())
+	if err != nil {
+		return nil, err
+	} else if anyMissing {
+		return nil, errors.WithStack(ErrMissingCriticalRefs)
+	}
+
+	src, exists := getString(resolvedConfig, []string{"src"})
 	if !exists {
 		return nil, errors.New("lua resolver needs a string 'src' param")
 	}
 
 	L := lua.NewState()
-	err := L.DoString(src)
+	err = L.DoString(src)
 	if err != nil {
 		return nil, err
 	}

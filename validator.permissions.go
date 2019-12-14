@@ -11,16 +11,15 @@ type permissionsValidator struct {
 	permissions map[string]interface{}
 }
 
-func NewPermissionsValidator(params map[string]interface{}) (Validator, error) {
-	permissions, exists := getMap(params, []string{"permissions"})
-	if !exists {
-		return nil, errors.New("permissions validator needs a 'permissions' param")
+func NewPermissionsValidator(r RefResolver, config *NelSON) (Validator, error) {
+	asMap, isMap := config.Value().(map[string]interface{})
+	if !isMap {
+		return nil, errors.New("permissions validator needs a map of permissions as its config")
 	}
-
-	return &permissionsValidator{permissions: permissions}, nil
+	return &permissionsValidator{permissions: asMap}, nil
 }
 
-var Err403 = errors.New("403: nope")
+var senderRegexp = regexp.MustCompile("\\${sender}")
 
 func (v *permissionsValidator) ValidateTx(state interface{}, txs, validTxs map[ID]*Tx, tx Tx) error {
 	perms, exists := v.permissions[tx.From.Hex()]
@@ -40,7 +39,8 @@ func (v *permissionsValidator) ValidateTx(state interface{}, txs, validTxs map[I
 
 		keypath := KeypathSeparator + strings.Join(patch.Keys, KeypathSeparator)
 		for pattern := range permsMap {
-			matched, err := regexp.MatchString(pattern, keypath)
+			expandedPattern := string(senderRegexp.ReplaceAll([]byte(pattern), []byte(tx.From.Hex())))
+			matched, err := regexp.MatchString(expandedPattern, keypath)
 			if err != nil {
 				return errors.Wrapf(Err403, "error executing regex")
 			}

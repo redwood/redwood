@@ -4,12 +4,12 @@ type dumbResolver struct {
 	resolver
 }
 
-func NewDumbResolver(params map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
+func NewDumbResolver(r RefResolver, config *NelSON, internalState map[string]interface{}) (Resolver, error) {
 	return &dumbResolver{}, nil
 }
 
 func (r *dumbResolver) InternalState() map[string]interface{} {
-	return nil
+	return map[string]interface{}{}
 }
 
 func (r *dumbResolver) ResolveState(state interface{}, sender Address, txID ID, parents []ID, ps []Patch) (interface{}, error) {

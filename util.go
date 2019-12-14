@@ -1,10 +1,15 @@
 package redwood
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	// "github.com/json-iterator/go"
 	"github.com/pkg/errors"
@@ -53,6 +58,17 @@ func getString(m interface{}, keypath []string) (string, bool) {
 		return s, true
 	}
 	return "", false
+}
+
+func getInt(m interface{}, keypath []string) (int, bool) {
+	x, exists := getValue(m, keypath)
+	if !exists {
+		return 0, false
+	}
+	if i, isInt := x.(int); isInt {
+		return i, true
+	}
+	return 0, false
 }
 
 func getMap(m interface{}, keypath []string) (map[string]interface{}, bool) {
@@ -169,7 +185,7 @@ func walkTree(tree interface{}, fn func(keypath []string, val interface{}) error
 	return nil
 }
 
-func walkTree2(tree interface{}, fn func(keypath []string, parent interface{}, val interface{}) error) error {
+func mapTree(tree interface{}, fn func(keypath []string, val interface{}) (interface{}, error)) (interface{}, error) {
 	type item struct {
 		val     interface{}
 		parent  interface{}
@@ -178,42 +194,58 @@ func walkTree2(tree interface{}, fn func(keypath []string, parent interface{}, v
 
 	stack := []item{{val: tree, keypath: []string{}}}
 	var current item
+	var firstLoop = true
 
 	for len(stack) > 0 {
 		current = stack[0]
 		stack = stack[1:]
 
-		err := fn(current.keypath, current.parent, current.val)
+		newVal, err := fn(current.keypath, current.val)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		if asMap, isMap := current.val.(map[string]interface{}); isMap {
+		if firstLoop {
+			tree = newVal
+			firstLoop = false
+		}
+
+		if asMap, isMap := current.parent.(map[string]interface{}); isMap {
+			asMap[current.keypath[len(current.keypath)-1]] = newVal
+		} else if asSlice, isSlice := current.parent.([]interface{}); isSlice {
+			i, err := strconv.Atoi(current.keypath[len(current.keypath)-1])
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
+			asSlice[i] = newVal
+		}
+
+		if asMap, isMap := newVal.(map[string]interface{}); isMap {
 			for key := range asMap {
 				kp := make([]string, len(current.keypath)+1)
 				copy(kp, current.keypath)
 				kp[len(kp)-1] = key
 				stack = append(stack, item{
 					val:     asMap[key],
-					parent:  asMap,
 					keypath: kp,
+					parent:  newVal,
 				})
 			}
 
-		} else if asSlice, isSlice := current.val.([]interface{}); isSlice {
-			for i := len(asSlice) - 1; i >= 0; i-- {
+		} else if asSlice, isSlice := newVal.([]interface{}); isSlice {
+			for i := range asSlice {
 				kp := make([]string, len(current.keypath)+1)
 				copy(kp, current.keypath)
 				kp[len(kp)-1] = strconv.Itoa(i)
 				stack = append(stack, item{
 					val:     asSlice[i],
-					parent:  asSlice,
 					keypath: kp,
+					parent:  newVal,
 				})
 			}
 		}
 	}
-	return nil
+	return tree, nil
 }
 
 func walkContentTypes(state interface{}, contentTypes []string, fn func(contentType string, keypath []string, val map[string]interface{}) error) error {
@@ -234,15 +266,15 @@ func walkContentTypes(state interface{}, contentTypes []string, fn func(contentT
 	})
 }
 
-func walkLinks(state interface{}, fn func(linkType LinkType, linkStr string, keypath []string, val map[string]interface{}) error) error {
+func WalkLinks(state interface{}, fn func(linkType LinkType, linkValue string, keypath []string, val map[string]interface{}) error) error {
 	return walkContentTypes(state, []string{"link"}, func(contentType string, keypath []string, val map[string]interface{}) error {
 		linkStr, exists := getString(val, []string{"value"})
 		if !exists {
 			return nil
 		}
 
-		linkType := DetermineLinkType(linkStr)
-		return fn(linkType, linkStr, keypath, val)
+		linkType, linkValue := DetermineLinkType(linkStr)
+		return fn(linkType, linkValue, keypath, val)
 	})
 }
 
@@ -313,4 +345,65 @@ func (s StringSet) Add(val string) {
 
 func (s StringSet) Remove(val string) {
 	delete(s, val)
+}
+
+func SniffContentType(filename string, data io.Reader) (string, error) {
+	// Only the first 512 bytes are used to sniff the content type.
+	buffer := make([]byte, 512)
+
+	_, err := data.Read(buffer)
+	if err != nil {
+		return "", err
+	}
+
+	// Use the net/http package's handy DectectContentType function. Always returns a valid
+	// content-type by returning "application/octet-stream" if no others seemed to match.
+	contentType := http.DetectContentType(buffer)
+
+	// If we got an ambiguous result, check the file extension
+	if contentType == "application/octet-stream" {
+		contentType = GuessContentTypeFromFilename(filename)
+	}
+	return contentType, nil
+}
+
+func GuessContentTypeFromFilename(filename string) string {
+	parts := strings.Split(filename, ".")
+	if len(parts) > 1 {
+		ext := strings.ToLower(parts[len(parts)-1])
+		switch ext {
+		case "txt":
+			return "text/plain"
+		case "html":
+			return "text/html"
+		case "js":
+			return "application/js"
+		case "json":
+			return "application/json"
+		case "png":
+			return "image/png"
+		case "jpg", "jpeg":
+			return "image/jpeg"
+		}
+	}
+	return "application/octet-stream"
+}
+
+func GetReadCloser(val interface{}) (io.ReadCloser, bool) {
+	switch v := val.(type) {
+	case string:
+		return ioutil.NopCloser(bytes.NewBufferString(v)), true
+	case []byte:
+		return ioutil.NopCloser(bytes.NewBuffer(v)), true
+	case io.ReadCloser:
+		return v, true
+	case *NelSON:
+		rc, err := v.ValueReader()
+		if err != nil {
+			return nil, false
+		}
+		return rc, true
+	default:
+		return nil, false
+	}
 }

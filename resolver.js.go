@@ -2,6 +2,8 @@ package redwood
 
 import (
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 
 	"github.com/pkg/errors"
 	"rogchap.com/v8go"
@@ -13,15 +15,33 @@ type jsResolver struct {
 	internalState map[string]interface{}
 }
 
-func NewJSResolver(params map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
-	src, exists := getString(params, []string{"src"})
+func NewJSResolver(r RefResolver, config *NelSON, internalState map[string]interface{}) (Resolver, error) {
+	resolvedConfig, anyMissing, err := r.ResolveRefs(config.Value())
+	if err != nil {
+		return nil, err
+	} else if anyMissing {
+		return nil, errors.WithStack(ErrMissingCriticalRefs)
+	}
+
+	srcval, exists := getValue(resolvedConfig, []string{"src"})
 	if !exists {
-		return nil, errors.New("js resolver needs a string 'src' param")
+		return nil, errors.New("js resolver needs a 'src' param")
+	}
+
+	readableSrc, ok := GetReadCloser(srcval)
+	if !ok {
+		return nil, errors.Errorf("js resolver needs a 'src' param of type string, []byte, or io.ReadCloser (got %T)", srcval)
+	}
+	defer readableSrc.Close()
+
+	srcStr, err := ioutil.ReadAll(readableSrc)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
 
 	ctx, _ := v8go.NewContext(nil)
 
-	_, err := ctx.RunScript("var global = {}; var newStateJSON; "+src, "")
+	_, err = ctx.RunScript("var global = {}; var newStateJSON; "+string(srcStr), "")
 	if err != nil {
 		return nil, err
 	}
@@ -42,6 +62,8 @@ func (r *jsResolver) InternalState() map[string]interface{} {
 
 func (r *jsResolver) ResolveState(state interface{}, sender Address, txID ID, parents []ID, patches []Patch) (newState interface{}, err error) {
 	defer annotate(&err, "jsResolver.ResolveState")
+
+	fmt.Printf("JS RESOLVER (tx.id = %v)\n", txID.Hex())
 
 	convertedPatches := make([]interface{}, len(patches))
 	for i, patch := range patches {

@@ -1,11 +1,6 @@
 package redwood
 
 import (
-	"encoding/json"
-	goerrors "errors"
-	"io/ioutil"
-	"os"
-	"strings"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -17,70 +12,61 @@ type Controller interface {
 	Ctx() *ctx.Context
 	Start() error
 
-	AddTx(tx *Tx) error
-	FetchTxs() TxIterator
+	AddTx(tx *Tx)
 	HaveTx(txID ID) bool
 
-	State(keypath []string, resolveRefs bool) (interface{}, bool, error)
-	ResolveRefs(input interface{}) (interface{}, bool, error)
+	State(keypath []string) (interface{}, []ID)
 	MostRecentTxID() ID // @@TODO: should be .Leaves()
+	ResolverTree() *resolverTree
+	SetResolverTree(tree *resolverTree)
 
-	SetReceivedRefsHandler(handler ReceivedRefsHandler)
 	OnDownloadedRef()
+}
 
-	DebugLockResolvers()
+type RefResolver interface {
+	ResolveRefs(input interface{}) (interface{}, bool, error)
 }
 
 type ReceivedRefsHandler func(refs []Hash)
+type TxProcessedHandler func(c Controller, tx *Tx, state interface{}) error
 
 type controller struct {
 	*ctx.Context
 
 	address        Address
+	stateURI       string
 	mu             sync.RWMutex
 	txs            map[ID]*Tx
 	validTxs       map[ID]*Tx
-	resolverTree   resolverTree
+	resolverTree   *resolverTree
 	currentState   interface{}
-	genesisState   interface{}
 	leaves         map[ID]bool
 	mostRecentTxID ID
 
-	chMempool chan *Tx
-	mempool   []*Tx
+	chMempool     chan *Tx
+	mempool       []*Tx
+	onTxProcessed TxProcessedHandler
 
-	onReceivedRefs    func(refs []Hash)
 	chOnDownloadedRef chan struct{}
-
-	store    Store
-	refStore RefStore
-
-	resolversLocked bool
 }
 
-func NewController(address Address, genesisState interface{}, store Store, refStore RefStore) (Controller, error) {
+func NewController(address Address, stateURI string, txProcessedHandler TxProcessedHandler) (Controller, error) {
 	c := &controller{
 		Context:           &ctx.Context{},
 		address:           address,
+		stateURI:          stateURI,
 		mu:                sync.RWMutex{},
 		txs:               make(map[ID]*Tx),
 		validTxs:          make(map[ID]*Tx),
-		resolverTree:      resolverTree{},
-		genesisState:      genesisState,
+		resolverTree:      &resolverTree{},
 		currentState:      map[string]interface{}{},
 		leaves:            make(map[ID]bool),
 		chMempool:         make(chan *Tx, 100),
 		chOnDownloadedRef: make(chan struct{}),
 		mostRecentTxID:    GenesisTxID,
-		store:             store,
-		refStore:          refStore,
+		onTxProcessed:     txProcessedHandler,
 	}
-
 	return c, nil
-}
-
-func (c *controller) DebugLockResolvers() {
-	c.resolversLocked = true
 }
 
 func (c *controller) Start() error {
@@ -90,29 +76,7 @@ func (c *controller) Start() error {
 			c.SetLogLabel(c.address.Pretty() + " controller")
 
 			c.resolverTree.addResolver([]string{}, &dumbResolver{})
-
-			c.CtxAddChild(c.store.Ctx(), nil)
-
-			err := c.store.Start()
-			if err != nil {
-				return err
-			}
-
 			go c.mempoolLoop()
-
-			err = c.AddTx(&Tx{
-				ID:      GenesisTxID,
-				Parents: []ID{},
-				Patches: []Patch{{Val: c.genesisState}},
-			})
-			if err != nil {
-				return err
-			}
-
-			err = c.replayStoredTxs()
-			if err != nil {
-				return err
-			}
 
 			return nil
 		},
@@ -123,150 +87,48 @@ func (c *controller) Start() error {
 	)
 }
 
-func (c *controller) SetReceivedRefsHandler(handler ReceivedRefsHandler) {
-	c.onReceivedRefs = handler
-}
-
 func (c *controller) OnDownloadedRef() {
 	c.chOnDownloadedRef <- struct{}{}
 }
 
-func (c *controller) State(keypath []string, resolveRefs bool) (interface{}, bool, error) {
+func (c *controller) State(keypath []string) (interface{}, []ID) {
+	// @@TODO: mutex
 	val, exists := getValue(c.currentState, keypath)
 	if !exists {
-		return nil, false, nil
+		return nil, nil
 	}
-	copied := DeepCopyJSValue(val)
-
-	if resolveRefs {
-		asMap, isMap := copied.(map[string]interface{})
-		if isMap {
-			return c.ResolveRefs(asMap)
-		}
-	}
-	return copied, false, nil
-}
-
-func (c *controller) ResolveRefs(input interface{}) (interface{}, bool, error) {
-	type resolution struct {
-		keypath []string
-		val     interface{}
-	}
-	resolutions := []resolution{}
-
-	var anyMissing bool
-	err := walkLinks(input, func(linkType LinkType, link string, keypath []string, val map[string]interface{}) error {
-		if linkType == LinkTypeRef {
-			hash, err := HashFromHex(link[len("ref:"):])
-			if err != nil {
-				return err
-			}
-
-			objectReader, contentType, err := c.refStore.Object(hash)
-			if goerrors.Is(err, os.ErrNotExist) {
-				// If we don't have a given ref, we leave it as-is, but inform the caller.
-				anyMissing = true
-				return nil
-			} else if err != nil {
-				return err
-			}
-			defer objectReader.Close()
-
-			bs, err := ioutil.ReadAll(objectReader)
-			if err != nil {
-				return err
-			}
-
-			switch {
-			case contentType == "application/json",
-				contentType == "application/js",
-				contentType[:5] == "text/":
-				resolutions = append(resolutions, resolution{keypath, string(bs)})
-
-			case contentType[:6] == "image/":
-				resolutions = append(resolutions, resolution{keypath, bs})
-
-			default:
-				panic("unknown content type")
-			}
-
-		} else if linkType == LinkTypePath {
-			otherKeypath := strings.Split(link[1:], "/")
-			val, _, err := c.State(otherKeypath, true)
-			if err != nil {
-				return err
-			}
-			resolutions = append(resolutions, resolution{keypath, val})
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, anyMissing, err
-	}
-
-	for _, res := range resolutions {
-		if len(res.keypath) > 0 {
-			setValueAtKeypath(input, res.keypath, res.val, true)
-		} else {
-			// This tends to come up when a browser is fetching individual resources that are refs
-			return res.val, anyMissing, nil
-		}
-	}
-	return input, anyMissing, nil
-}
-
-func (c *controller) StateJSON() []byte {
-	bs, err := json.MarshalIndent(c.currentState, "", "    ")
-	if err != nil {
-		panic(err)
-	}
-	str := string(bs)
-	str = strings.Replace(str, "\\n", "\n", -1)
-	return []byte(str)
+	leaves := []ID{c.mostRecentTxID}
+	return DeepCopyJSValue(val), leaves
 }
 
 func (c *controller) MostRecentTxID() ID {
 	return c.mostRecentTxID
 }
 
-func (c *controller) AddTx(tx *Tx) error {
+func (c *controller) ResolverTree() *resolverTree {
+	return c.resolverTree
+}
+
+func (c *controller) SetResolverTree(tree *resolverTree) {
+	c.resolverTree = tree
+}
+
+func (c *controller) AddTx(tx *Tx) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Ignore duplicates
 	if _, exists := c.txs[tx.ID]; exists {
-		c.Infof(0, "already know tx %v, skipping", tx.Hash().String())
-		return nil
+		c.Infof(0, "already know tx %v, skipping", tx.ID.Pretty())
+		return
 	}
 
-	c.Infof(0, "new tx %v", tx.Hash().Pretty())
+	c.Infof(0, "new tx %v", tx.ID.Pretty())
 
 	// Store the tx (so we can ignore txs we've seen before)
 	c.txs[tx.ID] = tx
 
 	c.addToMempool(tx)
-	return nil
-}
-
-func (c *controller) replayStoredTxs() error {
-	iter := c.store.AllTxs()
-	defer iter.Cancel()
-
-	for {
-		tx := iter.Next()
-		if iter.Error() != nil {
-			return iter.Error()
-		} else if tx == nil {
-			return nil
-		}
-
-		c.Infof(0, "found stored tx %v", tx.Hash())
-		err := c.AddTx(tx)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (c *controller) addToMempool(tx *Tx) {
@@ -301,10 +163,10 @@ func (c *controller) processMempool() {
 				c.Infof(0, "readding to mempool %v (%v)", tx.ID.Pretty(), err)
 				newMempool = append(newMempool, tx)
 			} else if err != nil {
-				c.Errorf("invalid tx %+v: %+v", *tx, err)
+				c.Errorf("invalid tx %+v: %v", err, PrettyJSON(tx))
 			} else {
 				anySucceeded = true
-				c.Infof(0, "tx added to chain (%v)", tx.Hash().Pretty())
+				c.Infof(0, "tx added to chain (%v)", tx.ID.Pretty())
 			}
 		}
 		c.mempool = newMempool
@@ -403,121 +265,36 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		}
 
 		newState = finalPatches[0].Val
-
-		// Notify the Host to start fetching any refs we don't have yet
-		var refs []Hash
-		err := walkLinks(newState, func(linkType LinkType, link string, keypath []string, val map[string]interface{}) error {
-			if linkType == LinkTypeRef {
-				hash, err := HashFromHex(link[len("ref:"):])
-				if err != nil {
-					return err
-				}
-				refs = append(refs, hash)
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-		c.onReceivedRefs(refs)
-
-		// Unmark parents as leaves
-		for _, parentID := range tx.Parents {
-			delete(c.leaves, parentID)
-		}
-
-		// @@TODO: add to timeDAG
-		c.mostRecentTxID = tx.ID
-
-		// Walk the tree and initialize validators and resolvers
-		// @@TODO: inefficient
-		if !c.resolversLocked {
-			newResolverTree := resolverTree{}
-			newResolverTree.addResolver([]string{}, &dumbResolver{})
-			newResolverTree.addValidator([]string{}, &permissionsValidator{})
-			err = walkTree(newState, func(keypath []string, val interface{}) error {
-				resolverConfig, exists := getValue(val, []string{"Merge-Type"})
-				if exists {
-					// Resolve any refs (to code) in the resolver config object.  We deep copy the config so
-					// that we don't inject any refs into the state tree itself
-					config, anyMissing, err := c.ResolveRefs(DeepCopyJSValue(resolverConfig).(map[string]interface{}))
-					if err != nil {
-						return err
-					} else if anyMissing {
-						return ErrMissingCriticalRefs
-					}
-
-					var resolverInternalState map[string]interface{}
-					oldResolverNode, depth := c.resolverTree.nearestResolverNodeForKeypath(keypath)
-					if depth != len(keypath) {
-						resolverInternalState = make(map[string]interface{})
-					} else {
-						resolverInternalState = oldResolverNode.resolver.InternalState()
-					}
-
-					resolver, err := initResolverFromConfig(config.(map[string]interface{}), resolverInternalState)
-					if err != nil {
-						return err
-					}
-					newResolverTree.addResolver(keypath, resolver)
-				}
-
-				validatorConfig, exists := getValue(val, []string{"Validator"})
-				if exists {
-					// Resolve any refs (to code) in the validator config object.  We deep copy the config so
-					// that we don't inject any refs into the state tree itself
-					config, anyMissing, err := c.ResolveRefs(DeepCopyJSValue(validatorConfig).(map[string]interface{}))
-					if err != nil {
-						return err
-					} else if anyMissing {
-						return ErrMissingCriticalRefs
-					}
-
-					validator, err := initValidatorFromConfig(config.(map[string]interface{}))
-					if err != nil {
-						return err
-					}
-					newResolverTree.addValidator(keypath, validator)
-				}
-
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-			c.resolverTree = newResolverTree
-		}
 	}
 
-	// Finally, set current state
-	c.currentState = newState
-	// c.Warnf("state ~> %v", PrettyJSON(newState))
-
-	tx.Valid = true
-	c.validTxs[tx.ID] = tx
-
-	err = c.store.AddTx(tx)
+	err = c.onTxProcessed(c, tx, newState)
 	if err != nil {
 		return err
 	}
 
-	// j, err := c.StateJSON()
-	// if err != nil {
-	// 	return err
-	// }
-	// c.Infof(0, "state = %v", string(j))
-	// v, _ := getValue(c.currentState.(map[string]interface{}), []string{"shrugisland", "talk0", "messages"})
-	// c.Infof(0, "state = %v", string(PrettyJSON(v)))
+	// Unmark parents as leaves
+	for _, parentID := range tx.Parents {
+		delete(c.leaves, parentID)
+	}
+
+	// @@TODO: add to timeDAG
+	c.mostRecentTxID = tx.ID
+
+	// Finally, set current state
+	c.currentState = newState
+	//c.Warnf("state (%v) ~> %v", c.stateURI, PrettyJSON(newState))
+
+	tx.Valid = true
+	c.validTxs[tx.ID] = tx
 
 	return nil
 }
 
 var (
-	ErrNoParentYet           = errors.New("no parent yet")
-	ErrMissingCriticalRefs   = errors.New("missing critical refs")
-	ErrInvalidSignature      = errors.New("invalid signature")
-	ErrInvalidPrivateRootKey = errors.New("invalid private root key")
-	ErrTxMissingParents      = errors.New("tx must have parents")
+	ErrNoParentYet         = errors.New("no parent yet")
+	ErrMissingCriticalRefs = errors.New("missing critical refs")
+	ErrInvalidSignature    = errors.New("invalid signature")
+	ErrTxMissingParents    = errors.New("tx must have parents")
 )
 
 func (c *controller) validateTxIntrinsics(tx *Tx) error {
@@ -527,16 +304,7 @@ func (c *controller) validateTxIntrinsics(tx *Tx) error {
 
 	for _, parentID := range tx.Parents {
 		if _, exists := c.validTxs[parentID]; !exists && parentID != GenesisTxID {
-			return errors.Wrapf(ErrNoParentYet, "tx: %v", parentID.Pretty())
-		}
-	}
-
-	if tx.IsPrivate() {
-		root := tx.PrivateRootKey()
-		for _, p := range tx.Patches {
-			if p.Keys[0] != root {
-				return ErrInvalidPrivateRootKey
-			}
+			return errors.Wrapf(ErrNoParentYet, "parent tx: %v", parentID.Hex())
 		}
 	}
 
@@ -569,10 +337,6 @@ func (c *controller) HaveTx(txID ID) bool {
 	defer c.mu.RUnlock()
 	_, have := c.txs[txID]
 	return have
-}
-
-func (c *controller) FetchTxs() TxIterator {
-	return c.store.AllTxs()
 }
 
 //func (c *controller) getAncestors(hashes map[Hash]bool) map[Hash]bool {

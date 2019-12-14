@@ -2,6 +2,7 @@ require('@babel/polyfill')
 
 const identity = require('./identity')
 const sync9 = require('./sync9-src')
+const dumb = require('./dumb-src')
 const utils = require('./utils')
 const httpTransport = require('./braid.transport.http')
 const webrtcTransport = require('./braid.transport.webrtc')
@@ -12,6 +13,7 @@ var Braid = {
     // submodules
     identity,
     sync9,
+    dumb,
     utils,
 }
 

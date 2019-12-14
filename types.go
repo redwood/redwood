@@ -11,40 +11,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-type (
-	ID           [32]byte
-	Address      [20]byte
-	Hash         [32]byte
-	Signature    []byte
-	ChallengeMsg []byte
-
-	Tx struct {
-		ID         ID        `json:"id"`
-		Parents    []ID      `json:"parents"`
-		From       Address   `json:"from"`
-		Sig        Signature `json:"sig,omitempty"`
-		URL        string    `json:"url"`
-		Patches    []Patch   `json:"patches"`
-		Recipients []Address `json:"recipients,omitempty"`
-
-		Valid bool `json:"-"`
-		hash  Hash `json:"-"`
-	}
-
-	Patch struct {
-		Keys  []string
-		Range *Range
-		Val   interface{}
-	}
-
-	Range struct {
-		Start int64
-		End   int64
-	}
-
-	LinkType int
-)
-
 var (
 	GenesisTxID = IDFromString("genesis")
 	EmptyHash   = Hash{}
@@ -54,99 +20,18 @@ const (
 	KeypathSeparator = "."
 )
 
-const (
-	LinkTypeUnknown LinkType = iota
-	LinkTypeRef
-	LinkTypePath
-	LinkTypeURL // @@TODO
-)
+type Tx struct {
+	ID         ID        `json:"id"`
+	Parents    []ID      `json:"parents"`
+	From       Address   `json:"from"`
+	Sig        Signature `json:"sig,omitempty"`
+	URL        string    `json:"url"`
+	Patches    []Patch   `json:"patches"`
+	Recipients []Address `json:"recipients,omitempty"`
+	Checkpoint bool      `json:"checkpoint"` // @@TODO: probably not ideal
 
-func DetermineLinkType(linkStr string) LinkType {
-	if strings.Index(linkStr, "ref:") == 0 {
-		return LinkTypeRef
-	} else if linkStr[0] == '/' {
-		return LinkTypePath
-	}
-	return LinkTypeUnknown
-}
-
-func SignatureFromHex(hx string) (Signature, error) {
-	bs, err := hex.DecodeString(hx)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	return Signature(bs), nil
-}
-
-func (sig Signature) String() string {
-	return hex.EncodeToString(sig)
-}
-
-func (sig Signature) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + hex.EncodeToString(sig) + `"`), nil
-}
-
-func (sig *Signature) UnmarshalJSON(bs []byte) error {
-	bs, err := hex.DecodeString(string(bs[1 : len(bs)-1]))
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	*sig = bs
-	return nil
-}
-
-func (c ChallengeMsg) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + hex.EncodeToString(c) + `"`), nil
-}
-
-func (c *ChallengeMsg) UnmarshalJSON(bs []byte) error {
-	bs, err := hex.DecodeString(string(bs[1 : len(bs)-1]))
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	*c = bs
-	return nil
-}
-
-func AddressFromHex(hx string) (Address, error) {
-	bs, err := hex.DecodeString(hx)
-	if err != nil {
-		return Address{}, errors.WithStack(err)
-	}
-	var addr Address
-	copy(addr[:], bs)
-	return addr, nil
-}
-
-func AddressFromBytes(bs []byte) Address {
-	var addr Address
-	copy(addr[:], bs)
-	return addr
-}
-
-func (a Address) String() string {
-	return a.Hex()
-}
-
-func (a Address) Pretty() string {
-	return a.Hex()[:6]
-}
-
-func (a Address) Hex() string {
-	return hex.EncodeToString(a[:])
-}
-
-func (a Address) MarshalText() ([]byte, error) {
-	return []byte(a.String()), nil
-}
-
-func (a *Address) UnmarshalText(asHex []byte) error {
-	bs, err := hex.DecodeString(string(asHex))
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	copy((*a)[:], bs)
-	return nil
+	Valid bool `json:"-"`
+	hash  Hash `json:"-"`
 }
 
 func (tx Tx) Hash() Hash {
@@ -184,49 +69,34 @@ func PrivateRootKeyForRecipients(recipients []Address) string {
 	for _, r := range recipients {
 		bs = append(bs, r[:]...)
 	}
-	return "private-" + HashBytes(bs).String()
+	return "private-" + HashBytes(bs).Hex()
 }
 
 func (tx Tx) PrivateRootKey() string {
 	return PrivateRootKeyForRecipients(tx.Recipients)
 }
 
-func HashBytes(bs []byte) Hash {
-	hash := crypto.Keccak256(bs)
-	var h Hash
-	copy(h[:], hash)
-	return h
+type Patch struct {
+	Keys  []string
+	Range *Range
+	Val   interface{}
 }
 
-func HashFromHex(hexStr string) (Hash, error) {
-	var hash Hash
-	err := hash.UnmarshalText([]byte(hexStr))
-	return hash, err
-}
-
-func (h *Hash) UnmarshalText(text []byte) error {
-	bs, err := hex.DecodeString(string(text))
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	copy((*h)[:], bs)
-	return nil
-}
-
-func (h Hash) MarshalText() ([]byte, error) {
-	return []byte(hex.EncodeToString(h[:])), nil
-}
-
-func (h Hash) String() string {
-	return hex.EncodeToString(h[:])
-}
-
-func (h Hash) Pretty() string {
-	return h.String()[:6]
+type Range struct {
+	Start int64
+	End   int64
 }
 
 func (p Patch) String() string {
-	s := KeypathSeparator + strings.Join(p.Keys, KeypathSeparator)
+	var keypathParts []string
+	for _, key := range p.Keys {
+		if strings.Contains(key, ".") {
+			keypathParts = append(keypathParts, `["`+key+`"]`)
+		} else {
+			keypathParts = append(keypathParts, KeypathSeparator+key)
+		}
+	}
+	s := strings.Join(keypathParts, "")
 
 	if p.Range != nil {
 		s += fmt.Sprintf("[%v:%v]", p.Range.Start, p.Range.End)
@@ -290,18 +160,7 @@ func (p Patch) MarshalJSON() ([]byte, error) {
 	return json.Marshal(p.String())
 }
 
-func (id *ID) UnmarshalText(text []byte) error {
-	bs, err := hex.DecodeString(string(text))
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	copy((*id)[:], bs)
-	return nil
-}
-
-func (id ID) MarshalText() ([]byte, error) {
-	return []byte(hex.EncodeToString(id[:])), nil
-}
+type ID [32]byte
 
 func RandomID() ID {
 	var id ID
@@ -331,6 +190,10 @@ func IDFromBytes(bs []byte) ID {
 	return id
 }
 
+func (id ID) String() string {
+	return id.Hex()
+}
+
 func (id ID) Pretty() string {
 	return id.String()[:6]
 }
@@ -339,11 +202,162 @@ func (id ID) Hex() string {
 	return hex.EncodeToString(id[:])
 }
 
-func (id ID) String() string {
-	return id.Hex()
+func (id ID) MarshalText() ([]byte, error) {
+	return []byte(hex.EncodeToString(id[:])), nil
 }
 
-func (tx *Tx) PrettyJSON() string {
-	j, _ := json.MarshalIndent(tx, "", "    ")
-	return string(j)
+func (id *ID) UnmarshalText(text []byte) error {
+	bs, err := hex.DecodeString(string(text))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	copy((*id)[:], bs)
+	return nil
+}
+
+type Address [20]byte
+
+func AddressFromHex(hx string) (Address, error) {
+	bs, err := hex.DecodeString(hx)
+	if err != nil {
+		return Address{}, errors.WithStack(err)
+	}
+	var addr Address
+	copy(addr[:], bs)
+	return addr, nil
+}
+
+func AddressFromBytes(bs []byte) Address {
+	var addr Address
+	copy(addr[:], bs)
+	return addr
+}
+
+func (a Address) String() string {
+	return a.Hex()
+}
+
+func (a Address) Pretty() string {
+	return a.Hex()[:6]
+}
+
+func (a Address) Hex() string {
+	return hex.EncodeToString(a[:])
+}
+
+func (a Address) MarshalText() ([]byte, error) {
+	return []byte(a.String()), nil
+}
+
+func (a *Address) UnmarshalText(asHex []byte) error {
+	bs, err := hex.DecodeString(string(asHex))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	copy((*a)[:], bs)
+	return nil
+}
+
+type Signature []byte
+
+func SignatureFromHex(hx string) (Signature, error) {
+	bs, err := hex.DecodeString(hx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return Signature(bs), nil
+}
+
+func (sig Signature) String() string {
+	return sig.Hex()
+}
+
+func (sig Signature) Hex() string {
+	return hex.EncodeToString(sig)
+}
+
+func (sig Signature) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + hex.EncodeToString(sig) + `"`), nil
+}
+
+func (sig *Signature) UnmarshalJSON(bs []byte) error {
+	bs, err := hex.DecodeString(string(bs[1 : len(bs)-1]))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	*sig = bs
+	return nil
+}
+
+type ChallengeMsg []byte
+
+func (c ChallengeMsg) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + hex.EncodeToString(c) + `"`), nil
+}
+
+func (c *ChallengeMsg) UnmarshalJSON(bs []byte) error {
+	bs, err := hex.DecodeString(string(bs[1 : len(bs)-1]))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	*c = bs
+	return nil
+}
+
+type Hash [32]byte
+
+func HashBytes(bs []byte) Hash {
+	hash := crypto.Keccak256(bs)
+	var h Hash
+	copy(h[:], hash)
+	return h
+}
+
+func HashFromHex(hexStr string) (Hash, error) {
+	var hash Hash
+	err := hash.UnmarshalText([]byte(hexStr))
+	return hash, err
+}
+
+func (h Hash) String() string {
+	return h.Hex()
+}
+
+func (h Hash) Pretty() string {
+	return h.String()[:6]
+}
+
+func (h Hash) Hex() string {
+	return hex.EncodeToString(h[:])
+}
+
+func (h Hash) MarshalText() ([]byte, error) {
+	return []byte(hex.EncodeToString(h[:])), nil
+}
+
+func (h *Hash) UnmarshalText(text []byte) error {
+	bs, err := hex.DecodeString(string(text))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	copy((*h)[:], bs)
+	return nil
+}
+
+type LinkType int
+
+const (
+	LinkTypeUnknown LinkType = iota
+	LinkTypeRef
+	LinkTypePath
+	LinkTypeURL // @@TODO
+)
+
+func DetermineLinkType(linkStr string) (LinkType, string) {
+	if strings.HasPrefix(linkStr, "ref:") {
+		return LinkTypeRef, linkStr[len("ref:"):]
+	} else if strings.HasPrefix(linkStr, "state:") {
+		return LinkTypePath, linkStr[len("state:"):]
+	}
+	return LinkTypeUnknown, linkStr
 }

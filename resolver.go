@@ -27,8 +27,8 @@ func (r *resolver) SetKeypath(keypath []string) {
 	r.keypath = keypath
 }
 
-type ResolverConstructor func(params map[string]interface{}, internalState map[string]interface{}) (Resolver, error)
-type ValidatorConstructor func(params map[string]interface{}) (Validator, error)
+type ResolverConstructor func(r RefResolver, config *NelSON, internalState map[string]interface{}) (Resolver, error)
+type ValidatorConstructor func(r RefResolver, config *NelSON) (Validator, error)
 
 var resolverRegistry map[string]ResolverConstructor
 var validatorRegistry map[string]ValidatorConstructor
@@ -39,35 +39,35 @@ func init() {
 		// "stack":       NewStackValidator,
 	}
 	resolverRegistry = map[string]ResolverConstructor{
-		"resolver/dumb":  NewDumbResolver,
-		"resolver/stack": NewStackResolver,
-		"resolver/lua":   NewLuaResolver,
-		"resolver/js":    NewJSResolver,
+		"resolver/dumb": NewDumbResolver,
+		"resolver/lua":  NewLuaResolver,
+		"resolver/js":   NewJSResolver,
+		//"resolver/stack": NewStackResolver,
 	}
 }
 
-func initResolverFromConfig(config map[string]interface{}, internalState map[string]interface{}) (Resolver, error) {
-	typ, exists := getString(config, []string{"Content-Type"})
-	if !exists {
+func initResolverFromConfig(r RefResolver, config *NelSON, internalState map[string]interface{}) (Resolver, error) {
+	typ := config.ContentType()
+	if typ == "" {
 		return nil, errors.New("cannot init resolver without a 'Content-Type' param")
 	}
 	ctor, exists := resolverRegistry[typ]
 	if !exists {
 		return nil, errors.Errorf("unknown resolver type '%v'", typ)
 	}
-	return ctor(config, internalState)
+	return ctor(r, config, internalState)
 }
 
-func initValidatorFromConfig(config map[string]interface{}) (Validator, error) {
-	typ, exists := getString(config, []string{"Content-Type"})
-	if !exists {
+func initValidatorFromConfig(r RefResolver, config *NelSON) (Validator, error) {
+	typ := config.ContentType()
+	if typ == "" {
 		return nil, errors.New("cannot init validator without a 'Content-Type' param")
 	}
 	ctor, exists := validatorRegistry[typ]
 	if !exists {
 		return nil, errors.Errorf("unknown validator type '%v'", typ)
 	}
-	return ctor(config)
+	return ctor(r, config)
 }
 
 type resolverTree struct {

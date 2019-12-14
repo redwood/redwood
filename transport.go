@@ -21,9 +21,9 @@ type Transport interface {
 	SetFetchRefHandler(handler FetchRefHandler)
 
 	GetPeerByConnStrings(ctx context.Context, reachableAt StringSet) (Peer, error)
-	ForEachProviderOfURL(ctx context.Context, theURL string) (<-chan Peer, error)
+	ForEachProviderOfStateURI(ctx context.Context, stateURI string) (<-chan Peer, error)
+	ForEachSubscriberToStateURI(ctx context.Context, stateURI string) (<-chan Peer, error)
 	ForEachProviderOfRef(ctx context.Context, refHash Hash) (<-chan Peer, error)
-	ForEachSubscriberToURL(ctx context.Context, theURL string) (<-chan Peer, error)
 	PeersClaimingAddress(ctx context.Context, address Address) (<-chan Peer, error)
 	AnnounceRef(refHash Hash) error
 }
@@ -39,7 +39,7 @@ type Peer interface {
 	CloseConn() error
 }
 
-type FetchHistoryHandler func(parents []ID, toVersion ID, peer Peer) error
+type FetchHistoryHandler func(stateURI string, parents []ID, toVersion ID, peer Peer) error
 type AckHandler func(txID ID, peer Peer)
 type TxHandler func(tx Tx, peer Peer)
 type PrivateTxHandler func(encryptedTx EncryptedTx, peer Peer)

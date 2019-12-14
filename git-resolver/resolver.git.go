@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libgit2/git2go"
+	"github.com/brynbellomy/git2go"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
