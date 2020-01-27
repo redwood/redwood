@@ -11,13 +11,15 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/sha3"
+
+	"github.com/brynbellomy/redwood/types"
 )
 
 type RefStore interface {
-	Object(hash Hash) (io.ReadCloser, int64, error)
-	StoreObject(reader io.ReadCloser, contentType string) (Hash, error)
-	HaveObject(hash Hash) bool
-	AllHashes() ([]Hash, error)
+	Object(hash types.Hash) (io.ReadCloser, int64, error)
+	StoreObject(reader io.ReadCloser, contentType string) (types.Hash, error)
+	HaveObject(hash types.Hash) bool
+	AllHashes() ([]types.Hash, error)
 }
 
 type refStore struct {
@@ -34,7 +36,7 @@ func (s *refStore) ensureRootPath() error {
 	return os.MkdirAll(s.rootPath, 0755)
 }
 
-func (s *refStore) Object(hash Hash) (io.ReadCloser, int64, error) {
+func (s *refStore) Object(hash types.Hash) (io.ReadCloser, int64, error) {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 
@@ -62,19 +64,19 @@ func (s *refStore) Object(hash Hash) (io.ReadCloser, int64, error) {
 	return f, stat.Size(), nil
 }
 
-func (s *refStore) StoreObject(reader io.ReadCloser, contentType string) (h Hash, err error) {
+func (s *refStore) StoreObject(reader io.ReadCloser, contentType string) (h types.Hash, err error) {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 	defer annotate(&err, "refStore.StoreObject")
 
 	err = s.ensureRootPath()
 	if err != nil {
-		return Hash{}, err
+		return types.Hash{}, err
 	}
 
 	tmpFile, err := ioutil.TempFile(s.rootPath, "temp-")
 	if err != nil {
-		return Hash{}, err
+		return types.Hash{}, err
 	}
 	defer func() {
 		closeErr := tmpFile.Close()
@@ -88,16 +90,16 @@ func (s *refStore) StoreObject(reader io.ReadCloser, contentType string) (h Hash
 
 	_, err = io.Copy(tmpFile, tee)
 	if err != nil {
-		return Hash{}, err
+		return types.Hash{}, err
 	}
 
 	bs := hasher.Sum(nil)
-	var hash Hash
+	var hash types.Hash
 	copy(hash[:], bs)
 
 	err = tmpFile.Close()
 	if err != nil {
-		return Hash{}, err
+		return types.Hash{}, err
 	}
 
 	err = os.Rename(tmpFile.Name(), filepath.Join(s.rootPath, "ref-"+hash.String()))
@@ -113,13 +115,13 @@ func (s *refStore) StoreObject(reader io.ReadCloser, contentType string) (h Hash
 	return hash, nil
 }
 
-func (s *refStore) HaveObject(hash Hash) bool {
+func (s *refStore) HaveObject(hash types.Hash) bool {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 	return fileExists(filepath.Join(s.rootPath, "ref-"+hash.String()))
 }
 
-func (s *refStore) contentType(hash Hash) (string, error) {
+func (s *refStore) contentType(hash types.Hash) (string, error) {
 	s.metadataMu.Lock()
 	defer s.metadataMu.Unlock()
 
@@ -143,7 +145,7 @@ func (s *refStore) contentType(hash Hash) (string, error) {
 	return contentType, nil
 }
 
-func (s *refStore) setContentType(hash Hash, contentType string) error {
+func (s *refStore) setContentType(hash types.Hash, contentType string) error {
 	s.metadataMu.Lock()
 	defer s.metadataMu.Unlock()
 
@@ -175,7 +177,7 @@ func (s *refStore) setContentType(hash Hash, contentType string) error {
 	return nil
 }
 
-func (s *refStore) AllHashes() ([]Hash, error) {
+func (s *refStore) AllHashes() ([]types.Hash, error) {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 
@@ -189,9 +191,9 @@ func (s *refStore) AllHashes() ([]Hash, error) {
 		return nil, err
 	}
 
-	var refHashes []Hash
+	var refHashes []types.Hash
 	for _, match := range matches {
-		hash, err := HashFromHex(filepath.Base(match)[4:])
+		hash, err := types.HashFromHex(filepath.Base(match)[4:])
 		if err != nil {
 			// ignore (@@TODO: delete?  notify?)
 			continue

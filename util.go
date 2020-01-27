@@ -1,10 +1,9 @@
 package redwood
 
 import (
-	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -106,7 +105,7 @@ func getBool(m interface{}, keypath []string) (bool, bool) {
 
 func setValueAtKeypath(x interface{}, keypath []string, val interface{}, clobber bool) {
 	if len(keypath) == 0 {
-		panic("bad")
+		panic("setValueAtKeypath: len(keypath) == 0")
 	}
 
 	var cur interface{} = x
@@ -131,13 +130,13 @@ func setValueAtKeypath(x interface{}, keypath []string, val interface{}, clobber
 			}
 			cur = asSlice[i]
 		} else {
-			panic("bad")
+			panic(fmt.Sprintf("setValueAtKeypath: bad type (%T)", cur))
 		}
 	}
 	if asMap, isMap := cur.(map[string]interface{}); isMap {
 		asMap[keypath[len(keypath)-1]] = val
 	} else {
-		panic("bad")
+		panic(fmt.Sprintf("setValueAtKeypath: bad final type (%T)", cur))
 	}
 }
 
@@ -266,18 +265,6 @@ func walkContentTypes(state interface{}, contentTypes []string, fn func(contentT
 	})
 }
 
-func WalkLinks(state interface{}, fn func(linkType LinkType, linkValue string, keypath []string, val map[string]interface{}) error) error {
-	return walkContentTypes(state, []string{"link"}, func(contentType string, keypath []string, val map[string]interface{}) error {
-		linkStr, exists := getString(val, []string{"value"})
-		if !exists {
-			return nil
-		}
-
-		linkType, linkValue := DetermineLinkType(linkStr)
-		return fn(linkType, linkValue, keypath, val)
-	})
-}
-
 func filterEmptyStrings(s []string) []string {
 	var filtered []string
 	for i := range s {
@@ -387,23 +374,4 @@ func GuessContentTypeFromFilename(filename string) string {
 		}
 	}
 	return "application/octet-stream"
-}
-
-func GetReadCloser(val interface{}) (io.ReadCloser, bool) {
-	switch v := val.(type) {
-	case string:
-		return ioutil.NopCloser(bytes.NewBufferString(v)), true
-	case []byte:
-		return ioutil.NopCloser(bytes.NewBuffer(v)), true
-	case io.ReadCloser:
-		return v, true
-	case *NelSON:
-		rc, err := v.ValueReader()
-		if err != nil {
-			return nil, false
-		}
-		return rc, true
-	default:
-		return nil, false
-	}
 }

@@ -10,12 +10,13 @@ import (
 
 	rw "github.com/brynbellomy/redwood"
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/types"
 )
 
 type client struct {
 	*ctx.Context
 	host       string
-	address    rw.Address
+	address    types.Address
 	sigprivkey rw.SigningPrivateKey
 	client     RemoteStoreClient
 	conn       *grpc.ClientConn
@@ -25,7 +26,7 @@ type client struct {
 // client should conform to rw.Store
 var _ rw.Store = (*client)(nil)
 
-func NewClient(host string, address rw.Address, sigprivkey rw.SigningPrivateKey) rw.Store {
+func NewClient(host string, address types.Address, sigprivkey rw.SigningPrivateKey) rw.Store {
 	return &client{
 		Context:    &ctx.Context{},
 		host:       host,
@@ -89,7 +90,7 @@ func (c *client) Authenticate() error {
 		return errors.New("protocol error")
 	}
 
-	sig, err := c.sigprivkey.SignHash(rw.HashBytes(challenge.Challenge))
+	sig, err := c.sigprivkey.SignHash(types.HashBytes(challenge.Challenge))
 	if err != nil {
 		return err
 	}

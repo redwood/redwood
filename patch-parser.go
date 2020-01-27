@@ -5,11 +5,13 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
+
+	"github.com/brynbellomy/redwood/tree"
 )
 
 var ErrBadPatch = errors.New("bad patch string")
 
-func ParsePatch(s string) (Patch, error) {
+func ParsePatch(s []byte) (Patch, error) {
 	patch := Patch{}
 
 	for i := 0; i < len(s); {
@@ -19,7 +21,7 @@ func ParsePatch(s string) (Patch, error) {
 			if err != nil {
 				return Patch{}, err
 			}
-			patch.Keys = append(patch.Keys, key)
+			patch.Keypath = patch.Keypath.Push(key)
 			i += len(key) + 1
 
 		case '[':
@@ -29,7 +31,7 @@ func ParsePatch(s string) (Patch, error) {
 				if err != nil {
 					return Patch{}, err
 				}
-				patch.Keys = append(patch.Keys, key)
+				patch.Keypath = patch.Keypath.Push(key)
 				i += len(key) + 4
 
 			case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
@@ -56,40 +58,40 @@ func ParsePatch(s string) (Patch, error) {
 	return Patch{}, errors.WithStack(ErrBadPatch)
 }
 
-func parseDotKey(s string) (string, error) {
+func parseDotKey(s []byte) ([]byte, error) {
 	buf := []byte{}
 	// start at index 1, skip first dot
 	for i := 1; i < len(s); i++ {
 		if s[i] == '.' || s[i] == '[' || s[i] == ' ' {
-			return string(buf), nil
+			return buf, nil
 		} else {
 			buf = append(buf, s[i])
 		}
 	}
-	return "", errors.WithStack(ErrBadPatch)
+	return nil, errors.WithStack(ErrBadPatch)
 }
 
-func parseBracketKey(s string) (string, error) {
+func parseBracketKey(s []byte) ([]byte, error) {
 	if len(s) < 5 {
-		return "", errors.WithStack(ErrBadPatch)
+		return nil, errors.WithStack(ErrBadPatch)
 	} else if s[0] != '[' && s[1] != '"' {
-		return "", errors.WithStack(ErrBadPatch)
+		return nil, errors.WithStack(ErrBadPatch)
 	}
 
 	buf := []byte{}
 	// start at index 2, skip ["
 	for i := 2; i < len(s); i++ {
 		if s[i] == '"' {
-			return string(buf), nil
+			return buf, nil
 		} else {
 			buf = append(buf, s[i])
 		}
 	}
-	return "", errors.WithStack(ErrBadPatch)
+	return nil, errors.WithStack(ErrBadPatch)
 }
 
-func parseRange(s string) (*Range, int, error) {
-	rng := &Range{}
+func parseRange(s []byte) (*tree.Range, int, error) {
+	rng := &tree.Range{}
 	haveStart := false
 	buf := []byte{}
 	// start at index 1, skip [
@@ -102,7 +104,7 @@ func parseRange(s string) (*Range, int, error) {
 			if err != nil {
 				return nil, 0, errors.WithStack(ErrBadPatch)
 			}
-			rng.End = end
+			rng[1] = end
 			return rng, i + 1, nil
 
 		} else if s[i] == ':' {
@@ -115,7 +117,7 @@ func parseRange(s string) (*Range, int, error) {
 				return nil, 0, errors.WithStack(ErrBadPatch)
 			}
 			buf = []byte{}
-			rng.Start = start
+			rng[0] = start
 			haveStart = true
 		} else {
 			buf = append(buf, s[i])

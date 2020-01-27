@@ -1,4 +1,4 @@
-package redwood
+package types
 
 import (
 	"github.com/pkg/errors"

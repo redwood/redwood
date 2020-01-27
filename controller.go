@@ -1,11 +1,15 @@
 package redwood
 
 import (
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/tree"
+	"github.com/brynbellomy/redwood/types"
 )
 
 type Controller interface {
@@ -13,35 +17,30 @@ type Controller interface {
 	Start() error
 
 	AddTx(tx *Tx)
-	HaveTx(txID ID) bool
+	HaveTx(txID types.ID) bool
 
-	State(keypath []string) (interface{}, []ID)
-	MostRecentTxID() ID // @@TODO: should be .Leaves()
+	State(version *types.ID) tree.Node
+	Leaves() map[types.ID]struct{}
 	ResolverTree() *resolverTree
 	SetResolverTree(tree *resolverTree)
 
 	OnDownloadedRef()
 }
 
-type RefResolver interface {
-	ResolveRefs(input interface{}) (interface{}, bool, error)
-}
-
-type ReceivedRefsHandler func(refs []Hash)
-type TxProcessedHandler func(c Controller, tx *Tx, state interface{}) error
+type ReceivedRefsHandler func(refs []types.Hash)
+type TxProcessedHandler func(c Controller, tx *Tx, state *tree.DBNode) error
 
 type controller struct {
 	*ctx.Context
 
-	address        Address
-	stateURI       string
-	mu             sync.RWMutex
-	txs            map[ID]*Tx
-	validTxs       map[ID]*Tx
-	resolverTree   *resolverTree
-	currentState   interface{}
-	leaves         map[ID]bool
-	mostRecentTxID ID
+	address      types.Address
+	stateURI     string
+	mu           sync.RWMutex
+	txs          map[types.ID]*Tx
+	validTxs     map[types.ID]*Tx
+	resolverTree *resolverTree
+	state        *tree.DBTree
+	leaves       map[types.ID]struct{}
 
 	chMempool     chan *Tx
 	mempool       []*Tx
@@ -50,20 +49,25 @@ type controller struct {
 	chOnDownloadedRef chan struct{}
 }
 
-func NewController(address Address, stateURI string, txProcessedHandler TxProcessedHandler) (Controller, error) {
+func NewController(address types.Address, stateURI string, dbRootPath string, txProcessedHandler TxProcessedHandler) (Controller, error) {
+	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(stateURI)
+	state, err := tree.NewDBTree(filepath.Join(dbRootPath, stateURIClean))
+	if err != nil {
+		return nil, err
+	}
+
 	c := &controller{
 		Context:           &ctx.Context{},
 		address:           address,
 		stateURI:          stateURI,
 		mu:                sync.RWMutex{},
-		txs:               make(map[ID]*Tx),
-		validTxs:          make(map[ID]*Tx),
-		resolverTree:      &resolverTree{},
-		currentState:      map[string]interface{}{},
-		leaves:            make(map[ID]bool),
+		txs:               make(map[types.ID]*Tx),
+		validTxs:          make(map[types.ID]*Tx),
+		resolverTree:      newResolverTree(),
+		state:             state,
+		leaves:            make(map[types.ID]struct{}),
 		chMempool:         make(chan *Tx, 100),
 		chOnDownloadedRef: make(chan struct{}),
-		mostRecentTxID:    GenesisTxID,
 		onTxProcessed:     txProcessedHandler,
 	}
 	return c, nil
@@ -75,7 +79,7 @@ func (c *controller) Start() error {
 		func() error {
 			c.SetLogLabel(c.address.Pretty() + " controller")
 
-			c.resolverTree.addResolver([]string{}, &dumbResolver{})
+			c.resolverTree.addResolver(tree.Keypath(nil), &dumbResolver{})
 			go c.mempoolLoop()
 
 			return nil
@@ -83,7 +87,12 @@ func (c *controller) Start() error {
 		nil,
 		nil,
 		// on shutdown
-		func() {},
+		func() {
+			err := c.state.Close()
+			if err != nil {
+				c.Errorf("error closing state db: %v", err)
+			}
+		},
 	)
 }
 
@@ -91,18 +100,15 @@ func (c *controller) OnDownloadedRef() {
 	c.chOnDownloadedRef <- struct{}{}
 }
 
-func (c *controller) State(keypath []string) (interface{}, []ID) {
-	// @@TODO: mutex
-	val, exists := getValue(c.currentState, keypath)
-	if !exists {
-		return nil, nil
+func (c *controller) State(version *types.ID) tree.Node {
+	if version == nil {
+		version = &types.EmptyID
 	}
-	leaves := []ID{c.mostRecentTxID}
-	return DeepCopyJSValue(val), leaves
+	return c.state.RootNode(*version)
 }
 
-func (c *controller) MostRecentTxID() ID {
-	return c.mostRecentTxID
+func (c *controller) Leaves() map[types.ID]struct{} {
+	return c.leaves
 }
 
 func (c *controller) ResolverTree() *resolverTree {
@@ -182,94 +188,123 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		return err
 	}
 
-	//
-	// Validate the tx's extrinsics
-	//
-	{
-		validators, validatorKeypaths, _ := c.resolverTree.groupPatchesByValidator(tx.Patches)
+	err = c.state.Update(types.EmptyID, func(state *tree.DBNode) error {
+		state.ResetDiff()
 
-		for validator, patches := range validators {
-			if len(patches) == 0 {
-				continue
-			}
+		//
+		// Validate the tx's extrinsics
+		//
+		{
+			// @@TODO: sort patches and use ordering to cut down on number of ops
 
-			txCopy := *tx
-			txCopy.Patches = patches
+			patches := tx.Patches
+			for i := len(c.resolverTree.validatorKeypaths) - 1; i >= 0; i-- {
+				validatorKeypath := c.resolverTree.validatorKeypaths[i]
 
-			c.mu.RLock()
-			err := validator.ValidateTx(c.stateAtKeypath(validatorKeypaths[validator]), c.txs, c.validTxs, txCopy)
-			if err != nil {
-				c.mu.RUnlock()
-				return err
-			}
-			c.mu.RUnlock()
-		}
-	}
-
-	//
-	// Apply changes to the state tree
-	//
-	var newState interface{}
-	{
-		var processNode func(node *resolverTreeNode, localState interface{}, patches []Patch) []Patch
-		processNode = func(node *resolverTreeNode, localState interface{}, patches []Patch) []Patch {
-			localStateMap, isMap := localState.(map[string]interface{})
-			if !isMap {
-				localStateMap = make(map[string]interface{})
-			}
-
-			newPatches := []Patch{}
-			for key, child := range node.subkeys {
-				// Trim patches to be relative to this child's keypath
-				patchesTrimmed := make([]Patch, 0)
-				for _, p := range patches {
-					if len(p.Keys) > 0 && p.Keys[0] == key {
-						pcopy := p.Copy()
-						patchesTrimmed = append(patchesTrimmed, Patch{Keys: pcopy.Keys[1:], Range: pcopy.Range, Val: pcopy.Val})
+				var unprocessedPatches []Patch
+				var patchesTrimmed []Patch
+				for _, patch := range patches {
+					if patch.Keypath.StartsWith(validatorKeypath) {
+						patchesTrimmed = append(patchesTrimmed, Patch{
+							Keypath: patch.Keypath.RelativeTo(validatorKeypath),
+							Range:   patch.Range,
+							Val:     patch.Val,
+						})
+					} else {
+						unprocessedPatches = append(unprocessedPatches, patch)
 					}
 				}
 
-				// Process the patches for the child node into (hopefully) fewer patches and then queue them up for processing at this node
-				processed := processNode(child, localStateMap[key], patchesTrimmed)
-				for i := range processed {
-					processed[i].Keys = append([]string{key}, processed[i].Keys...)
-				}
-
-				newPatches = append(newPatches, processed...)
-			}
-
-			// Also queue up any patches that weren't the responsibility of our child nodes
-			for _, p := range patches {
-				if len(p.Keys) == 0 {
-					newPatches = append(newPatches, p.Copy())
-				} else if _, exists := node.subkeys[p.Keys[0]]; !exists {
-					newPatches = append(newPatches, p.Copy())
-				}
-			}
-
-			if node.resolver != nil {
-				// If this is a node with a resolver, process this set of patches into a single patch for our parent
-				newState, err := node.resolver.ResolveState(localStateMap, tx.From, tx.ID, tx.Parents, newPatches)
+				txCopy := *tx
+				txCopy.Patches = patchesTrimmed
+				err := c.resolverTree.validators[string(validatorKeypath)].ValidateTx(state.AtKeypath(validatorKeypath, nil), c.txs, c.validTxs, &txCopy)
 				if err != nil {
-					panic(err)
+					return err
 				}
-				return []Patch{{Keys: node.keypath, Val: newState}}
-			} else {
-				// If this node isn't a resolver, just return the patches our children gave us
-				return newPatches
+
+				patches = unprocessedPatches
 			}
 		}
-		finalPatches := processNode(c.resolverTree.root, c.currentState, tx.Patches)
-		if len(finalPatches) != 1 {
-			panic("noooo")
+
+		//
+		// Apply changes to the state tree
+		//
+		{
+			// @@TODO: sort patches and use ordering to cut down on number of ops
+
+			patches := tx.Patches
+			for i := len(c.resolverTree.resolverKeypaths) - 1; i >= 0; i-- {
+				resolverKeypath := c.resolverTree.resolverKeypaths[i]
+
+				var unprocessedPatches []Patch
+				var patchesTrimmed []Patch
+				for _, patch := range patches {
+					if patch.Keypath.StartsWith(resolverKeypath) {
+						patchesTrimmed = append(patchesTrimmed, Patch{
+							Keypath: patch.Keypath.RelativeTo(resolverKeypath),
+							Range:   patch.Range,
+							Val:     patch.Val,
+						})
+					} else {
+						unprocessedPatches = append(unprocessedPatches, patch)
+					}
+				}
+				if len(patchesTrimmed) == 0 {
+					patches = unprocessedPatches
+					continue
+				}
+
+				stateToResolve := state.AtKeypath(resolverKeypath, nil)
+				resolverConfig, err := state.CopyToMemory(resolverKeypath.Push(MergeTypeKeypath), nil)
+				if err != nil && errors.Cause(err) != types.Err404 {
+					return err
+				}
+				if resolverConfig != nil {
+					state.Diff().SetEnabled(false)
+					err = stateToResolve.Delete(MergeTypeKeypath, nil)
+					if err != nil {
+						return err
+					}
+					state.Diff().SetEnabled(true)
+				}
+
+				err = c.resolverTree.resolvers[string(resolverKeypath)].ResolveState(stateToResolve, tx.From, tx.ID, tx.Parents, patchesTrimmed)
+				if err != nil {
+					return err
+				}
+
+				if resolverConfig != nil {
+					state.Diff().SetEnabled(false)
+					resolverConfigVal, _, err := resolverConfig.Value(nil, nil)
+					if err != nil {
+						return err
+					}
+					err = stateToResolve.Set(MergeTypeKeypath, nil, resolverConfigVal)
+					if err != nil {
+						return err
+					}
+					state.Diff().SetEnabled(true)
+				}
+
+				patches = unprocessedPatches
+			}
 		}
 
-		newState = finalPatches[0].Val
-	}
-
-	err = c.onTxProcessed(c, tx, newState)
+		err = c.onTxProcessed(c, tx, state)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		return err
+	}
+
+	if tx.Checkpoint {
+		err = c.state.CopyVersion(tx.ID, types.EmptyID)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Unmark parents as leaves
@@ -277,11 +312,11 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		delete(c.leaves, parentID)
 	}
 
-	// @@TODO: add to timeDAG
-	c.mostRecentTxID = tx.ID
+	// Mark this tx as a leaf
+	c.leaves[tx.ID] = struct{}{}
 
-	// Finally, set current state
-	c.currentState = newState
+	// @@TODO: add to timeDAG
+
 	//c.Warnf("state (%v) ~> %v", c.stateURI, PrettyJSON(newState))
 
 	tx.Valid = true
@@ -322,17 +357,7 @@ func (c *controller) validateTxIntrinsics(tx *Tx) error {
 	return nil
 }
 
-func (c *controller) stateAtKeypath(keypath []string) interface{} {
-	if len(keypath) == 0 {
-		return c.currentState
-	} else if stateMap, isMap := c.currentState.(map[string]interface{}); isMap {
-		val, _ := getValue(stateMap, keypath)
-		return val
-	}
-	return nil
-}
-
-func (c *controller) HaveTx(txID ID) bool {
+func (c *controller) HaveTx(txID types.ID) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	_, have := c.txs[txID]

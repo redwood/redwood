@@ -43,7 +43,27 @@ Keep an eye on our [Github project board](https://github.com/brynbellomy/redwood
     - **Go protobuf client (forthcoming):** Redwood will include a Go protobuf client in the very near future.
 - **Git integration:**
     - Redwood can act as a Git server.  With the included Git remote helper plugin, you can do things like `git clone redwood://mysite.com/git`, and also push and pull, without actually setting up a Git server of any kind.
-    - When you push updates to the code and assets in your application, they will be deployed instantly with zero downtime.  No more blue-green deploys.  See [git-remote-helper/main.go](https://github.com/brynbellomy/redwood/blob/master/git-remote-helper/main.go) for the remote helper itself, and [scenarios/git-integration/main.go](https://github.com/brynbellomy/redwood/blob/master/scenarios/git-integration/main.go), the fully-featured demo, for more information.  Instructions for running the Git demo are provided below.
+    - When you push updates to the code and assets in your application, they will be deployed instantly with zero downtime.  No more blue-green deploys.  See [git-remote-helper/main.go](https://github.com/brynbellomy/redwood/blob/master/git-remote-helper/main.go) for the remote helper itself, and [demos/git-integration/main.go](https://github.com/brynbellomy/redwood/blob/master/demos/git-integration/main.go), the fully-featured demo, for more information.  Instructions for running the Git demo are provided below.
+
+
+## 🔒 Security model
+
+(This section is in draft, although the information it contains is up to date)
+
+Redwood has a goal of providing a multilayered, robust security model.  It currently implements the following mechanisms to achieve this goal:
+
+1. Users are identified by a public/private keypair (actually using Ethereum's implementation at the moment).  All transactions must be signed by the sender, allowing recipients to verify the sender identities.
+
+2. You can place "transaction validators" at any node in your state trees, and any transaction affecting the subtree under the validator will be checked by that validator.  Currently, there's a "permissions" validator included that gives a simple way to control writes based on the Ethereum keypair I mentioned above.  This part isn't very well fleshed out yet, but it provides what seems to be a solid model to iterate on.
+
+3. You can also write custom transaction validators in Go/Lua/Javascript, which should make it trivial to implement just about any access control model you desire.
+
+4. You can also create a "private" tree by explicitly specifying the set of users who are allowed to read from and write to that tree.  The default Redwood node implementation does automatic peer discovery and keeps a list of peers whose identities/addresses have been verified.  When it receives a transaction for a private tree, it only gossips that transaction to the tree's members (as opposed to its behavior with public trees, which is to gossip transactions to any peer who subscribes to that tree).
+
+5. We also want secure persistent storage for transactions so that we can get high availability and redundancy without compromising the security model.  To facilitate this, we allow you to configure the node to talk to what we're calling a "remote blind store" (essentially a key-value DB running on a separate piece of hardware, possibly off-site).  The Redwood node encrypts transactions with a key the remote store doesn't possess and sends it over gRPC to the blind store.
+
+6. Some applications will have a high volume of transaction data, and will want to be able to prune/merge/rebase that data to save space.  To prevent bad actors from issuing malicious prune requests, the remote blind stores are going to implement their own p2p protocol involving threshold signatures.  Prune requests will only be honored if a quorum of these blind stores sign off on them.
+
 
 
 ## The demos
@@ -55,13 +75,13 @@ Each demo comes with a debugging view that allows you to inspect the current sta
 You can run the chat demo with the following commands (note: Go 1.13+ is required).
 
 ```sh
-$ cd scenarios/chat
+$ cd demos/chat
 $ go run main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/shrugisland/talk0/index.html>
-- <https://localhost:21242/shrugisland/talk0/index.html>
+- <https://localhost:21232/chat/talk0/index.html>
+- <https://localhost:21242/chat/talk0/index.html>
 
 **(Note: due to the self-signed TLS certificates, your browser will complain that you're "not safe")**
 
@@ -74,7 +94,7 @@ You now have four nodes (two in Go, two in the browser) that can talk with one a
 You can run the text editor demo with the following commands (note: Go 1.13+ is required).
 
 ```sh
-$ cd scenarios/text-editor
+$ cd demos/text-editor
 $ go run main.go
 ```
 
@@ -100,7 +120,7 @@ $ go build --tags static -o /usr/bin/git-remote-redwood main.go
 Once the helper is installed, you can run the git demo with the following commands (note: Go 1.13+ is required).
 
 ```sh
-$ cd scenarios/git-integration
+$ cd demos/git-integration
 $ go run main.go
 ```
 

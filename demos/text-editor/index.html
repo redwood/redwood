@@ -18,6 +18,7 @@
         textarea {
             width: 100%;
             flex-grow: 1;
+            min-height: 300px;
         }
         #debug-container {
             width: 66%;
@@ -106,7 +107,7 @@
                 let selectionEnd = editor.selectionEnd + n
 
                 editor.value = newState.text
-                editor.selectionStart = selectionStart
+                editor.selectionStart = selectionEnd
                 editor.selectionEnd = selectionEnd
             }
         }

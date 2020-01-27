@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/types"
 )
 
 type Host interface {
@@ -20,12 +21,12 @@ type Host interface {
 	// Get(ctx context.Context, url string) (interface{}, error)
 	Subscribe(ctx context.Context, stateURI string) (bool, []error)
 	SendTx(ctx context.Context, tx Tx) error
-	AddRef(reader io.ReadCloser, contentType string) (Hash, error)
+	AddRef(reader io.ReadCloser, contentType string) (types.Hash, error)
 	AddPeer(ctx context.Context, transportName string, reachableAt StringSet) error
 	Port() uint
 	Transport(name string) Transport
 	Controller() Metacontroller
-	Address() Address
+	Address() types.Address
 }
 
 type host struct {
@@ -38,15 +39,14 @@ type host struct {
 	encryptingKeypair *EncryptingKeypair
 
 	subscriptionsOut map[string]map[peerTuple]*subscriptionOut // map[stateURI][peerTuple]
-	peerSeenTxs      map[peerTuple]map[ID]bool
+	peerSeenTxs      map[peerTuple]map[types.ID]bool
 	peerSeenTxsMu    sync.RWMutex
 
-	store     Store
 	peerStore PeerStore
 	refStore  RefStore
 
-	missingRefs   map[Hash]struct{}
-	chMissingRefs chan []Hash
+	missingRefs   map[types.Hash]struct{}
+	chMissingRefs chan []types.Hash
 	chFetchRefs   chan struct{}
 }
 
@@ -69,11 +69,11 @@ func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypai
 		signingKeypair:    signingKeypair,
 		encryptingKeypair: encryptingKeypair,
 		subscriptionsOut:  make(map[string]map[peerTuple]*subscriptionOut),
-		peerSeenTxs:       make(map[peerTuple]map[ID]bool),
+		peerSeenTxs:       make(map[peerTuple]map[types.ID]bool),
 		peerStore:         peerStore,
 		refStore:          refStore,
-		missingRefs:       make(map[Hash]struct{}),
-		chMissingRefs:     make(chan []Hash, 100),
+		missingRefs:       make(map[types.Hash]struct{}),
+		chMissingRefs:     make(chan []types.Hash, 100),
 		chFetchRefs:       make(chan struct{}),
 	}
 	return h, nil
@@ -137,7 +137,7 @@ func (h *host) Controller() Metacontroller {
 	return h.controller
 }
 
-func (h *host) Address() Address {
+func (h *host) Address() types.Address {
 	return h.signingKeypair.Address()
 }
 
@@ -205,25 +205,25 @@ func (h *host) onPrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
 	}
 }
 
-func (h *host) onAckReceived(txID ID, peer Peer) {
+func (h *host) onAckReceived(txID types.ID, peer Peer) {
 	h.Infof(0, "ack received for %v", txID.Hex())
 	h.markTxSeenByPeer(peer, txID)
 }
 
-func (h *host) markTxSeenByPeer(peer Peer, txID ID) {
+func (h *host) markTxSeenByPeer(peer Peer, txID types.ID) {
 	h.peerSeenTxsMu.Lock()
 	defer h.peerSeenTxsMu.Unlock()
 
 	for _, tuple := range peerTuples(peer) {
 		if h.peerSeenTxs[tuple] == nil {
-			h.peerSeenTxs[tuple] = make(map[ID]bool)
+			h.peerSeenTxs[tuple] = make(map[types.ID]bool)
 		}
 		h.peerSeenTxs[tuple][txID] = true
 	}
 }
 
-func (h *host) txSeenByPeer(peer Peer, txID ID) bool {
-	if peer.Address() == (Address{}) {
+func (h *host) txSeenByPeer(peer Peer, txID types.ID) bool {
+	if peer.Address() == (types.Address{}) {
 		return false
 	}
 
@@ -263,7 +263,7 @@ func (h *host) AddPeer(ctx context.Context, transportName string, reachableAt St
 	return nil
 }
 
-func (h *host) onFetchHistoryRequestReceived(stateURI string, parents []ID, toVersion ID, peer Peer) error {
+func (h *host) onFetchHistoryRequestReceived(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error {
 	iter := h.controller.FetchTxs(stateURI)
 	defer iter.Cancel()
 
@@ -378,12 +378,12 @@ func (h *host) requestPeerCredentials(ctx context.Context, peer Peer, transport 
 		return nil, nil, err
 	}
 
-	challengeMsg, err := GenerateChallengeMsg()
+	challengeMsg, err := types.GenerateChallengeMsg()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	err = peer.WriteMsg(Msg{Type: MsgType_VerifyAddress, Payload: ChallengeMsg(challengeMsg)})
+	err = peer.WriteMsg(Msg{Type: MsgType_VerifyAddress, Payload: types.ChallengeMsg(challengeMsg)})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -400,7 +400,7 @@ func (h *host) requestPeerCredentials(ctx context.Context, peer Peer, transport 
 		return nil, nil, errors.WithStack(ErrProtocol)
 	}
 
-	sigpubkey, err := RecoverSigningPubkey(HashBytes(challengeMsg), resp.Signature)
+	sigpubkey, err := RecoverSigningPubkey(types.HashBytes(challengeMsg), resp.Signature)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -414,10 +414,10 @@ func (h *host) requestPeerCredentials(ctx context.Context, peer Peer, transport 
 	return sigpubkey, encpubkey, nil
 }
 
-func (h *host) onVerifyAddressReceived(challengeMsg ChallengeMsg, peer Peer) error {
+func (h *host) onVerifyAddressReceived(challengeMsg types.ChallengeMsg, peer Peer) error {
 	defer peer.CloseConn()
 
-	sig, err := h.signingKeypair.SignHash(HashBytes(challengeMsg))
+	sig, err := h.signingKeypair.SignHash(types.HashBytes(challengeMsg))
 	if err != nil {
 		return err
 	}
@@ -432,7 +432,7 @@ type peersWithAddressResult struct {
 	EncryptingPublicKey
 }
 
-func (h *host) peersWithAddress(ctx context.Context, address Address) (<-chan peersWithAddressResult, error) {
+func (h *host) peersWithAddress(ctx context.Context, address types.Address) (<-chan peersWithAddressResult, error) {
 	if address == h.Address() {
 		return nil, errors.WithStack(ErrPeerIsSelf)
 	}
@@ -524,7 +524,7 @@ func (h *host) peersWithAddress(ctx context.Context, address Address) (<-chan pe
 	return ch, nil
 }
 
-func (h *host) broadcastPrivateTxToRecipient(ctx context.Context, txID ID, marshalledTx []byte, recipientAddr Address) error {
+func (h *host) broadcastPrivateTxToRecipient(ctx context.Context, txID types.ID, marshalledTx []byte, recipientAddr types.Address) error {
 	chPeers, err := h.peersWithAddress(ctx, recipientAddr)
 	if err != nil {
 		return err
@@ -687,7 +687,7 @@ func (h *host) SignTx(tx *Tx) error {
 	return err
 }
 
-func (h *host) AddRef(reader io.ReadCloser, contentType string) (Hash, error) {
+func (h *host) AddRef(reader io.ReadCloser, contentType string) (types.Hash, error) {
 	return h.refStore.StoreObject(reader, contentType)
 }
 
@@ -715,7 +715,7 @@ func (h *host) fetchRefsLoop() {
 	}
 }
 
-func (h *host) onReceivedRefs(refs []Hash) {
+func (h *host) onReceivedRefs(refs []types.Hash) {
 	if len(refs) == 0 {
 		return
 	}
@@ -757,12 +757,12 @@ func (h *host) fetchMissingRefs() {
 	wg.Wait()
 
 	succeeded.Range(func(key interface{}, _ interface{}) bool {
-		delete(h.missingRefs, key.(Hash))
+		delete(h.missingRefs, key.(types.Hash))
 		return true
 	})
 }
 
-func (h *host) fetchRef(ref Hash) bool {
+func (h *host) fetchRef(ref types.Hash) bool {
 	chPeers := make(chan Peer)
 	ctx, cancel := context.WithCancel(h.Ctx())
 	defer cancel()
@@ -885,7 +885,7 @@ const (
 	REF_CHUNK_SIZE = 1024 // @@TODO: tunable buffer size?
 )
 
-func (h *host) onFetchRefReceived(refHash Hash, peer Peer) {
+func (h *host) onFetchRefReceived(refHash types.Hash, peer Peer) {
 	defer peer.CloseConn()
 
 	objectReader, _, err := h.refStore.Object(refHash)

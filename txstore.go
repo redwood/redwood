@@ -2,19 +2,18 @@ package redwood
 
 import (
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/types"
 )
 
-type Store interface {
+type TxStore interface {
 	Ctx() *ctx.Context
 	Start() error
 
 	AddTx(tx *Tx) error
-	RemoveTx(stateURI string, txID ID) error
-	FetchTx(stateURI string, txID ID) (*Tx, error)
+	RemoveTx(stateURI string, txID types.ID) error
+	FetchTx(stateURI string, txID types.ID) (*Tx, error)
 	AllTxs() TxIterator
 	AllTxsForStateURI(stateURI string) TxIterator
-	AddState(version ID, state interface{}) error
-	FetchState(version ID) (interface{}, error)
 }
 
 type TxIterator interface {

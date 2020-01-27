@@ -30,6 +30,7 @@ import (
 	multihash "github.com/multiformats/go-multihash"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/types"
 )
 
 type libp2pTransport struct {
@@ -42,7 +43,7 @@ type libp2pTransport struct {
 	port   uint
 	p2pKey cryptop2p.PrivKey
 
-	address Address
+	address types.Address
 
 	fetchHistoryHandler  FetchHistoryHandler
 	txHandler            TxHandler
@@ -68,7 +69,7 @@ const (
 	PROTO_MAIN protocol.ID = "/redwood/main/1.0.0"
 )
 
-func NewLibp2pTransport(addr Address, port uint, metacontroller Metacontroller, refStore RefStore, peerStore PeerStore) (Transport, error) {
+func NewLibp2pTransport(addr types.Address, port uint, metacontroller Metacontroller, refStore RefStore, peerStore PeerStore) (Transport, error) {
 	t := &libp2pTransport{
 		Context:         &ctx.Context{},
 		port:            port,
@@ -200,8 +201,8 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 		sub := &libp2pSubscriptionIn{stateURI, stream}
 		t.subscriptionsIn[stateURI][sub] = struct{}{}
 
-		parents := []ID{}
-		toVersion := ID{}
+		parents := []types.ID{}
+		toVersion := types.ID{}
 		pinfo := t.libp2pHost.Peerstore().PeerInfo(stream.Conn().RemotePeer())
 		err := t.fetchHistoryHandler(stateURI, parents, toVersion, &libp2pPeer{t: t, pinfo: pinfo, stream: stream})
 		if err != nil {
@@ -231,7 +232,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	case MsgType_Ack:
 		defer stream.Close()
 
-		txID, ok := msg.Payload.(ID)
+		txID, ok := msg.Payload.(types.ID)
 		if !ok {
 			t.Errorf("Ack message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
@@ -250,7 +251,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	case MsgType_VerifyAddress:
 		defer stream.Close()
 
-		challengeMsg, ok := msg.Payload.(ChallengeMsg)
+		challengeMsg, ok := msg.Payload.(types.ChallengeMsg)
 		if !ok {
 			t.Errorf("VerifyAddress message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
@@ -267,7 +268,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	case MsgType_FetchRef:
 		defer stream.Close()
 
-		refHash, ok := msg.Payload.(Hash)
+		refHash, ok := msg.Payload.(types.Hash)
 		if !ok {
 			t.Errorf("FetchRef message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
@@ -360,7 +361,7 @@ func (t *libp2pTransport) ForEachProviderOfStateURI(ctx context.Context, stateUR
 	return ch, nil
 }
 
-func (t *libp2pTransport) ForEachProviderOfRef(ctx context.Context, refHash Hash) (<-chan Peer, error) {
+func (t *libp2pTransport) ForEachProviderOfRef(ctx context.Context, refHash types.Hash) (<-chan Peer, error) {
 	refCid, err := cidForString("ref:" + refHash.String())
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -412,7 +413,7 @@ func (t *libp2pTransport) ForEachSubscriberToStateURI(ctx context.Context, state
 	return ch, nil
 }
 
-func (t *libp2pTransport) PeersClaimingAddress(ctx context.Context, address Address) (<-chan Peer, error) {
+func (t *libp2pTransport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan Peer, error) {
 	addrCid, err := cidForString("addr:" + address.String())
 	if err != nil {
 		t.Errorf("announce: error creating cid: %v", err)
@@ -489,7 +490,7 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 			t.Errorf("error fetching refStore hashes: %v", err)
 		}
 		for _, refHash := range refHashes {
-			go func(refHash Hash) {
+			go func(refHash types.Hash) {
 				err := t.AnnounceRef(refHash)
 				if err != nil {
 					t.Errorf("announce: error: %v", err)
@@ -564,7 +565,7 @@ func (t *libp2pTransport) periodicallyUpdatePeerStore() {
 	}
 }
 
-func (t *libp2pTransport) AnnounceRef(refHash Hash) error {
+func (t *libp2pTransport) AnnounceRef(refHash types.Hash) error {
 	ctxInner, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)
 	defer cancel()
 
@@ -586,7 +587,7 @@ type libp2pPeer struct {
 	t       *libp2pTransport
 	pinfo   peerstore.PeerInfo
 	stream  netp2p.Stream
-	address Address
+	address types.Address
 }
 
 func (p *libp2pPeer) Transport() Transport {
@@ -605,11 +606,11 @@ func (p *libp2pPeer) ReachableAt() StringSet {
 	return filterUselessLibp2pAddrs(reachableAt)
 }
 
-func (p *libp2pPeer) Address() Address {
+func (p *libp2pPeer) Address() types.Address {
 	return p.address
 }
 
-func (p *libp2pPeer) SetAddress(addr Address) {
+func (p *libp2pPeer) SetAddress(addr types.Address) {
 	p.address = addr
 }
 
@@ -645,7 +646,7 @@ func (p *libp2pPeer) CloseConn() error {
 	return p.stream.Close()
 }
 
-func obtainP2PKey(addr Address) (cryptop2p.PrivKey, error) {
+func obtainP2PKey(addr types.Address) (cryptop2p.PrivKey, error) {
 	configPath, err := RedwoodConfigDirPath()
 	if err != nil {
 		return nil, err

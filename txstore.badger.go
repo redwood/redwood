@@ -3,27 +3,29 @@ package redwood
 import (
 	"encoding/json"
 
-	"github.com/dgraph-io/badger"
+	"github.com/dgraph-io/badger/v2"
+	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/types"
 )
 
-type badgerStore struct {
+type badgerTxStore struct {
 	*ctx.Context
 	db         *badger.DB
 	dbFilename string
-	address    Address
+	address    types.Address
 }
 
-func NewBadgerStore(dbFilename string, address Address) Store {
-	return &badgerStore{
+func NewBadgerTxStore(dbFilename string, address types.Address) TxStore {
+	return &badgerTxStore{
 		Context:    &ctx.Context{},
 		dbFilename: dbFilename,
 		address:    address,
 	}
 }
 
-func (p *badgerStore) Start() error {
+func (p *badgerTxStore) Start() error {
 	return p.CtxStart(
 		// on startup,
 		func() error {
@@ -45,11 +47,11 @@ func (p *badgerStore) Start() error {
 	)
 }
 
-func makeTxKey(stateURI string, txID ID) []byte {
+func makeTxKey(stateURI string, txID types.ID) []byte {
 	return append([]byte("tx:"+stateURI+":"), txID[:]...)
 }
 
-func (p *badgerStore) AddTx(tx *Tx) error {
+func (p *badgerTxStore) AddTx(tx *Tx) error {
 	bs, err := json.Marshal(tx)
 	if err != nil {
 		return err
@@ -67,21 +69,21 @@ func (p *badgerStore) AddTx(tx *Tx) error {
 	return nil
 }
 
-func (p *badgerStore) RemoveTx(stateURI string, txID ID) error {
+func (p *badgerTxStore) RemoveTx(stateURI string, txID types.ID) error {
 	key := makeTxKey(stateURI, txID)
 	return p.db.Update(func(txn *badger.Txn) error {
 		return txn.Delete(key)
 	})
 }
 
-func (p *badgerStore) FetchTx(stateURI string, txID ID) (*Tx, error) {
+func (p *badgerTxStore) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 	key := makeTxKey(stateURI, txID)
 
 	var bs []byte
 	err := p.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key)
 		if err == badger.ErrKeyNotFound {
-			return Err404
+			return errors.WithStack(types.Err404)
 		} else if err != nil {
 			return err
 		}
@@ -100,15 +102,15 @@ func (p *badgerStore) FetchTx(stateURI string, txID ID) (*Tx, error) {
 	return &tx, err
 }
 
-func (p *badgerStore) AllTxs() TxIterator {
+func (p *badgerTxStore) AllTxs() TxIterator {
 	return p.allTxs("tx:")
 }
 
-func (p *badgerStore) AllTxsForStateURI(stateURI string) TxIterator {
+func (p *badgerTxStore) AllTxsForStateURI(stateURI string) TxIterator {
 	return p.allTxs("tx:" + stateURI + ":")
 }
 
-func (p *badgerStore) allTxs(prefix string) TxIterator {
+func (p *badgerTxStore) allTxs(prefix string) TxIterator {
 	txIter := &txIterator{
 		ch:       make(chan *Tx),
 		chCancel: make(chan struct{}),
@@ -153,47 +155,4 @@ func (p *badgerStore) allTxs(prefix string) TxIterator {
 	}()
 
 	return txIter
-}
-
-func (p *badgerStore) AddState(version ID, state interface{}) error {
-	bs, err := json.Marshal(state)
-	if err != nil {
-		return err
-	}
-
-	key := append([]byte("state:"), version[:]...)
-
-	err = p.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(key, []byte(bs))
-	})
-	if err != nil {
-		p.Errorf("failed to write state %v", version.Hex())
-		return err
-	}
-	p.Infof(0, "wrote state %v", version.Hex())
-	return nil
-}
-
-func (p *badgerStore) FetchState(version ID) (interface{}, error) {
-	key := append([]byte("state:"), version[:]...)
-
-	var bs []byte
-	err := p.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(key)
-		if err != nil {
-			return err
-		}
-
-		return item.Value(func(val []byte) error {
-			bs = append([]byte{}, val...)
-			return nil
-		})
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var state interface{}
-	err = json.Unmarshal(bs, &state)
-	return state, err
 }

@@ -5,9 +5,10 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
-	"math/rand"
 
 	"github.com/pkg/errors"
+
+	"github.com/brynbellomy/redwood/types"
 )
 
 type Msg struct {
@@ -49,13 +50,13 @@ type FetchRefResponseBody struct {
 }
 
 type StoreRefResponse struct {
-	Hash Hash `json:"hash"`
+	Hash types.Hash `json:"hash"`
 }
 
 type EncryptedTx struct {
-	TxID             ID     `json:"txID"`
-	EncryptedPayload []byte `json:"encryptedPayload"`
-	SenderPublicKey  []byte `json:"senderPublicKey"`
+	TxID             types.ID `json:"txID"`
+	EncryptedPayload []byte   `json:"encryptedPayload"`
+	SenderPublicKey  []byte   `json:"senderPublicKey"`
 }
 
 func WriteMsg(w io.Writer, msg Msg) error {
@@ -148,7 +149,7 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		msg.Payload = tx
 
 	case MsgType_Ack:
-		var hash Hash
+		var hash types.Hash
 		bs := []byte(m.PayloadBytes[1 : len(m.PayloadBytes)-1]) // remove quotes
 		copy(hash[:], bs)
 		msg.Payload = hash
@@ -162,7 +163,7 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		msg.Payload = ep
 
 	case MsgType_VerifyAddress:
-		var challenge ChallengeMsg
+		var challenge types.ChallengeMsg
 		err := json.Unmarshal(m.PayloadBytes, &challenge)
 		if err != nil {
 			return err
@@ -179,7 +180,7 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		msg.Payload = resp
 
 	case MsgType_FetchRef:
-		var hash Hash
+		var hash types.Hash
 		err := json.Unmarshal([]byte(m.PayloadBytes), &hash)
 		if err != nil {
 			return err
@@ -207,10 +208,4 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 	}
 
 	return nil
-}
-
-func GenerateChallengeMsg() ([]byte, error) {
-	challengeMsg := make([]byte, 128)
-	_, err := rand.Read(challengeMsg)
-	return challengeMsg, err
 }

@@ -6,6 +6,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
+
+	"github.com/brynbellomy/redwood/types"
 )
 
 type (
@@ -15,14 +17,14 @@ type (
 	}
 
 	SigningPrivateKey interface {
-		SignHash(data Hash) ([]byte, error)
+		SignHash(data types.Hash) ([]byte, error)
 		Bytes() []byte
 		String() string
 	}
 
 	SigningPublicKey interface {
-		VerifySignature(hash Hash, signature []byte) bool
-		Address() Address
+		VerifySignature(hash types.Hash, signature []byte) bool
+		Address() types.Address
 		Bytes() []byte
 		String() string
 	}
@@ -36,14 +38,14 @@ type (
 	}
 )
 
-func (pubkey *signingPublicKey) VerifySignature(hash Hash, signature []byte) bool {
+func (pubkey *signingPublicKey) VerifySignature(hash types.Hash, signature []byte) bool {
 	signatureNoRecoverID := signature[:len(signature)-1] // remove recovery id
 	return crypto.VerifySignature(pubkey.Bytes(), hash[:], signatureNoRecoverID)
 }
 
-func (pubkey *signingPublicKey) Address() Address {
+func (pubkey *signingPublicKey) Address() types.Address {
 	ethAddr := crypto.PubkeyToAddress(*pubkey.PublicKey)
-	var a Address
+	var a types.Address
 	copy(a[:], ethAddr[:])
 	return a
 }
@@ -56,7 +58,7 @@ func (pubkey *signingPublicKey) String() string {
 	return hex.EncodeToString(pubkey.Bytes())
 }
 
-func (privkey *signingPrivateKey) SignHash(hash Hash) ([]byte, error) {
+func (privkey *signingPrivateKey) SignHash(hash types.Hash) ([]byte, error) {
 	sig, err := crypto.Sign(hash[:], privkey.PrivateKey)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -94,7 +96,7 @@ func SigningKeypairFromHex(s string) (*SigningKeypair, error) {
 	}, nil
 }
 
-func RecoverSigningPubkey(hash Hash, signature []byte) (SigningPublicKey, error) {
+func RecoverSigningPubkey(hash types.Hash, signature []byte) (SigningPublicKey, error) {
 	ecdsaPubkey, err := crypto.SigToPub(hash[:], signature)
 	if err != nil {
 		return nil, errors.WithStack(err)

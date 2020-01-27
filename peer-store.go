@@ -4,13 +4,14 @@ import (
 	"sync"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/types"
 )
 
 type PeerStore interface {
 	AddReachableAddresses(transportName string, reachableAt StringSet)
-	AddVerifiedCredentials(transportName string, reachableAt StringSet, address Address, sigpubkey SigningPublicKey, encpubkey EncryptingPublicKey)
+	AddVerifiedCredentials(transportName string, reachableAt StringSet, address types.Address, sigpubkey SigningPublicKey, encpubkey EncryptingPublicKey)
 	PeerTuples() []peerTuple
-	PeersWithAddress(address Address) []*storedPeer
+	PeersWithAddress(address types.Address) []*storedPeer
 }
 
 type peerStore struct {
@@ -18,7 +19,7 @@ type peerStore struct {
 
 	muPeers          sync.RWMutex
 	peers            map[peerTuple]*storedPeer
-	peersWithAddress map[Address]map[peerTuple]*storedPeer
+	peersWithAddress map[types.Address]map[peerTuple]*storedPeer
 	maybePeers       map[peerTuple]struct{}
 }
 
@@ -30,16 +31,16 @@ type peerTuple struct {
 type storedPeer struct {
 	transportName string
 	reachableAt   StringSet
-	address       Address
+	address       types.Address
 	sigpubkey     SigningPublicKey
 	encpubkey     EncryptingPublicKey
 }
 
-func NewPeerStore(addr Address) *peerStore {
+func NewPeerStore(addr types.Address) *peerStore {
 	s := &peerStore{
 		Logger:           ctx.NewLogger("peer store " + addr.Pretty()),
 		peers:            make(map[peerTuple]*storedPeer),
-		peersWithAddress: make(map[Address]map[peerTuple]*storedPeer),
+		peersWithAddress: make(map[types.Address]map[peerTuple]*storedPeer),
 		maybePeers:       make(map[peerTuple]struct{}),
 	}
 
@@ -68,7 +69,7 @@ func (s *peerStore) AddReachableAddresses(transportName string, reachableAt Stri
 	}
 }
 
-func (s *peerStore) AddVerifiedCredentials(transportName string, reachableAt StringSet, address Address, sigpubkey SigningPublicKey, encpubkey EncryptingPublicKey) {
+func (s *peerStore) AddVerifiedCredentials(transportName string, reachableAt StringSet, address types.Address, sigpubkey SigningPublicKey, encpubkey EncryptingPublicKey) {
 	s.muPeers.Lock()
 	defer s.muPeers.Unlock()
 
@@ -118,7 +119,7 @@ func (s *peerStore) PeerTuples() []peerTuple {
 	return peers
 }
 
-func (s *peerStore) PeersWithAddress(address Address) []*storedPeer {
+func (s *peerStore) PeersWithAddress(address types.Address) []*storedPeer {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 

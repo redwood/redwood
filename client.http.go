@@ -19,15 +19,18 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/brynbellomy/redwood/tree"
+	"github.com/brynbellomy/redwood/types"
 )
 
 type HTTPClient interface {
 	Authorize() error
 	Subscribe(ctx context.Context, stateURI string) (chan MaybeTx, error)
-	FetchTx(stateURI string, txID ID) (*Tx, error)
-	Get(stateURI string, txID *ID, keypath []string, raw bool) (io.ReadCloser, int64, []ID, error)
+	FetchTx(stateURI string, txID types.ID) (*Tx, error)
+	Get(stateURI string, version *types.ID, keypath tree.Keypath, rng *tree.Range, raw bool) (io.ReadCloser, int64, []types.ID, error)
 	Put(tx *Tx) error
-	StoreRef(file io.Reader) (Hash, error)
+	StoreRef(file io.Reader) (types.Hash, error)
 }
 
 type httpClient struct {
@@ -78,7 +81,7 @@ func (c *httpClient) Authorize() error {
 		return errors.WithStack(err)
 	}
 
-	sig, err := c.sigkeys.SignHash(HashBytes(challenge))
+	sig, err := c.sigkeys.SignHash(types.HashBytes(challenge))
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -156,7 +159,7 @@ func (c *httpClient) Subscribe(ctx context.Context, stateURI string) (chan Maybe
 	return ch, nil
 }
 
-func (c *httpClient) FetchTx(stateURI string, txID ID) (*Tx, error) {
+func (c *httpClient) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 	client := c.client()
 	req, err := http.NewRequest("GET", c.peerReachableAddress+"/__tx/"+txID.Hex(), nil)
 	if err != nil {
@@ -169,7 +172,7 @@ func (c *httpClient) FetchTx(stateURI string, txID ID) (*Tx, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	} else if resp.StatusCode == 404 {
-		return nil, Err404
+		return nil, types.Err404
 	} else if resp.StatusCode != 200 {
 		return nil, errors.Errorf("error fetching tx: (%v) %v", resp.StatusCode, resp.Status)
 	}
@@ -183,9 +186,9 @@ func (c *httpClient) FetchTx(stateURI string, txID ID) (*Tx, error) {
 	return &tx, nil
 }
 
-func (c *httpClient) Get(stateURI string, txID *ID, keypath []string, raw bool) (io.ReadCloser, int64, []ID, error) {
+func (c *httpClient) Get(stateURI string, version *types.ID, keypath tree.Keypath, rng *tree.Range, raw bool) (io.ReadCloser, int64, []types.ID, error) {
 	client := c.client()
-	url := c.peerReachableAddress + "/" + strings.Join(keypath, "/")
+	url := c.peerReachableAddress + "/" + string(keypath)
 	if raw {
 		url += "?raw=true"
 	}
@@ -197,16 +200,19 @@ func (c *httpClient) Get(stateURI string, txID *ID, keypath []string, raw bool) 
 	if stateURI != "" {
 		req.Header.Set("State-URI", stateURI)
 	}
-	if txID != nil {
-		req.Header.Set("Version", txID.Hex())
+	if version != nil {
+		req.Header.Set("Version", version.Hex())
+	}
+	if rng != nil {
+		req.Header.Set("Range", fmt.Sprintf("json=%d:%d", rng[0], rng[1]))
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0, nil, errors.WithStack(err)
 	} else if resp.StatusCode != 200 {
-		if txID != nil {
-			return nil, 0, nil, errors.Errorf("error getting state@%v: (%v) %v", txID.Hex(), resp.StatusCode, resp.Status)
+		if version != nil {
+			return nil, 0, nil, errors.Errorf("error getting state@%v: (%v) %v", version.Hex(), resp.StatusCode, resp.Status)
 		}
 		return nil, 0, nil, errors.Errorf("error getting state@HEAD (%v) %v", resp.StatusCode, resp.Status)
 	}
@@ -219,12 +225,12 @@ func (c *httpClient) Get(stateURI string, txID *ID, keypath []string, raw bool) 
 		}
 	}
 
-	var parents []ID
+	var parents []types.ID
 	if parentsHeader := resp.Header.Get("Parents"); parentsHeader != "" {
 		parentStrs := strings.Split(parentsHeader, ",")
 		for _, pstr := range parentStrs {
 			pstr = strings.TrimSpace(pstr)
-			pid, err := IDFromHex(pstr)
+			pid, err := types.IDFromHex(pstr)
 			if err != nil {
 				return nil, 0, nil, errors.New("bad parents header")
 			}
@@ -281,7 +287,7 @@ func (c *httpClient) Put(tx *Tx) error {
 	return nil
 }
 
-func (c *httpClient) StoreRef(file io.Reader) (Hash, error) {
+func (c *httpClient) StoreRef(file io.Reader) (types.Hash, error) {
 	client := c.client()
 
 	var buf bytes.Buffer
@@ -292,35 +298,35 @@ func (c *httpClient) StoreRef(file io.Reader) (Hash, error) {
 	h.Set("Content-Type", "application/octet-stream")
 	fileWriter, err := w.CreatePart(h)
 	if err != nil {
-		return Hash{}, errors.WithStack(err)
+		return types.Hash{}, errors.WithStack(err)
 	}
 
 	// @@TODO: streaming?
 	_, err = io.Copy(fileWriter, file)
 	if err != nil {
-		return Hash{}, errors.WithStack(err)
+		return types.Hash{}, errors.WithStack(err)
 	}
 	w.Close()
 
 	req, err := http.NewRequest("PUT", c.peerReachableAddress, &buf)
 	if err != nil {
-		return Hash{}, errors.WithStack(err)
+		return types.Hash{}, errors.WithStack(err)
 	}
 	req.Header.Set("Ref", "true")
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return Hash{}, errors.WithStack(err)
+		return types.Hash{}, errors.WithStack(err)
 	} else if resp.StatusCode != 200 {
-		return Hash{}, errors.Errorf("error verifying peer address: (%v) %v", resp.StatusCode, resp.Status)
+		return types.Hash{}, errors.Errorf("error verifying peer address: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
 
 	var body StoreRefResponse
 	err = json.NewDecoder(resp.Body).Decode(&body)
 	if err != nil {
-		return Hash{}, errors.WithStack(err)
+		return types.Hash{}, errors.WithStack(err)
 	}
 	return body.Hash, nil
 }

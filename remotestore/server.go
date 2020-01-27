@@ -4,7 +4,7 @@ import (
 	"context"
 	"net"
 
-	"github.com/dgraph-io/badger"
+	"github.com/dgraph-io/badger/v2"
 	"github.com/dgrijalva/jwt-go"
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"github.com/pkg/errors"
@@ -13,6 +13,7 @@ import (
 
 	rw "github.com/brynbellomy/redwood"
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/types"
 )
 
 type server struct {
@@ -22,11 +23,11 @@ type server struct {
 	grpc             *grpc.Server
 	dbPath           string
 	db               *badger.DB
-	allowedAddresses map[rw.Address]bool
+	allowedAddresses map[types.Address]bool
 }
 
-func NewServer(listenNetwork, listenHost, dbPath string, allowedAddresses []rw.Address) *server {
-	allowedAddressesMap := map[rw.Address]bool{}
+func NewServer(listenNetwork, listenHost, dbPath string, allowedAddresses []types.Address) *server {
+	allowedAddressesMap := map[types.Address]bool{}
 	for _, addr := range allowedAddresses {
 		allowedAddressesMap[addr] = true
 	}
@@ -109,7 +110,7 @@ func (s *server) requireAuth(ctx context.Context) error {
 			return grpc.Errorf(codes.Unauthenticated, "invalid claims")
 		}
 
-		addr, err := rw.AddressFromHex(addrStr)
+		addr, err := types.AddressFromHex(addrStr)
 		if err != nil {
 			return grpc.Errorf(codes.Unauthenticated, "not allowed")
 		} else if !s.allowedAddresses[addr] {
@@ -123,7 +124,7 @@ func (s *server) requireAuth(ctx context.Context) error {
 }
 
 func (s *server) Authenticate(authSrv RemoteStore_AuthenticateServer) error {
-	challenge, err := rw.GenerateChallengeMsg()
+	challenge, err := types.GenerateChallengeMsg()
 	if err != nil {
 		return err
 	}
@@ -144,7 +145,7 @@ func (s *server) Authenticate(authSrv RemoteStore_AuthenticateServer) error {
 		return errors.New("protocol error")
 	}
 
-	pubkey, err := rw.RecoverSigningPubkey(rw.HashBytes(challenge), sig.Signature)
+	pubkey, err := rw.RecoverSigningPubkey(types.HashBytes(challenge), sig.Signature)
 	if err != nil {
 		return err
 	}

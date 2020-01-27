@@ -1,9 +1,12 @@
 module github.com/brynbellomy/redwood
 
+replace github.com/podio/v8.go => ./v8.go
+
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d
 	github.com/ThomsonReutersEikon/go-ntlm v0.0.0-20181130171125-cf23bd1ecf18 // indirect
+	github.com/alecthomas/participle v0.4.0
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20191023202215-f096da5361bb // indirect
 	github.com/brynbellomy/debugcharts v0.0.0-20180826220201-c3f57e57ea6f
@@ -18,7 +21,7 @@ require (
 	github.com/bugsnag/panicwrap v1.2.0 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/deoxxa/otto v0.0.0-20171002224534-26777b428add
-	github.com/dgraph-io/badger v1.6.0
+	github.com/dgraph-io/badger/v2 v2.0.1
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/docker/docker v0.7.3-0.20180815000130-e05b657120a6
 	github.com/dustin/go-humanize v1.0.0
@@ -28,6 +31,7 @@ require (
 	github.com/gin-gonic/gin v1.4.0 // indirect
 	github.com/git-lfs/gitobj v1.4.1 // indirect
 	github.com/golang/protobuf v1.3.2
+	github.com/graphql-go/graphql v0.7.8
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/ijc25/Gotty v0.0.0-20170406111628-a8b993ba6abd
 	github.com/ipfs/go-cid v0.0.1
@@ -51,9 +55,13 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/plan-systems/klog v0.0.0-20190618231738-14c6677fa6ea
 	github.com/plan-systems/plan-core v0.0.3
+	github.com/rivo/tview v0.0.0-20191129065140-82b05c9fb329
 	github.com/rjeczalik/notify v0.9.2 // indirect
+	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d
+	github.com/saibing/go-v8 v0.0.0-20170603061908-420da5803b3f
 	github.com/sirupsen/logrus v1.4.2
 	github.com/src-d/go-git v4.7.0+incompatible // indirect
+	github.com/stretchr/testify v1.4.0
 	github.com/tyler-smith/go-bip39 v1.0.0
 	github.com/urfave/cli v1.20.0
 	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036

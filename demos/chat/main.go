@@ -8,7 +8,8 @@ import (
 
 	rw "github.com/brynbellomy/redwood"
 	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/scenarios/demoutils"
+	"github.com/brynbellomy/redwood/demos/demoutils"
+	"github.com/brynbellomy/redwood/types"
 )
 
 type app struct {
@@ -21,11 +22,9 @@ func main() {
 	flag.Set("logtostderr", "true")
 	flag.Set("v", "2")
 
-	os.MkdirAll("/tmp/redwood", 0700)
-
 	// Make two Go hosts that will communicate with one another over libp2p
-	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/redwood/badger1", "/tmp/redwood/refs1", "cookiesecret1", "server1.crt", "server1.key")
-	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/redwood/badger2", "/tmp/redwood/refs2", "cookiesecret2", "server2.crt", "server2.key")
+	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "cookiesecret1", "server1.crt", "server1.key")
+	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "cookiesecret2", "server2.crt", "server2.key")
 
 	err := host1.Start()
 	if err != nil {
@@ -85,14 +84,6 @@ func sendTxs(host1, host2 rw.Host) {
 	// Before sending any transactions, we upload some resources we're going to need
 	// into the RefStore of the node.  These resources can be referred to in the state
 	// tree by their hash.
-	sync9, err := os.Open("./sync9-otto.js")
-	if err != nil {
-		panic(err)
-	}
-	sync9Hash, err := host1.AddRef(sync9, "application/js")
-	if err != nil {
-		panic(err)
-	}
 	indexHTML, err := os.Open("./index.html")
 	if err != nil {
 		panic(err)
@@ -110,7 +101,7 @@ func sendTxs(host1, host2 rw.Host) {
 		panic(err)
 	}
 
-	hostsByAddress := map[rw.Address]rw.Host{
+	hostsByAddress := map[types.Address]rw.Host{
 		host1.Address(): host1,
 		host2.Address(): host2,
 	}
@@ -131,7 +122,7 @@ func sendTxs(host1, host2 rw.Host) {
 		//
 		genesisTx = rw.Tx{
 			ID:      rw.GenesisTxID,
-			Parents: []rw.ID{},
+			Parents: []types.ID{},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
 			Patches: []rw.Patch{
@@ -167,14 +158,12 @@ func sendTxs(host1, host2 rw.Host) {
 		// Then, we set up the chat room itself.  It has:
 		//   - an array of messages
 		//   - an index.html page (for interacting with the chat from a web browser)
-		//   - a "sync9" merge resolver (which is good at intelligently merging concurrent updates
-		//       from multiple users).  Notice that we uploaded the Javascript code for this resolver
-		//       to the node above ^, and we're now referring to it by its hash.
+		//   - a "dumb" merge resolver
 		//   - a "permissions" validator (which says that any user may write to the .messages key)
 		//
 		tx1 = rw.Tx{
-			ID:      rw.RandomID(),
-			Parents: []rw.ID{rw.GenesisTxID},
+			ID:      types.RandomID(),
+			Parents: []types.ID{rw.GenesisTxID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
 			Patches: []rw.Patch{
@@ -188,13 +177,8 @@ func sendTxs(host1, host2 rw.Host) {
 						}
 					},
 					"Merge-Type": {
-						"Content-Type": "resolver/js",
-						"value": {
-							"src": {
-								"Content-Type": "link",
-								"value": "ref:` + sync9Hash.String() + `"
-							}
-						}
+						"Content-Type": "resolver/dumb",
+						"value": {}
 					},
 					"Validator": {
 						"Content-Type": "validator/permissions",
@@ -228,8 +212,8 @@ func sendTxs(host1, host2 rw.Host) {
 	//
 	var (
 		ptx1 = rw.Tx{
-			ID:      rw.IDFromString("ptx1"),
-			Parents: []rw.ID{tx1.ID},
+			ID:      types.IDFromString("ptx1"),
+			Parents: []types.ID{tx1.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
 			Patches: []rw.Patch{
@@ -249,8 +233,8 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 
 		ptx2 = rw.Tx{
-			ID:      rw.IDFromString("ptx2"),
-			Parents: []rw.ID{ptx1.ID},
+			ID:      types.IDFromString("ptx2"),
+			Parents: []types.ID{ptx1.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
 			Patches: []rw.Patch{
@@ -262,10 +246,10 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 
 		// Here, we also add a private portion of Paul Stamets' user profile.  Only he can view this data.
-		ptx3recipients = []rw.Address{host1.Address()}
+		ptx3recipients = []types.Address{host1.Address()}
 		ptx3           = rw.Tx{
 			ID:      rw.GenesisTxID,
-			Parents: []rw.ID{},
+			Parents: []types.ID{},
 			From:    host1.Address(),
 			URL:     "localhost:21231/" + rw.PrivateRootKeyForRecipients(ptx3recipients),
 			Patches: []rw.Patch{
@@ -293,8 +277,8 @@ func sendTxs(host1, host2 rw.Host) {
 	//
 	var (
 		tx2 = rw.Tx{
-			ID:      rw.IDFromString("two"),
-			Parents: []rw.ID{ptx2.ID},
+			ID:      types.IDFromString("two"),
+			Parents: []types.ID{ptx2.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
 			Patches: []rw.Patch{
@@ -303,8 +287,8 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 
 		tx3 = rw.Tx{
-			ID:      rw.IDFromString("three"),
-			Parents: []rw.ID{tx2.ID},
+			ID:      types.IDFromString("three"),
+			Parents: []types.ID{tx2.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
 			Patches: []rw.Patch{
@@ -313,8 +297,8 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 
 		tx4 = rw.Tx{
-			ID:      rw.IDFromString("four"),
-			Parents: []rw.ID{tx3.ID},
+			ID:      types.IDFromString("four"),
+			Parents: []types.ID{tx3.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
 			Patches: []rw.Patch{
@@ -339,7 +323,7 @@ func sendTxs(host1, host2 rw.Host) {
 }
 
 func mustParsePatch(s string) rw.Patch {
-	p, err := rw.ParsePatch(s)
+	p, err := rw.ParsePatch([]byte(s))
 	if err != nil {
 		panic(err.Error() + ": " + s)
 	}

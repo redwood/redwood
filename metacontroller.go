@@ -1,12 +1,16 @@
 package redwood
 
 import (
+	"io"
 	"strings"
 	"sync"
 
 	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/nelson"
+	"github.com/brynbellomy/redwood/tree"
+	"github.com/brynbellomy/redwood/types"
 )
 
 type Metacontroller interface {
@@ -14,17 +18,17 @@ type Metacontroller interface {
 	Start() error
 
 	AddTx(tx *Tx) error
-	FetchTx(stateURI string, txID ID) (*Tx, error)
+	FetchTx(stateURI string, txID types.ID) (*Tx, error)
 	FetchTxs(stateURI string) TxIterator
-	HaveTx(stateURI string, txID ID) bool
+	HaveTx(stateURI string, txID types.ID) bool
 
 	KnownStateURIs() []string
-	State(stateURI string, keypath []string, version *ID) (interface{}, []ID, error)
-	MostRecentTxID(stateURI string) (ID, error) // @@TODO: should be .Leaves()
+	State(stateURI string, version *types.ID) (tree.Node, error)
+	Leaves(stateURI string) (map[types.ID]struct{}, error)
 
-	RefResolver
 	SetReceivedRefsHandler(handler ReceivedRefsHandler)
 	OnDownloadedRef()
+	RefObjectReader(refHash types.Hash) (io.ReadCloser, int64, error)
 
 	DebugLockResolvers()
 }
@@ -32,13 +36,14 @@ type Metacontroller interface {
 type metacontroller struct {
 	*ctx.Context
 
-	address Address
+	address types.Address
 
 	controllers         map[string]Controller
 	controllersMu       sync.RWMutex
 	receivedRefsHandler ReceivedRefsHandler
-	store               Store
+	txStore             TxStore
 	refStore            RefStore
+	dbRootPath          string
 
 	resolversLocked bool
 
@@ -48,14 +53,18 @@ type metacontroller struct {
 
 var (
 	ErrNoController = errors.New("no controller for that stateURI")
+
+	MergeTypeKeypath = tree.Keypath("Merge-Type")
+	ValidatorKeypath = tree.Keypath("Validator")
 )
 
-func NewMetacontroller(address Address, store Store, refStore RefStore) Metacontroller {
+func NewMetacontroller(address types.Address, dbRootPath string, txStore TxStore, refStore RefStore) Metacontroller {
 	return &metacontroller{
 		Context:        &ctx.Context{},
 		address:        address,
 		controllers:    make(map[string]Controller),
-		store:          store,
+		dbRootPath:     dbRootPath,
+		txStore:        txStore,
 		refStore:       refStore,
 		validStateURIs: make(map[string]struct{}),
 	}
@@ -67,21 +76,12 @@ func (m *metacontroller) Start() error {
 		func() error {
 			m.SetLogLabel(m.address.Pretty() + " metacontroller")
 
-			m.CtxAddChild(m.store.Ctx(), nil)
+			m.CtxAddChild(m.txStore.Ctx(), nil)
 
-			err := m.store.Start()
+			err := m.txStore.Start()
 			if err != nil {
 				return err
 			}
-
-			//err = m.AddTx(&Tx{
-			//    ID:      GenesisTxID,
-			//    Parents: []ID{},
-			//    Patches: []Patch{{Val: c.genesisState}},
-			//})
-			//if err != nil {
-			//    return err
-			//}
 
 			err = m.replayStoredTxs()
 			if err != nil {
@@ -98,7 +98,7 @@ func (m *metacontroller) Start() error {
 }
 
 func (m *metacontroller) replayStoredTxs() error {
-	iter := m.store.AllTxs()
+	iter := m.txStore.AllTxs()
 	defer iter.Cancel()
 
 	for {
@@ -126,7 +126,7 @@ func (m *metacontroller) ensureController(stateURI string) (Controller, error) {
 	if ctrl == nil {
 		// Set up the controller
 		var err error
-		ctrl, err = NewController(m.address, stateURI, m.txProcessedHandler)
+		ctrl, err = NewController(m.address, stateURI, m.dbRootPath, m.txProcessedHandler)
 		if err != nil {
 			return nil, err
 		}
@@ -143,106 +143,206 @@ func (m *metacontroller) ensureController(stateURI string) (Controller, error) {
 	return ctrl, nil
 }
 
-func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state interface{}) error {
-	err := m.store.AddTx(tx)
+func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DBNode) error {
+	err := m.txStore.AddTx(tx)
 	if err != nil {
 		m.Errorf("error adding tx to store: %+v", err)
 		// @@TODO: is there anything else we can do here?
 	}
 
-	func() {
-		m.validStateURIsMu.Lock()
-		defer m.validStateURIsMu.Unlock()
-		m.validStateURIs[tx.URL] = struct{}{}
-	}()
-
-	if tx.Checkpoint {
-		err = m.store.AddState(tx.ID, state)
-		if err != nil {
-			m.Errorf("error adding state to store: %+v", err)
-			// @@TODO: is there anything else we can do here?
-		}
-	}
-
-	// Notify the Host to start fetching any refs we don't have yet
-	if m.receivedRefsHandler != nil {
-		var refs []Hash
-		err := WalkLinks(state, func(linkType LinkType, link string, keypath []string, val map[string]interface{}) error {
-			if linkType == LinkTypeRef {
-				hash, err := HashFromHex(link)
-				if err != nil {
-					return err
-				}
-				refs = append(refs, hash)
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-
-		m.receivedRefsHandler(refs)
-	}
+	m.validStateURIsMu.Lock()
+	m.validStateURIs[tx.URL] = struct{}{}
+	m.validStateURIsMu.Unlock()
 
 	// Walk the tree and initialize validators and resolvers
 	// @@TODO: inefficient
 	if !m.resolversLocked {
-		newResolverTree := &resolverTree{}
-		newResolverTree.addResolver([]string{}, &dumbResolver{})
-		err = walkTree(state, func(keypath []string, val interface{}) error {
-			resolverConfig, exists := getValue(val, []string{"Merge-Type"})
-			if exists {
-				// Resolve any refs (to code) in the resolver config object.  We deep copy the config so
-				// that we don't inject any refs into the state tree itself
-				config, anyMissing, err := m.ResolveRefs(DeepCopyJSValue(resolverConfig).(map[string]interface{}))
-				if err != nil {
-					return err
-				} else if anyMissing {
-					return ErrMissingCriticalRefs
-				}
+		newResolverTree := newResolverTree()
+		newResolverTree.addResolver(nil, &dumbResolver{})
 
-				// @@TODO: if the resolver type changes, this totally breaks everything
-				var resolverInternalState map[string]interface{}
-				oldResolverNode, depth := c.ResolverTree().nearestResolverNodeForKeypath(keypath)
-				if depth != len(keypath) {
-					resolverInternalState = make(map[string]interface{})
-				} else {
-					resolverInternalState = oldResolverNode.resolver.InternalState()
-				}
-
-				resolver, err := initResolverFromConfig(m, config.(*NelSON), resolverInternalState)
-				if err != nil {
-					return err
-				}
-				newResolverTree.addResolver(keypath, resolver)
+		var refs []types.Hash
+		defer func() {
+			if m.receivedRefsHandler != nil {
+				m.receivedRefsHandler(refs)
 			}
+		}()
 
-			validatorConfig, exists := getValue(val, []string{"Validator"})
-			if exists {
-				// Resolve any refs (to code) in the validator config object.  We deep copy the config so
-				// that we don't inject any refs into the state tree itself
-				config, anyMissing, err := m.ResolveRefs(DeepCopyJSValue(validatorConfig).(map[string]interface{}))
-				if err != nil {
+		diff := state.Diff()
+
+		// Find all refs in the tree and notify the Host to start fetching them
+		for kp := range diff.Added {
+			keypath := tree.Keypath(kp)
+			parentKeypath, key := keypath.Pop()
+			switch {
+			case key.Equals(nelson.ValueKey):
+				contentType, err := nelson.GetContentType(state.AtKeypath(parentKeypath, nil))
+				if err != nil && errors.Cause(err) != types.Err404 {
 					return err
-				} else if anyMissing {
-					return ErrMissingCriticalRefs
+				} else if contentType != "link" {
+					continue
 				}
 
-				validator, err := initValidatorFromConfig(m, config.(*NelSON))
+				linkStr, _, err := state.StringValue(keypath)
 				if err != nil {
 					return err
 				}
-				newResolverTree.addValidator(keypath, validator)
+				linkType, linkValue := nelson.DetermineLinkType(linkStr)
+				if linkType == nelson.LinkTypeRef {
+					hash, err := types.HashFromHex(linkValue)
+					if err != nil {
+						return err
+					}
+					refs = append(refs, hash)
+				}
 			}
-
-			return nil
-		})
-		if err != nil {
-			return err
 		}
-		c.SetResolverTree(newResolverTree)
+
+		// Remove deleted resolvers and validators
+		for kp := range diff.Removed {
+			parentKeypath, key := tree.Keypath(kp).Pop()
+			switch {
+			case key.Equals(MergeTypeKeypath):
+				c.ResolverTree().removeResolver(parentKeypath)
+			case key.Equals(ValidatorKeypath):
+				c.ResolverTree().removeValidator(parentKeypath)
+			}
+
+			for parentKeypath != nil {
+				nextParentKeypath, key := parentKeypath.Pop()
+				switch {
+				case key.Equals(MergeTypeKeypath):
+					err := m.initializeResolver(state, parentKeypath, c)
+					if err != nil {
+						return err
+					}
+				case key.Equals(ValidatorKeypath):
+					err := m.initializeValidator(state, parentKeypath, c)
+					if err != nil {
+						return err
+					}
+				}
+				parentKeypath = nextParentKeypath
+			}
+		}
+
+		// Attach added resolvers and validators
+		for kp := range diff.Added {
+			keypath := tree.Keypath(kp)
+			parentKeypath, key := keypath.Pop()
+			switch {
+			case key.Equals(MergeTypeKeypath):
+				err := m.initializeResolver(state, keypath, c)
+				if err != nil {
+					return err
+				}
+
+			case key.Equals(ValidatorKeypath):
+				err := m.initializeValidator(state, keypath, c)
+				if err != nil {
+					return err
+				}
+			}
+
+			for parentKeypath != nil {
+				nextParentKeypath, key := parentKeypath.Pop()
+				switch {
+				case key.Equals(MergeTypeKeypath):
+					err := m.initializeResolver(state, parentKeypath, c)
+					if err != nil {
+						return err
+					}
+				case key.Equals(ValidatorKeypath):
+					err := m.initializeValidator(state, parentKeypath, c)
+					if err != nil {
+						return err
+					}
+				}
+				parentKeypath = nextParentKeypath
+			}
+		}
 	}
 
+	return nil
+}
+
+func (m *metacontroller) initializeResolver(state *tree.DBNode, resolverKeypath tree.Keypath, c Controller) error {
+	// Resolve any refs (to code) in the resolver config object.  We copy the config so
+	// that we don't inject any refs into the state tree itself
+	config, err := state.CopyToMemory(resolverKeypath, nil)
+	if err != nil {
+		return err
+	}
+
+	config, anyMissing, err := nelson.Resolve(config, m)
+	if err != nil {
+		return err
+	} else if anyMissing {
+		return errors.WithStack(ErrMissingCriticalRefs)
+	}
+
+	contentType, err := nelson.GetContentType(config)
+	if err != nil {
+		return err
+	} else if contentType == "" {
+		return errors.New("cannot initialize resolver without a 'Content-Type' key")
+	}
+
+	ctor, exists := resolverRegistry[contentType]
+	if !exists {
+		return errors.Errorf("unknown resolver type '%v'", contentType)
+	}
+
+	// @@TODO: if the resolver type changes, this totally breaks everything
+	var internalState map[string]interface{}
+	oldResolver, oldResolverKeypath := c.ResolverTree().nearestResolverForKeypath(resolverKeypath)
+	if !oldResolverKeypath.Equals(resolverKeypath) {
+		internalState = make(map[string]interface{})
+	} else {
+		internalState = oldResolver.InternalState()
+	}
+
+	resolver, err := ctor(config, internalState)
+	if err != nil {
+		return err
+	}
+
+	c.ResolverTree().addResolver(resolverKeypath, resolver)
+	return nil
+}
+
+func (m *metacontroller) initializeValidator(state *tree.DBNode, validatorKeypath tree.Keypath, c Controller) error {
+	// Resolve any refs (to code) in the validator config object.  We copy the config so
+	// that we don't inject any refs into the state tree itself
+	config, err := state.CopyToMemory(validatorKeypath, nil)
+	if err != nil {
+		return err
+	}
+
+	config, anyMissing, err := nelson.Resolve(config, m)
+	if err != nil {
+		return err
+	} else if anyMissing {
+		return errors.WithStack(ErrMissingCriticalRefs)
+	}
+
+	contentType, err := nelson.GetContentType(config)
+	if err != nil {
+		return err
+	} else if contentType == "" {
+		return errors.New("cannot initialize validator without a 'Content-Type' key")
+	}
+
+	ctor, exists := validatorRegistry[contentType]
+	if !exists {
+		return errors.Errorf("unknown validator type '%v'", contentType)
+	}
+
+	validator, err := ctor(config)
+	if err != nil {
+		return err
+	}
+
+	c.ResolverTree().addValidator(validatorKeypath, validator)
 	return nil
 }
 
@@ -278,14 +378,14 @@ func (m *metacontroller) AddTx(tx *Tx) error {
 }
 
 func (m *metacontroller) FetchTxs(stateURI string) TxIterator {
-	return m.store.AllTxsForStateURI(stateURI)
+	return m.txStore.AllTxsForStateURI(stateURI)
 }
 
-func (m *metacontroller) FetchTx(stateURI string, txID ID) (*Tx, error) {
-	return m.store.FetchTx(stateURI, txID)
+func (m *metacontroller) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
+	return m.txStore.FetchTx(stateURI, txID)
 }
 
-func (m *metacontroller) HaveTx(stateURI string, txID ID) bool {
+func (m *metacontroller) HaveTx(stateURI string, txID types.ID) bool {
 	m.controllersMu.RLock()
 	defer m.controllersMu.RUnlock()
 
@@ -296,68 +396,30 @@ func (m *metacontroller) HaveTx(stateURI string, txID ID) bool {
 	return ctrl.HaveTx(txID)
 }
 
-func (m *metacontroller) State(stateURI string, keypath []string, version *ID) (interface{}, []ID, error) {
-	if version != nil {
-		state, err := m.store.FetchState(*version)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		tx, err := m.store.FetchTx(stateURI, *version)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		sliced, exists := getValue(state, keypath)
-		if !exists {
-			return nil, nil, Err404
-		}
-		return sliced, tx.Parents, nil
-
-	} else {
-		m.controllersMu.RLock()
-		defer m.controllersMu.RUnlock()
-
-		ctrl := m.controllers[stateURI]
-		if ctrl == nil {
-			return nil, nil, errors.Wrapf(ErrNoController, stateURI)
-		}
-		state, leaves := ctrl.State(keypath)
-		return state, leaves, nil
-	}
-}
-
-func (m *metacontroller) ResolveRefs(input interface{}) (interface{}, bool, error) {
-	m.controllersMu.RLock()
-	defer m.controllersMu.RUnlock()
-
-	var anyMissing bool
-	newInput, err := mapTree(input, func(keypath []string, val interface{}) (interface{}, error) {
-		if _, exists := getString(val, []string{"Content-Type"}); exists {
-			n := m.ResolveNelSON(val)
-			if !n.fullyResolved {
-				anyMissing = true
-			}
-			return n, nil
-		} else {
-			return val, nil
-		}
-	})
-	if err != nil {
-		return nil, false, err
-	}
-	return newInput, anyMissing, nil
-}
-
-func (m *metacontroller) MostRecentTxID(stateURI string) (ID, error) {
+func (m *metacontroller) State(stateURI string, version *types.ID) (tree.Node, error) {
 	m.controllersMu.RLock()
 	defer m.controllersMu.RUnlock()
 
 	ctrl := m.controllers[stateURI]
 	if ctrl == nil {
-		return ID{}, errors.Wrapf(ErrNoController, stateURI)
+		return nil, errors.Wrapf(ErrNoController, stateURI)
 	}
-	return ctrl.MostRecentTxID(), nil
+	return ctrl.State(version), nil
+}
+
+func (m *metacontroller) RefObjectReader(refHash types.Hash) (io.ReadCloser, int64, error) {
+	return m.refStore.Object(refHash)
+}
+
+func (m *metacontroller) Leaves(stateURI string) (map[types.ID]struct{}, error) {
+	m.controllersMu.RLock()
+	defer m.controllersMu.RUnlock()
+
+	ctrl := m.controllers[stateURI]
+	if ctrl == nil {
+		return nil, errors.Wrapf(ErrNoController, stateURI)
+	}
+	return ctrl.Leaves(), nil
 }
 
 func (m *metacontroller) SetReceivedRefsHandler(handler ReceivedRefsHandler) {

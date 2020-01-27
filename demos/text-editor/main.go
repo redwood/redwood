@@ -8,7 +8,8 @@ import (
 
 	rw "github.com/brynbellomy/redwood"
 	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/scenarios/demoutils"
+	"github.com/brynbellomy/redwood/demos/demoutils"
+	"github.com/brynbellomy/redwood/types"
 )
 
 type app struct {
@@ -20,10 +21,9 @@ func main() {
 	flag.Set("logtostderr", "true")
 	flag.Set("v", "2")
 
-	os.MkdirAll("/tmp/redwood/text-editor", 0700)
-
-	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/redwood/text-editor/badger1", "/tmp/redwood/text-editor/refs1", "cookiesecret1", "server1.crt", "server1.key")
-	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/redwood/text-editor/badger2", "/tmp/redwood/text-editor/refs2", "cookiesecret2", "server2.crt", "server2.key")
+	// Make two Go hosts that will communicate with one another over libp2p
+	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "cookiesecret1", "server1.crt", "server1.key")
+	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "cookiesecret2", "server2.crt", "server2.key")
 
 	err := host1.Start()
 	if err != nil {
@@ -100,7 +100,7 @@ func sendTxs(host1, host2 rw.Host) {
 	}
 
 	// These are just convenience utils
-	hostsByAddress := map[rw.Address]rw.Host{
+	hostsByAddress := map[types.Address]rw.Host{
 		host1.Address(): host1,
 		host2.Address(): host2,
 	}
@@ -115,7 +115,7 @@ func sendTxs(host1, host2 rw.Host) {
 
 	//
 	// Setup our text editor using a single transaction.  This channel has:
-	//   - an string containing the document's text
+	//   - a string containing the document's text
 	//   - an index.html page (for interacting with the editor from a web browser)
 	//   - a "sync9" merge resolver (which is good at intelligently merging concurrent updates
 	//       from multiple users).  Notice that we uploaded the Javascript code for this resolver
@@ -125,7 +125,7 @@ func sendTxs(host1, host2 rw.Host) {
 	var (
 		genesisTx = rw.Tx{
 			ID:      rw.GenesisTxID,
-			Parents: []rw.ID{},
+			Parents: []types.ID{},
 			From:    host1.Address(),
 			URL:     "localhost:21231/editor",
 			Patches: []rw.Patch{
@@ -181,7 +181,7 @@ func sendTxs(host1, host2 rw.Host) {
 }
 
 func mustParsePatch(s string) rw.Patch {
-	p, err := rw.ParsePatch(s)
+	p, err := rw.ParsePatch([]byte(s))
 	if err != nil {
 		panic(err.Error() + ": " + s)
 	}

@@ -26,12 +26,15 @@ import (
 	"golang.org/x/net/publicsuffix"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/nelson"
+	"github.com/brynbellomy/redwood/tree"
+	"github.com/brynbellomy/redwood/types"
 )
 
 type httpTransport struct {
 	*ctx.Context
 
-	address         Address
+	address         types.Address
 	controller      Metacontroller
 	defaultStateURI string
 	ownURL          string
@@ -42,7 +45,7 @@ type httpTransport struct {
 	tlsKeyFilename  string
 	cookieJar       http.CookieJar
 
-	pendingAuthorizations map[ID][]byte
+	pendingAuthorizations map[types.ID][]byte
 
 	fetchHistoryHandler  FetchHistoryHandler
 	ackHandler           AckHandler
@@ -58,7 +61,7 @@ type httpTransport struct {
 	peerStore PeerStore
 }
 
-func NewHTTPTransport(addr Address, port uint, defaultStateURI string, controller Metacontroller, refStore RefStore, peerStore PeerStore, sigkeys *SigningKeypair, cookieSecret [32]byte, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
+func NewHTTPTransport(addr types.Address, port uint, defaultStateURI string, controller Metacontroller, refStore RefStore, peerStore PeerStore, sigkeys *SigningKeypair, cookieSecret [32]byte, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
@@ -76,7 +79,7 @@ func NewHTTPTransport(addr Address, port uint, defaultStateURI string, controlle
 		tlsCertFilename:       tlsCertFilename,
 		tlsKeyFilename:        tlsKeyFilename,
 		cookieJar:             jar,
-		pendingAuthorizations: make(map[ID][]byte),
+		pendingAuthorizations: make(map[types.ID][]byte),
 		ownURL:                fmt.Sprintf("localhost:%v", port),
 		refStore:              refStore,
 		peerStore:             peerStore,
@@ -136,7 +139,7 @@ func (t *httpTransport) Start() error {
 type httpSubscriptionIn struct {
 	io.Writer
 	http.Flusher
-	address          Address
+	address          types.Address
 	chDoneCatchingUp chan struct{}
 	chDone           chan struct{}
 }
@@ -252,7 +255,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (t *httpTransport) serveAuthorizeSelf(w http.ResponseWriter, r *http.Request, address Address, challengeMsgHex string) {
+func (t *httpTransport) serveAuthorizeSelf(w http.ResponseWriter, r *http.Request, address types.Address, challengeMsgHex string) {
 	challengeMsg, err := hex.DecodeString(challengeMsgHex)
 	if err != nil {
 		http.Error(w, "Challenge header: bad challenge message", http.StatusBadRequest)
@@ -267,8 +270,8 @@ func (t *httpTransport) serveAuthorizeSelf(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (t *httpTransport) serveAuthorizeOtherIssueChallenge(w http.ResponseWriter, r *http.Request, sessionID ID) {
-	challenge, err := GenerateChallengeMsg()
+func (t *httpTransport) serveAuthorizeOtherIssueChallenge(w http.ResponseWriter, r *http.Request, sessionID types.ID) {
+	challenge, err := types.GenerateChallengeMsg()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -284,7 +287,7 @@ func (t *httpTransport) serveAuthorizeOtherIssueChallenge(w http.ResponseWriter,
 	}
 }
 
-func (t *httpTransport) serveAuthorizeOtherCheckResponse(w http.ResponseWriter, r *http.Request, sessionID ID, responseHex string) {
+func (t *httpTransport) serveAuthorizeOtherCheckResponse(w http.ResponseWriter, r *http.Request, sessionID types.ID, responseHex string) {
 	challenge, exists := t.pendingAuthorizations[sessionID]
 	if !exists {
 		http.Error(w, "no pending authorization", http.StatusBadRequest)
@@ -297,7 +300,7 @@ func (t *httpTransport) serveAuthorizeOtherCheckResponse(w http.ResponseWriter, 
 		return
 	}
 
-	sigpubkey, err := RecoverSigningPubkey(HashBytes(challenge), sig)
+	sigpubkey, err := RecoverSigningPubkey(types.HashBytes(challenge), sig)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -312,7 +315,7 @@ func (t *httpTransport) serveAuthorizeOtherCheckResponse(w http.ResponseWriter, 
 	delete(t.pendingAuthorizations, sessionID) // @@TODO: expiration/garbage collection for failed auths
 }
 
-func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request, address Address) {
+func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request, address types.Address) {
 	t.Infof(0, "incoming subscription (address: %v)", address)
 
 	// @@TODO: ensure we actually have this stateURI
@@ -351,22 +354,22 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 
 	parentsHeader := r.Header.Get("Parents")
 	if parentsHeader != "" {
-		var parents []ID
+		var parents []types.ID
 		parentStrs := strings.Split(parentsHeader, ",")
 		for _, parentStr := range parentStrs {
-			parent, err := IDFromHex(parentStr)
+			parent, err := types.IDFromHex(parentStr)
 			if err != nil {
 				// @@TODO: what to do?
-				parents = []ID{GenesisTxID}
+				parents = []types.ID{GenesisTxID}
 				break
 			}
 			parents = append(parents, parent)
 		}
 
-		var toVersion ID
+		var toVersion types.ID
 		if versionHeader := r.Header.Get("Version"); versionHeader != "" {
 			var err error
-			toVersion, err = IDFromHex(versionHeader)
+			toVersion, err = types.IDFromHex(versionHeader)
 			if err != nil {
 				// @@TODO: what to do?
 			}
@@ -409,7 +412,7 @@ func (t *httpTransport) serveGetTx(w http.ResponseWriter, r *http.Request) {
 
 	parts := strings.Split(r.URL.Path[1:], "/")
 	txIDStr := parts[1]
-	txID, err := IDFromHex(txIDStr)
+	txID, err := types.IDFromHex(txIDStr)
 	if err != nil {
 		http.Error(w, "bad tx id", http.StatusBadRequest)
 		return
@@ -425,67 +428,165 @@ func (t *httpTransport) serveGetTx(w http.ResponseWriter, r *http.Request) {
 }
 
 func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
-	keypath := filterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
+
+	keypathStrs := filterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
 
 	stateURI := r.Header.Get("State-URI")
 	if stateURI == "" {
-		stateURI = strings.Join([]string{t.defaultStateURI, keypath[0]}, "/")
-		keypath = keypath[1:]
+		stateURI = strings.Join([]string{t.defaultStateURI, keypathStrs[0]}, "/")
+		keypathStrs = keypathStrs[1:]
 	}
 
-	var version *ID
+	keypathStr := strings.Join(keypathStrs, string(tree.KeypathSeparator))
+	keypath := tree.Keypath(keypathStr)
+
+	parts := keypath.Parts()
+	newParts := make([]tree.Keypath, 0, len(parts))
+	for _, part := range parts {
+		if idx := part.IndexByte('['); idx > -1 {
+			newParts = append(newParts, part[:idx])
+			x, err := strconv.ParseInt(string(part[idx+1:len(part)-1]), 10, 64)
+			if err != nil {
+				http.Error(w, "bad slice index", http.StatusBadRequest)
+				return
+			}
+			newParts = append(newParts, tree.EncodeSliceIndex(uint64(x)))
+		} else {
+			newParts = append(newParts, part)
+		}
+	}
+	keypath = tree.JoinKeypaths(newParts, []byte("/"))
+
+	var version *types.ID
 	if vstr := r.Header.Get("Version"); vstr != "" {
-		v, err := IDFromHex(vstr)
+		v, err := types.IDFromHex(vstr)
 		if err != nil {
 			http.Error(w, "bad Version header", http.StatusBadRequest)
 			return
 		}
 		version = &v
+
 	}
 
-	val, parents, err := t.controller.State(stateURI, keypath, version)
+	var rng *tree.Range
+	if rstr := r.Header.Get("Range"); rstr != "" {
+		// Range: -10:-5
+		// @@TODO: real json Range parsing
+		parts := strings.SplitN(rstr, "=", 2)
+		if len(parts) != 2 {
+			http.Error(w, "bad Range header", http.StatusBadRequest)
+			return
+		} else if parts[0] != "json" {
+			http.Error(w, "bad Range header", http.StatusBadRequest)
+			return
+		}
+		parts = strings.SplitN(parts[1], ":", 2)
+		if len(parts) != 2 {
+			http.Error(w, "bad Range header", http.StatusBadRequest)
+			return
+		}
+		start, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			http.Error(w, "bad Range header", http.StatusBadRequest)
+			return
+		}
+		end, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			http.Error(w, "bad Range header", http.StatusBadRequest)
+			return
+		}
+		_rng := tree.Range{start, end}
+		rng = &_rng
+	}
+
+	// Add the "Parents" header
+	{
+		leaves, err := t.controller.Leaves(stateURI)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("%+v", err), http.StatusNotFound)
+			return
+		}
+		var leaf types.ID
+		for vid := range leaves {
+			leaf = vid
+			break
+		}
+		tx, err := t.controller.FetchTx(stateURI, leaf)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("can't fetch tx %v: %+v", leaf, err.Error()), http.StatusNotFound)
+			return
+		}
+		parents := tx.Parents
+
+		var parentStrs []string
+		for _, pid := range parents {
+			parentStrs = append(parentStrs, pid.Hex())
+		}
+		w.Header().Add("Parents", strings.Join(parentStrs, ","))
+	}
+
+	state, err := t.controller.State(stateURI, version)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("not found: %+v", err.Error()), http.StatusNotFound)
+		http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
 		return
 	}
-
-	var parentStrs []string
-	for _, pid := range parents {
-		parentStrs = append(parentStrs, pid.Hex())
-	}
-	w.Header().Add("Parents", strings.Join(parentStrs, ","))
+	defer state.Close()
 
 	raw, err := parseRawParam(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
-	} else if raw {
-		respondJSON(w, val)
+	}
+
+	var anyMissing bool
+	if !raw {
+		state, err = state.CopyToMemory(keypath, rng)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("copyToMemory: %+v", err), http.StatusInternalServerError)
+			return
+		}
+
+		state, anyMissing, err = nelson.Resolve(state, t.controller)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("resolve: %+v", err), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		state = state.AtKeypath(keypath, rng)
+	}
+
+	contentType, err := nelson.GetContentType(state)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+		return
+	}
+	if contentType == "application/octet-stream" {
+		contentType = GuessContentTypeFromFilename(string(keypath.Part(-1)))
+	}
+
+	contentLength, err := nelson.GetContentLength(state)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 		return
 	}
 
-	val, anyMissing, err := t.controller.ResolveRefs(val)
+	var val interface{}
+	var exists bool
+	if !raw {
+		val, exists, err = nelson.GetValueRecursive(state, nil, nil)
+	} else {
+		val, exists, err = state.Value(nil, nil)
+	}
 	if err != nil {
-		panic(err)
+		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusBadRequest)
+		return
+	} else if !exists {
+		http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+		return
 	}
 
-	var contentType string
-	var contentLength int64
-	var respBuf io.ReadCloser
-	if n, is := val.(*NelSON); is {
-		contentType = n.ContentType()
-		if contentType == "application/octet-stream" {
-			contentType = GuessContentTypeFromFilename(keypath[len(keypath)-1])
-		}
-
-		contentLength = n.ContentLength()
-		reader, err := n.ValueReader()
-		if err != nil {
-			panic(err)
-		}
-		respBuf = reader
-
-	} else {
+	respBuf, ok := nelson.GetReadCloser(val)
+	if !ok {
 		contentType = "application/json"
 		j, err := json.Marshal(val)
 		if err != nil {
@@ -509,6 +610,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	if allowSubscribe[contentType] {
 		w.Header().Set("Subscribe", "Allow")
 	}
+
 	if anyMissing {
 		w.WriteHeader(http.StatusPartialContent)
 	}
@@ -519,7 +621,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (t *httpTransport) serveAck(w http.ResponseWriter, r *http.Request, address Address) {
+func (t *httpTransport) serveAck(w http.ResponseWriter, r *http.Request, address types.Address) {
 	defer r.Body.Close()
 
 	bs, err := ioutil.ReadAll(r.Body)
@@ -529,7 +631,7 @@ func (t *httpTransport) serveAck(w http.ResponseWriter, r *http.Request, address
 		return
 	}
 
-	var txID ID
+	var txID types.ID
 	err = txID.UnmarshalText(bs)
 	if err != nil {
 		t.Errorf("error reading ACK body: %v", err)
@@ -540,7 +642,7 @@ func (t *httpTransport) serveAck(w http.ResponseWriter, r *http.Request, address
 	t.ackHandler(txID, &httpPeer{address: address, t: t, Writer: w})
 }
 
-func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, address Address) {
+func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, address types.Address) {
 	t.Infof(0, "incoming private tx")
 
 	var encryptedTx EncryptedTx
@@ -576,42 +678,42 @@ func (t *httpTransport) servePostRef(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, StoreRefResponse{hash})
 }
 
-func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, address Address) {
+func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, address types.Address) {
 	t.Infof(0, "incoming tx")
 
 	var err error
 
-	var sig Signature
+	var sig types.Signature
 	sigHeaderStr := r.Header.Get("Signature")
 	if sigHeaderStr == "" {
 		http.Error(w, "missing Signature header", http.StatusBadRequest)
 		return
 	} else {
-		sig, err = SignatureFromHex(sigHeaderStr)
+		sig, err = types.SignatureFromHex(sigHeaderStr)
 		if err != nil {
 			http.Error(w, "bad Signature header", http.StatusBadRequest)
 			return
 		}
 	}
 
-	var txID ID
+	var txID types.ID
 	txIDStr := r.Header.Get("Version")
 	if txIDStr == "" {
-		txID = RandomID()
+		txID = types.RandomID()
 	} else {
-		txID, err = IDFromHex(txIDStr)
+		txID, err = types.IDFromHex(txIDStr)
 		if err != nil {
 			http.Error(w, "bad Version header", http.StatusBadRequest)
 			return
 		}
 	}
 
-	var parents []ID
+	var parents []types.ID
 	parentsStr := r.Header.Get("Parents")
 	if parentsStr != "" {
 		parentsStrs := strings.Split(parentsStr, ",")
 		for _, pstr := range parentsStrs {
-			parentID, err := IDFromHex(strings.TrimSpace(pstr))
+			parentID, err := types.IDFromHex(strings.TrimSpace(pstr))
 			if err != nil {
 				http.Error(w, "bad Parents header", http.StatusBadRequest)
 				return
@@ -628,7 +730,7 @@ func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, addr
 	var patches []Patch
 	scanner := bufio.NewScanner(r.Body)
 	for scanner.Scan() {
-		line := scanner.Text()
+		line := scanner.Bytes()
 		patch, err := ParsePatch(line)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("bad patch string: %v", line), http.StatusBadRequest)
@@ -780,7 +882,7 @@ func (t *httpTransport) ForEachProviderOfStateURI(ctx context.Context, theURL st
 	return ch, nil
 }
 
-func (t *httpTransport) ForEachProviderOfRef(ctx context.Context, refHash Hash) (<-chan Peer, error) {
+func (t *httpTransport) ForEachProviderOfRef(ctx context.Context, refHash types.Hash) (<-chan Peer, error) {
 	return nil, errors.New("unimplemented")
 }
 
@@ -806,11 +908,11 @@ func (t *httpTransport) ForEachSubscriberToStateURI(ctx context.Context, stateUR
 	return ch, nil
 }
 
-func (t *httpTransport) PeersClaimingAddress(ctx context.Context, address Address) (<-chan Peer, error) {
+func (t *httpTransport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan Peer, error) {
 	return nil, errors.New("unimplemented")
 }
 
-func (t *httpTransport) AnnounceRef(refHash Hash) error {
+func (t *httpTransport) AnnounceRef(refHash types.Hash) error {
 	return errors.New("unimplemented")
 }
 
@@ -818,17 +920,17 @@ var (
 	ErrBadCookie = errors.New("bad cookie")
 )
 
-func (t *httpTransport) ensureSessionIDCookie(w http.ResponseWriter, r *http.Request) (ID, error) {
+func (t *httpTransport) ensureSessionIDCookie(w http.ResponseWriter, r *http.Request) (types.ID, error) {
 	sessionIDBytes, err := t.signedCookie(r, "sessionid")
 	if err != nil {
 		t.Errorf("error reading signed sessionid cookie: %v", err)
 		return t.setSessionIDCookie(w)
 	}
-	return IDFromBytes(sessionIDBytes), nil
+	return types.IDFromBytes(sessionIDBytes), nil
 }
 
-func (t *httpTransport) setSessionIDCookie(w http.ResponseWriter) (ID, error) {
-	sessionID := RandomID()
+func (t *httpTransport) setSessionIDCookie(w http.ResponseWriter) (types.ID, error) {
+	sessionID := types.RandomID()
 	err := t.setSignedCookie(w, "sessionid", sessionID[:])
 	return sessionID, err
 }
@@ -836,7 +938,7 @@ func (t *httpTransport) setSessionIDCookie(w http.ResponseWriter) (ID, error) {
 func (t *httpTransport) setSignedCookie(w http.ResponseWriter, name string, value []byte) error {
 	w.Header().Del("Set-Cookie")
 
-	sig, err := t.sigkeys.SignHash(HashBytes(append(value, t.cookieSecret[:]...)))
+	sig, err := t.sigkeys.SignHash(types.HashBytes(append(value, t.cookieSecret[:]...)))
 	if err != nil {
 		return err
 	}
@@ -868,23 +970,23 @@ func (t *httpTransport) signedCookie(r *http.Request, name string) ([]byte, erro
 	sig, err := hex.DecodeString(parts[1])
 	if err != nil {
 		return nil, errors.Wrapf(ErrBadCookie, "cookie '%v' bad hex signature: %v", name, err)
-	} else if !t.sigkeys.VerifySignature(HashBytes(append(value, t.cookieSecret[:]...)), sig) {
+	} else if !t.sigkeys.VerifySignature(types.HashBytes(append(value, t.cookieSecret[:]...)), sig) {
 		return nil, errors.Wrapf(ErrBadCookie, "cookie '%v' has invalid signature (value: %0x)", name, value)
 	}
 	return value, nil
 }
 
-func (t *httpTransport) addressFromCookie(r *http.Request) Address {
+func (t *httpTransport) addressFromCookie(r *http.Request) types.Address {
 	addressBytes, err := t.signedCookie(r, "address")
 	if err != nil {
-		return Address{}
+		return types.Address{}
 	}
-	return AddressFromBytes(addressBytes)
+	return types.AddressFromBytes(addressBytes)
 }
 
 type httpPeer struct {
 	t       *httpTransport
-	address Address
+	address types.Address
 
 	// stream
 	reachableAt string
@@ -912,11 +1014,11 @@ func (p *httpPeer) ReachableAt() StringSet {
 	return NewStringSet([]string{p.reachableAt})
 }
 
-func (p *httpPeer) Address() Address {
+func (p *httpPeer) Address() types.Address {
 	return p.address
 }
 
-func (p *httpPeer) SetAddress(addr Address) {
+func (p *httpPeer) SetAddress(addr types.Address) {
 	p.address = addr
 }
 
@@ -1005,7 +1107,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 	case MsgType_Ack:
-		txID, ok := msg.Payload.(ID)
+		txID, ok := msg.Payload.(types.ID)
 		if !ok {
 			return errors.WithStack(ErrProtocol)
 		}
@@ -1030,7 +1132,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		defer resp.Body.Close()
 
 	case MsgType_VerifyAddress:
-		challengeMsg, ok := msg.Payload.(ChallengeMsg)
+		challengeMsg, ok := msg.Payload.(types.ChallengeMsg)
 		if !ok {
 			return errors.WithStack(ErrProtocol)
 		}

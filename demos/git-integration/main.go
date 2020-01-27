@@ -10,7 +10,8 @@ import (
 
 	rw "github.com/brynbellomy/redwood"
 	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/scenarios/demoutils"
+	"github.com/brynbellomy/redwood/demos/demoutils"
+	"github.com/brynbellomy/redwood/types"
 	// "github.com/brynbellomy/redwood/remotestore"
 )
 
@@ -27,10 +28,9 @@ func main() {
 	flag.Set("logtostderr", "true")
 	flag.Set("v", "2")
 
-	os.MkdirAll("/tmp/redwood/git-integration", 0700)
-
-	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "/tmp/redwood/git-integration/badger1", "/tmp/redwood/git-integration/refs1", "cookiesecret1", "server1.crt", "server1.key")
-	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "/tmp/redwood/git-integration/badger2", "/tmp/redwood/git-integration/refs2", "cookiesecret2", "server2.crt", "server2.key")
+	// Make two Go hosts that will communicate with one another over libp2p
+	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "cookiesecret1", "server1.crt", "server1.key")
+	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "cookiesecret2", "server2.crt", "server2.key")
 
 	err := host1.Start()
 	if err != nil {
@@ -141,7 +141,7 @@ func sendTxs(host1, host2 rw.Host) {
 	}
 
 	// These are just convenience utils
-	hostsByAddress := map[rw.Address]rw.Host{
+	hostsByAddress := map[types.Address]rw.Host{
 		host1.Address(): host1,
 		host2.Address(): host2,
 	}
@@ -154,7 +154,7 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 	}
 
-	commit1RepoTxID, err := rw.IDFromHex("65cfaaa3194b0e36d90730fc1950596a6c117080000000000000000000000000")
+	commit1RepoTxID, err := types.IDFromHex("65cfaaa3194b0e36d90730fc1950596a6c117080000000000000000000000000")
 	if err != nil {
 		panic(err)
 	}
@@ -166,7 +166,7 @@ func sendTxs(host1, host2 rw.Host) {
 		// The "gitdemo" channel simply contains an index.html page for viewing the current state of the repo.
 		genesisDemo = rw.Tx{
 			ID:      rw.GenesisTxID,
-			Parents: []rw.ID{},
+			Parents: []types.ID{},
 			From:    host1.Address(),
 			URL:     "localhost:21231/gitdemo",
 			Patches: []rw.Patch{
@@ -202,7 +202,7 @@ func sendTxs(host1, host2 rw.Host) {
 		// any user to write to these keys, but you'll want to set up your own repo to be more restrictive.
 		genesisRepo = rw.Tx{
 			ID:      rw.GenesisTxID,
-			Parents: []rw.ID{},
+			Parents: []types.ID{},
 			From:    host1.Address(),
 			URL:     "localhost:21231/git",
 			Patches: []rw.Patch{
@@ -242,7 +242,7 @@ func sendTxs(host1, host2 rw.Host) {
 		// for each ref (i.e. each branch or tag).
 		genesisReflog = rw.Tx{
 			ID:      rw.GenesisTxID,
-			Parents: []rw.ID{},
+			Parents: []types.ID{},
 			From:    host1.Address(),
 			URL:     "localhost:21231/git-reflog",
 			Patches: []rw.Patch{
@@ -271,7 +271,7 @@ func sendTxs(host1, host2 rw.Host) {
 		// cloned using the command "git clone redwood://localhost:21231/git"
 		commit1Repo = rw.Tx{
 			ID:         commit1RepoTxID,
-			Parents:    []rw.ID{genesisRepo.ID},
+			Parents:    []types.ID{genesisRepo.ID},
 			From:       host1.Address(),
 			URL:        "localhost:21231/git",
 			Checkpoint: true,
@@ -314,8 +314,8 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 
 		commit1Reflog = rw.Tx{
-			ID:         rw.RandomID(),
-			Parents:    []rw.ID{genesisReflog.ID},
+			ID:         types.RandomID(),
+			Parents:    []types.ID{genesisReflog.ID},
 			From:       host1.Address(),
 			URL:        "localhost:21231/git-reflog",
 			Checkpoint: true,
@@ -337,7 +337,7 @@ func sendTxs(host1, host2 rw.Host) {
 }
 
 func mustParsePatch(s string) rw.Patch {
-	p, err := rw.ParsePatch(s)
+	p, err := rw.ParsePatch([]byte(s))
 	if err != nil {
 		panic(err.Error() + ": " + s)
 	}
