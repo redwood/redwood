@@ -84,7 +84,7 @@ func TestDBTree_CopyToMemory_AtKeypath(T *testing.T) {
 	require.NoError(T, err)
 
 	err = tree.View(v, func(node *DBNode) error {
-		copied, err := node.AtKeypath(Keypath("flox")).CopyToMemory(nil, nil)
+		copied, err := node.AtKeypath(Keypath("flox"), nil).CopyToMemory(nil, nil)
 		require.NoError(T, err)
 
 		expected := takeFixtureOutputsWithPrefix(Keypath("flox"), fixture1.output...)

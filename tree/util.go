@@ -91,8 +91,11 @@ func setValueAtKeypath(x interface{}, keypath Keypath, val interface{}, clobber 
 
 		} else if asSlice, isSlice := cur.([]interface{}); isSlice {
 			cur = asSlice[DecodeSliceIndex(key)]
+		} else if asNode, isNode := cur.(Node); isNode {
+			asNode.Set(Keypath(key), nil, make(map[string]interface{}))
+			cur = asNode.AtKeypath(Keypath(key), nil)
 		} else {
-			panic("bad 2")
+			panic(fmt.Sprintf("bad 2: %T %v", cur, key))
 		}
 	}
 

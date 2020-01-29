@@ -1,13 +1,8 @@
 package tree
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
-	"math/rand"
-	"sort"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )

@@ -115,7 +115,7 @@ func sendTxs(host1, host2 rw.Host) {
 
 	//
 	// Setup our text editor using a single transaction.  This channel has:
-	//   - a string containing the document's text
+	//   - a string containing the document's text (at the keypath ".text.value")
 	//   - an index.html page (for interacting with the editor from a web browser)
 	//   - a "sync9" merge resolver (which is good at intelligently merging concurrent updates
 	//       from multiple users).  Notice that we uploaded the Javascript code for this resolver
@@ -130,7 +130,19 @@ func sendTxs(host1, host2 rw.Host) {
 			URL:     "localhost:21231/editor",
 			Patches: []rw.Patch{
 				mustParsePatch(` = {
-					"text": "",
+					"text": {
+						"value": "",
+						
+						"Merge-Type": {
+							"Content-Type": "resolver/js",
+							"value": {
+								"src": {
+									"Content-Type": "link",
+									"value": "ref:` + sync9Hash.String() + `"
+								}
+							}
+						}
+					},
 					"index.html": {
 						"Content-Type": "text/html",
 						"value": {
@@ -139,13 +151,8 @@ func sendTxs(host1, host2 rw.Host) {
 						}
 					},
 					"Merge-Type": {
-						"Content-Type": "resolver/js",
-						"value": {
-							"src": {
-								"Content-Type": "link",
-								"value": "ref:` + sync9Hash.String() + `"
-							}
-						}
+						"Content-Type": "resolver/dumb",
+						"value": {}
 					},
 					"Validator": {
 						"Content-Type": "validator/permissions",
@@ -156,7 +163,7 @@ func sendTxs(host1, host2 rw.Host) {
 								}
 							},
 							"*": {
-								"^\\.text.*": {
+								"^\\.text\\.value.*": {
 									"write": true
 								}
 							}
@@ -174,10 +181,10 @@ func sendTxs(host1, host2 rw.Host) {
 	host1.Info(1, "sending tx to initialize text editor channel...")
 	sendTx(genesisTx)
 
-	go func() {
-		time.Sleep(2 * time.Second)
-		host1.Controller().DebugLockResolvers()
-	}()
+	//go func() {
+	//    time.Sleep(2 * time.Second)
+	//    host1.Controller().DebugLockResolvers()
+	//}()
 }
 
 func mustParsePatch(s string) rw.Patch {

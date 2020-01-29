@@ -67,6 +67,7 @@ type Node interface {
 	ResetDiff()
 	CopyToMemory(keypath Keypath, rng *Range) (Node, error)
 	DepthFirstIterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator
+	DebugPrint()
 }
 
 type NodeType uint8

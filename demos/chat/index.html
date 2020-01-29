@@ -151,7 +151,7 @@
 
             // Update the chat UI
             if (newState.talk0 && newState.talk0.messages) {
-                messages = newState.talk0.messages
+                messages = newState.talk0.messages.value
             }
             refreshChatUI()
         }
@@ -183,7 +183,7 @@
             var msg = messages[i]
             var refAvailable
             if (msg.attachment) {
-                refAvailable = await available('/chat/talk0/messages[' + i + ']/attachment')
+                refAvailable = await available('/chat/talk0/messages/value[' + i + ']/attachment')
                 allRefsAvailable = allRefsAvailable && refAvailable
             }
             var sender = currentState && currentState.users && currentState.users[msg.sender]
@@ -195,7 +195,7 @@
             html += '        <div>' + msg.text + '</div>'
             if (msg.attachment) {
             if (refAvailable) {
-            html += '        <img src="/chat/talk0/messages[' + i + ']/attachment" />'
+            html += '        <img src="/chat/talk0/messages/value[' + i + ']/attachment" />'
             } else {
             refsStillLoading = true
             html += '        <div>(loading...)</div>'
@@ -312,7 +312,7 @@
             parents: Object.keys(s9.leaves),
             url: 'localhost:21231/chat',
             patches: [
-                '.talk0.messages[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify([{
+                '.talk0.messages.value[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify([{
                     attachment: attachment,
                     sender: identity.address.toLowerCase(),
                     text: inputText.value,

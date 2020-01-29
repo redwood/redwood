@@ -106,7 +106,7 @@
                 let selectionStart = editor.selectionStart + n
                 let selectionEnd = editor.selectionEnd + n
 
-                editor.value = newState.text
+                editor.value = newState.text.value
                 editor.selectionStart = selectionEnd
                 editor.selectionEnd = selectionEnd
             }
@@ -147,7 +147,7 @@
             parents: Object.keys(s9.leaves),
             url: 'localhost:21231/editor',
             patches: [
-                '.text[' + editor.selectionStart + ':' + editor.selectionEnd + '] = ' + JSON.stringify(char),
+                '.text.value[' + editor.selectionStart + ':' + editor.selectionEnd + '] = ' + JSON.stringify(char),
             ],
         }
 

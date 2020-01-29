@@ -168,31 +168,33 @@ func sendTxs(host1, host2 rw.Host) {
 			URL:     "localhost:21231/chat",
 			Patches: []rw.Patch{
 				mustParsePatch(`.talk0 = {
-					"messages": [],
+					"messages": {
+						"value": [],
+						"Merge-Type": {
+							"Content-Type": "resolver/dumb",
+							"value": {}
+						},
+						"Validator": {
+							"Content-Type": "validator/permissions",
+							"value": {
+								"96216849c49358b10257cb55b28ea603c874b05e": {
+									"^.*$": {
+										"write": true
+									}
+								},
+								"*": {
+									"^\\.value.*": {
+										"write": true
+									}
+								}
+							}
+						}
+					},
 					"index.html": {
 						"Content-Type": "text/html",
 						"value": {
 							"Content-Type": "link",
 							"value": "ref:` + indexHTMLHash.String() + `"
-						}
-					},
-					"Merge-Type": {
-						"Content-Type": "resolver/dumb",
-						"value": {}
-					},
-					"Validator": {
-						"Content-Type": "validator/permissions",
-						"value": {
-							"96216849c49358b10257cb55b28ea603c874b05e": {
-								"^.*$": {
-									"write": true
-								}
-							},
-							"*": {
-								"^\\.messages.*": {
-									"write": true
-								}
-							}
 						}
 					}
 				}`),
@@ -282,7 +284,7 @@ func sendTxs(host1, host2 rw.Host) {
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
 			Patches: []rw.Patch{
-				mustParsePatch(`.talk0.messages[0:0] = [{"text":"hello!","sender":"` + host1.Address().String() + `"}]`),
+				mustParsePatch(`.talk0.messages.value[0:0] = [{"text":"hello!","sender":"` + host1.Address().String() + `"}]`),
 			},
 		}
 
@@ -292,7 +294,7 @@ func sendTxs(host1, host2 rw.Host) {
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
 			Patches: []rw.Patch{
-				mustParsePatch(`.talk0.messages[1:1] = [{"text":"well hello to you too","sender":"` + host2.Address().String() + `"}]`),
+				mustParsePatch(`.talk0.messages.value[1:1] = [{"text":"well hello to you too","sender":"` + host2.Address().String() + `"}]`),
 			},
 		}
 
@@ -302,7 +304,7 @@ func sendTxs(host1, host2 rw.Host) {
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
 			Patches: []rw.Patch{
-				mustParsePatch(`.talk0.messages[2:2] = [{
+				mustParsePatch(`.talk0.messages.value[2:2] = [{
 					"text": "who needs a meme?",
 					"sender": "` + host1.Address().String() + `",
 					"attachment": {

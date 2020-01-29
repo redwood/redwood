@@ -40,22 +40,6 @@ func (n *Frame) ContentType() (string, error) {
 		return "", err
 	}
 
-	//switch n.overrideValue.(type) {
-	//case map[string]interface{}, []interface{}:
-	//    return "application/json"
-	//case []byte, io.Reader:
-	//    return "application/octet-stream"
-	//case string:
-	//    return "text/plain"
-	//default:
-	//    // no-op
-	//}
-	//
-	//val, _, err := n.Node.Value(nil, nil)
-	//if err != nil {
-	//    panic(err)
-	//}
-
 	switch val.(type) {
 	case nil, map[string]interface{}, []interface{}:
 		return "application/json", nil
@@ -77,43 +61,8 @@ func (n *Frame) Value(keypath tree.Keypath, rng *tree.Range) (interface{}, bool,
 	if n.overrideValue != nil {
 		return n.overrideValue, true, nil
 	}
-
 	return GetValueRecursive(n.Node, keypath, rng)
-
-	//val, exists, err := n.Node.Value(keypath, rng)
-	//if err != nil {
-	//    return nil, false, err
-	//} else if !exists {
-	//    return nil, false, nil
-	//}
-	//
-	//asNelSON, isNelSON := val.(*Frame)
-	//if isNelSON {
-	//    return asNelSON.Value(keypath, rng)
-	//}
-	//
-	//return val, true, nil
 }
-
-//func (n *Frame) ValueReader() (io.ReadCloser, bool, error) {
-//    val, exists, err := GetValueRecursive(n, nil, nil)
-//    if err != nil {
-//        return nil, false, err
-//    } else if !exists {
-//        return nil, false, nil
-//    }
-//
-//    if n.fullyResolved == false || n.ContentType() == "application/json" {
-//        bs, err := json.Marshal(val)
-//        return ioutil.NopCloser(bytes.NewBuffer(bs)), true, err
-//    }
-//
-//    readCloser, ok := GetReadCloser(val)
-//    if !ok {
-//        return nil, false, errors.Errorf("value can't have a Reader")
-//    }
-//    return readCloser, true, nil
-//}
 
 func (n *Frame) MarshalJSON() ([]byte, error) {
 	val, exists, err := GetValueRecursive(n, nil, nil)

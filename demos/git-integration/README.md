@@ -16,8 +16,8 @@ $ go run main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/gitdemo/index.html>
-- <https://localhost:21242/gitdemo/index.html>
+- <https://localhost:21232/gitdemo>
+- <https://localhost:21242/gitdemo>
 
 Now, let's clone the demo repo:
 

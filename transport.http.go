@@ -540,17 +540,30 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 	var anyMissing bool
 	if !raw {
-		state, err = state.CopyToMemory(keypath, rng)
+		indexHTMLExists, err := state.Exists(keypath.Push(tree.Keypath("index.html")))
 		if err != nil {
-			http.Error(w, fmt.Sprintf("copyToMemory: %+v", err), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+			return
+		}
+		if indexHTMLExists {
+			keypath = keypath.Push(tree.Keypath("index.html"))
+		}
+
+		state, err = state.CopyToMemory(keypath, rng)
+		if errors.Cause(err) == types.Err404 {
+			http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+			return
+		} else if err != nil {
+			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 			return
 		}
 
 		state, anyMissing, err = nelson.Resolve(state, t.controller)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("resolve: %+v", err), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 			return
 		}
+
 	} else {
 		state = state.AtKeypath(keypath, rng)
 	}

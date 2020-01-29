@@ -80,8 +80,8 @@ $ go run main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/chat/talk0/index.html>
-- <https://localhost:21242/chat/talk0/index.html>
+- <https://localhost:21232/chat/talk0>
+- <https://localhost:21242/chat/talk0>
 
 **(Note: due to the self-signed TLS certificates, your browser will complain that you're "not safe")**
 
@@ -99,8 +99,8 @@ $ go run main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/editor/index.html>
-- <https://localhost:21242/editor/index.html>
+- <https://localhost:21232/editor>
+- <https://localhost:21242/editor>
 
 **(Note: due to the self-signed TLS certificates, your browser will complain that you're "not safe")**
 
@@ -125,8 +125,8 @@ $ go run main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/gitdemo/index.html>
-- <https://localhost:21242/gitdemo/index.html>
+- <https://localhost:21232/gitdemo>
+- <https://localhost:21242/gitdemo>
 
 Now, let's clone the demo repo:
 

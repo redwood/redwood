@@ -80,12 +80,13 @@ func (t *MemoryNode) CopyToMemory(keypath Keypath, rng *Range) (Node, error) {
 
 	//t.copied = true
 	cpy := &MemoryNode{
-		keypath:   t.keypath.Push(keypath),
-		rng:       rng,
-		keypaths:  t.keypaths,
-		values:    t.values,
-		nodeTypes: t.nodeTypes,
-		diff:      t.diff,
+		keypath:      t.keypath.Push(keypath),
+		rng:          rng,
+		keypaths:     t.keypaths,
+		values:       t.values,
+		nodeTypes:    t.nodeTypes,
+		sliceLengths: t.sliceLengths,
+		diff:         t.diff,
 		//copied:    true,
 	}
 	cpy.makeCopy()
@@ -113,24 +114,37 @@ func (t *MemoryNode) makeCopy() {
 	keypaths := make([]Keypath, end-start)
 	values := make(map[string]interface{}, end-start)
 	nodeTypes := make(map[string]NodeType, end-start)
+	sliceLengths := make(map[string]int)
 
 	copy(keypaths, t.keypaths[start:end])
 
 	for _, kp := range keypaths {
 		values[string(kp)] = t.values[string(kp)]
 		nodeTypes[string(kp)] = t.nodeTypes[string(kp)]
+		if nodeTypes[string(kp)] == NodeTypeSlice {
+			sliceLengths[string(kp)] = t.sliceLengths[string(kp)]
+		}
 	}
 
 	t.keypaths = keypaths
 	t.values = values
 	t.nodeTypes = nodeTypes
+	t.sliceLengths = sliceLengths
 	t.diff = t.diff.Copy()
 
 	t.copied = false
 }
 
 func (t *MemoryNode) AtKeypath(keypath Keypath, rng *Range) Node {
-	return &MemoryNode{keypath: t.keypath.Push(keypath), rng: rng, keypaths: t.keypaths, values: t.values, nodeTypes: t.nodeTypes, diff: t.diff}
+	return &MemoryNode{
+		keypath:      t.keypath.Push(keypath),
+		rng:          rng,
+		keypaths:     t.keypaths,
+		values:       t.values,
+		nodeTypes:    t.nodeTypes,
+		sliceLengths: t.sliceLengths,
+		diff:         t.diff,
+	}
 }
 
 func (t *MemoryNode) Exists(keypath Keypath) (bool, error) {
@@ -236,6 +250,7 @@ func (t *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 
 	case NodeTypeSlice:
 		s := make([]interface{}, t.sliceLengths[string(absKeypath)])
+		t.DebugPrint()
 
 		t.scanNodeTypesWithPrefix(absKeypath, func(kp Keypath, nodeType NodeType) {
 			if nodeType == NodeTypeSlice {
@@ -339,11 +354,12 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 			absNodeKeypath := absKeypath.Push(nodeKeypath)
 			newKeypaths = append(newKeypaths, absNodeKeypath)
 
-			switch nodeValue.(type) {
+			switch nv := nodeValue.(type) {
 			case map[string]interface{}:
 				t.nodeTypes[string(absNodeKeypath)] = NodeTypeMap
 			case []interface{}:
 				t.nodeTypes[string(absNodeKeypath)] = NodeTypeSlice
+				t.sliceLengths[string(absNodeKeypath)] = len(nv)
 			default:
 				t.nodeTypes[string(absNodeKeypath)] = NodeTypeValue
 				t.values[string(absNodeKeypath)] = nodeValue
@@ -358,11 +374,12 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 			absNodeKeypath := absKeypath.Push(nodeKeypath)
 			newKeypaths = append(newKeypaths, absNodeKeypath)
 
-			switch nodeValue.(type) {
+			switch nv := nodeValue.(type) {
 			case map[string]interface{}:
 				t.nodeTypes[string(absNodeKeypath)] = NodeTypeMap
 			case []interface{}:
 				t.nodeTypes[string(absNodeKeypath)] = NodeTypeSlice
+				t.sliceLengths[string(absNodeKeypath)] = len(nv)
 			default:
 				t.nodeTypes[string(absNodeKeypath)] = NodeTypeValue
 				t.values[string(absNodeKeypath)] = nodeValue
@@ -517,7 +534,7 @@ func (t *MemoryNode) DepthFirstIterator(keypath Keypath, prefetchValues bool, pr
 	end, i := t.findPrefixRange(t.keypath.Push(keypath))
 
 	return &memoryDepthFirstIterator{
-		iterNode:    &MemoryNode{keypaths: t.keypaths, values: t.values, nodeTypes: t.nodeTypes},
+		iterNode:    &MemoryNode{keypaths: t.keypaths, values: t.values, nodeTypes: t.nodeTypes, sliceLengths: t.sliceLengths},
 		backingNode: t,
 		i:           i,
 		end:         end,
@@ -689,6 +706,10 @@ func (t *MemoryNode) DebugPrint() {
 	fmt.Println("- root keypath:", t.keypath)
 	fmt.Println("- copied:", t.copied)
 	for _, kp := range t.keypaths {
-		fmt.Println("  -", kp, t.nodeTypes[string(kp)], t.values[string(kp)])
+		if t.nodeTypes[string(kp)] == NodeTypeSlice {
+			fmt.Println("  -", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.sliceLengths[string(kp)])
+		} else {
+			fmt.Println("  -", kp, t.nodeTypes[string(kp)], t.values[string(kp)])
+		}
 	}
 }

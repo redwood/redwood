@@ -958,6 +958,34 @@ func (tx *DBNode) CopyToMemory(keypath Keypath, rng *Range) (n Node, err error) 
 	return mNode, nil
 }
 
+func (tx *DBNode) DebugPrint() {
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = true
+	iter := tx.tx.NewIterator(opts)
+	defer iter.Close()
+
+	fmt.Println("- root keypath:", tx.rootKeypath)
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		item := iter.Item()
+		valBytes, err := item.ValueCopy(nil)
+		if err != nil {
+			panic(err)
+		}
+
+		nodeType, valueType, length, data, err := decodeNode(valBytes)
+		if err != nil {
+			panic(err)
+		}
+
+		val, err := decodeGoValue(nodeType, valueType, length, nil, data)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Printf("  - %v %v %v %v %v\n", string(item.Key()), nodeType, valueType, length, val)
+	}
+}
+
 func (t *DBTree) CopyVersion(dstVersion, srcVersion types.ID) error {
 	return t.db.Update(func(tx *badger.Txn) error {
 		stream := t.db.NewStream()

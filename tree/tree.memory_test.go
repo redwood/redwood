@@ -33,7 +33,7 @@ func TestMemoryNode_Set(T *testing.T) {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
 			//state := NewMemoryNode(NodeTypeMap).AtKeypath(test.atKeypath).(*MemoryNode)
-			state := NewMemoryNode().AtKeypath(test.atKeypath).(*MemoryNode)
+			state := NewMemoryNode().AtKeypath(test.atKeypath, nil).(*MemoryNode)
 
 			for _, f := range test.fixtures {
 				err := state.Set(test.keypath, test.rng, f.input)
@@ -90,7 +90,7 @@ func TestMemoryNode_Delete(T *testing.T) {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
 			//state := NewMemoryNode(NodeTypeMap).AtKeypath(test.atKeypath).(*MemoryNode)
-			state := NewMemoryNode().AtKeypath(test.atKeypath).(*MemoryNode)
+			state := NewMemoryNode().AtKeypath(test.atKeypath, nil).(*MemoryNode)
 
 			err := state.Set(test.setKeypath, test.setRange, test.fixture.input)
 			require.NoError(T, err)
@@ -146,7 +146,7 @@ func TestMemoryNode_DepthFirstIterator(T *testing.T) {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
 			//state := NewMemoryNode(NodeTypeMap).AtKeypath(test.atKeypath).(*MemoryNode)
-			state := NewMemoryNode().AtKeypath(test.atKeypath).(*MemoryNode)
+			state := NewMemoryNode().AtKeypath(test.atKeypath, nil).(*MemoryNode)
 
 			err := state.Set(nil, nil, test.fixture.input)
 			require.NoError(T, err)
@@ -333,38 +333,24 @@ func TestMemoryNode_CopyToMemory(T *testing.T) {
 }
 
 func TestMemoryNode_CopyToMemory_AtKeypath(T *testing.T) {
-	//T.Parallel()
-	//
-	//tree := mustNewDBTree(T)
-	//defer tree.DeleteDB()
-	//
-	//err = tree.Update(func(tx *DBNode) error {
-	//    _, err := tx.Set(nil, nil, testVal1)
-	//    require.NoError(T, err)
-	//    return nil
-	//})
-	//require.NoError(T, err)
-	//
-	//expectedKeypaths := []Keypath{
-	//    Keypath("flox"),
-	//    Keypath("flox").PushIndex(0),
-	//    Keypath("flox").PushIndex(1),
-	//    Keypath("flox").PushIndex(1).Push(Keypath("yup")),
-	//    Keypath("flox").PushIndex(1).Push(Keypath("hey")),
-	//    Keypath("flox").PushIndex(2),
-	//}
-	//
-	//sort.Slice(expectedKeypaths, func(i, j int) bool { return bytes.Compare(expectedKeypaths[i], expectedKeypaths[j]) < 0 })
-	//
-	//err = tree.View(func(node *DBNode) error {
-	//    copied, err := node.AtKeypath(Keypath("flox")).CopyToMemory(nil)
-	//    require.NoError(T, err)
-	//
-	//    memnode := copied.(*MemoryNode)
-	//    for i := range memnode.keypaths {
-	//        require.Equal(T, expectedKeypaths[i], memnode.keypaths[i])
-	//    }
-	//    return nil
-	//})
-	//require.NoError(T, err)
+	T.Parallel()
+
+	node := NewMemoryNode()
+	err := node.Set(nil, nil, fixture1.input)
+	require.NoError(T, err)
+
+	copied, err := node.AtKeypath(Keypath("asdf"), nil).CopyToMemory(nil, nil)
+	require.NoError(T, err)
+
+	expected := takeFixtureOutputsWithPrefix(Keypath("asdf"), fixture1.output...)
+
+	memnode := copied.(*MemoryNode)
+	for i, kp := range memnode.keypaths {
+		require.Equal(T, expected[i].keypath, kp)
+		require.Equal(T, expected[i].nodeType, memnode.nodeTypes[string(kp)])
+		if memnode.nodeTypes[string(kp)] == NodeTypeSlice {
+			require.Equal(T, len(expected[i].value.([]interface{})), memnode.sliceLengths[string(kp)])
+		}
+	}
+	require.NoError(T, err)
 }
