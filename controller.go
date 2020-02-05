@@ -19,7 +19,8 @@ type Controller interface {
 	AddTx(tx *Tx)
 	HaveTx(txID types.ID) bool
 
-	State(version *types.ID) tree.Node
+	StateAtVersion(version *types.ID) tree.Node
+	QueryIndex(version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
 	Leaves() map[types.ID]struct{}
 	ResolverTree() *resolverTree
 	SetResolverTree(tree *resolverTree)
@@ -39,7 +40,8 @@ type controller struct {
 	txs          map[types.ID]*Tx
 	validTxs     map[types.ID]*Tx
 	resolverTree *resolverTree
-	state        *tree.DBTree
+	states       *tree.DBTree
+	indices      *tree.DBTree
 	leaves       map[types.ID]struct{}
 
 	chMempool     chan *Tx
@@ -51,7 +53,12 @@ type controller struct {
 
 func NewController(address types.Address, stateURI string, dbRootPath string, txProcessedHandler TxProcessedHandler) (Controller, error) {
 	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(stateURI)
-	state, err := tree.NewDBTree(filepath.Join(dbRootPath, stateURIClean))
+	states, err := tree.NewDBTree(filepath.Join(dbRootPath, stateURIClean))
+	if err != nil {
+		return nil, err
+	}
+
+	indices, err := tree.NewDBTree(filepath.Join(dbRootPath, stateURIClean+"_indices"))
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +71,8 @@ func NewController(address types.Address, stateURI string, dbRootPath string, tx
 		txs:               make(map[types.ID]*Tx),
 		validTxs:          make(map[types.ID]*Tx),
 		resolverTree:      newResolverTree(),
-		state:             state,
+		states:            states,
+		indices:           indices,
 		leaves:            make(map[types.ID]struct{}),
 		chMempool:         make(chan *Tx, 100),
 		chOnDownloadedRef: make(chan struct{}),
@@ -88,7 +96,7 @@ func (c *controller) Start() error {
 		nil,
 		// on shutdown
 		func() {
-			err := c.state.Close()
+			err := c.states.Close()
 			if err != nil {
 				c.Errorf("error closing state db: %v", err)
 			}
@@ -100,11 +108,8 @@ func (c *controller) OnDownloadedRef() {
 	c.chOnDownloadedRef <- struct{}{}
 }
 
-func (c *controller) State(version *types.ID) tree.Node {
-	if version == nil {
-		version = &types.EmptyID
-	}
-	return c.state.RootNode(*version)
+func (c *controller) StateAtVersion(version *types.ID) tree.Node {
+	return c.states.StateAtVersion(version, false)
 }
 
 func (c *controller) Leaves() map[types.ID]struct{} {
@@ -188,120 +193,120 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		return err
 	}
 
-	err = c.state.Update(types.EmptyID, func(state *tree.DBNode) error {
-		state.ResetDiff()
+	state := c.states.StateAtVersion(nil, true)
+	defer state.Close()
 
-		//
-		// Validate the tx's extrinsics
-		//
-		{
-			// @@TODO: sort patches and use ordering to cut down on number of ops
+	//
+	// Validate the tx's extrinsics
+	//
+	{
+		// @@TODO: sort patches and use ordering to cut down on number of ops
 
-			patches := tx.Patches
-			for i := len(c.resolverTree.validatorKeypaths) - 1; i >= 0; i-- {
-				validatorKeypath := c.resolverTree.validatorKeypaths[i]
+		patches := tx.Patches
+		for i := len(c.resolverTree.validatorKeypaths) - 1; i >= 0; i-- {
+			validatorKeypath := c.resolverTree.validatorKeypaths[i]
 
-				var unprocessedPatches []Patch
-				var patchesTrimmed []Patch
-				for _, patch := range patches {
-					if patch.Keypath.StartsWith(validatorKeypath) {
-						patchesTrimmed = append(patchesTrimmed, Patch{
-							Keypath: patch.Keypath.RelativeTo(validatorKeypath),
-							Range:   patch.Range,
-							Val:     patch.Val,
-						})
-					} else {
-						unprocessedPatches = append(unprocessedPatches, patch)
-					}
+			var unprocessedPatches []Patch
+			var patchesTrimmed []Patch
+			for _, patch := range patches {
+				if patch.Keypath.StartsWith(validatorKeypath) {
+					patchesTrimmed = append(patchesTrimmed, Patch{
+						Keypath: patch.Keypath.RelativeTo(validatorKeypath),
+						Range:   patch.Range,
+						Val:     patch.Val,
+					})
+				} else {
+					unprocessedPatches = append(unprocessedPatches, patch)
 				}
+			}
 
-				txCopy := *tx
-				txCopy.Patches = patchesTrimmed
-				err := c.resolverTree.validators[string(validatorKeypath)].ValidateTx(state.AtKeypath(validatorKeypath, nil), c.txs, c.validTxs, &txCopy)
+			txCopy := *tx
+			txCopy.Patches = patchesTrimmed
+			err := c.resolverTree.validators[string(validatorKeypath)].ValidateTx(state.AtKeypath(validatorKeypath, nil), c.txs, c.validTxs, &txCopy)
+			if err != nil {
+				return err
+			}
+
+			patches = unprocessedPatches
+		}
+	}
+
+	//
+	// Apply changes to the state tree
+	//
+	{
+		// @@TODO: sort patches and use ordering to cut down on number of ops
+
+		patches := tx.Patches
+		for i := len(c.resolverTree.resolverKeypaths) - 1; i >= 0; i-- {
+			resolverKeypath := c.resolverTree.resolverKeypaths[i]
+
+			var unprocessedPatches []Patch
+			var patchesTrimmed []Patch
+			for _, patch := range patches {
+				if patch.Keypath.StartsWith(resolverKeypath) {
+					patchesTrimmed = append(patchesTrimmed, Patch{
+						Keypath: patch.Keypath.RelativeTo(resolverKeypath),
+						Range:   patch.Range,
+						Val:     patch.Val,
+					})
+				} else {
+					unprocessedPatches = append(unprocessedPatches, patch)
+				}
+			}
+			if len(patchesTrimmed) == 0 {
+				patches = unprocessedPatches
+				continue
+			}
+
+			stateToResolve := state.AtKeypath(resolverKeypath, nil)
+			resolverConfig, err := state.CopyToMemory(resolverKeypath.Push(MergeTypeKeypath), nil)
+			if err != nil && errors.Cause(err) != types.Err404 {
+				return err
+			}
+			if resolverConfig != nil {
+				state.Diff().SetEnabled(false)
+				err = stateToResolve.Delete(MergeTypeKeypath, nil)
 				if err != nil {
 					return err
 				}
-
-				patches = unprocessedPatches
+				state.Diff().SetEnabled(true)
 			}
-		}
 
-		//
-		// Apply changes to the state tree
-		//
-		{
-			// @@TODO: sort patches and use ordering to cut down on number of ops
+			err = c.resolverTree.resolvers[string(resolverKeypath)].ResolveState(stateToResolve, tx.From, tx.ID, tx.Parents, patchesTrimmed)
+			if err != nil {
+				return err
+			}
 
-			patches := tx.Patches
-			for i := len(c.resolverTree.resolverKeypaths) - 1; i >= 0; i-- {
-				resolverKeypath := c.resolverTree.resolverKeypaths[i]
-
-				var unprocessedPatches []Patch
-				var patchesTrimmed []Patch
-				for _, patch := range patches {
-					if patch.Keypath.StartsWith(resolverKeypath) {
-						patchesTrimmed = append(patchesTrimmed, Patch{
-							Keypath: patch.Keypath.RelativeTo(resolverKeypath),
-							Range:   patch.Range,
-							Val:     patch.Val,
-						})
-					} else {
-						unprocessedPatches = append(unprocessedPatches, patch)
-					}
-				}
-				if len(patchesTrimmed) == 0 {
-					patches = unprocessedPatches
-					continue
-				}
-
-				stateToResolve := state.AtKeypath(resolverKeypath, nil)
-				resolverConfig, err := state.CopyToMemory(resolverKeypath.Push(MergeTypeKeypath), nil)
-				if err != nil && errors.Cause(err) != types.Err404 {
-					return err
-				}
-				if resolverConfig != nil {
-					state.Diff().SetEnabled(false)
-					err = stateToResolve.Delete(MergeTypeKeypath, nil)
-					if err != nil {
-						return err
-					}
-					state.Diff().SetEnabled(true)
-				}
-
-				err = c.resolverTree.resolvers[string(resolverKeypath)].ResolveState(stateToResolve, tx.From, tx.ID, tx.Parents, patchesTrimmed)
+			if resolverConfig != nil {
+				state.Diff().SetEnabled(false)
+				resolverConfigVal, _, err := resolverConfig.Value(nil, nil)
 				if err != nil {
 					return err
 				}
-
-				if resolverConfig != nil {
-					state.Diff().SetEnabled(false)
-					resolverConfigVal, _, err := resolverConfig.Value(nil, nil)
-					if err != nil {
-						return err
-					}
-					err = stateToResolve.Set(MergeTypeKeypath, nil, resolverConfigVal)
-					if err != nil {
-						return err
-					}
-					state.Diff().SetEnabled(true)
+				err = stateToResolve.Set(MergeTypeKeypath, nil, resolverConfigVal)
+				if err != nil {
+					return err
 				}
-
-				patches = unprocessedPatches
+				state.Diff().SetEnabled(true)
 			}
-		}
 
-		err = c.onTxProcessed(c, tx, state)
-		if err != nil {
-			return err
+			patches = unprocessedPatches
 		}
-		return nil
-	})
+	}
+
+	err = c.onTxProcessed(c, tx, state)
+	if err != nil {
+		return err
+	}
+
+	err = state.Save()
 	if err != nil {
 		return err
 	}
 
 	if tx.Checkpoint {
-		err = c.state.CopyVersion(tx.ID, types.EmptyID)
+		err = c.states.CopyVersion(tx.ID, tree.CurrentVersion)
 		if err != nil {
 			return err
 		}
@@ -362,6 +367,52 @@ func (c *controller) HaveTx(txID types.ID) bool {
 	defer c.mu.RUnlock()
 	_, have := c.txs[txID]
 	return have
+}
+
+func (c *controller) QueryIndex(version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (node tree.Node, err error) {
+	defer withStack(&err)
+
+	indexNode := c.indices.IndexAtVersion(version, keypath, indexName, false)
+
+	exists, err := indexNode.Exists(queryParam)
+	if err != nil {
+		return nil, err
+
+	} else if !exists {
+		indexNode.Close()
+		indexNode = c.indices.IndexAtVersion(version, keypath, indexName, true)
+
+		indices, exists := c.resolverTree.indexers[string(keypath)]
+		if !exists {
+			return nil, types.Err404
+		}
+		indexer, exists := indices[string(indexName)]
+		if !exists {
+			return nil, types.Err404
+		}
+
+		if version == nil {
+			version = &tree.CurrentVersion
+		}
+
+		nodeToIndex := c.states.StateAtVersion(version, false).AtKeypath(keypath, nil).(*tree.DBNode)
+
+		err := c.indices.BuildIndex(version, nodeToIndex, indexName, indexer)
+		if err != nil {
+			return nil, err
+		}
+
+		indexNode = c.indices.IndexAtVersion(version, keypath, indexName, false)
+
+		exists, err = indexNode.Exists(queryParam)
+		if err != nil {
+			return nil, err
+		} else if !exists {
+			return nil, types.Err404
+		}
+	}
+
+	return indexNode.AtKeypath(queryParam, rng), nil
 }
 
 //func (c *controller) getAncestors(hashes map[Hash]bool) map[Hash]bool {

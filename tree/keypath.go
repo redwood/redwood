@@ -28,6 +28,8 @@ func (k Keypath) String() string {
 	//for i, part := range parts {
 	//    if len(part) == 8 {
 	//        partStrings[i] = fmt.Sprintf("%v", DecodeSliceIndex(part))
+	//    } else if len(part) == 0 {
+	//        partStrings[i] = "<nil>"
 	//    } else {
 	//        partStrings[i] = string(part)
 	//    }

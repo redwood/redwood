@@ -23,6 +23,12 @@ func annotate(err *error, msg string, args ...interface{}) {
 	}
 }
 
+func withStack(err *error) {
+	if *err != nil {
+		*err = errors.WithStack(*err)
+	}
+}
+
 func getValue(x interface{}, keypath []string) (interface{}, bool) {
 	for i := 0; i < len(keypath); i++ {
 		if asMap, isMap := x.(map[string]interface{}); isMap {

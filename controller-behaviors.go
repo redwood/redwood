@@ -17,11 +17,17 @@ type Validator interface {
 	ValidateTx(state tree.Node, txs, validTxs map[types.ID]*Tx, tx *Tx) error
 }
 
+type Indexer interface {
+	IndexKeyForNode(state tree.Node) (tree.Keypath, error)
+}
+
 type ResolverConstructor func(config tree.Node, internalState map[string]interface{}) (Resolver, error)
 type ValidatorConstructor func(config tree.Node) (Validator, error)
+type IndexerConstructor func(config tree.Node) (Indexer, error)
 
 var resolverRegistry map[string]ResolverConstructor
 var validatorRegistry map[string]ValidatorConstructor
+var indexerRegistry map[string]IndexerConstructor
 
 func init() {
 	validatorRegistry = map[string]ValidatorConstructor{
@@ -34,6 +40,9 @@ func init() {
 		"resolver/js":   NewJSResolver,
 		//"resolver/stack": NewStackResolver,
 	}
+	indexerRegistry = map[string]IndexerConstructor{
+		"indexer/keypath": NewKeypathIndexer,
+	}
 }
 
 type resolverTree struct {
@@ -41,12 +50,14 @@ type resolverTree struct {
 	validators        map[string]Validator
 	resolverKeypaths  []tree.Keypath
 	resolvers         map[string]Resolver
+	indexers          map[string]map[string]Indexer
 }
 
 func newResolverTree() *resolverTree {
 	return &resolverTree{
 		validators: make(map[string]Validator),
 		resolvers:  make(map[string]Resolver),
+		indexers:   make(map[string]map[string]Indexer),
 	}
 }
 
@@ -98,6 +109,20 @@ func (t *resolverTree) removeValidator(keypath tree.Keypath) {
 	}
 	copy(t.validatorKeypaths[idx:], t.validatorKeypaths[idx+1:])
 	t.validatorKeypaths = t.validatorKeypaths[:len(t.validatorKeypaths)-1]
+}
+
+func (t *resolverTree) addIndexer(keypath tree.Keypath, indexName tree.Keypath, indexer Indexer) {
+	if _, exists := t.indexers[string(keypath)]; !exists {
+		t.indexers[string(keypath)] = make(map[string]Indexer)
+	}
+	t.indexers[string(keypath)][string(indexName)] = indexer
+}
+
+func (t *resolverTree) removeIndexer(keypath tree.Keypath, indexName tree.Keypath) {
+	if _, exists := t.indexers[string(keypath)]; !exists {
+		return
+	}
+	delete(t.indexers[string(keypath)], string(indexName))
 }
 
 func (t *resolverTree) nearestResolverForKeypath(keypath tree.Keypath) (Resolver, tree.Keypath) {

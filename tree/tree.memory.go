@@ -7,6 +7,8 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
+
+	"github.com/brynbellomy/redwood/types"
 )
 
 type MemoryNode struct {
@@ -22,31 +24,11 @@ type MemoryNode struct {
 }
 
 func NewMemoryNode() Node {
-	values := make(map[string]interface{})
-	//if rootNodeType == NodeTypeValue {
-	//    values[""] = nil
-	//}
 	return &MemoryNode{
-		//keypaths: []Keypath{Keypath(nil)},
-		values:    values,
-		nodeTypes: map[string]NodeType{
-			//"": rootNodeType,
-		},
-		sliceLengths: map[string]int{},
+		values:       make(map[string]interface{}),
+		nodeTypes:    make(map[string]NodeType),
+		sliceLengths: make(map[string]int),
 		diff:         NewDiff(),
-	}
-}
-
-func (nt NodeType) String() string {
-	switch nt {
-	case NodeTypeValue:
-		return "Value"
-	case NodeTypeMap:
-		return "Map"
-	case NodeTypeSlice:
-		return "Slice"
-	default:
-		return "Invalid"
 	}
 }
 
@@ -135,6 +117,21 @@ func (t *MemoryNode) makeCopy() {
 	t.copied = false
 }
 
+func (n *MemoryNode) Subkeys() []Keypath {
+	var keypaths []Keypath
+	keypathsMap := make(map[string]struct{})
+	_ = n.scanKeypathsWithPrefix(n.keypath, nil, func(kp Keypath, _ int) error {
+		subkey := kp.RelativeTo(n.keypath).Part(0)
+		_, exists := keypathsMap[string(subkey)]
+		if !exists && len(subkey) > 0 {
+			keypaths = append(keypaths, subkey)
+			keypathsMap[string(subkey)] = struct{}{}
+		}
+		return nil
+	})
+	return keypaths
+}
+
 func (t *MemoryNode) AtKeypath(keypath Keypath, rng *Range) Node {
 	return &MemoryNode{
 		keypath:      t.keypath.Push(keypath),
@@ -145,6 +142,40 @@ func (t *MemoryNode) AtKeypath(keypath Keypath, rng *Range) Node {
 		sliceLengths: t.sliceLengths,
 		diff:         t.diff,
 	}
+}
+
+func (t *MemoryNode) NodeInfo() (NodeType, ValueType, uint64, error) {
+	switch t.nodeTypes[string(t.keypath)] {
+	case NodeTypeInvalid:
+		return 0, 0, 0, errors.WithStack(types.Err404)
+
+	case NodeTypeMap:
+		return NodeTypeMap, 0, 0, nil
+
+	case NodeTypeSlice:
+		return NodeTypeSlice, 0, uint64(t.sliceLengths[string(t.keypath)]), nil
+
+	case NodeTypeValue:
+		val, exists := t.values[string(t.keypath)]
+		if !exists {
+			return 0, 0, 0, errors.WithStack(types.Err404)
+		}
+		switch v := val.(type) {
+		case string:
+			return NodeTypeValue, ValueTypeString, uint64(len(v)), nil
+		case float64:
+			return NodeTypeValue, ValueTypeFloat, 0, nil
+		case uint64:
+			return NodeTypeValue, ValueTypeUint, 0, nil
+		case int64:
+			return NodeTypeValue, ValueTypeInt, 0, nil
+		case bool:
+			return NodeTypeValue, ValueTypeBool, 0, nil
+		case nil:
+			return NodeTypeValue, ValueTypeInvalid, 0, nil
+		}
+	}
+	panic("should be unreachable")
 }
 
 func (t *MemoryNode) Exists(keypath Keypath) (bool, error) {
@@ -217,10 +248,15 @@ func (t *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 		return nil, false, nil
 
 	case NodeTypeValue:
+		val, exists := t.values[string(absKeypath)]
+		if !exists {
+			return nil, false, nil
+		} else if asNode, isNode := val.(Node); isNode {
+			return asNode.Value(nil, rng)
+		}
 		if rng != nil {
 			return nil, false, ErrRangeOverNonSlice
 		}
-		val, exists := t.values[string(absKeypath)]
 		return val, exists, nil
 
 	case NodeTypeMap:
@@ -250,7 +286,6 @@ func (t *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 
 	case NodeTypeSlice:
 		s := make([]interface{}, t.sliceLengths[string(absKeypath)])
-		t.DebugPrint()
 
 		t.scanNodeTypesWithPrefix(absKeypath, func(kp Keypath, nodeType NodeType) {
 			if nodeType == NodeTypeSlice {
@@ -307,94 +342,63 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 	}
 
 	absKeypath := t.keypath.Push(keypath)
-
 	var newKeypaths []Keypath
 
 	// Set value types for intermediate keypaths in case they don't exist
 	{
-		var isSettingSimpleValue bool
-		switch value.(type) {
-		case map[string]interface{}, []interface{}:
-		default:
-			isSettingSimpleValue = true
-		}
-		if len(absKeypath) != 0 || !isSettingSimpleValue {
-			nt := t.nodeTypes[string(Keypath(nil))]
-			if nt == NodeTypeValue {
-				t.nodeTypes[string(Keypath(nil))] = NodeTypeMap
-			} else if nt == NodeTypeInvalid {
-				t.nodeTypes[string(Keypath(nil))] = NodeTypeMap
-				//newKeypaths = append(newKeypaths, nil)
+		parts := append([]Keypath{nil}, absKeypath.Parts()...)
+		var byteIdx int
+		for i, key := range parts[:len(parts)-1] {
+			byteIdx += len(key)
+
+			var partialKeypath Keypath
+			// We always want 0-length keypaths to be nil
+			if byteIdx != 0 {
+				partialKeypath = absKeypath[:byteIdx]
 			}
-		}
 
-		parts := absKeypath.Parts()
-		if len(parts) != 0 {
-			var byteIdx int
-			for _, key := range parts[:len(parts)-1] {
-				byteIdx += len(key)
+			nt := t.nodeTypes[string(partialKeypath)]
+			if nt == NodeTypeInvalid {
+				t.nodeTypes[string(partialKeypath)] = NodeTypeMap
 
-				partialKeypath := absKeypath[:byteIdx]
-				nt := t.nodeTypes[string(partialKeypath)]
-				if nt == NodeTypeValue {
-					t.nodeTypes[string(partialKeypath)] = NodeTypeMap
-				} else if nt == NodeTypeInvalid {
-					t.nodeTypes[string(partialKeypath)] = NodeTypeMap
-					newKeypaths = append(newKeypaths, partialKeypath)
+			} else if nt != NodeTypeMap {
+				err := t.Delete(partialKeypath.RelativeTo(keypath), nil)
+				if err != nil {
+					return err
 				}
+				t.nodeTypes[string(partialKeypath)] = NodeTypeMap
+			}
+			newKeypaths = append(newKeypaths, partialKeypath)
+
+			if i != 0 {
+				// Only account for the keypath separator after the root (nil) keypath
 				byteIdx += 1
 			}
 		}
 	}
 
-	switch v := value.(type) {
-	case map[string]interface{}:
-		t.nodeTypes[string(absKeypath)] = NodeTypeMap
-		walkGoValue(value, func(nodeKeypath Keypath, nodeValue interface{}) error {
-			absNodeKeypath := absKeypath.Push(nodeKeypath)
-			newKeypaths = append(newKeypaths, absNodeKeypath)
+	//switch v := value.(type) {
+	//case []interface{}:
+	//    t.sliceLengths[string(absKeypath)] = len(v)
+	//}
 
-			switch nv := nodeValue.(type) {
-			case map[string]interface{}:
-				t.nodeTypes[string(absNodeKeypath)] = NodeTypeMap
-			case []interface{}:
-				t.nodeTypes[string(absNodeKeypath)] = NodeTypeSlice
-				t.sliceLengths[string(absNodeKeypath)] = len(nv)
-			default:
-				t.nodeTypes[string(absNodeKeypath)] = NodeTypeValue
-				t.values[string(absNodeKeypath)] = nodeValue
-			}
-			return nil
-		})
+	walkGoValue(value, func(nodeKeypath Keypath, nodeValue interface{}) error {
+		absNodeKeypath := absKeypath.Push(nodeKeypath)
+		newKeypaths = append(newKeypaths, absNodeKeypath)
 
-	case []interface{}:
-		t.nodeTypes[string(absKeypath)] = NodeTypeSlice
-		t.sliceLengths[string(absKeypath)] += len(v)
-		walkGoValue(value, func(nodeKeypath Keypath, nodeValue interface{}) error {
-			absNodeKeypath := absKeypath.Push(nodeKeypath)
-			newKeypaths = append(newKeypaths, absNodeKeypath)
-
-			switch nv := nodeValue.(type) {
-			case map[string]interface{}:
-				t.nodeTypes[string(absNodeKeypath)] = NodeTypeMap
-			case []interface{}:
-				t.nodeTypes[string(absNodeKeypath)] = NodeTypeSlice
-				t.sliceLengths[string(absNodeKeypath)] = len(nv)
-			default:
-				t.nodeTypes[string(absNodeKeypath)] = NodeTypeValue
-				t.values[string(absNodeKeypath)] = nodeValue
-			}
-			return nil
-		})
-
-	default:
-		t.nodeTypes[string(absKeypath)] = NodeTypeValue
-		_, exists := t.values[string(absKeypath)]
-		t.values[string(absKeypath)] = value
-		if !exists {
-			newKeypaths = append(newKeypaths, absKeypath)
+		switch nv := nodeValue.(type) {
+		case map[string]interface{}:
+			t.nodeTypes[string(absNodeKeypath)] = NodeTypeMap
+		case []interface{}:
+			t.nodeTypes[string(absNodeKeypath)] = NodeTypeSlice
+			t.sliceLengths[string(absNodeKeypath)] = len(nv)
+		default:
+			t.nodeTypes[string(absNodeKeypath)] = NodeTypeValue
+			t.values[string(absNodeKeypath)] = nodeValue
 		}
-	}
+		return nil
+	})
+
 	t.diff.AddMany(newKeypaths)
 	t.addKeypaths(newKeypaths)
 
@@ -554,12 +558,6 @@ func (iter *memoryDepthFirstIterator) SeekTo(keypath Keypath) {
 }
 
 func (iter *memoryDepthFirstIterator) Next() Node {
-	// Accounting to allow the consumer perform mutations without needing to manually seek the iterator.
-	curLen := len(iter.backingNode.keypaths)
-	if iter.prevLen != curLen {
-		//iter.i += curLen - iter.prevLen
-	}
-
 	if iter.i == iter.end {
 		return nil
 	}

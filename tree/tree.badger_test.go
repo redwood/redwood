@@ -66,6 +66,28 @@ func TestDBTree_CopyToMemory(T *testing.T) {
 	//}
 }
 
+func (t *DBTree) View(v *types.ID, fn func(*DBNode) error) error {
+	state := t.StateAtVersion(v, false)
+	defer state.Close()
+	return fn(state)
+}
+
+func (t *DBTree) Update(v *types.ID, fn func(*DBNode) error) error {
+	state := t.StateAtVersion(v, true)
+	defer state.Close()
+
+	err := fn(state)
+	if err != nil {
+		return err
+	}
+
+	err = state.Save()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func TestDBTree_CopyToMemory_AtKeypath(T *testing.T) {
 	T.Parallel()
 
@@ -76,28 +98,42 @@ func TestDBTree_CopyToMemory_AtKeypath(T *testing.T) {
 
 	v := types.RandomID()
 
-	err = tree.Update(v, func(tx *DBNode) error {
+	err = tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(nil, nil, fixture1.input)
 		require.NoError(T, err)
 		return nil
 	})
 	require.NoError(T, err)
 
-	err = tree.View(v, func(node *DBNode) error {
-		copied, err := node.AtKeypath(Keypath("flox"), nil).CopyToMemory(nil, nil)
-		require.NoError(T, err)
+	tests := []struct {
+		name    string
+		keypath Keypath
+	}{
+		{"value", Keypath("flo")},
+		{"slice", Keypath("flox")},
+		{"map", Keypath("flox").PushIndex(1)},
+	}
 
-		expected := takeFixtureOutputsWithPrefix(Keypath("flox"), fixture1.output...)
-		expected = removeFixtureOutputPrefixes(Keypath("flox"), expected...)
-		memnode := copied.(*MemoryNode)
-		require.Equal(T, len(expected), len(memnode.keypaths))
+	for _, test := range tests {
+		test := test
+		T.Run(test.name, func(T *testing.T) {
+			err = tree.View(&v, func(node *DBNode) error {
+				copied, err := node.AtKeypath(Keypath("flox"), nil).CopyToMemory(nil, nil)
+				require.NoError(T, err)
 
-		for i := range memnode.keypaths {
-			require.Equal(T, expected[i].keypath, memnode.keypaths[i])
-		}
-		return nil
-	})
-	require.NoError(T, err)
+				expected := takeFixtureOutputsWithPrefix(Keypath("flox"), fixture1.output...)
+				expected = removeFixtureOutputPrefixes(Keypath("flox"), expected...)
+				memnode := copied.(*MemoryNode)
+				require.Equal(T, len(expected), len(memnode.keypaths))
+
+				for i := range memnode.keypaths {
+					require.Equal(T, expected[i].keypath, memnode.keypaths[i])
+				}
+				return nil
+			})
+			require.NoError(T, err)
+		})
+	}
 }
 
 func setRangeSlice_setup(T *testing.T) (*DBTree, types.ID, func()) {
@@ -107,7 +143,7 @@ func setRangeSlice_setup(T *testing.T) (*DBTree, types.ID, func()) {
 
 	v := types.RandomID()
 
-	err = tree.Update(v, func(tx *DBNode) error {
+	err = tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/bar/baz"), nil, uint64(123))
 		require.NoError(T, err)
 
@@ -118,7 +154,7 @@ func setRangeSlice_setup(T *testing.T) (*DBTree, types.ID, func()) {
 	})
 	require.NoError(T, err)
 
-	val, exists, err := tree.Value(v, nil, nil)
+	val, exists, err := tree.Value(&v, nil, nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, val, M{
@@ -145,26 +181,26 @@ func TestDBTree_SetRangeString(T *testing.T) {
 	defer tree.DeleteDB()
 	v := types.RandomID()
 
-	err = tree.Update(v, func(tx *DBNode) error {
+	err = tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/string"), nil, "abcdefgh")
 		require.NoError(T, err)
 		return nil
 	})
 	require.NoError(T, err)
 
-	str, exists, err := tree.Value(v, Keypath("foo/string"), nil)
+	str, exists, err := tree.Value(&v, Keypath("foo/string"), nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, "abcdefgh", str)
 
-	err = tree.Update(v, func(tx *DBNode) error {
+	err = tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/string"), &Range{3, 6}, "xx")
 		require.NoError(T, err)
 		return nil
 	})
 	require.NoError(T, err)
 
-	str, exists, err = tree.Value(v, Keypath("foo/string"), nil)
+	str, exists, err = tree.Value(&v, Keypath("foo/string"), nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, "abcxxgh", str)
@@ -176,14 +212,14 @@ func TestDBTree_SetRangeSlice_Start_Grow(T *testing.T) {
 	tree, v, cleanup := setRangeSlice_setup(T)
 	defer cleanup()
 
-	err := tree.Update(v, func(tx *DBNode) error {
+	err := tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/slice"), &Range{0, 2}, []interface{}{testVal5, testVal6, testVal7, testVal8})
 		require.NoError(T, err)
 		return nil
 	})
 	require.NoError(T, err)
 
-	val, exists, err := tree.Value(v, nil, nil)
+	val, exists, err := tree.Value(&v, nil, nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, M{
@@ -202,7 +238,7 @@ func TestDBTree_SetRangeSlice_Start_Same(T *testing.T) {
 	tree, v, cleanup := setRangeSlice_setup(T)
 	defer cleanup()
 
-	err := tree.Update(v, func(tx *DBNode) error {
+	err := tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/slice"), &Range{0, 2}, []interface{}{testVal5, testVal6})
 		require.NoError(T, err)
 		return nil
@@ -210,7 +246,7 @@ func TestDBTree_SetRangeSlice_Start_Same(T *testing.T) {
 	require.NoError(T, err)
 	//debugPrint(T, tree)
 
-	val, exists, err := tree.Value(v, nil, nil)
+	val, exists, err := tree.Value(&v, nil, nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, M{
@@ -229,7 +265,7 @@ func TestDBTree_SetRangeSlice_Start_Shrink(T *testing.T) {
 	tree, v, cleanup := setRangeSlice_setup(T)
 	defer cleanup()
 
-	err := tree.Update(v, func(tx *DBNode) error {
+	err := tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/slice"), &Range{0, 2}, []interface{}{testVal5})
 		require.NoError(T, err)
 		return nil
@@ -237,7 +273,7 @@ func TestDBTree_SetRangeSlice_Start_Shrink(T *testing.T) {
 	require.NoError(T, err)
 	//debugPrint(T, tree)
 
-	val, exists, err := tree.Value(v, nil, nil)
+	val, exists, err := tree.Value(&v, nil, nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, M{
@@ -257,7 +293,7 @@ func TestDBTree_SetRangeSlice_Middle_Grow(T *testing.T) {
 	defer cleanup()
 	//debugPrint(T, tree)
 
-	err := tree.Update(v, func(tx *DBNode) error {
+	err := tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/slice"), &Range{1, 3}, []interface{}{testVal5, testVal6, testVal7, testVal8})
 		require.NoError(T, err)
 		return nil
@@ -265,7 +301,7 @@ func TestDBTree_SetRangeSlice_Middle_Grow(T *testing.T) {
 	require.NoError(T, err)
 	//debugPrint(T, tree)
 
-	val, exists, err := tree.Value(v, nil, nil)
+	val, exists, err := tree.Value(&v, nil, nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, M{
@@ -284,7 +320,7 @@ func TestDBTree_SetRangeSlice_Middle_Same(T *testing.T) {
 	tree, v, cleanup := setRangeSlice_setup(T)
 	defer cleanup()
 
-	err := tree.Update(v, func(tx *DBNode) error {
+	err := tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/slice"), &Range{1, 3}, []interface{}{testVal5, testVal6})
 		require.NoError(T, err)
 		return nil
@@ -292,7 +328,7 @@ func TestDBTree_SetRangeSlice_Middle_Same(T *testing.T) {
 	require.NoError(T, err)
 	//debugPrint(T, tree)
 
-	val, exists, err := tree.Value(v, nil, nil)
+	val, exists, err := tree.Value(&v, nil, nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, M{
@@ -313,7 +349,7 @@ func TestDBTree_SetRangeSlice_Middle_Shrink(T *testing.T) {
 
 	//debugPrint(T, tree)
 
-	err := tree.Update(v, func(tx *DBNode) error {
+	err := tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/slice"), &Range{1, 3}, []interface{}{testVal5})
 		require.NoError(T, err)
 		return nil
@@ -321,7 +357,7 @@ func TestDBTree_SetRangeSlice_Middle_Shrink(T *testing.T) {
 	require.NoError(T, err)
 	//debugPrint(T, tree)
 
-	val, exists, err := tree.Value(v, nil, nil)
+	val, exists, err := tree.Value(&v, nil, nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, M{
@@ -340,7 +376,7 @@ func TestDBTree_SetRangeSlice_End_Grow(T *testing.T) {
 	tree, v, cleanup := setRangeSlice_setup(T)
 	defer cleanup()
 
-	err := tree.Update(v, func(tx *DBNode) error {
+	err := tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/slice"), &Range{2, 4}, []interface{}{testVal5, testVal6, testVal7, testVal8})
 		require.NoError(T, err)
 		return nil
@@ -348,7 +384,7 @@ func TestDBTree_SetRangeSlice_End_Grow(T *testing.T) {
 	require.NoError(T, err)
 	//debugPrint(T, tree)
 
-	val, exists, err := tree.Value(v, nil, nil)
+	val, exists, err := tree.Value(&v, nil, nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, M{
@@ -367,7 +403,7 @@ func TestDBTree_SetRangeSlice_End_Same(T *testing.T) {
 	tree, v, cleanup := setRangeSlice_setup(T)
 	defer cleanup()
 
-	err := tree.Update(v, func(tx *DBNode) error {
+	err := tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/slice"), &Range{2, 4}, []interface{}{testVal5, testVal6})
 		require.NoError(T, err)
 		return nil
@@ -375,7 +411,7 @@ func TestDBTree_SetRangeSlice_End_Same(T *testing.T) {
 	require.NoError(T, err)
 	//debugPrint(T, tree)
 
-	val, exists, err := tree.Value(v, nil, nil)
+	val, exists, err := tree.Value(&v, nil, nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, M{
@@ -394,7 +430,7 @@ func TestDBTree_SetRangeSlice_End_Shrink(T *testing.T) {
 	tree, v, cleanup := setRangeSlice_setup(T)
 	defer cleanup()
 
-	err := tree.Update(v, func(tx *DBNode) error {
+	err := tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/slice"), &Range{1, 4}, []interface{}{testVal5})
 		require.NoError(T, err)
 		return nil
@@ -402,7 +438,7 @@ func TestDBTree_SetRangeSlice_End_Shrink(T *testing.T) {
 	require.NoError(T, err)
 	//debugPrint(T, tree)
 
-	val, exists, err := tree.Value(v, nil, nil)
+	val, exists, err := tree.Value(&v, nil, nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, M{
@@ -421,7 +457,7 @@ func TestDBTree_SetRangeSlice_End_Append(T *testing.T) {
 	tree, v, cleanup := setRangeSlice_setup(T)
 	defer cleanup()
 
-	err := tree.Update(v, func(tx *DBNode) error {
+	err := tree.Update(&v, func(tx *DBNode) error {
 		err := tx.Set(Keypath("foo/slice"), &Range{4, 4}, []interface{}{testVal5, testVal6, testVal7, testVal8})
 		require.NoError(T, err)
 		return nil
@@ -429,7 +465,7 @@ func TestDBTree_SetRangeSlice_End_Append(T *testing.T) {
 	require.NoError(T, err)
 	//debugPrint(T, tree)
 
-	val, exists, err := tree.Value(v, nil, nil)
+	val, exists, err := tree.Value(&v, nil, nil)
 	require.True(T, exists)
 	require.NoError(T, err)
 	require.Equal(T, M{
@@ -453,7 +489,7 @@ func TestDBTree_CopyVersion(T *testing.T) {
 	srcVersion := types.RandomID()
 	dstVersion := types.RandomID()
 
-	err = tree.Update(srcVersion, func(tx *DBNode) error {
+	err = tree.Update(&srcVersion, func(tx *DBNode) error {
 		err := tx.Set(nil, nil, fixture1.input)
 		require.NoError(T, err)
 		return nil
@@ -463,12 +499,12 @@ func TestDBTree_CopyVersion(T *testing.T) {
 	err = tree.CopyVersion(dstVersion, srcVersion)
 	require.NoError(T, err)
 
-	srcVal, exists, err := tree.RootNode(srcVersion).Value(nil, nil)
+	srcVal, exists, err := tree.StateAtVersion(&srcVersion, false).Value(nil, nil)
 	require.NoError(T, err)
 	require.True(T, exists)
 	require.Equal(T, srcVal, fixture1.input)
 
-	dstVal, exists, err := tree.RootNode(dstVersion).Value(nil, nil)
+	dstVal, exists, err := tree.StateAtVersion(&dstVersion, false).Value(nil, nil)
 	require.NoError(T, err)
 	require.True(T, exists)
 	require.Equal(T, dstVal, fixture1.input)

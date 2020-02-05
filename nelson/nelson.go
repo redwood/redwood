@@ -61,6 +61,7 @@ func (n *Frame) Value(keypath tree.Keypath, rng *tree.Range) (interface{}, bool,
 	if n.overrideValue != nil {
 		return n.overrideValue, true, nil
 	}
+	//return n.Node.Value(keypath, rng)
 	return GetValueRecursive(n.Node, keypath, rng)
 }
 
@@ -83,7 +84,7 @@ func (n *Frame) ValueNode() tree.Node {
 }
 
 type ReferenceResolver interface {
-	State(stateURI string, version *types.ID) (tree.Node, error)
+	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
 	RefObjectReader(refHash types.Hash) (io.ReadCloser, int64, error)
 }
 
@@ -98,7 +99,9 @@ func Resolve(frameNode tree.Node, refResolver ReferenceResolver) (tree.Node, boo
 			break
 		}
 
-		parentKeypath, key := node.Keypath().Pop()
+		keypath := node.Keypath().RelativeTo(frameNode.Keypath())
+
+		parentKeypath, key := keypath.Pop()
 		if key.Equals(ValueKey) {
 			// This is a NelSON frame.
 
@@ -153,17 +156,19 @@ func Resolve(frameNode tree.Node, refResolver ReferenceResolver) (tree.Node, boo
 					}
 				}
 
-				newParentKeypath, key := parentKeypath.Pop()
+				newParentKeypath, newKey := parentKeypath.Pop()
 
-				if !key.Equals(ValueKey) {
-					err := frameNode.Set(parentKeypath, nil, n)
-					if err != nil {
-						return nil, false, err
-					}
+				if !newKey.Equals(ValueKey) {
 					if len(parentKeypath) == 0 {
-						frameNode = n
+						return n, false, nil
+
+					} else {
+						err := frameNode.Set(parentKeypath, nil, n)
+						if err != nil {
+							return nil, false, err
+						}
+						iter.(interface{ SeekTo(keypath tree.Keypath) }).SeekTo(parentKeypath)
 					}
-					iter.(interface{ SeekTo(keypath tree.Keypath) }).SeekTo(parentKeypath)
 
 					break TravelUpwards
 				}
@@ -174,6 +179,7 @@ func Resolve(frameNode tree.Node, refResolver ReferenceResolver) (tree.Node, boo
 				}
 
 				parentKeypath = newParentKeypath
+				key = newKey
 			}
 		}
 	}
@@ -223,7 +229,7 @@ func resolveLink(n *Frame, linkStr string, refResolver ReferenceResolver) {
 
 		stateURI := strings.Join(parts[:2], "/")
 		keypath := tree.Keypath(linkValue[len(stateURI)+1:])
-		state, err := refResolver.State(stateURI, version)
+		state, err := refResolver.StateAtVersion(stateURI, version)
 		if err != nil {
 			n.err = err
 			n.fullyResolved = false

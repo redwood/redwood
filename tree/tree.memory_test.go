@@ -17,39 +17,42 @@ func TestMemoryNode_Set(T *testing.T) {
 		fixtures  []fixture
 	}{
 		{"root keypath, single set, map value", Keypath(nil), Keypath(nil), nil, []fixture{fixture1}},
-		//{"root keypath, single set, map value 2", Keypath(nil), Keypath(nil), nil, []fixture{fixture2}},
-		//{"root keypath, single set, float value", Keypath(nil), Keypath(nil), nil, []fixture{fixture5}},
-		//{"root keypath, single set, string value", Keypath(nil), Keypath(nil), nil, []fixture{fixture6}},
-		//{"root keypath, single set, bool value", Keypath(nil), Keypath(nil), nil, []fixture{fixture7}},
-		//
-		//{"non-root keypath, single set, map value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture1}},
-		//{"non-root keypath, single set, map value 2", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture2}},
-		//{"non-root keypath, single set, float value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture5}},
-		//{"non-root keypath, single set, string value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture6}},
-		//{"non-root keypath, single set, bool value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture7}},
+		{"root keypath, single set, map value 2", Keypath(nil), Keypath(nil), nil, []fixture{fixture2}},
+		{"root keypath, single set, float value", Keypath(nil), Keypath(nil), nil, []fixture{fixture5}},
+		{"root keypath, single set, string value", Keypath(nil), Keypath(nil), nil, []fixture{fixture6}},
+		{"root keypath, single set, bool value", Keypath(nil), Keypath(nil), nil, []fixture{fixture7}},
+
+		{"non-root keypath, single set, map value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture1}},
+		{"non-root keypath, single set, map value 2", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture2}},
+		{"non-root keypath, single set, float value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture5}},
+		{"non-root keypath, single set, string value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture6}},
+		{"non-root keypath, single set, bool value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture7}},
 	}
 
 	for _, test := range tests {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
-			//state := NewMemoryNode(NodeTypeMap).AtKeypath(test.atKeypath).(*MemoryNode)
 			state := NewMemoryNode().AtKeypath(test.atKeypath, nil).(*MemoryNode)
 
 			for _, f := range test.fixtures {
 				err := state.Set(test.keypath, test.rng, f.input)
 				require.NoError(T, err)
 			}
-			state.DebugPrint()
+
+			prefixOutputs := makeAtKeypathFixtureOutputs(test.atKeypath)
+			expectedNodesFromAtKeypath := len(prefixOutputs)
+			if expectedNodesFromAtKeypath > 0 {
+				expectedNodesFromAtKeypath--
+			}
 
 			expectedNumValues := countNodesOfType(NodeTypeValue, combineFixtureOutputs(nil, test.fixtures...)...)
 			expectedNumSlices := countNodesOfType(NodeTypeSlice, combineFixtureOutputs(nil, test.fixtures...)...)
-			expectedNumMaps := countNodesOfType(NodeTypeMap, combineFixtureOutputs(nil, test.fixtures...)...) + test.atKeypath.NumParts()
+			expectedNumMaps := countNodesOfType(NodeTypeMap, combineFixtureOutputs(nil, test.fixtures...)...) + expectedNodesFromAtKeypath
 			expectedNumNodes := expectedNumValues + expectedNumSlices + expectedNumMaps
 			require.Equal(T, expectedNumValues, len(state.values))
 			require.Equal(T, expectedNumNodes, len(state.nodeTypes))
 			require.Equal(T, expectedNumNodes, len(state.keypaths))
 
-			prefixOutputs := makeAtKeypathFixtureOutputs(test.atKeypath)
 			valueOutputs := combineFixtureOutputs(test.atKeypath, test.fixtures...)
 			expected := append(prefixOutputs[:len(prefixOutputs)-1], valueOutputs...)
 			for i, kp := range state.keypaths {

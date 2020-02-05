@@ -188,6 +188,14 @@ func sendTxs(host1, host2 rw.Host) {
 									}
 								}
 							}
+						},
+						"Indices": {
+							"sender": {
+								"Content-Type": "indexer/keypath",
+								"value": {
+									"keypath": "sender"
+								}
+							}
 						}
 					},
 					"index.html": {

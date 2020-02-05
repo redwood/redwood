@@ -2,12 +2,18 @@ package tree
 
 import (
 	"github.com/pkg/errors"
+
+	"github.com/brynbellomy/redwood/types"
 )
 
 var (
 	ErrNodeEncoding      = errors.New("corrupted encoding for node")
 	ErrInvalidRange      = errors.New("invalid range")
 	ErrRangeOverNonSlice = errors.New("range over non-slice")
+)
+
+var (
+	CurrentVersion = types.EmptyID
 )
 
 type Range [2]int64
@@ -53,6 +59,7 @@ func (rng *Range) IndicesForLength(length uint64) (uint64, uint64) {
 type Node interface {
 	Close()
 	Keypath() Keypath
+	Subkeys() []Keypath
 	AtKeypath(keypath Keypath, rng *Range) Node
 	Value(keypath Keypath, rng *Range) (interface{}, bool, error)
 	UintValue(keypath Keypath) (uint64, bool, error)
@@ -60,6 +67,7 @@ type Node interface {
 	FloatValue(keypath Keypath) (float64, bool, error)
 	StringValue(keypath Keypath) (string, bool, error)
 	ContentLength() (int64, error)
+	NodeInfo() (NodeType, ValueType, uint64, error)
 	Exists(keypath Keypath) (bool, error)
 	Set(keypath Keypath, rng *Range, val interface{}) error
 	Delete(keypath Keypath, rng *Range) error
@@ -79,6 +87,19 @@ const (
 	NodeTypeSlice
 )
 
+func (nt NodeType) String() string {
+	switch nt {
+	case NodeTypeValue:
+		return "Value"
+	case NodeTypeMap:
+		return "Map"
+	case NodeTypeSlice:
+		return "Slice"
+	default:
+		return "Invalid"
+	}
+}
+
 type ValueType uint8
 
 const (
@@ -88,7 +109,27 @@ const (
 	ValueTypeInt
 	ValueTypeFloat
 	ValueTypeBool
+	ValueTypeNil
 )
+
+func (vt ValueType) String() string {
+	switch vt {
+	case ValueTypeString:
+		return "String"
+	case ValueTypeUint:
+		return "Uint"
+	case ValueTypeInt:
+		return "Int"
+	case ValueTypeFloat:
+		return "Float"
+	case ValueTypeBool:
+		return "Bool"
+	case ValueTypeNil:
+		return "Nil"
+	default:
+		return "Invalid"
+	}
+}
 
 type Iterator interface {
 	Next() Node
@@ -120,7 +161,7 @@ func (d *Diff) Enabled() bool {
 }
 
 func (d *Diff) Add(keypath Keypath) {
-	if !d.enabled {
+	if d == nil || !d.enabled {
 		return
 	}
 	_, exists := d.Added[string(keypath)]
@@ -131,7 +172,7 @@ func (d *Diff) Add(keypath Keypath) {
 }
 
 func (d *Diff) AddMany(keypaths []Keypath) {
-	if !d.enabled {
+	if d == nil || !d.enabled {
 		return
 	}
 	for _, kp := range keypaths {
@@ -140,7 +181,7 @@ func (d *Diff) AddMany(keypaths []Keypath) {
 }
 
 func (d *Diff) Remove(keypath Keypath) {
-	if !d.enabled {
+	if d == nil || !d.enabled {
 		return
 	}
 	_, exists := d.Removed[string(keypath)]
@@ -151,7 +192,7 @@ func (d *Diff) Remove(keypath Keypath) {
 }
 
 func (d *Diff) RemoveMany(keypaths []Keypath) {
-	if !d.enabled {
+	if d == nil || !d.enabled {
 		return
 	}
 	for _, kp := range keypaths {

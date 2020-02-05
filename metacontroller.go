@@ -23,7 +23,8 @@ type Metacontroller interface {
 	HaveTx(stateURI string, txID types.ID) bool
 
 	KnownStateURIs() []string
-	State(stateURI string, version *types.ID) (tree.Node, error)
+	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
+	QueryIndex(stateURI string, version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
 	Leaves(stateURI string) (map[types.ID]struct{}, error)
 
 	SetReceivedRefsHandler(handler ReceivedRefsHandler)
@@ -205,6 +206,9 @@ func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DB
 				c.ResolverTree().removeResolver(parentKeypath)
 			case key.Equals(ValidatorKeypath):
 				c.ResolverTree().removeValidator(parentKeypath)
+			case parentKeypath.Part(-1).Equals(tree.Keypath("Indices")):
+				//indicesKeypath, _ := parentKeypath.Pop()
+				//c.ResolverTree().removeIndexer()
 			}
 
 			for parentKeypath != nil {
@@ -238,6 +242,12 @@ func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DB
 
 			case key.Equals(ValidatorKeypath):
 				err := m.initializeValidator(state, keypath, c)
+				if err != nil {
+					return err
+				}
+
+			case key.Equals(tree.Keypath("Indices")):
+				err := m.initializeIndexer(state, keypath, c)
 				if err != nil {
 					return err
 				}
@@ -346,6 +356,49 @@ func (m *metacontroller) initializeValidator(state *tree.DBNode, validatorKeypat
 	return nil
 }
 
+func (m *metacontroller) initializeIndexer(state *tree.DBNode, indexerConfigKeypath tree.Keypath, c Controller) error {
+	// Resolve any refs (to code) in the indexer config object.  We copy the config so
+	// that we don't inject any refs into the state tree itself
+	indexConfigs, err := state.CopyToMemory(indexerConfigKeypath, nil)
+	if err != nil {
+		return err
+	}
+
+	subkeys := indexConfigs.Subkeys()
+
+	for _, indexName := range subkeys {
+		config, anyMissing, err := nelson.Resolve(indexConfigs.AtKeypath(indexName, nil), m)
+		if err != nil {
+			return err
+		} else if anyMissing {
+			return errors.WithStack(ErrMissingCriticalRefs)
+		}
+
+		contentType, err := nelson.GetContentType(config)
+		if err != nil {
+			return err
+		} else if contentType == "" {
+			return errors.New("cannot initialize indexer without a 'Content-Type' key")
+		}
+
+		ctor, exists := indexerRegistry[contentType]
+		if !exists {
+			return errors.Errorf("unknown indexer type '%v'", contentType)
+		}
+
+		indexer, err := ctor(config)
+		if err != nil {
+			return err
+		}
+
+		indexerNodeKeypath, _ := indexerConfigKeypath.Pop()
+		indexerNodeKeypath = indexerNodeKeypath.Push(nelson.ValueKey)
+
+		c.ResolverTree().addIndexer(indexerNodeKeypath, indexName, indexer)
+	}
+	return nil
+}
+
 func (m *metacontroller) KnownStateURIs() []string {
 	m.validStateURIsMu.Lock()
 	defer m.validStateURIsMu.Unlock()
@@ -396,7 +449,7 @@ func (m *metacontroller) HaveTx(stateURI string, txID types.ID) bool {
 	return ctrl.HaveTx(txID)
 }
 
-func (m *metacontroller) State(stateURI string, version *types.ID) (tree.Node, error) {
+func (m *metacontroller) StateAtVersion(stateURI string, version *types.ID) (tree.Node, error) {
 	m.controllersMu.RLock()
 	defer m.controllersMu.RUnlock()
 
@@ -404,7 +457,18 @@ func (m *metacontroller) State(stateURI string, version *types.ID) (tree.Node, e
 	if ctrl == nil {
 		return nil, errors.Wrapf(ErrNoController, stateURI)
 	}
-	return ctrl.State(version), nil
+	return ctrl.StateAtVersion(version), nil
+}
+
+func (m *metacontroller) QueryIndex(stateURI string, version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error) {
+	m.controllersMu.RLock()
+	defer m.controllersMu.RUnlock()
+
+	ctrl := m.controllers[stateURI]
+	if ctrl == nil {
+		return nil, errors.Wrapf(ErrNoController, stateURI)
+	}
+	return ctrl.QueryIndex(version, keypath, indexName, queryParam, rng)
 }
 
 func (m *metacontroller) RefObjectReader(refHash types.Hash) (io.ReadCloser, int64, error) {

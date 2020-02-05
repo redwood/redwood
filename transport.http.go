@@ -465,7 +465,6 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		version = &v
-
 	}
 
 	var rng *tree.Range
@@ -495,8 +494,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad Range header", http.StatusBadRequest)
 			return
 		}
-		_rng := tree.Range{start, end}
-		rng = &_rng
+		rng = &tree.Range{start, end}
 	}
 
 	// Add the "Parents" header
@@ -525,31 +523,19 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Parents", strings.Join(parentStrs, ","))
 	}
 
-	state, err := t.controller.State(stateURI, version)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
-		return
-	}
-	defer state.Close()
-
+	indexName, indexArg := parseIndexParams(r)
 	raw, err := parseRawParam(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusBadRequest)
 		return
 	}
 
+	var state tree.Node
 	var anyMissing bool
-	if !raw {
-		indexHTMLExists, err := state.Exists(keypath.Push(tree.Keypath("index.html")))
-		if err != nil {
-			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-			return
-		}
-		if indexHTMLExists {
-			keypath = keypath.Push(tree.Keypath("index.html"))
-		}
 
-		state, err = state.CopyToMemory(keypath, rng)
+	if indexName != "" {
+		// Index query
+		state, err = t.controller.QueryIndex(stateURI, version, keypath, tree.Keypath(indexName), tree.Keypath(indexArg), rng)
 		if errors.Cause(err) == types.Err404 {
 			http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
 			return
@@ -558,14 +544,43 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		state, anyMissing, err = nelson.Resolve(state, t.controller)
+	} else {
+		// State query
+		state, err = t.controller.StateAtVersion(stateURI, version)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
 			return
 		}
+		defer state.Close()
 
-	} else {
-		state = state.AtKeypath(keypath, rng)
+		if raw {
+			state = state.AtKeypath(keypath, rng)
+
+		} else {
+			indexHTMLExists, err := state.Exists(keypath.Push(tree.Keypath("index.html")))
+			if err != nil {
+				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+				return
+			}
+			if indexHTMLExists {
+				keypath = keypath.Push(tree.Keypath("index.html"))
+			}
+
+			state, err = state.CopyToMemory(keypath, rng)
+			if errors.Cause(err) == types.Err404 {
+				http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+				return
+			} else if err != nil {
+				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+				return
+			}
+
+			state, anyMissing, err = nelson.Resolve(state, t.controller)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+				return
+			}
+		}
 	}
 
 	contentType, err := nelson.GetContentType(state)
@@ -791,6 +806,12 @@ func parseRawParam(r *http.Request) (bool, error) {
 		return false, errors.New("invalid raw param")
 	}
 	return raw, nil
+}
+
+func parseIndexParams(r *http.Request) (string, string) {
+	indexName := r.URL.Query().Get("index")
+	indexArg := r.URL.Query().Get("index_arg")
+	return indexName, indexArg
 }
 
 func respondJSON(resp http.ResponseWriter, data interface{}) {
