@@ -56,6 +56,10 @@ bundle exec middleman server
 
 # OR run this to run with vagrant
 vagrant up
+
+# OR run this to run with docker
+docker build . -t slate:latest # this only needs to be run once
+docker run -p 4567:4567 -v $(pwd)/source:/srv/slate/source slate:latest
 ```
 
 You can now see the docs at http://localhost:4567. Whoa! That was fast!
