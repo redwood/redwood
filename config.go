@@ -1,7 +1,6 @@
 package redwood
 
 import (
-	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -28,7 +27,7 @@ type NodeConfig struct {
 	BootstrapPeers          []string `yaml:"BootstrapPeers"`
 	RPCListenNetwork        string   `yaml:"RPCListenNetwork"`
 	RPCListenHost           string   `yaml:"RPCListenHost"`
-	HTTPListenAddr          string   `yaml:"HTTPListenAddr"`
+	HTTPListenHost          string   `yaml:"HTTPListenHost"`
 	HTTPCookieSecret        string   `yaml:"HTTPCookieSecret"`
 	HDMnemonicPhrase        string   `yaml:"HDMnemonicPhrase"`
 	ContentAnnounceInterval Duration `yaml:"ContentAnnounceInterval"`
@@ -76,7 +75,7 @@ var DefaultConfig = func() Config {
 			P2PListenPort:           21231,
 			RPCListenNetwork:        "tcp",
 			RPCListenHost:           "0.0.0.0:21232",
-			HTTPListenAddr:          ":8080",
+			HTTPListenHost:          ":8080",
 			HTTPCookieSecret:        string(httpCookieSecret),
 			HDMnemonicPhrase:        hdMnemonicPhrase,
 			ContentAnnounceInterval: Duration(15 * time.Second),
@@ -96,7 +95,6 @@ var DefaultConfig = func() Config {
 }()
 
 func configRoot() (root string, _ error) {
-	defer func() { fmt.Println("CONFIG ROOT", root) }()
 	configRoot, err := os.UserConfigDir()
 	if err != nil {
 		configRoot, err = os.Getwd()
@@ -126,16 +124,15 @@ func dataRoot() (string, error) {
 	}
 }
 
-func ReadConfigAtPath(cfgRoot string) (*Config, error) {
-	if cfgRoot == "" {
+func ReadConfigAtPath(configPath string) (*Config, error) {
+	if configPath == "" {
 		var err error
-		cfgRoot, err = configRoot()
+		configPath, err = configRoot()
 		if err != nil {
 			return nil, err
 		}
+		configPath = filepath.Join(configPath, ".redwoodrc")
 	}
-	configPath := filepath.Join(cfgRoot, ".redwoodrc")
-	fmt.Println("CONFIG PATH", configPath)
 
 	// Copy the default config
 	cfg := DefaultConfig

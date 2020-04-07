@@ -13,12 +13,14 @@ type app struct {
 	ctx.Context
 }
 
+var configFilepath = flag.String("config", "", "path to config file")
+
 func main() {
 	flag.Parse()
 	flag.Set("logtostderr", "true")
 	flag.Set("v", "2")
 
-	config, err := rw.ReadConfigAtPath("")
+	config, err := rw.ReadConfigAtPath(*configFilepath)
 	if err != nil {
 		panic(err)
 	}
@@ -56,7 +58,7 @@ func main() {
 
 	httpTransport, err := rw.NewHTTPTransport(
 		signingKeypair.Address(),
-		config.HTTPListenAddr,
+		config.HTTPListenHost,
 		config.DefaultStateURI,
 		metacontroller,
 		refStore,
