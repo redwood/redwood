@@ -16,14 +16,14 @@ type Controller interface {
 	Ctx() *ctx.Context
 	Start() error
 
-	AddTx(tx *Tx)
+	AddTx(tx *Tx) error
 	HaveTx(txID types.ID) bool
 
 	StateAtVersion(version *types.ID) tree.Node
 	QueryIndex(version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
 	Leaves() map[types.ID]struct{}
-	ResolverTree() *resolverTree
-	SetResolverTree(tree *resolverTree)
+	BehaviorTree() *behaviorTree
+	SetBehaviorTree(tree *behaviorTree)
 
 	OnDownloadedRef()
 }
@@ -34,15 +34,18 @@ type TxProcessedHandler func(c Controller, tx *Tx, state *tree.DBNode) error
 type controller struct {
 	*ctx.Context
 
-	address      types.Address
-	stateURI     string
-	mu           sync.RWMutex
-	txs          map[types.ID]*Tx
-	validTxs     map[types.ID]*Tx
-	resolverTree *resolverTree
-	states       *tree.DBTree
-	indices      *tree.DBTree
-	leaves       map[types.ID]struct{}
+	address  types.Address
+	stateURI string
+	mu       sync.RWMutex
+
+	txs     map[types.ID]*Tx
+	txStore TxStore
+
+	behaviorTree *behaviorTree
+
+	states  *tree.DBTree
+	indices *tree.DBTree
+	leaves  map[types.ID]struct{}
 
 	chMempool     chan *Tx
 	mempool       []*Tx
@@ -51,14 +54,14 @@ type controller struct {
 	chOnDownloadedRef chan struct{}
 }
 
-func NewController(address types.Address, stateURI string, dbRootPath string, txProcessedHandler TxProcessedHandler) (Controller, error) {
+func NewController(address types.Address, stateURI string, stateDBRootPath string, txStore TxStore, txProcessedHandler TxProcessedHandler) (Controller, error) {
 	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(stateURI)
-	states, err := tree.NewDBTree(filepath.Join(dbRootPath, stateURIClean))
+	states, err := tree.NewDBTree(filepath.Join(stateDBRootPath, stateURIClean))
 	if err != nil {
 		return nil, err
 	}
 
-	indices, err := tree.NewDBTree(filepath.Join(dbRootPath, stateURIClean+"_indices"))
+	indices, err := tree.NewDBTree(filepath.Join(stateDBRootPath, stateURIClean+"_indices"))
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +72,8 @@ func NewController(address types.Address, stateURI string, dbRootPath string, tx
 		stateURI:          stateURI,
 		mu:                sync.RWMutex{},
 		txs:               make(map[types.ID]*Tx),
-		validTxs:          make(map[types.ID]*Tx),
-		resolverTree:      newResolverTree(),
+		txStore:           txStore,
+		behaviorTree:      newBehaviorTree(),
 		states:            states,
 		indices:           indices,
 		leaves:            make(map[types.ID]struct{}),
@@ -87,7 +90,7 @@ func (c *controller) Start() error {
 		func() error {
 			c.SetLogLabel(c.address.Pretty() + " controller")
 
-			c.resolverTree.addResolver(tree.Keypath(nil), &dumbResolver{})
+			c.behaviorTree.addResolver(tree.Keypath(nil), &dumbResolver{})
 			go c.mempoolLoop()
 
 			return nil
@@ -116,30 +119,38 @@ func (c *controller) Leaves() map[types.ID]struct{} {
 	return c.leaves
 }
 
-func (c *controller) ResolverTree() *resolverTree {
-	return c.resolverTree
+func (c *controller) BehaviorTree() *behaviorTree {
+	return c.behaviorTree
 }
 
-func (c *controller) SetResolverTree(tree *resolverTree) {
-	c.resolverTree = tree
+func (c *controller) SetBehaviorTree(tree *behaviorTree) {
+	c.behaviorTree = tree
 }
 
-func (c *controller) AddTx(tx *Tx) {
+func (c *controller) AddTx(tx *Tx) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Ignore duplicates
-	if _, exists := c.txs[tx.ID]; exists {
+	exists, err := c.txStore.TxExists(c.stateURI, tx.ID)
+	if err != nil {
+		return err
+	} else if exists {
 		c.Infof(0, "already know tx %v, skipping", tx.ID.Pretty())
-		return
+		return nil
 	}
 
 	c.Infof(0, "new tx %v", tx.ID.Pretty())
 
 	// Store the tx (so we can ignore txs we've seen before)
-	c.txs[tx.ID] = tx
+	tx.Valid = false
+	err = c.txStore.AddTx(tx)
+	if err != nil {
+		return err
+	}
 
 	c.addToMempool(tx)
+	return nil
 }
 
 func (c *controller) addToMempool(tx *Tx) {
@@ -203,8 +214,8 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		// @@TODO: sort patches and use ordering to cut down on number of ops
 
 		patches := tx.Patches
-		for i := len(c.resolverTree.validatorKeypaths) - 1; i >= 0; i-- {
-			validatorKeypath := c.resolverTree.validatorKeypaths[i]
+		for i := len(c.behaviorTree.validatorKeypaths) - 1; i >= 0; i-- {
+			validatorKeypath := c.behaviorTree.validatorKeypaths[i]
 
 			var unprocessedPatches []Patch
 			var patchesTrimmed []Patch
@@ -222,7 +233,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 
 			txCopy := *tx
 			txCopy.Patches = patchesTrimmed
-			err := c.resolverTree.validators[string(validatorKeypath)].ValidateTx(state.AtKeypath(validatorKeypath, nil), c.txs, c.validTxs, &txCopy)
+			err := c.behaviorTree.validators[string(validatorKeypath)].ValidateTx(state.AtKeypath(validatorKeypath, nil), &txCopy)
 			if err != nil {
 				return err
 			}
@@ -238,8 +249,8 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 		// @@TODO: sort patches and use ordering to cut down on number of ops
 
 		patches := tx.Patches
-		for i := len(c.resolverTree.resolverKeypaths) - 1; i >= 0; i-- {
-			resolverKeypath := c.resolverTree.resolverKeypaths[i]
+		for i := len(c.behaviorTree.resolverKeypaths) - 1; i >= 0; i-- {
+			resolverKeypath := c.behaviorTree.resolverKeypaths[i]
 
 			var unprocessedPatches []Patch
 			var patchesTrimmed []Patch
@@ -273,7 +284,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 				state.Diff().SetEnabled(true)
 			}
 
-			err = c.resolverTree.resolvers[string(resolverKeypath)].ResolveState(stateToResolve, tx.From, tx.ID, tx.Parents, patchesTrimmed)
+			err = c.behaviorTree.resolvers[string(resolverKeypath)].ResolveState(stateToResolve, tx.From, tx.ID, tx.Parents, patchesTrimmed)
 			if err != nil {
 				return err
 			}
@@ -320,13 +331,12 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 	// Mark this tx as a leaf
 	c.leaves[tx.ID] = struct{}{}
 
-	// @@TODO: add to timeDAG
-
-	//c.Warnf("state (%v) ~> %v", c.stateURI, PrettyJSON(newState))
-
+	// Mark the tx valid and save it to the DB
 	tx.Valid = true
-	c.validTxs[tx.ID] = tx
-
+	err = c.txStore.AddTx(tx)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -343,7 +353,12 @@ func (c *controller) validateTxIntrinsics(tx *Tx) error {
 	}
 
 	for _, parentID := range tx.Parents {
-		if _, exists := c.validTxs[parentID]; !exists && parentID != GenesisTxID {
+		parentTx, err := c.txStore.FetchTx(c.stateURI, parentID)
+		if errors.Cause(err) == types.Err404 {
+			return errors.Wrapf(ErrNoParentYet, "parent tx: %v", parentID.Hex())
+		} else if err != nil {
+			return err
+		} else if !parentTx.Valid && parentID != GenesisTxID {
 			return errors.Wrapf(ErrNoParentYet, "parent tx: %v", parentID.Hex())
 		}
 	}
@@ -382,7 +397,7 @@ func (c *controller) QueryIndex(version *types.ID, keypath tree.Keypath, indexNa
 		indexNode.Close()
 		indexNode = c.indices.IndexAtVersion(version, keypath, indexName, true)
 
-		indices, exists := c.resolverTree.indexers[string(keypath)]
+		indices, exists := c.behaviorTree.indexers[string(keypath)]
 		if !exists {
 			return nil, types.Err404
 		}

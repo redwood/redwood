@@ -127,7 +127,7 @@ func (m *metacontroller) ensureController(stateURI string) (Controller, error) {
 	if ctrl == nil {
 		// Set up the controller
 		var err error
-		ctrl, err = NewController(m.address, stateURI, m.dbRootPath, m.txProcessedHandler)
+		ctrl, err = NewController(m.address, stateURI, m.dbRootPath, m.txStore, m.txProcessedHandler)
 		if err != nil {
 			return nil, err
 		}
@@ -158,8 +158,8 @@ func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DB
 	// Walk the tree and initialize validators and resolvers
 	// @@TODO: inefficient
 	if !m.resolversLocked {
-		newResolverTree := newResolverTree()
-		newResolverTree.addResolver(nil, &dumbResolver{})
+		newBehaviorTree := newBehaviorTree()
+		newBehaviorTree.addResolver(nil, &dumbResolver{})
 
 		var refs []types.Hash
 		defer func() {
@@ -203,12 +203,12 @@ func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DB
 			parentKeypath, key := tree.Keypath(kp).Pop()
 			switch {
 			case key.Equals(MergeTypeKeypath):
-				c.ResolverTree().removeResolver(parentKeypath)
+				c.BehaviorTree().removeResolver(parentKeypath)
 			case key.Equals(ValidatorKeypath):
-				c.ResolverTree().removeValidator(parentKeypath)
+				c.BehaviorTree().removeValidator(parentKeypath)
 			case parentKeypath.Part(-1).Equals(tree.Keypath("Indices")):
 				//indicesKeypath, _ := parentKeypath.Pop()
-				//c.ResolverTree().removeIndexer()
+				//c.BehaviorTree().removeIndexer()
 			}
 
 			for parentKeypath != nil {
@@ -304,7 +304,7 @@ func (m *metacontroller) initializeResolver(state *tree.DBNode, resolverKeypath 
 
 	// @@TODO: if the resolver type changes, this totally breaks everything
 	var internalState map[string]interface{}
-	oldResolver, oldResolverKeypath := c.ResolverTree().nearestResolverForKeypath(resolverKeypath)
+	oldResolver, oldResolverKeypath := c.BehaviorTree().nearestResolverForKeypath(resolverKeypath)
 	if !oldResolverKeypath.Equals(resolverKeypath) {
 		internalState = make(map[string]interface{})
 	} else {
@@ -316,7 +316,7 @@ func (m *metacontroller) initializeResolver(state *tree.DBNode, resolverKeypath 
 		return err
 	}
 
-	c.ResolverTree().addResolver(resolverKeypath, resolver)
+	c.BehaviorTree().addResolver(resolverKeypath, resolver)
 	return nil
 }
 
@@ -352,7 +352,7 @@ func (m *metacontroller) initializeValidator(state *tree.DBNode, validatorKeypat
 		return err
 	}
 
-	c.ResolverTree().addValidator(validatorKeypath, validator)
+	c.BehaviorTree().addValidator(validatorKeypath, validator)
 	return nil
 }
 
@@ -394,7 +394,7 @@ func (m *metacontroller) initializeIndexer(state *tree.DBNode, indexerConfigKeyp
 		indexerNodeKeypath, _ := indexerConfigKeypath.Pop()
 		indexerNodeKeypath = indexerNodeKeypath.Push(nelson.ValueKey)
 
-		c.ResolverTree().addIndexer(indexerNodeKeypath, indexName, indexer)
+		c.BehaviorTree().addIndexer(indexerNodeKeypath, indexName, indexer)
 	}
 	return nil
 }

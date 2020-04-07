@@ -172,6 +172,8 @@ func (t *MemoryNode) NodeInfo() (NodeType, ValueType, uint64, error) {
 		case bool:
 			return NodeTypeValue, ValueTypeBool, 0, nil
 		case nil:
+			return NodeTypeValue, ValueTypeNil, 0, nil
+		default:
 			return NodeTypeValue, ValueTypeInvalid, 0, nil
 		}
 	}
@@ -266,19 +268,16 @@ func (t *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 
 		m := make(map[string]interface{})
 
-		t.scanNodeTypesWithPrefix(absKeypath, func(kp Keypath, nodeType NodeType) {
-			if nodeType == NodeTypeSlice {
-				relKp := kp.RelativeTo(absKeypath)
-				if len(relKp) != 0 {
-					setValueAtKeypath(m, relKp, make([]interface{}, t.sliceLengths[string(kp)]), false)
-				}
-			}
-		})
-
 		t.scanKeypathsWithPrefix(absKeypath, nil, func(kp Keypath, _ int) error {
 			relKp := kp.RelativeTo(absKeypath)
+
 			if len(relKp) != 0 {
-				setValueAtKeypath(m, relKp, t.values[string(kp)], false)
+				switch t.nodeTypes[string(kp)] {
+				case NodeTypeSlice:
+					setValueAtKeypath(m, relKp, make([]interface{}, t.sliceLengths[string(kp)]), false)
+				default:
+					setValueAtKeypath(m, relKp, t.values[string(kp)], false)
+				}
 			}
 			return nil
 		})
@@ -287,19 +286,16 @@ func (t *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 	case NodeTypeSlice:
 		s := make([]interface{}, t.sliceLengths[string(absKeypath)])
 
-		t.scanNodeTypesWithPrefix(absKeypath, func(kp Keypath, nodeType NodeType) {
-			if nodeType == NodeTypeSlice {
-				relKp := kp.RelativeTo(absKeypath)
-				if len(relKp) != 0 {
-					setValueAtKeypath(s, relKp, make([]interface{}, t.sliceLengths[string(kp)]), false)
-				}
-			}
-		})
-
 		t.scanKeypathsWithPrefix(absKeypath, rng, func(kp Keypath, _ int) error {
 			relKp := kp.RelativeTo(absKeypath)
+
 			if len(relKp) != 0 {
-				setValueAtKeypath(s, relKp, t.values[string(kp)], false)
+				switch t.nodeTypes[string(kp)] {
+				case NodeTypeSlice:
+					setValueAtKeypath(s, relKp, make([]interface{}, t.sliceLengths[string(kp)]), false)
+				default:
+					setValueAtKeypath(s, relKp, t.values[string(kp)], false)
+				}
 			}
 			return nil
 		})
@@ -376,11 +372,6 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 			}
 		}
 	}
-
-	//switch v := value.(type) {
-	//case []interface{}:
-	//    t.sliceLengths[string(absKeypath)] = len(v)
-	//}
 
 	walkGoValue(value, func(nodeKeypath Keypath, nodeValue interface{}) error {
 		absNodeKeypath := absKeypath.Push(nodeKeypath)
@@ -673,7 +664,6 @@ func (s *MemoryNode) scanKeypathsWithPrefix(prefix Keypath, rng *Range, fn func(
 			if err != nil {
 				return err
 			}
-			//i++
 		}
 	} else {
 		var foundRange bool
@@ -690,14 +680,6 @@ func (s *MemoryNode) scanKeypathsWithPrefix(prefix Keypath, rng *Range, fn func(
 		}
 	}
 	return nil
-}
-
-func (s *MemoryNode) scanNodeTypesWithPrefix(prefix Keypath, fn func(Keypath, NodeType)) {
-	for keypath, nodeType := range s.nodeTypes {
-		if Keypath(keypath).StartsWith(prefix) {
-			fn(Keypath(keypath), nodeType)
-		}
-	}
 }
 
 func (t *MemoryNode) DebugPrint() {

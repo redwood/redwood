@@ -32,7 +32,7 @@ func NewPermissionsValidator(config tree.Node) (Validator, error) {
 
 var senderRegexp = regexp.MustCompile("\\${sender}")
 
-func (v *permissionsValidator) ValidateTx(state tree.Node, txs, validTxs map[types.ID]*Tx, tx *Tx) error {
+func (v *permissionsValidator) ValidateTx(state tree.Node, tx *Tx) error {
 	perms, exists := v.permissions[tx.From.Hex()]
 	if !exists {
 		perms, exists = v.permissions["*"]

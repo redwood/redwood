@@ -23,7 +23,6 @@ type Host interface {
 	SendTx(ctx context.Context, tx Tx) error
 	AddRef(reader io.ReadCloser, contentType string) (types.Hash, error)
 	AddPeer(ctx context.Context, transportName string, reachableAt StringSet) error
-	Port() uint
 	Transport(name string) Transport
 	Controller() Metacontroller
 	Address() types.Address
@@ -32,7 +31,6 @@ type Host interface {
 type host struct {
 	*ctx.Context
 
-	port              uint
 	transports        map[string]Transport
 	controller        Metacontroller
 	signingKeypair    *SigningKeypair
@@ -56,14 +54,13 @@ var (
 	ErrPeerIsSelf = errors.New("peer is self")
 )
 
-func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, port uint, transports []Transport, controller Metacontroller, refStore RefStore, peerStore PeerStore) (Host, error) {
+func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, transports []Transport, controller Metacontroller, refStore RefStore, peerStore PeerStore) (Host, error) {
 	transportsMap := make(map[string]Transport)
 	for _, tpt := range transports {
 		transportsMap[tpt.Name()] = tpt
 	}
 	h := &host{
 		Context:           &ctx.Context{},
-		port:              port,
 		transports:        transportsMap,
 		controller:        controller,
 		signingKeypair:    signingKeypair,
@@ -123,10 +120,6 @@ func (h *host) Start() error {
 		// on shutdown
 		func() {},
 	)
-}
-
-func (h *host) Port() uint {
-	return h.port
 }
 
 func (h *host) Transport(name string) Transport {

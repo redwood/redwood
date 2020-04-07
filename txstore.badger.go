@@ -27,7 +27,7 @@ func NewBadgerTxStore(dbFilename string, address types.Address) TxStore {
 
 func (p *badgerTxStore) Start() error {
 	return p.CtxStart(
-		// on startup,
+		// on startup
 		func() error {
 			p.SetLogLabel(p.address.Pretty() + " store:badger")
 			p.Infof(0, "opening badger store at %v", p.dbFilename)
@@ -74,6 +74,25 @@ func (p *badgerTxStore) RemoveTx(stateURI string, txID types.ID) error {
 	return p.db.Update(func(txn *badger.Txn) error {
 		return txn.Delete(key)
 	})
+}
+
+func (p *badgerTxStore) TxExists(stateURI string, txID types.ID) (bool, error) {
+	key := makeTxKey(stateURI, txID)
+
+	var exists bool
+	err := p.db.View(func(txn *badger.Txn) error {
+		_, err := txn.Get(key)
+		if err == badger.ErrKeyNotFound {
+			exists = false
+			return nil
+		} else if err != nil {
+			return errors.WithStack(err)
+		}
+
+		exists = true
+		return nil
+	})
+	return exists, err
 }
 
 func (p *badgerTxStore) FetchTx(stateURI string, txID types.ID) (*Tx, error) {

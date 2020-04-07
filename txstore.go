@@ -11,6 +11,7 @@ type TxStore interface {
 
 	AddTx(tx *Tx) error
 	RemoveTx(stateURI string, txID types.ID) error
+	TxExists(stateURI string, txID types.ID) (bool, error)
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
 	AllTxs() TxIterator
 	AllTxsForStateURI(stateURI string) TxIterator

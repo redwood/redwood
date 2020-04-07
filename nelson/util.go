@@ -12,16 +12,46 @@ import (
 	"github.com/brynbellomy/redwood/types"
 )
 
-type Valuer interface {
-	Value(keypath tree.Keypath, rng *tree.Range) (interface{}, bool, error)
-}
+//func Unwrap(node tree.Node) (tree.Node, error) {
+//    current := node
+//    for {
+//        switch n := node.(type) {
+//        case *Frame:
+//            current = n.Node
+//        case *tree.MemoryNode:
+//            nodeType, valueType, _, err := n.NodeInfo()
+//            if err != nil {
+//                // @@TODO: ??
+//                return nil, err
+//            }
+//
+//            if nodeType == NodeTypeValue && valueType == ValueTypeInvalid {
+//                val, exists, err := n.Value(nil)
+//                if err != nil {
+//                    return nil, err
+//                } else if !exists {
+//                    panic("should never happen")
+//                }
+//
+//                if frame, is := val.(*Frame); is {
+//                    current = frame.Node
+//                } else {
+//                    break
+//                }
+//            } else {
+//                break
+//            }
+//        }
+//    }
+//    return current
+//}
 
 func GetValueRecursive(val interface{}, keypath tree.Keypath, rng *tree.Range) (interface{}, bool, error) {
 	current := val
 	var exists bool
 	var err error
 	for {
-		if x, is := current.(Valuer); is {
+		if x, is := current.(tree.Node); is {
 			current, exists, err = x.Value(keypath, rng)
 			if err != nil {
 				return nil, false, err
@@ -80,7 +110,7 @@ func GetContentType(val interface{}) (string, error) {
 	case ContentTyper:
 		return v.ContentType()
 
-	case Valuer:
+	case tree.Node:
 		contentType, exists, err := GetValueRecursive(v, ContentTypeKey, nil)
 		if err != nil && errors.Cause(err) == types.Err404 {
 			return "application/json", nil
@@ -102,7 +132,7 @@ func GetContentLength(val interface{}) (int64, error) {
 	case ContentLengther:
 		return v.ContentLength()
 
-	case Valuer:
+	case tree.Node:
 		contentLength, exists, err := GetValueRecursive(v, ContentLengthKey, nil)
 		if err != nil {
 			return 0, err

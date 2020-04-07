@@ -14,7 +14,7 @@ type Resolver interface {
 }
 
 type Validator interface {
-	ValidateTx(state tree.Node, txs, validTxs map[types.ID]*Tx, tx *Tx) error
+	ValidateTx(state tree.Node, tx *Tx) error
 }
 
 type Indexer interface {
@@ -45,7 +45,7 @@ func init() {
 	}
 }
 
-type resolverTree struct {
+type behaviorTree struct {
 	validatorKeypaths []tree.Keypath
 	validators        map[string]Validator
 	resolverKeypaths  []tree.Keypath
@@ -53,15 +53,15 @@ type resolverTree struct {
 	indexers          map[string]map[string]Indexer
 }
 
-func newResolverTree() *resolverTree {
-	return &resolverTree{
+func newBehaviorTree() *behaviorTree {
+	return &behaviorTree{
 		validators: make(map[string]Validator),
 		resolvers:  make(map[string]Resolver),
 		indexers:   make(map[string]map[string]Indexer),
 	}
 }
 
-func (t *resolverTree) addResolver(keypath tree.Keypath, resolver Resolver) {
+func (t *behaviorTree) addResolver(keypath tree.Keypath, resolver Resolver) {
 	if _, exists := t.resolvers[string(keypath)]; !exists {
 		t.resolverKeypaths = append(t.resolverKeypaths, keypath)
 		// @@TODO: sucks
@@ -70,7 +70,7 @@ func (t *resolverTree) addResolver(keypath tree.Keypath, resolver Resolver) {
 	t.resolvers[string(keypath)] = resolver
 }
 
-func (t *resolverTree) removeResolver(keypath tree.Keypath) {
+func (t *behaviorTree) removeResolver(keypath tree.Keypath) {
 	if _, exists := t.resolvers[string(keypath)]; !exists {
 		return
 	}
@@ -86,7 +86,7 @@ func (t *resolverTree) removeResolver(keypath tree.Keypath) {
 	t.resolverKeypaths = t.resolverKeypaths[:len(t.resolverKeypaths)-1]
 }
 
-func (t *resolverTree) addValidator(keypath tree.Keypath, validator Validator) {
+func (t *behaviorTree) addValidator(keypath tree.Keypath, validator Validator) {
 	if _, exists := t.validators[string(keypath)]; !exists {
 		t.validatorKeypaths = append(t.validatorKeypaths, keypath)
 		// @@TODO: sucks
@@ -95,7 +95,7 @@ func (t *resolverTree) addValidator(keypath tree.Keypath, validator Validator) {
 	t.validators[string(keypath)] = validator
 }
 
-func (t *resolverTree) removeValidator(keypath tree.Keypath) {
+func (t *behaviorTree) removeValidator(keypath tree.Keypath) {
 	if _, exists := t.validators[string(keypath)]; !exists {
 		return
 	}
@@ -111,21 +111,21 @@ func (t *resolverTree) removeValidator(keypath tree.Keypath) {
 	t.validatorKeypaths = t.validatorKeypaths[:len(t.validatorKeypaths)-1]
 }
 
-func (t *resolverTree) addIndexer(keypath tree.Keypath, indexName tree.Keypath, indexer Indexer) {
+func (t *behaviorTree) addIndexer(keypath tree.Keypath, indexName tree.Keypath, indexer Indexer) {
 	if _, exists := t.indexers[string(keypath)]; !exists {
 		t.indexers[string(keypath)] = make(map[string]Indexer)
 	}
 	t.indexers[string(keypath)][string(indexName)] = indexer
 }
 
-func (t *resolverTree) removeIndexer(keypath tree.Keypath, indexName tree.Keypath) {
+func (t *behaviorTree) removeIndexer(keypath tree.Keypath, indexName tree.Keypath) {
 	if _, exists := t.indexers[string(keypath)]; !exists {
 		return
 	}
 	delete(t.indexers[string(keypath)], string(indexName))
 }
 
-func (t *resolverTree) nearestResolverForKeypath(keypath tree.Keypath) (Resolver, tree.Keypath) {
+func (t *behaviorTree) nearestResolverForKeypath(keypath tree.Keypath) (Resolver, tree.Keypath) {
 	for i := len(t.resolverKeypaths) - 1; i >= 0; i-- {
 		kp := t.resolverKeypaths[i]
 		if keypath.StartsWith(kp) {
@@ -135,7 +135,7 @@ func (t *resolverTree) nearestResolverForKeypath(keypath tree.Keypath) (Resolver
 	return nil, nil
 }
 
-func (t *resolverTree) nearestValidatorForKeypath(keypath tree.Keypath) (Validator, tree.Keypath) {
+func (t *behaviorTree) nearestValidatorForKeypath(keypath tree.Keypath) (Validator, tree.Keypath) {
 	for i := len(t.validatorKeypaths) - 1; i >= 0; i-- {
 		kp := t.validatorKeypaths[i]
 		if keypath.StartsWith(kp) {
