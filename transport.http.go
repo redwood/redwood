@@ -38,7 +38,7 @@ type httpTransport struct {
 	controller      Metacontroller
 	defaultStateURI string
 	ownURL          string
-	port            uint
+	listenAddr      string
 	sigkeys         *SigningKeypair
 	cookieSecret    [32]byte
 	tlsCertFilename string
@@ -61,10 +61,25 @@ type httpTransport struct {
 	peerStore PeerStore
 }
 
-func NewHTTPTransport(addr types.Address, port uint, defaultStateURI string, controller Metacontroller, refStore RefStore, peerStore PeerStore, sigkeys *SigningKeypair, cookieSecret [32]byte, tlsCertFilename, tlsKeyFilename string) (Transport, error) {
+func NewHTTPTransport(
+	addr types.Address,
+	listenAddr string,
+	defaultStateURI string,
+	controller Metacontroller,
+	refStore RefStore,
+	peerStore PeerStore,
+	sigkeys *SigningKeypair,
+	cookieSecret [32]byte,
+	tlsCertFilename, tlsKeyFilename string,
+) (Transport, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
+	}
+
+	ownURL := listenAddr
+	if len(listenAddr) > 0 && listenAddr[0] == ':' {
+		ownURL = "localhost" + listenAddr
 	}
 
 	t := &httpTransport{
@@ -72,7 +87,7 @@ func NewHTTPTransport(addr types.Address, port uint, defaultStateURI string, con
 		address:               addr,
 		subscriptionsIn:       make(map[string]map[*httpSubscriptionIn]struct{}),
 		controller:            controller,
-		port:                  port,
+		listenAddr:            listenAddr,
 		defaultStateURI:       defaultStateURI,
 		sigkeys:               sigkeys,
 		cookieSecret:          cookieSecret,
@@ -80,7 +95,7 @@ func NewHTTPTransport(addr types.Address, port uint, defaultStateURI string, con
 		tlsKeyFilename:        tlsKeyFilename,
 		cookieJar:             jar,
 		pendingAuthorizations: make(map[types.ID][]byte),
-		ownURL:                fmt.Sprintf("localhost:%v", port),
+		ownURL:                ownURL,
 		refStore:              refStore,
 		peerStore:             peerStore,
 	}
@@ -92,7 +107,7 @@ func (t *httpTransport) Start() error {
 		// on startup
 		func() error {
 			t.SetLogLabel(t.address.Pretty() + " transport")
-			t.Infof(0, "opening http transport at :%v", t.port)
+			t.Infof(0, "opening http transport at %v", t.listenAddr)
 
 			if t.cookieSecret == [32]byte{} {
 				_, err := rand.Read(t.cookieSecret[:])
@@ -114,7 +129,7 @@ func (t *httpTransport) Start() error {
 				}
 
 				srv := &http.Server{
-					Addr:      fmt.Sprintf(":%v", t.port),
+					Addr:      t.listenAddr,
 					Handler:   t,
 					TLSConfig: cfg,
 				}

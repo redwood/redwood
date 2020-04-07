@@ -1,125 +1,145 @@
 package main
 
-// import (
-// 	"context"
-// 	"time"
+import (
+	"flag"
+	"os"
+	"path/filepath"
 
-// 	log "github.com/sirupsen/logrus"
+	rw "github.com/brynbellomy/redwood"
+	"github.com/brynbellomy/redwood/ctx"
+)
 
-// 	rw "github.com/brynbellomy/redwood"
-// )
+type app struct {
+	ctx.Context
+}
 
-// type M = map[string]interface{}
+func main() {
+	flag.Parse()
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
 
-// func main() {
-// 	ctx := context.Background()
+	config, err := rw.ReadConfigAtPath("")
+	if err != nil {
+		panic(err)
+	}
 
-// 	var id1 rw.ID
-// 	var id2 rw.ID
+	err = ensureDataDirs(config)
+	if err != nil {
+		panic(err)
+	}
 
-// 	copy(id1[:], []byte("oneoneoneoneone"))
-// 	copy(id2[:], []byte("twotwotwotwotwo"))
+	signingKeypair, err := rw.SigningKeypairFromHDMnemonic(config.HDMnemonicPhrase, rw.DefaultHDDerivationPath)
+	if err != nil {
+		panic(err)
+	}
 
-// 	genesisState := M{
-// 		"permissions": M{
-// 			id1.String(): M{
-// 				"^.*$": M{
-// 					"read":  true,
-// 					"write": true,
-// 				},
-// 			},
-// 		},
-// 	}
-// 	genesisState2 := M{
-// 		"permissions": M{
-// 			id1.String(): M{
-// 				"^.*$": M{
-// 					"read":  true,
-// 					"write": true,
-// 				},
-// 			},
-// 		},
-// 	}
+	encryptingKeypair, err := rw.GenerateEncryptingKeypair()
+	if err != nil {
+		panic(err)
+	}
 
-// 	c1 := rw.NewConsumer(id1, 21231, rw.NewStore(id1, genesisState))
-// 	c2 := rw.NewConsumer(id2, 21241, rw.NewStore(id2, genesisState2))
+	txStore := rw.NewBadgerTxStore(config.TxDBRoot(), signingKeypair.Address())
+	refStore := rw.NewRefStore(config.RefDataRoot())
+	peerStore := rw.NewPeerStore(signingKeypair.Address())
+	metacontroller := rw.NewMetacontroller(signingKeypair.Address(), config.StateDBRoot(), txStore, refStore)
 
-// 	luaResolver, err := rw.NewLuaResolver(`
-// function resolve_state(state, patch)
-//     state['heyo'] = 'zzzzz'
-// end
-//             `)
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	libp2pTransport, err := rw.NewLibp2pTransport(signingKeypair.Address(), config.P2PListenPort, metacontroller, refStore, peerStore)
+	if err != nil {
+		panic(err)
+	}
 
-// 	c1.Store.RegisterResolverForKeypath([]string{"nested", "repo"}, rw.NewStackResolver([]rw.Resolver{
-// 		rw.NewDumbResolver(),
-// 		luaResolver,
-// 		// &gitResolver{repoRoot: "/tmp/hihihi", branch: "master"},
-// 	}))
+	tlsCertFilename := filepath.Join(config.DataRoot, "server.crt")
+	tlsKeyFilename := filepath.Join(config.DataRoot, "server.key")
 
-// 	// Connect the two consumers
-// 	peerID := c1.Transport.(interface {
-// 		Libp2pPeerID() string
-// 	}).Libp2pPeerID()
-// 	c2.AddPeer(ctx, "/ip4/0.0.0.0/tcp/21231/p2p/"+peerID)
+	var cookieSecret [32]byte
+	copy(cookieSecret[:], []byte(config.HTTPCookieSecret))
 
-// 	// Consumer 2 subscribes to a URL
-// 	err = c2.Subscribe(ctx, "braid://axon.science")
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	httpTransport, err := rw.NewHTTPTransport(
+		signingKeypair.Address(),
+		config.HTTPListenAddr,
+		config.DefaultStateURI,
+		metacontroller,
+		refStore,
+		peerStore,
+		signingKeypair,
+		cookieSecret,
+		tlsCertFilename,
+		tlsKeyFilename,
+	)
+	if err != nil {
+		panic(err)
+	}
 
-// 	time.Sleep(1 * time.Second)
+	transports := []rw.Transport{libp2pTransport, httpTransport}
 
-// 	var (
-// 		tx1 = rw.Tx{
-// 			ID:      rw.RandomID(),
-// 			Parents: []rw.ID{rw.GenesisTxID},
-// 			From:    id1,
-// 			URL:     "braid://axon.science",
-// 			Patches: []rw.Patch{
-// 				{Keys: []string{"foo"}, Val: 123},
-// 			},
-// 		}
+	host, err := rw.NewHost(signingKeypair, encryptingKeypair, transports, metacontroller, refStore, peerStore)
+	if err != nil {
+		panic(err)
+	}
 
-// 		tx2 = rw.Tx{
-// 			ID:      rw.RandomID(),
-// 			Parents: []rw.ID{tx1.ID},
-// 			From:    id1,
-// 			URL:     "braid://axon.science",
-// 			Patches: []rw.Patch{
-// 				{Keys: []string{"foo", "bar", "baz"}, Val: 123},
-// 			},
-// 		}
+	err = host.Start()
+	if err != nil {
+		panic(err)
+	}
 
-// 		tx3 = rw.Tx{
-// 			ID:      rw.RandomID(),
-// 			Parents: []rw.ID{tx2.ID},
-// 			From:    id1,
-// 			URL:     "braid://axon.science",
-// 			Patches: []rw.Patch{
-// 				{Keys: []string{"nested", "repo", "somefile.txt"}, Val: 123},
-// 				{Keys: []string{"nested", "repo", "a-folder", "filez.txt"}, Val: []int{1, 2, 3}},
-// 			},
-// 		}
-// 	)
+	app := app{}
+	app.CtxAddChild(host.Ctx(), nil)
+	app.CtxStart(
+		func() error { return nil },
+		nil,
+		nil,
+		nil,
+	)
 
-// 	err = c1.AddTx(ctx, tx1)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	err = c1.AddTx(ctx, tx2)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	err = c1.AddTx(ctx, tx3)
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	//// Connect to bootstrap peers
+	//libp2pTransport := host.Transport("libp2p").(interface{ Libp2pPeerID() string })
+	//host2.AddPeer(host2.Ctx(), "libp2p", rw.NewStringSet([]string{"/ip4/0.0.0.0/tcp/21231/p2p/" + libp2pTransport.Libp2pPeerID()}))
+	////err = host2.AddPeer(host2.Ctx(), "http", "https://localhost:21232")
+	////if err != nil {
+	////    panic(err)
+	////}
+	////err = host1.AddPeer(host1.Ctx(), "http", "https://localhost:21242")
+	////if err != nil {
+	////    panic(err)
+	////}
+	//
+	//time.Sleep(2 * time.Second)
+	//
+	//// Both consumers subscribe to the URL
+	//ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
+	//go func() {
+	//    anySucceeded, _ := host2.Subscribe(ctx, "localhost:21231/gitdemo")
+	//    if !anySucceeded {
+	//        panic("host2 could not subscribe")
+	//    }
+	//    anySucceeded, _ = host2.Subscribe(ctx, "localhost:21231/git")
+	//    if !anySucceeded {
+	//        panic("host2 could not subscribe")
+	//    }
+	//    anySucceeded, _ = host2.Subscribe(ctx, "localhost:21231/git-reflog")
+	//    if !anySucceeded {
+	//        panic("host2 could not subscribe")
+	//    }
+	//}()
 
-// 	// Block forever
-// 	ch := make(chan struct{})
-// 	<-ch
-// }
+	app.AttachInterruptHandler()
+	app.CtxWait()
+}
+
+func ensureDataDirs(config *rw.Config) error {
+	err := os.MkdirAll(config.RefDataRoot(), 0700)
+	if err != nil {
+		return err
+	}
+
+	err = os.MkdirAll(config.TxDBRoot(), 0700)
+	if err != nil {
+		return err
+	}
+
+	err = os.MkdirAll(config.StateDBRoot(), 0700)
+	if err != nil {
+		return err
+	}
+	return nil
+}
