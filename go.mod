@@ -61,6 +61,8 @@ require (
 	github.com/saibing/go-v8 v0.0.0-20170603061908-420da5803b3f
 	github.com/sirupsen/logrus v1.4.2
 	github.com/src-d/go-git v4.7.0+incompatible // indirect
+	github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570 // indirect
+	github.com/steakknife/hamming v0.0.0-20180906055917-c99c65617cd3 // indirect
 	github.com/stretchr/testify v1.4.0
 	github.com/tyler-smith/go-bip39 v1.0.0
 	github.com/urfave/cli v1.20.0
