@@ -29,7 +29,7 @@ type Tx struct {
 	Recipients []types.Address `json:"recipients,omitempty"`
 	Checkpoint bool            `json:"checkpoint"` // @@TODO: probably not ideal
 
-	Valid bool       `json:"-"`
+	Valid bool       `json:"valid"`
 	hash  types.Hash `json:"-"`
 }
 

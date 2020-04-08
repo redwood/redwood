@@ -355,11 +355,11 @@ func (c *controller) validateTxIntrinsics(tx *Tx) error {
 	for _, parentID := range tx.Parents {
 		parentTx, err := c.txStore.FetchTx(c.stateURI, parentID)
 		if errors.Cause(err) == types.Err404 {
-			return errors.Wrapf(ErrNoParentYet, "parent tx: %v", parentID.Hex())
+			return errors.Wrapf(ErrNoParentYet, "parent tx not found: %v", parentID.Hex())
 		} else if err != nil {
 			return err
 		} else if !parentTx.Valid && parentID != GenesisTxID {
-			return errors.Wrapf(ErrNoParentYet, "parent tx: %v", parentID.Hex())
+			return errors.Wrapf(ErrNoParentYet, "parent tx not valid: %v", parentID.Hex())
 		}
 	}
 
