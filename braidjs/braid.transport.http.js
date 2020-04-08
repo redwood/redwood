@@ -1,4 +1,5 @@
-
+require('es6-promise').polyfill()
+require('isomorphic-fetch')
 
 module.exports = function (opts) {
     const { httpHost, onFoundPeers, peerID } = opts
@@ -64,7 +65,10 @@ module.exports = function (opts) {
         }
     }
 
-    async function get(stateURI, keypath) {
+    async function get({ stateURI, keypath, raw }) {
+        if (raw) {
+            keypath = keypath + '?raw=1'
+        }
         return (await (await wrappedFetch(keypath, {
             headers: {
                 'Accept': 'application/json',
