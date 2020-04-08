@@ -1,4 +1,6 @@
-require('@babel/polyfill')
+if (typeof window !== 'undefined') {
+    require('@babel/polyfill')
+}
 
 const identity = require('./identity')
 const sync9 = require('./sync9-src')
@@ -17,10 +19,9 @@ var Braid = {
     utils,
 }
 
-if (window) {
+if (typeof window !== 'undefined') {
     window.Braid = Braid
-}
-if (module && module.exports) {
+} else {
     module.exports = Braid
 }
 

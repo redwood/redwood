@@ -13,7 +13,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "es6-promise": "^4.2.8",
     "ethers": "^4.0.38",
+    "isomorphic-fetch": "^2.2.1",
     "peerjs": "^1.1.0"
   },
   "devDependencies": {
