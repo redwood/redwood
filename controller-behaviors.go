@@ -42,6 +42,7 @@ func init() {
 	}
 	indexerRegistry = map[string]IndexerConstructor{
 		"indexer/keypath": NewKeypathIndexer,
+		"indexer/js":      NewJSIndexer,
 	}
 }
 
