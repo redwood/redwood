@@ -1,7 +1,5 @@
 module github.com/brynbellomy/redwood
 
-replace github.com/podio/v8.go => ./v8.go
-
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d
@@ -59,7 +57,6 @@ require (
 	github.com/rivo/tview v0.0.0-20191129065140-82b05c9fb329
 	github.com/rjeczalik/notify v0.9.2 // indirect
 	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d
-	github.com/saibing/go-v8 v0.0.0-20170603061908-420da5803b3f
 	github.com/sirupsen/logrus v1.4.2
 	github.com/src-d/go-git v4.7.0+incompatible // indirect
 	github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570 // indirect
@@ -75,7 +72,7 @@ require (
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/src-d/go-git.v4 v4.13.1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20190502103701-55513cacd4ae
-	rogchap.com/v8go v0.1.0
+	rogchap.com/v8go v0.2.0
 )
 
 go 1.13
