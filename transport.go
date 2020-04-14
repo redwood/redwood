@@ -14,13 +14,7 @@ type Transport interface {
 	Start() error
 	Name() string
 
-	SetFetchHistoryHandler(handler FetchHistoryHandler)
-	SetTxHandler(handler TxHandler)
-	SetPrivateTxHandler(handler PrivateTxHandler)
-	SetAckHandler(handler AckHandler)
-	SetVerifyAddressHandler(handler VerifyAddressHandler)
-	SetFetchRefHandler(handler FetchRefHandler)
-
+	SetHost(host Host)
 	GetPeerByConnStrings(ctx context.Context, reachableAt StringSet) (Peer, error)
 	ForEachProviderOfStateURI(ctx context.Context, stateURI string) (<-chan Peer, error)
 	ForEachSubscriberToStateURI(ctx context.Context, stateURI string) (<-chan Peer, error)
@@ -34,6 +28,8 @@ type Peer interface {
 	ReachableAt() StringSet
 	Address() types.Address
 	SetAddress(addr types.Address)
+	PublicKeypairs() (SigningPublicKey, EncryptingPublicKey)
+	Tuples() []peerTuple
 	EnsureConnected(ctx context.Context) error
 	WriteMsg(msg Msg) error
 	ReadMsg() (Msg, error)

@@ -20,6 +20,10 @@ type Logger interface {
 	SetLogLabel(inLabel string)
 	GetLogLabel() string
 	GetLogPrefix() string
+	Debug(args ...interface{})
+	Debugf(inFormat string, args ...interface{})
+	Success(args ...interface{})
+	Successf(inFormat string, args ...interface{})
 	LogV(inVerboseLevel int32) bool
 	Info(inVerboseLevel int32, args ...interface{})
 	Infof(inVerboseLevel int32, inFormat string, args ...interface{})
@@ -75,6 +79,38 @@ func (l *logger) GetLogPrefix() string {
 // LogV returns true if logging is currently enabled for log verbose level.
 func (l *logger) LogV(inVerboseLevel int32) bool {
 	return bool(klog.V(klog.Level(inVerboseLevel)))
+}
+
+func (l *logger) Debug(args ...interface{}) {
+	if l.hasPrefix {
+		klog.DebugDepth(1, l.logPrefix, fmt.Sprint(args...))
+	} else {
+		klog.DebugDepth(1, args...)
+	}
+}
+
+func (l *logger) Debugf(inFormat string, args ...interface{}) {
+	if l.hasPrefix {
+		klog.DebugDepth(1, l.logPrefix, fmt.Sprintf(inFormat, args...))
+	} else {
+		klog.DebugDepth(1, fmt.Sprintf(inFormat, args...))
+	}
+}
+
+func (l *logger) Success(args ...interface{}) {
+	if l.hasPrefix {
+		klog.SuccessDepth(1, l.logPrefix, fmt.Sprint(args...))
+	} else {
+		klog.SuccessDepth(1, args...)
+	}
+}
+
+func (l *logger) Successf(inFormat string, args ...interface{}) {
+	if l.hasPrefix {
+		klog.SuccessDepth(1, l.logPrefix, fmt.Sprintf(inFormat, args...))
+	} else {
+		klog.SuccessDepth(1, fmt.Sprintf(inFormat, args...))
+	}
 }
 
 // Info logs to the INFO log.

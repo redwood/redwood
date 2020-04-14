@@ -20,7 +20,7 @@ type Metacontroller interface {
 	AddTx(tx *Tx) error
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
 	FetchTxs(stateURI string) TxIterator
-	HaveTx(stateURI string, txID types.ID) bool
+	HaveTx(stateURI string, txID types.ID) (bool, error)
 
 	KnownStateURIs() []string
 	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
@@ -176,7 +176,7 @@ func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DB
 			parentKeypath, key := keypath.Pop()
 			switch {
 			case key.Equals(nelson.ValueKey):
-				contentType, err := nelson.GetContentType(state.AtKeypath(parentKeypath, nil))
+				contentType, err := nelson.GetContentType(state.NodeAt(parentKeypath, nil))
 				if err != nil && errors.Cause(err) != types.Err404 {
 					return err
 				} else if contentType != "link" {
@@ -367,7 +367,7 @@ func (m *metacontroller) initializeIndexer(state *tree.DBNode, indexerConfigKeyp
 	subkeys := indexConfigs.Subkeys()
 
 	for _, indexName := range subkeys {
-		config, anyMissing, err := nelson.Resolve(indexConfigs.AtKeypath(indexName, nil), m)
+		config, anyMissing, err := nelson.Resolve(indexConfigs.NodeAt(indexName, nil), m)
 		if err != nil {
 			return err
 		} else if anyMissing {
@@ -392,7 +392,6 @@ func (m *metacontroller) initializeIndexer(state *tree.DBNode, indexerConfigKeyp
 		}
 
 		indexerNodeKeypath, _ := indexerConfigKeypath.Pop()
-		indexerNodeKeypath = indexerNodeKeypath.Push(nelson.ValueKey)
 
 		c.BehaviorTree().addIndexer(indexerNodeKeypath, indexName, indexer)
 	}
@@ -438,13 +437,13 @@ func (m *metacontroller) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 	return m.txStore.FetchTx(stateURI, txID)
 }
 
-func (m *metacontroller) HaveTx(stateURI string, txID types.ID) bool {
+func (m *metacontroller) HaveTx(stateURI string, txID types.ID) (bool, error) {
 	m.controllersMu.RLock()
 	defer m.controllersMu.RUnlock()
 
 	ctrl := m.controllers[stateURI]
 	if ctrl == nil {
-		return false
+		return false, nil
 	}
 	return ctrl.HaveTx(txID)
 }

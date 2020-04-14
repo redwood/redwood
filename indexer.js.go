@@ -71,7 +71,6 @@ func (i *jsIndexer) IndexKeyForNode(node tree.Node) (_ tree.Keypath, err error) 
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("-------", indexKeyVal.String())
 
 	// The indexer can return undefined or null to indicate that this keypath shouldn't be indexed
 	switch indexKeyVal.String() {

@@ -1,6 +1,7 @@
 package demoutils
 
 import (
+	"fmt"
 	"io/ioutil"
 
 	rw "github.com/brynbellomy/redwood"
@@ -43,14 +44,14 @@ func MakeHost(signingKeypairHex string, port uint, cookieSecretStr, tlsCertFilen
 
 	var cookieSecret [32]byte
 	copy(cookieSecret[:], []byte(cookieSecretStr))
-	httptransport, err := rw.NewHTTPTransport(signingKeypair.Address(), port+1, "localhost:21231", metacontroller, refStore, peerStore, signingKeypair, cookieSecret, tlsCertFilename, tlsKeyFilename)
+	httptransport, err := rw.NewHTTPTransport(signingKeypair.Address(), fmt.Sprintf("localhost:%v", port+1), "localhost:21231", metacontroller, refStore, peerStore, signingKeypair, cookieSecret, tlsCertFilename, tlsKeyFilename)
 	if err != nil {
 		panic(err)
 	}
 
 	transports := []rw.Transport{p2ptransport, httptransport}
 
-	h, err := rw.NewHost(signingKeypair, encryptingKeypair, port, transports, metacontroller, refStore, peerStore)
+	h, err := rw.NewHost(signingKeypair, encryptingKeypair, transports, metacontroller, refStore, peerStore)
 	if err != nil {
 		panic(err)
 	}

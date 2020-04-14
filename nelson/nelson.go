@@ -9,9 +9,12 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/brynbellomy/redwood/ctx"
 	"github.com/brynbellomy/redwood/tree"
 	"github.com/brynbellomy/redwood/types"
 )
+
+var log = ctx.NewLogger("nelson")
 
 type Frame struct {
 	tree.Node
@@ -28,14 +31,14 @@ var (
 	ContentLengthKey = tree.Keypath("Content-Length")
 )
 
-func (n *Frame) ContentType() (string, error) {
-	if n.contentType != "" {
-		return n.contentType, nil
-	} else if !n.fullyResolved {
+func (frame *Frame) ContentType() (string, error) {
+	if frame.contentType != "" {
+		return frame.contentType, nil
+	} else if !frame.fullyResolved {
 		return "application/json", nil
 	}
 
-	val, _, err := GetValueRecursive(n, nil, nil)
+	val, _, err := GetValueRecursive(frame, nil, nil)
 	if err != nil {
 		return "", err
 	}
@@ -52,21 +55,35 @@ func (n *Frame) ContentType() (string, error) {
 	}
 }
 
-func (n *Frame) ContentLength() (int64, error) {
-	return n.contentLength, nil
+func (frame *Frame) ContentLength() (int64, error) {
+	return frame.contentLength, nil
 }
 
-func (n *Frame) Value(keypath tree.Keypath, rng *tree.Range) (interface{}, bool, error) {
+func (frame *Frame) DebugPrint() {
+	log.Debug("NelSON Frame ----------------------------------------")
+	frame.Node.DebugPrint()
+	log.Debug("---------------------------------------------------")
+}
+
+func (frame *Frame) Value(keypath tree.Keypath, rng *tree.Range) (interface{}, bool, error) {
 	// @@TODO: how do we handle overrideValue if there's a keypath/range?
-	if n.overrideValue != nil {
-		return n.overrideValue, true, nil
+	if frame.overrideValue != nil {
+		return frame.overrideValue, true, nil
 	}
-	//return n.Node.Value(keypath, rng)
-	return GetValueRecursive(n.Node, keypath, rng)
+	return frame.Node.Value(keypath, rng)
 }
 
-func (n *Frame) MarshalJSON() ([]byte, error) {
-	val, exists, err := GetValueRecursive(n, nil, nil)
+func (frame *Frame) ParentNodeFor(keypath tree.Keypath) (tree.Node, tree.Keypath) {
+	// This is necessary -- otherwise, fetching a Frame node will actually
+	// return the underlying tree.Node
+	if len(keypath) == 0 {
+		return frame, nil
+	}
+	return frame.Node.ParentNodeFor(keypath)
+}
+
+func (frame *Frame) MarshalJSON() ([]byte, error) {
+	val, exists, err := GetValueRecursive(frame, nil, nil)
 	if err != nil {
 		return nil, err
 	} else if !exists {
@@ -75,12 +92,12 @@ func (n *Frame) MarshalJSON() ([]byte, error) {
 	return json.Marshal(val)
 }
 
-func (n *Frame) Err() error {
-	return n.err
+func (frame *Frame) Err() error {
+	return frame.err
 }
 
-func (n *Frame) ValueNode() tree.Node {
-	return n.Node
+func (frame *Frame) ValueNode() tree.Node {
+	return frame.Node
 }
 
 type ReferenceResolver interface {
@@ -88,10 +105,15 @@ type ReferenceResolver interface {
 	RefObjectReader(refHash types.Hash) (io.ReadCloser, int64, error)
 }
 
-func Resolve(frameNode tree.Node, refResolver ReferenceResolver) (tree.Node, bool, error) {
+func prettyJSON(x interface{}) string {
+	j, _ := json.MarshalIndent(x, "", "    ")
+	return string(j)
+}
+
+func Resolve(outerNode tree.Node, refResolver ReferenceResolver) (tree.Node, bool, error) {
 	var anyMissing bool
 
-	iter := frameNode.DepthFirstIterator(nil, false, 0)
+	iter := outerNode.DepthFirstIterator(nil, false, 0)
 	defer iter.Close()
 	for {
 		node := iter.Next()
@@ -99,7 +121,7 @@ func Resolve(frameNode tree.Node, refResolver ReferenceResolver) (tree.Node, boo
 			break
 		}
 
-		keypath := node.Keypath().RelativeTo(frameNode.Keypath())
+		keypath := node.Keypath().RelativeTo(outerNode.Keypath())
 
 		parentKeypath, key := keypath.Pop()
 		if key.Equals(ValueKey) {
@@ -109,24 +131,28 @@ func Resolve(frameNode tree.Node, refResolver ReferenceResolver) (tree.Node, boo
 			if err != nil {
 				return nil, false, err
 			}
-			n := &Frame{Node: copied}
+			frame := &Frame{Node: copied}
 
 			// Before anything else, check for a link frame (transclusion).  If we find one,
 			// don't set the Content-Type, just resolve the link.
 			{
-				contentType, _, err := frameNode.StringValue(parentKeypath.Push(ContentTypeKey))
-				if err != nil {
-					return nil, false, err
+				contentType, _, err := outerNode.StringValue(parentKeypath.Push(ContentTypeKey))
+				if err != nil && errors.Cause(err) != types.Err404 {
+					return nil, false, errors.Wrapf(err, "parentKeypath: %v", parentKeypath)
 				}
 				if contentType == "link" {
-					linkStr, _, err := node.StringValue(nil)
+					var innerAnyMissing bool
+
+					linkStr, _, err := frame.StringValue(nil)
 					if err != nil {
-						n.err = err
-						n.fullyResolved = false
+						frame.err = err
+						frame.fullyResolved = false
+						anyMissing = true
 					} else {
-						resolveLink(n, linkStr, refResolver)
+						innerAnyMissing = resolveLink(frame, linkStr, refResolver)
 					}
-					anyMissing = anyMissing || !n.fullyResolved
+					anyMissing = anyMissing || innerAnyMissing
+					frame.fullyResolved = !anyMissing
 				}
 			}
 
@@ -134,36 +160,37 @@ func Resolve(frameNode tree.Node, refResolver ReferenceResolver) (tree.Node, boo
 		TravelUpwards:
 			for {
 				// Innermost Content-Length wins
-				if n.contentLength == 0 {
-					contentLength, exists, err := frameNode.IntValue(parentKeypath.Push(ContentLengthKey))
-					if err != nil {
+				if frame.contentLength == 0 {
+					contentLength, exists, err := outerNode.IntValue(parentKeypath.Push(ContentLengthKey))
+					if err != nil && errors.Cause(err) != types.Err404 {
 						return nil, false, err
 					}
 					if exists {
-						n.contentLength = contentLength
+						frame.contentLength = contentLength
 					}
 				}
 
 				// Innermost Content-Type wins
-				if n.contentType == "" {
-					contentType, _, err := frameNode.StringValue(parentKeypath.Push(ContentTypeKey))
-					if err != nil {
+				if frame.contentType == "" {
+					contentType, _, err := outerNode.StringValue(parentKeypath.Push(ContentTypeKey))
+					if err != nil && errors.Cause(err) != types.Err404 {
 						return nil, false, err
 					}
 					// Enclosing (matryoshka-style) NelSON frames can't have a Content-Type of "link".  Only the innermost.
 					if contentType != "link" {
-						n.contentType = contentType
+						frame.contentType = contentType
 					}
 				}
 
-				newParentKeypath, newKey := parentKeypath.Pop()
+				nextParentKeypath, nextKey := parentKeypath.Pop()
 
-				if !newKey.Equals(ValueKey) {
+				if !nextKey.Equals(ValueKey) {
 					if len(parentKeypath) == 0 {
-						return n, false, nil
+						frame.fullyResolved = !anyMissing
+						return frame, anyMissing, nil
 
 					} else {
-						err := frameNode.Set(parentKeypath, nil, n)
+						err := outerNode.Set(parentKeypath, nil, frame)
 						if err != nil {
 							return nil, false, err
 						}
@@ -178,37 +205,33 @@ func Resolve(frameNode tree.Node, refResolver ReferenceResolver) (tree.Node, boo
 					break TravelUpwards
 				}
 
-				parentKeypath = newParentKeypath
-				key = newKey
+				parentKeypath = nextParentKeypath
+				key = nextKey
 			}
 		}
 	}
-	return frameNode, anyMissing, nil
+	return outerNode, anyMissing, nil
 }
 
-func resolveLink(n *Frame, linkStr string, refResolver ReferenceResolver) {
+func resolveLink(frame *Frame, linkStr string, refResolver ReferenceResolver) (anyMissing bool) {
 	linkType, linkValue := DetermineLinkType(linkStr)
 	if linkType == LinkTypeRef {
 		hash, err := types.HashFromHex(linkValue)
 		if err != nil {
-			n.err = err
-			n.fullyResolved = false
-			return
+			frame.err = err
+			return true
 		}
 		reader, contentLength, err := refResolver.RefObjectReader(hash)
 		if goerrors.Is(err, os.ErrNotExist) {
-			n.err = types.Err404
-			n.fullyResolved = false
-			return
+			frame.err = types.Err404
+			return true
 		} else if err != nil {
-			n.err = err
-			n.fullyResolved = false
-			return
+			frame.err = err
+			return true
 		} else {
-			n.overrideValue = reader
-			n.contentLength = contentLength
-			n.fullyResolved = true
-			return
+			frame.overrideValue = reader
+			frame.contentLength = contentLength
+			return false
 		}
 
 	} else if linkType == LinkTypePath {
@@ -218,9 +241,8 @@ func resolveLink(n *Frame, linkStr string, refResolver ReferenceResolver) {
 			vstr := parts[1][i:]
 			v, err := types.IDFromHex(vstr)
 			if err != nil {
-				n.err = err
-				n.fullyResolved = false
-				return
+				frame.err = err
+				return true
 			}
 			version = &v
 			parts[1] = parts[1][:i]
@@ -231,43 +253,37 @@ func resolveLink(n *Frame, linkStr string, refResolver ReferenceResolver) {
 		keypath := tree.Keypath(linkValue[len(stateURI)+1:])
 		state, err := refResolver.StateAtVersion(stateURI, version)
 		if err != nil {
-			n.err = err
-			n.fullyResolved = false
-			return
+			frame.err = err
+			return true
 		}
 		state, err = state.CopyToMemory(keypath, nil)
 		if err != nil {
-			n.err = err
-			n.fullyResolved = false
-			return
+			frame.err = err
+			return true
 		}
 
 		state, anyMissing, err := Resolve(state, refResolver)
 		if err != nil {
-			n.err = err
-			n.fullyResolved = false
-			return
+			frame.err = err
+			return true
 		}
 
 		v, _, err := state.Value(nil, nil)
 		if err != nil {
-			n.err = err
-			n.fullyResolved = false
-			return
+			frame.err = err
+			return true
 		}
 
 		if asNelSON, isNelSON := v.(*Frame); isNelSON {
-			n.contentType = asNelSON.contentType
-			n.contentLength = asNelSON.contentLength
+			frame.contentType = asNelSON.contentType
+			frame.contentLength = asNelSON.contentLength
 		}
-		n.Node = state
-		n.err = err
-		n.fullyResolved = !anyMissing
-		return
+		frame.Node = state
+		frame.err = err
+		return anyMissing
 
 	} else {
-		n.err = errors.Errorf("unsupported link type: %v", linkStr)
-		n.fullyResolved = false
-		return
+		frame.err = errors.Errorf("unsupported link type: %v", linkStr)
+		return true
 	}
 }

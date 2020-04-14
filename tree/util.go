@@ -67,11 +67,10 @@ func walkGoValue(tree interface{}, fn func(keypath Keypath, val interface{}) err
 
 func setValueAtKeypath(x interface{}, keypath Keypath, val interface{}, clobber bool) interface{} {
 	if len(keypath) == 0 {
-		panic("bad 1")
+		return val
 	}
 
 	var cur interface{} = x
-	//key, rest := keypath.Shift()
 	var key Keypath
 	for {
 		key, keypath = keypath.Shift()
@@ -93,7 +92,7 @@ func setValueAtKeypath(x interface{}, keypath Keypath, val interface{}, clobber 
 			cur = asSlice[DecodeSliceIndex(key)]
 		} else if asNode, isNode := cur.(Node); isNode {
 			asNode.Set(Keypath(key), nil, make(map[string]interface{}))
-			cur = asNode.AtKeypath(Keypath(key), nil)
+			cur = asNode.NodeAt(Keypath(key), nil)
 		} else {
 			panic(fmt.Sprintf("bad 2: %T %v", cur, key))
 		}

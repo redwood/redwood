@@ -1,7 +1,6 @@
 package tree
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -109,6 +108,7 @@ func TestDBTree_CopyToMemory_AtKeypath(T *testing.T) {
 		name    string
 		keypath Keypath
 	}{
+		{"root value", Keypath(nil)},
 		{"value", Keypath("flo")},
 		{"slice", Keypath("flox")},
 		{"map", Keypath("flox").PushIndex(1)},
@@ -118,12 +118,13 @@ func TestDBTree_CopyToMemory_AtKeypath(T *testing.T) {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
 			err = tree.View(&v, func(node *DBNode) error {
-				copied, err := node.AtKeypath(Keypath("flox"), nil).CopyToMemory(nil, nil)
+				copied, err := node.NodeAt(test.keypath, nil).CopyToMemory(nil, nil)
 				require.NoError(T, err)
 
-				expected := takeFixtureOutputsWithPrefix(Keypath("flox"), fixture1.output...)
-				expected = removeFixtureOutputPrefixes(Keypath("flox"), expected...)
+				expected := takeFixtureOutputsWithPrefix(test.keypath, fixture1.output...)
+				expected = removeFixtureOutputPrefixes(test.keypath, expected...)
 				memnode := copied.(*MemoryNode)
+				memnode.DebugPrint()
 				require.Equal(T, len(expected), len(memnode.keypaths))
 
 				for i := range memnode.keypaths {
@@ -553,8 +554,3 @@ func TestDBTree_CopyVersion(T *testing.T) {
 //
 //    fmt.Println(prettyJSON(v))
 //}
-
-func prettyJSON(x interface{}) string {
-	j, _ := json.MarshalIndent(x, "", "    ")
-	return string(j)
-}

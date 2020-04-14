@@ -808,7 +808,7 @@ func walkLinks(n tree.Node, fn func(linkType nelson.LinkType, linkStr string, ke
 
 		parentKeypath, key := node.Keypath().Pop()
 		if key.Equals(nelson.ContentTypeKey) {
-			contentType, err := nelson.GetContentType(n.AtKeypath(parentKeypath, nil))
+			contentType, err := nelson.GetContentType(n.NodeAt(parentKeypath, nil))
 			if err != nil && errors.Cause(err) != types.Err404 {
 				return err
 			} else if contentType != "link" {

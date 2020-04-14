@@ -340,6 +340,21 @@ func (s StringSet) Remove(val string) {
 	delete(s, val)
 }
 
+func (s StringSet) Any() string {
+	for x := range s {
+		return x
+	}
+	return ""
+}
+
+func (s StringSet) Copy() StringSet {
+	set := map[string]struct{}{}
+	for val := range s {
+		set[val] = struct{}{}
+	}
+	return set
+}
+
 func SniffContentType(filename string, data io.Reader) (string, error) {
 	// Only the first 512 bytes are used to sniff the content type.
 	buffer := make([]byte, 512)

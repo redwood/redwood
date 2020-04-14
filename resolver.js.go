@@ -21,9 +21,11 @@ type jsResolver struct {
 // Ensure jsResolver conforms to the Resolver interface
 var _ Resolver = (*jsResolver)(nil)
 
-func NewJSResolver(config tree.Node, internalState map[string]interface{}) (Resolver, error) {
-	//config.(*tree.MemoryNode).DebugPrint()
-	srcval, exists, err := nelson.GetValueRecursive(config, tree.Keypath("src"), nil)
+func NewJSResolver(config tree.Node, internalState map[string]interface{}) (_ Resolver, err error) {
+	defer annotate(&err, "NewJSResolver")
+
+	// srcval, exists, err := nelson.GetValueRecursive(config, tree.Keypath("src"), nil)
+	srcval, exists, err := config.Value(tree.Keypath("src"), nil)
 	if err != nil {
 		return nil, err
 	} else if !exists {

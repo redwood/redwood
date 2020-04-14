@@ -11,7 +11,7 @@ type refResolverMock struct {
 	stateURIs map[string]tree.Node
 }
 
-func (m *refResolverMock) State(stateURI string, version types.ID) (tree.Node, error) {
+func (m *refResolverMock) StateAtVersion(stateURI string, version *types.ID) (tree.Node, error) {
 	state, exists := m.stateURIs[stateURI]
 	if !exists {
 		return nil, types.Err404
