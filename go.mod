@@ -14,6 +14,7 @@ require (
 	github.com/brynbellomy/git2go v0.0.0-20191127205451-32796717b4d5
 	github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d
 	github.com/brynbellomy/go-structomancer v1.0.1 // indirect
+	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae // indirect
 	github.com/btcsuite/btcd v0.0.0-20190213025234-306aecffea32
 	github.com/btcsuite/btcutil v0.0.0-20190207003914-4c204d697803
 	github.com/btcsuite/goleveldb v1.0.0 // indirect

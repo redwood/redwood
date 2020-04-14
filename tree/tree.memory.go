@@ -39,6 +39,7 @@ func NewMemoryNode() Node {
 }
 
 func (n *MemoryNode) Close() {
+	log.Debug()
 }
 
 func (n *MemoryNode) Keypath() Keypath {

@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/plan-systems/klog"
+	"github.com/brynbellomy/klog"
 	"github.com/stretchr/testify/require"
 
 	"github.com/brynbellomy/redwood/tree"
