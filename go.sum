@@ -719,3 +719,5 @@ honnef.co/go/tools v0.0.0-20190102054323-c2f93a96b099/go.mod h1:rf3lG4BRIbNafJWh
 honnef.co/go/tools v0.0.0-20190523083050-ea95bdfd59fc/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
 rogchap.com/v8go v0.1.0 h1:8NBXdXn+0YiwDkWUQn8PZPiNRvxxRfMPxyDgzmU3f0A=
 rogchap.com/v8go v0.1.0/go.mod h1:IitZnaOtWSJadY/7qinKHIEHpxsilMWyLQ+Efdo4n4I=
+rogchap.com/v8go v0.2.0 h1:/WYn0qDow4Q5nLzzl5FUUzHyMtH9KKh0ZVmMiDSFTBo=
+rogchap.com/v8go v0.2.0/go.mod h1:IitZnaOtWSJadY/7qinKHIEHpxsilMWyLQ+Efdo4n4I=
