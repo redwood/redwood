@@ -10,8 +10,11 @@ import (
 type PeerStore interface {
 	AddReachableAddresses(transportName string, reachableAt StringSet)
 	AddVerifiedCredentials(transportName string, reachableAt StringSet, address types.Address, sigpubkey SigningPublicKey, encpubkey EncryptingPublicKey)
+	MaybePeers() []peerTuple
 	PeerTuples() []peerTuple
 	PeersWithAddress(address types.Address) []*storedPeer
+	PeersFromTransportWithAddress(transport string, address types.Address) []*storedPeer
+	PeerReachableAt(transport string, reachableAt StringSet) *storedPeer
 }
 
 type peerStore struct {
@@ -26,14 +29,6 @@ type peerStore struct {
 type peerTuple struct {
 	TransportName string
 	ReachableAt   string
-}
-
-type storedPeer struct {
-	transportName string
-	reachableAt   StringSet
-	address       types.Address
-	sigpubkey     SigningPublicKey
-	encpubkey     EncryptingPublicKey
 }
 
 func NewPeerStore(addr types.Address) *peerStore {
@@ -85,8 +80,15 @@ func (s *peerStore) AddVerifiedCredentials(transportName string, reachableAt Str
 		}
 	}
 	if peer == nil {
-		peer = &storedPeer{transportName: transportName, reachableAt: NewStringSet(nil)}
+		peer = &storedPeer{
+			transportName: transportName,
+			reachableAt:   NewStringSet(nil),
+			address:       address,
+		}
 	}
+	peer.address = address
+	peer.sigpubkey = sigpubkey
+	peer.encpubkey = encpubkey
 
 	if _, exists := s.peersWithAddress[address]; !exists {
 		s.peersWithAddress[address] = make(map[peerTuple]*storedPeer)
@@ -99,10 +101,32 @@ func (s *peerStore) AddVerifiedCredentials(transportName string, reachableAt Str
 		s.peersWithAddress[address][tuple] = peer
 		peer.reachableAt.Add(ra)
 	}
+}
 
-	peer.address = address
-	peer.sigpubkey = sigpubkey
-	peer.encpubkey = encpubkey
+func (s *peerStore) PeerReachableAt(transport string, reachableAt StringSet) *storedPeer {
+	s.muPeers.RLock()
+	defer s.muPeers.RUnlock()
+
+	for ra := range reachableAt {
+		peer, exists := s.peers[peerTuple{transport, ra}]
+		if exists {
+			return peer.Copy()
+		}
+	}
+	return nil
+}
+
+func (s *peerStore) MaybePeers() []peerTuple {
+	s.muPeers.RLock()
+	defer s.muPeers.RUnlock()
+
+	tuples := make([]peerTuple, len(s.maybePeers))
+	i := 0
+	for tuple := range s.maybePeers {
+		tuples[i] = tuple
+		i++
+	}
+	return tuples
 }
 
 func (s *peerStore) PeerTuples() []peerTuple {
@@ -126,16 +150,64 @@ func (s *peerStore) PeersWithAddress(address types.Address) []*storedPeer {
 	var peers []*storedPeer
 	if _, exists := s.peersWithAddress[address]; exists {
 		for _, peer := range s.peersWithAddress[address] {
-			peers = append(peers, peer)
+			peers = append(peers, peer.Copy())
 		}
 	}
 	return peers
 }
 
-func (sp *storedPeer) Tuples() []peerTuple {
+func (s *peerStore) PeersFromTransportWithAddress(transport string, address types.Address) []*storedPeer {
+	s.muPeers.RLock()
+	defer s.muPeers.RUnlock()
+
+	var peers []*storedPeer
+	if _, exists := s.peersWithAddress[address]; exists {
+		for _, peer := range s.peersWithAddress[address] {
+			if peer.transportName == transport {
+				peers = append(peers, peer.Copy())
+			}
+		}
+	}
+	return peers
+}
+
+type storedPeer struct {
+	transportName string
+	reachableAt   StringSet
+	address       types.Address
+	sigpubkey     SigningPublicKey
+	encpubkey     EncryptingPublicKey
+}
+
+func (p storedPeer) Address() types.Address {
+	return p.address
+}
+
+func (p *storedPeer) SetAddress(addr types.Address) {
+	p.address = addr
+}
+
+func (p storedPeer) PublicKeypairs() (SigningPublicKey, EncryptingPublicKey) {
+	return p.sigpubkey, p.encpubkey
+}
+
+func (sp storedPeer) Tuples() []peerTuple {
 	var tuples []peerTuple
 	for reachableAt := range sp.reachableAt {
 		tuples = append(tuples, peerTuple{sp.transportName, reachableAt})
 	}
 	return tuples
+}
+
+func (p *storedPeer) Copy() *storedPeer {
+	if p == nil {
+		return nil
+	}
+	return &storedPeer{
+		transportName: p.transportName,
+		reachableAt:   p.reachableAt.Copy(),
+		address:       p.address,
+		sigpubkey:     p.sigpubkey, // @@TODO: need copy
+		encpubkey:     p.encpubkey, // @@TODO: need copy
+	}
 }

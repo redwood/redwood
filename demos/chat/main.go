@@ -162,7 +162,7 @@ func sendTxs(host1, host2 rw.Host) {
 		//   - a "permissions" validator (which says that any user may write to the .messages key)
 		//
 		tx1 = rw.Tx{
-			ID:      types.RandomID(),
+			ID:      types.IDFromString("tx1"),
 			Parents: []types.ID{rw.GenesisTxID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
@@ -210,7 +210,6 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 	)
 
-	host1.Info(1, "sending tx to initialize talk channel...")
 	sendTx(genesisTx)
 	sendTx(tx1)
 
@@ -222,7 +221,7 @@ func sendTxs(host1, host2 rw.Host) {
 	//
 	var (
 		ptx1 = rw.Tx{
-			ID:      types.IDFromString("ptx1"),
+			ID:      types.IDFromString("p1"),
 			Parents: []types.ID{tx1.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
@@ -233,7 +232,7 @@ func sendTxs(host1, host2 rw.Host) {
 						"value": {
 							"*": {
 								"^\\.${sender}.*$": {
-									"write": true 
+									"write": true
 								}
 							}
 						}
@@ -243,7 +242,7 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 
 		ptx2 = rw.Tx{
-			ID:      types.IDFromString("ptx2"),
+			ID:      types.IDFromString("p2"),
 			Parents: []types.ID{ptx1.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
@@ -258,8 +257,8 @@ func sendTxs(host1, host2 rw.Host) {
 		// Here, we also add a private portion of Paul Stamets' user profile.  Only he can view this data.
 		ptx3recipients = []types.Address{host1.Address()}
 		ptx3           = rw.Tx{
-			ID:      rw.GenesisTxID,
-			Parents: []types.ID{},
+			ID:      types.IDFromString("p3"),
+			Parents: []types.ID{ptx2.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/" + rw.PrivateRootKeyForRecipients(ptx3recipients),
 			Patches: []rw.Patch{
@@ -287,7 +286,7 @@ func sendTxs(host1, host2 rw.Host) {
 	//
 	var (
 		tx2 = rw.Tx{
-			ID:      types.IDFromString("two"),
+			ID:      types.IDFromString("tx2"),
 			Parents: []types.ID{ptx2.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
@@ -297,7 +296,7 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 
 		tx3 = rw.Tx{
-			ID:      types.IDFromString("three"),
+			ID:      types.IDFromString("tx3"),
 			Parents: []types.ID{tx2.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",
@@ -307,7 +306,7 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 
 		tx4 = rw.Tx{
-			ID:      types.IDFromString("four"),
+			ID:      types.IDFromString("tx4"),
 			Parents: []types.ID{tx3.ID},
 			From:    host1.Address(),
 			URL:     "localhost:21231/chat",

@@ -3,13 +3,15 @@ package tree
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"sort"
 
 	"github.com/pkg/errors"
 
+	"github.com/brynbellomy/redwood/ctx"
 	"github.com/brynbellomy/redwood/types"
 )
+
+var log = ctx.NewLogger("memory node")
 
 type MemoryNode struct {
 	keypath Keypath
@@ -25,9 +27,13 @@ type MemoryNode struct {
 
 func NewMemoryNode() Node {
 	return &MemoryNode{
+		keypath:      nil,
+		rng:          nil,
+		keypaths:     nil,
 		values:       make(map[string]interface{}),
 		nodeTypes:    make(map[string]NodeType),
 		sliceLengths: make(map[string]int),
+		copied:       false,
 		diff:         NewDiff(),
 	}
 }
@@ -117,6 +123,8 @@ func (t *MemoryNode) makeCopy() {
 	t.copied = false
 }
 
+// Subkeys returns only the keys that are direct descendants of the
+// given node.
 func (n *MemoryNode) Subkeys() []Keypath {
 	var keypaths []Keypath
 	keypathsMap := make(map[string]struct{})
@@ -132,20 +140,76 @@ func (n *MemoryNode) Subkeys() []Keypath {
 	return keypaths
 }
 
-func (t *MemoryNode) AtKeypath(keypath Keypath, rng *Range) Node {
+// NodeAt returns the tree.Node corresponding to the given keypath in
+// the state tree.  If the keypath doesn't exist, a MemoryNode is still
+// returned, but calling .Value on it will return a result with
+// NodeTypeInvalid.
+func (n *MemoryNode) NodeAt(keypath Keypath, rng *Range) Node {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.NodeAt(relKeypath, rng)
+	}
+
+	absKeypath := n.keypath.Push(keypath)
+
+	if n.nodeTypes[string(absKeypath)] == NodeTypeNode {
+		// This shouldn't happen because we call .ParentNodeFor
+		return n.values[string(absKeypath)].(Node)
+	}
+
 	return &MemoryNode{
-		keypath:      t.keypath.Push(keypath),
+		keypath:      absKeypath,
 		rng:          rng,
-		keypaths:     t.keypaths,
-		values:       t.values,
-		nodeTypes:    t.nodeTypes,
-		sliceLengths: t.sliceLengths,
-		diff:         t.diff,
+		keypaths:     n.keypaths,
+		values:       n.values,
+		nodeTypes:    n.nodeTypes,
+		sliceLengths: n.sliceLengths,
+		diff:         n.diff,
 	}
 }
 
-func (t *MemoryNode) NodeInfo() (NodeType, ValueType, uint64, error) {
-	switch t.nodeTypes[string(t.keypath)] {
+// ParentNodeFor in most cases returns the method's receiver.  But in
+// the case where another tree.Node has been .Set into the receiver's
+// state tree at some point in the provided keypath, it will return the
+// deepest tree.Node corresponding to that keypath.  The returned keypath
+// is provided keypath, relative to the deepest tree.Node.
+func (n *MemoryNode) ParentNodeFor(keypath Keypath) (Node, Keypath) {
+	if len(keypath) == 0 {
+		return n, keypath
+	}
+
+	parts := keypath.Parts()
+	absKeypath := n.keypath.Push(keypath)
+	currentKeypath := n.keypath.Copy()
+	for _, part := range parts {
+		currentKeypath = currentKeypath.Push(part)
+
+		switch n.nodeTypes[string(currentKeypath)] {
+		case NodeTypeNode:
+			innerNode := n.values[string(currentKeypath)].(Node)
+			relKeypath := absKeypath.RelativeTo(currentKeypath)
+			return innerNode.ParentNodeFor(relKeypath)
+
+		case NodeTypeValue, NodeTypeInvalid:
+			return n, keypath
+		}
+	}
+	return n, keypath
+}
+
+func (n *MemoryNode) nodeType(keypath Keypath) NodeType {
+	return n.nodeTypes[string(n.keypath.Push(keypath))]
+}
+
+// NodeInfo returns metadata about the node: its NodeType, its ValueType
+// (if applicable), and the Content-Length of its value.
+func (n *MemoryNode) NodeInfo(keypath Keypath) (NodeType, ValueType, uint64, error) {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.NodeInfo(relKeypath)
+	}
+
+	absKeypath := n.keypath.Push(keypath)
+
+	switch n.nodeTypes[string(absKeypath)] {
 	case NodeTypeInvalid:
 		return 0, 0, 0, errors.WithStack(types.Err404)
 
@@ -153,10 +217,10 @@ func (t *MemoryNode) NodeInfo() (NodeType, ValueType, uint64, error) {
 		return NodeTypeMap, 0, 0, nil
 
 	case NodeTypeSlice:
-		return NodeTypeSlice, 0, uint64(t.sliceLengths[string(t.keypath)]), nil
+		return NodeTypeSlice, 0, uint64(n.sliceLengths[string(absKeypath)]), nil
 
 	case NodeTypeValue:
-		val, exists := t.values[string(t.keypath)]
+		val, exists := n.values[string(absKeypath)]
 		if !exists {
 			return 0, 0, 0, errors.WithStack(types.Err404)
 		}
@@ -176,18 +240,34 @@ func (t *MemoryNode) NodeInfo() (NodeType, ValueType, uint64, error) {
 		default:
 			return NodeTypeValue, ValueTypeInvalid, 0, nil
 		}
+	case NodeTypeNode:
+		panic("TODO: implement this case")
 	}
 	panic("should be unreachable")
 }
 
-func (t *MemoryNode) Exists(keypath Keypath) (bool, error) {
-	_, exists := t.values[string(t.keypath.Push(keypath))]
+// Exists returns a boolean representing whether the given keypath has
+// been set in the subtree for this node.  For a MemoryNode, it never
+// returns an error.
+func (n *MemoryNode) Exists(keypath Keypath) (bool, error) {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.Exists(relKeypath)
+	}
+
+	absKeypath := n.keypath.Push(keypath)
+
+	_, exists := n.values[string(absKeypath)]
 	return exists, nil
 }
 
-func (t *MemoryNode) UintValue(keypath Keypath) (uint64, bool, error) {
-	absKeypath := t.keypath.Push(keypath)
-	v, exists := t.values[string(absKeypath)]
+func (n *MemoryNode) UintValue(keypath Keypath) (uint64, bool, error) {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.UintValue(relKeypath)
+	}
+
+	absKeypath := n.keypath.Push(keypath)
+
+	v, exists := n.values[string(absKeypath)]
 	if !exists {
 		return 0, false, nil
 	}
@@ -197,9 +277,14 @@ func (t *MemoryNode) UintValue(keypath Keypath) (uint64, bool, error) {
 	return 0, false, nil
 }
 
-func (t *MemoryNode) IntValue(keypath Keypath) (int64, bool, error) {
-	absKeypath := t.keypath.Push(keypath)
-	v, exists := t.values[string(absKeypath)]
+func (n *MemoryNode) IntValue(keypath Keypath) (int64, bool, error) {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.IntValue(relKeypath)
+	}
+
+	absKeypath := n.keypath.Push(keypath)
+
+	v, exists := n.values[string(absKeypath)]
 	if !exists {
 		return 0, false, nil
 	}
@@ -209,9 +294,14 @@ func (t *MemoryNode) IntValue(keypath Keypath) (int64, bool, error) {
 	return 0, false, nil
 }
 
-func (t *MemoryNode) FloatValue(keypath Keypath) (float64, bool, error) {
-	absKeypath := t.keypath.Push(keypath)
-	v, exists := t.values[string(absKeypath)]
+func (n *MemoryNode) FloatValue(keypath Keypath) (float64, bool, error) {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.FloatValue(relKeypath)
+	}
+
+	absKeypath := n.keypath.Push(keypath)
+
+	v, exists := n.values[string(absKeypath)]
 	if !exists {
 		return 0, false, nil
 	}
@@ -221,9 +311,14 @@ func (t *MemoryNode) FloatValue(keypath Keypath) (float64, bool, error) {
 	return 0, false, nil
 }
 
-func (t *MemoryNode) StringValue(keypath Keypath) (string, bool, error) {
-	absKeypath := t.keypath.Push(keypath)
-	v, exists := t.values[string(absKeypath)]
+func (n *MemoryNode) StringValue(keypath Keypath) (string, bool, error) {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.StringValue(relKeypath)
+	}
+
+	absKeypath := n.keypath.Push(keypath)
+
+	v, exists := n.values[string(absKeypath)]
 	if !exists {
 		return "", false, nil
 	}
@@ -233,30 +328,37 @@ func (t *MemoryNode) StringValue(keypath Keypath) (string, bool, error) {
 	return "", false, nil
 }
 
-func (t *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, error) {
+// Value returns the native Go value at the given keypath and range.
+func (n *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, error) {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.Value(relKeypath, rng)
+	}
+
+	absKeypath := n.keypath.Push(keypath)
+
 	if rng == nil {
-		rng = t.rng
-	} else if rng != nil && t.rng != nil {
+		rng = n.rng
+	} else if rng != nil && n.rng != nil {
 		panic("unsupported")
 	}
 	if rng != nil && !rng.Valid() {
 		return nil, false, errors.WithStack(ErrInvalidRange)
 	}
 
-	absKeypath := t.keypath.Push(keypath)
-
-	switch t.nodeTypes[string(absKeypath)] {
+	switch n.nodeTypes[string(absKeypath)] {
 	case NodeTypeInvalid:
 		return nil, false, nil
 
+	case NodeTypeNode:
+		// This should never happen because we call .ParentNodeFor above
+		return node.Value(keypath, rng)
+
 	case NodeTypeValue:
-		val, exists := t.values[string(absKeypath)]
+		val, exists := n.values[string(absKeypath)]
 		if !exists {
 			return nil, false, nil
-		} else if asNode, isNode := val.(Node); isNode {
-			return asNode.Value(nil, rng)
-		}
-		if rng != nil {
+		} else if rng != nil {
+			// @@TODO: support strings/bytes
 			return nil, false, ErrRangeOverNonSlice
 		}
 		return val, exists, nil
@@ -268,15 +370,26 @@ func (t *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 
 		m := make(map[string]interface{})
 
-		t.scanKeypathsWithPrefix(absKeypath, nil, func(kp Keypath, _ int) error {
+		n.scanKeypathsWithPrefix(absKeypath, nil, func(kp Keypath, _ int) error {
 			relKp := kp.RelativeTo(absKeypath)
 
 			if len(relKp) != 0 {
-				switch t.nodeTypes[string(kp)] {
+				switch n.nodeTypes[string(kp)] {
 				case NodeTypeSlice:
-					setValueAtKeypath(m, relKp, make([]interface{}, t.sliceLengths[string(kp)]), false)
-				default:
-					setValueAtKeypath(m, relKp, t.values[string(kp)], false)
+					setValueAtKeypath(m, relKp, make([]interface{}, n.sliceLengths[string(kp)]), false)
+				case NodeTypeMap:
+					setValueAtKeypath(m, relKp, make(map[string]interface{}), false)
+				case NodeTypeNode:
+					node := n.values[string(kp)].(Node)
+					val, exists, err := node.Value(nil, nil)
+					if err != nil {
+						return err
+					} else if !exists {
+						panic("wat")
+					}
+					setValueAtKeypath(m, relKp, val, false)
+				case NodeTypeValue:
+					setValueAtKeypath(m, relKp, n.values[string(kp)], false)
 				}
 			}
 			return nil
@@ -284,17 +397,28 @@ func (t *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 		return m, true, nil
 
 	case NodeTypeSlice:
-		s := make([]interface{}, t.sliceLengths[string(absKeypath)])
+		s := make([]interface{}, n.sliceLengths[string(absKeypath)])
 
-		t.scanKeypathsWithPrefix(absKeypath, rng, func(kp Keypath, _ int) error {
+		n.scanKeypathsWithPrefix(absKeypath, rng, func(kp Keypath, _ int) error {
 			relKp := kp.RelativeTo(absKeypath)
 
 			if len(relKp) != 0 {
-				switch t.nodeTypes[string(kp)] {
+				switch n.nodeTypes[string(kp)] {
 				case NodeTypeSlice:
-					setValueAtKeypath(s, relKp, make([]interface{}, t.sliceLengths[string(kp)]), false)
-				default:
-					setValueAtKeypath(s, relKp, t.values[string(kp)], false)
+					setValueAtKeypath(s, relKp, make([]interface{}, n.sliceLengths[string(kp)]), false)
+				case NodeTypeMap:
+					setValueAtKeypath(s, relKp, make(map[string]interface{}), false)
+				case NodeTypeNode:
+					node := n.values[string(kp)].(Node)
+					val, exists, err := node.Value(nil, nil)
+					if err != nil {
+						return err
+					} else if !exists {
+						panic("wat")
+					}
+					setValueAtKeypath(s, relKp, val, false)
+				case NodeTypeValue:
+					setValueAtKeypath(s, relKp, n.values[string(kp)], false)
 				}
 			}
 			return nil
@@ -325,6 +449,10 @@ func (n *MemoryNode) ContentLength() (int64, error) {
 }
 
 func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
+	if node, relKeypath := t.ParentNodeFor(keypath); t != node {
+		return node.Set(relKeypath, rng, value)
+	}
+
 	// @@TODO: handle range
 	if rng != nil {
 		panic("unsupported")
@@ -356,15 +484,8 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 			nt := t.nodeTypes[string(partialKeypath)]
 			if nt == NodeTypeInvalid {
 				t.nodeTypes[string(partialKeypath)] = NodeTypeMap
-
-			} else if nt != NodeTypeMap {
-				err := t.Delete(partialKeypath.RelativeTo(keypath), nil)
-				if err != nil {
-					return err
-				}
-				t.nodeTypes[string(partialKeypath)] = NodeTypeMap
+				newKeypaths = append(newKeypaths, partialKeypath)
 			}
-			newKeypaths = append(newKeypaths, partialKeypath)
 
 			if i != 0 {
 				// Only account for the keypath separator after the root (nil) keypath
@@ -383,6 +504,9 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 		case []interface{}:
 			t.nodeTypes[string(absNodeKeypath)] = NodeTypeSlice
 			t.sliceLengths[string(absNodeKeypath)] = len(nv)
+		case Node:
+			t.nodeTypes[string(absNodeKeypath)] = NodeTypeNode
+			t.values[string(absNodeKeypath)] = nodeValue
 		default:
 			t.nodeTypes[string(absNodeKeypath)] = NodeTypeValue
 			t.values[string(absNodeKeypath)] = nodeValue
@@ -397,6 +521,10 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 }
 
 func (n *MemoryNode) Delete(keypath Keypath, rng *Range) error {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.Delete(relKeypath, rng)
+	}
+
 	if rng == nil {
 		rng = n.rng
 	} else if rng != nil && n.rng != nil {
@@ -517,6 +645,73 @@ func (n *MemoryNode) ResetDiff() {
 //    return nil
 //}
 
+type memoryIterator struct {
+	i           int
+	end         int
+	backingNode *MemoryNode
+	iterNode    *MemoryNode
+}
+
+func (n *MemoryNode) Iterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.Iterator(relKeypath, prefetchValues, prefetchSize)
+	}
+
+	i, end := n.findPrefixRange(n.keypath.Push(keypath))
+
+	return &memoryIterator{
+		iterNode:    &MemoryNode{keypaths: n.keypaths, values: n.values, nodeTypes: n.nodeTypes, sliceLengths: n.sliceLengths},
+		backingNode: n,
+		i:           i,
+		end:         end,
+	}
+}
+
+func (iter *memoryIterator) SeekTo(keypath Keypath) {
+	newIdx := 0
+	for i := 0; i < len(iter.backingNode.keypaths); i++ {
+		if iter.backingNode.keypaths[i].Equals(keypath) {
+			newIdx = i
+			break
+		}
+	}
+	iter.i = newIdx
+}
+
+func (iter *memoryIterator) Next() Node {
+	if iter.i == iter.end-1 {
+		return nil
+	}
+
+	iter.i++
+	iter.iterNode.keypath = iter.backingNode.keypaths[iter.i]
+	return iter.iterNode
+}
+
+func (iter *memoryIterator) Close() {}
+
+type memoryChildIterator struct {
+	*memoryIterator
+}
+
+func (n *MemoryNode) ChildIterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.ChildIterator(relKeypath, prefetchValues, prefetchSize)
+	}
+	return &memoryChildIterator{n.Iterator(keypath, prefetchValues, prefetchSize).(*memoryIterator)}
+}
+
+func (iter *memoryChildIterator) Next() Node {
+	for {
+		node := iter.memoryIterator.Next()
+		if node == nil {
+			return nil
+		} else if node.Keypath().NumParts() == iter.memoryIterator.backingNode.keypath.NumParts()+1 {
+			return node
+		}
+	}
+}
+
 type memoryDepthFirstIterator struct {
 	i           int
 	end         int
@@ -525,15 +720,18 @@ type memoryDepthFirstIterator struct {
 	iterNode    *MemoryNode
 }
 
-func (t *MemoryNode) DepthFirstIterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator {
-	end, i := t.findPrefixRange(t.keypath.Push(keypath))
+func (n *MemoryNode) DepthFirstIterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.DepthFirstIterator(relKeypath, prefetchValues, prefetchSize)
+	}
+	end, i := n.findPrefixRange(n.keypath.Push(keypath))
 
 	return &memoryDepthFirstIterator{
-		iterNode:    &MemoryNode{keypaths: t.keypaths, values: t.values, nodeTypes: t.nodeTypes, sliceLengths: t.sliceLengths},
-		backingNode: t,
+		iterNode:    &MemoryNode{keypaths: n.keypaths, values: n.values, nodeTypes: n.nodeTypes, sliceLengths: n.sliceLengths},
+		backingNode: n,
 		i:           i,
 		end:         end,
-		prevLen:     len(t.keypaths),
+		prevLen:     len(n.keypaths),
 	}
 }
 
@@ -683,13 +881,15 @@ func (s *MemoryNode) scanKeypathsWithPrefix(prefix Keypath, rng *Range, fn func(
 }
 
 func (t *MemoryNode) DebugPrint() {
-	fmt.Println("- root keypath:", t.keypath)
-	fmt.Println("- copied:", t.copied)
+	log.Success("MemoryNode ----------------------------------------")
+	log.Success("- root keypath: ", t.keypath)
+	log.Success("- copied: ", t.copied)
 	for _, kp := range t.keypaths {
 		if t.nodeTypes[string(kp)] == NodeTypeSlice {
-			fmt.Println("  -", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.sliceLengths[string(kp)])
+			log.Successf("  - %v %v %v %v", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.sliceLengths[string(kp)])
 		} else {
-			fmt.Println("  -", kp, t.nodeTypes[string(kp)], t.values[string(kp)])
+			log.Successf("  - %v %v %v (%T)", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.values[string(kp)])
 		}
 	}
+	log.Success("---------------------------------------------------")
 }

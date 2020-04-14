@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/nelson"
 	"github.com/brynbellomy/redwood/tree"
 	"github.com/brynbellomy/redwood/types"
 )
@@ -17,7 +18,7 @@ type Controller interface {
 	Start() error
 
 	AddTx(tx *Tx) error
-	HaveTx(txID types.ID) bool
+	HaveTx(txID types.ID) (bool, error)
 
 	StateAtVersion(version *types.ID) tree.Node
 	QueryIndex(version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
@@ -38,7 +39,6 @@ type controller struct {
 	stateURI string
 	mu       sync.RWMutex
 
-	txs     map[types.ID]*Tx
 	txStore TxStore
 
 	behaviorTree *behaviorTree
@@ -71,7 +71,6 @@ func NewController(address types.Address, stateURI string, stateDBRootPath strin
 		address:           address,
 		stateURI:          stateURI,
 		mu:                sync.RWMutex{},
-		txs:               make(map[types.ID]*Tx),
 		txStore:           txStore,
 		behaviorTree:      newBehaviorTree(),
 		states:            states,
@@ -185,10 +184,10 @@ func (c *controller) processMempool() {
 				c.Infof(0, "readding to mempool %v (%v)", tx.ID.Pretty(), err)
 				newMempool = append(newMempool, tx)
 			} else if err != nil {
-				c.Errorf("invalid tx %+v: %v", err, PrettyJSON(tx))
+				c.Errorf("invalid tx %v: %+v: %v", tx.ID.Pretty(), err, PrettyJSON(tx))
 			} else {
 				anySucceeded = true
-				c.Infof(0, "tx added to chain (%v)", tx.ID.Pretty())
+				c.Successf("tx added to chain (%v)", tx.ID.Pretty())
 			}
 		}
 		c.mempool = newMempool
@@ -233,7 +232,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 
 			txCopy := *tx
 			txCopy.Patches = patchesTrimmed
-			err := c.behaviorTree.validators[string(validatorKeypath)].ValidateTx(state.AtKeypath(validatorKeypath, nil), &txCopy)
+			err := c.behaviorTree.validators[string(validatorKeypath)].ValidateTx(state.NodeAt(validatorKeypath, nil), &txCopy)
 			if err != nil {
 				return err
 			}
@@ -270,7 +269,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 				continue
 			}
 
-			stateToResolve := state.AtKeypath(resolverKeypath, nil)
+			stateToResolve := state.NodeAt(resolverKeypath, nil)
 			resolverConfig, err := state.CopyToMemory(resolverKeypath.Push(MergeTypeKeypath), nil)
 			if err != nil && errors.Cause(err) != types.Err404 {
 				return err
@@ -355,11 +354,11 @@ func (c *controller) validateTxIntrinsics(tx *Tx) error {
 	for _, parentID := range tx.Parents {
 		parentTx, err := c.txStore.FetchTx(c.stateURI, parentID)
 		if errors.Cause(err) == types.Err404 {
-			return errors.Wrapf(ErrNoParentYet, "parent tx not found: %v", parentID.Hex())
+			return errors.Wrapf(ErrNoParentYet, "parent tx not found: %v", parentID.Pretty())
 		} else if err != nil {
 			return err
 		} else if !parentTx.Valid && parentID != GenesisTxID {
-			return errors.Wrapf(ErrNoParentYet, "parent tx not valid: %v", parentID.Hex())
+			return errors.Wrapf(ErrNoParentYet, "parent tx not valid: %v", parentID.Pretty())
 		}
 	}
 
@@ -377,11 +376,8 @@ func (c *controller) validateTxIntrinsics(tx *Tx) error {
 	return nil
 }
 
-func (c *controller) HaveTx(txID types.ID) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	_, have := c.txs[txID]
-	return have
+func (c *controller) HaveTx(txID types.ID) (bool, error) {
+	return c.txStore.TxExists(c.stateURI, txID)
 }
 
 func (c *controller) QueryIndex(version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (node tree.Node, err error) {
@@ -410,9 +406,17 @@ func (c *controller) QueryIndex(version *types.ID, keypath tree.Keypath, indexNa
 			version = &tree.CurrentVersion
 		}
 
-		nodeToIndex := c.states.StateAtVersion(version, false).AtKeypath(keypath, nil).(*tree.DBNode)
+		nodeToIndex, err := c.states.StateAtVersion(version, false).NodeAt(keypath, nil).CopyToMemory(nil, nil)
+		if err != nil {
+			return nil, err
+		}
 
-		err := c.indices.BuildIndex(version, nodeToIndex, indexName, indexer)
+		nodeToIndex, relKeypath, err := nelson.Unwrap(nodeToIndex)
+		if err != nil {
+			return nil, err
+		}
+
+		err = c.indices.BuildIndex(version, relKeypath, nodeToIndex, indexName, indexer)
 		if err != nil {
 			return nil, err
 		}
@@ -427,7 +431,7 @@ func (c *controller) QueryIndex(version *types.ID, keypath tree.Keypath, indexNa
 		}
 	}
 
-	return indexNode.AtKeypath(queryParam, rng), nil
+	return indexNode.NodeAt(queryParam, rng), nil
 }
 
 //func (c *controller) getAncestors(hashes map[Hash]bool) map[Hash]bool {

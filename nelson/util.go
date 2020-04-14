@@ -12,39 +12,27 @@ import (
 	"github.com/brynbellomy/redwood/types"
 )
 
-//func Unwrap(node tree.Node) (tree.Node, error) {
-//    current := node
-//    for {
-//        switch n := node.(type) {
-//        case *Frame:
-//            current = n.Node
-//        case *tree.MemoryNode:
-//            nodeType, valueType, _, err := n.NodeInfo()
-//            if err != nil {
-//                // @@TODO: ??
-//                return nil, err
-//            }
-//
-//            if nodeType == NodeTypeValue && valueType == ValueTypeInvalid {
-//                val, exists, err := n.Value(nil)
-//                if err != nil {
-//                    return nil, err
-//                } else if !exists {
-//                    panic("should never happen")
-//                }
-//
-//                if frame, is := val.(*Frame); is {
-//                    current = frame.Node
-//                } else {
-//                    break
-//                }
-//            } else {
-//                break
-//            }
-//        }
-//    }
-//    return current
-//}
+func Unwrap(node tree.Node) (tree.Node, tree.Keypath, error) {
+	current := node
+	currentKeypath := node.Keypath()
+	for {
+		switch n := current.(type) {
+		case *Frame:
+			current = n.Node
+		case tree.Node:
+			exists, err := n.Exists(ValueKey)
+			if err != nil {
+				// @@TODO: ??
+				return nil, nil, err
+			} else if !exists {
+				return n, currentKeypath, nil
+			}
+			current = n.NodeAt(ValueKey, nil)
+			_, currentKeypath = currentKeypath.Shift()
+		}
+	}
+	panic("unreachable")
+}
 
 func GetValueRecursive(val interface{}, keypath tree.Keypath, rng *tree.Range) (interface{}, bool, error) {
 	current := val

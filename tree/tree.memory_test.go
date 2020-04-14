@@ -1,10 +1,12 @@
 package tree
 
 import (
+	"flag"
 	"fmt"
 	"strconv"
 	"testing"
 
+	"github.com/plan-systems/klog"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +34,7 @@ func TestMemoryNode_Set(T *testing.T) {
 	for _, test := range tests {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
-			state := NewMemoryNode().AtKeypath(test.atKeypath, nil).(*MemoryNode)
+			state := NewMemoryNode().NodeAt(test.atKeypath, nil).(*MemoryNode)
 
 			for _, f := range test.fixtures {
 				err := state.Set(test.keypath, test.rng, f.input)
@@ -66,6 +68,121 @@ func TestMemoryNode_Set(T *testing.T) {
 	}
 }
 
+func TestMemoryNode_ParentNodeFor(T *testing.T) {
+	defer klog.Flush()
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
+
+	T.Run("non-root node", func(T *testing.T) {
+		state := NewMemoryNode().(*MemoryNode)
+		innerNode := NewMemoryNode().(*MemoryNode)
+
+		err := state.Set(Keypath("foo"), nil, M{
+			"one":   uint64(123),
+			"two":   M{"two a": false, "two b": nil},
+			"three": "hello",
+		})
+		require.NoError(T, err)
+		state.DebugPrint()
+
+		err = innerNode.Set(Keypath("bar"), nil, M{
+			"baz": M{
+				"xyzzy": "zork",
+			},
+		})
+		require.NoError(T, err)
+		innerNode.DebugPrint()
+
+		err = state.Set(Keypath("foo/two"), nil, innerNode)
+		require.NoError(T, err)
+		state.DebugPrint()
+
+		node, keypath := state.ParentNodeFor(Keypath("foo/two/bar/baz/xyzzy"))
+		require.Equal(T, Keypath("bar/baz/xyzzy"), keypath)
+		memNode := node.(*MemoryNode)
+		require.Equal(T, innerNode.keypaths, memNode.keypaths)
+	})
+
+	T.Run("root node", func(T *testing.T) {
+		state := NewMemoryNode().(*MemoryNode)
+		innerNode := NewMemoryNode().(*MemoryNode)
+
+		err := state.Set(Keypath("foo"), nil, M{
+			"one":   uint64(123),
+			"two":   M{"two a": false, "two b": nil},
+			"three": "hello",
+		})
+		require.NoError(T, err)
+		state.DebugPrint()
+
+		err = innerNode.Set(Keypath("bar"), nil, M{
+			"baz": M{
+				"xyzzy": "zork",
+			},
+		})
+		require.NoError(T, err)
+		innerNode.DebugPrint()
+
+		err = state.Set(nil, nil, innerNode)
+		require.NoError(T, err)
+		state.DebugPrint()
+
+		node, keypath := state.ParentNodeFor(Keypath("bar/baz/xyzzy"))
+		require.Equal(T, Keypath("bar/baz/xyzzy"), keypath)
+		memNode := node.(*MemoryNode)
+		require.Equal(T, innerNode.keypaths, memNode.keypaths)
+	})
+}
+
+func TestMemoryNode_SetNode(T *testing.T) {
+	defer klog.Flush()
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
+
+	T.Run("inner MemoryNode", func(T *testing.T) {
+		state := NewMemoryNode().(*MemoryNode)
+		innerNode := NewMemoryNode().(*MemoryNode)
+
+		err := state.Set(Keypath("foo"), nil, M{
+			"one":   uint64(123),
+			"two":   M{"two a": false, "two b": nil},
+			"three": "hello",
+		})
+		require.NoError(T, err)
+
+		err = innerNode.Set(Keypath("bar"), nil, M{
+			"baz": M{
+				"xyzzy": "zork",
+			},
+		})
+		require.NoError(T, err)
+
+		err = state.Set(Keypath("foo/two"), nil, innerNode)
+		require.NoError(T, err)
+
+		require.Len(T, state.keypaths, 5)
+
+		expected := M{
+			"foo": M{
+				"one": uint64(123),
+				"two": M{
+					"bar": M{
+						"baz": M{
+							"xyzzy": "zork",
+						},
+					},
+				},
+				"three": "hello",
+			},
+		}
+
+		received, exists, err := state.Value(nil, nil)
+		require.NoError(T, err)
+		require.True(T, exists)
+		require.Equal(T, expected, received)
+	})
+}
+
 func TestMemoryNode_Delete(T *testing.T) {
 	tests := []struct {
 		name          string
@@ -92,8 +209,8 @@ func TestMemoryNode_Delete(T *testing.T) {
 	for _, test := range tests {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
-			//state := NewMemoryNode(NodeTypeMap).AtKeypath(test.atKeypath).(*MemoryNode)
-			state := NewMemoryNode().AtKeypath(test.atKeypath, nil).(*MemoryNode)
+			//state := NewMemoryNode(NodeTypeMap).NodeAt(test.atKeypath).(*MemoryNode)
+			state := NewMemoryNode().NodeAt(test.atKeypath, nil).(*MemoryNode)
 
 			err := state.Set(test.setKeypath, test.setRange, test.fixture.input)
 			require.NoError(T, err)
@@ -148,8 +265,8 @@ func TestMemoryNode_DepthFirstIterator(T *testing.T) {
 	for _, test := range tests {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
-			//state := NewMemoryNode(NodeTypeMap).AtKeypath(test.atKeypath).(*MemoryNode)
-			state := NewMemoryNode().AtKeypath(test.atKeypath, nil).(*MemoryNode)
+			//state := NewMemoryNode(NodeTypeMap).NodeAt(test.atKeypath).(*MemoryNode)
+			state := NewMemoryNode().NodeAt(test.atKeypath, nil).(*MemoryNode)
 
 			err := state.Set(nil, nil, test.fixture.input)
 			require.NoError(T, err)
@@ -323,7 +440,7 @@ func TestMemoryNode_CopyToMemory(T *testing.T) {
 	//sort.Slice(expectedKeypaths, func(i, j int) bool { return bytes.Compare(expectedKeypaths[i], expectedKeypaths[j]) < 0 })
 	//
 	//err = state.View(func(node *DBNode) error {
-	//    copied, err := node.AtKeypath(Keypath("flox")).CopyToMemory(nil)
+	//    copied, err := node.NodeAt(Keypath("flox")).CopyToMemory(nil)
 	//    require.NoError(T, err)
 	//
 	//    memnode := copied.(*MemoryNode)
@@ -342,7 +459,7 @@ func TestMemoryNode_CopyToMemory_AtKeypath(T *testing.T) {
 	err := node.Set(nil, nil, fixture1.input)
 	require.NoError(T, err)
 
-	copied, err := node.AtKeypath(Keypath("asdf"), nil).CopyToMemory(nil, nil)
+	copied, err := node.NodeAt(Keypath("asdf"), nil).CopyToMemory(nil, nil)
 	require.NoError(T, err)
 
 	expected := takeFixtureOutputsWithPrefix(Keypath("asdf"), fixture1.output...)

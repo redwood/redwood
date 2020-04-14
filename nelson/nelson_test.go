@@ -1,148 +1,205 @@
 package nelson
 
 import (
-	"encoding/json"
+	"flag"
 	"fmt"
 	"math/rand"
 	"testing"
 
+	"github.com/plan-systems/klog"
 	"github.com/stretchr/testify/require"
 
 	"github.com/brynbellomy/redwood/tree"
-	"github.com/brynbellomy/redwood/types"
 )
 
 type M = map[string]interface{}
 
-func setupDBTreeWithValue(T *testing.T, keypath tree.Keypath, val interface{}) (*tree.DBTree, types.ID) {
+func setupDBTreeWithValue(T *testing.T, keypath tree.Keypath, val interface{}) *tree.DBTree {
 	i := rand.Int()
-	state, err := tree.NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i))
-	require.NoError(T, err)
-	v := types.RandomID()
 
-	err = state.Update(v, func(tx *tree.DBNode) error {
-		err := tx.Set(keypath, nil, val)
-		require.NoError(T, err)
-		return nil
-	})
+	db, err := tree.NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i))
 	require.NoError(T, err)
-	return state, v
+
+	state := db.StateAtVersion(nil, true)
+	defer state.Save()
+
+	err = state.Set(keypath, nil, val)
+	require.NoError(T, err)
+
+	return db
 }
 
 func TestResolve_SimpleFrame(T *testing.T) {
-	i := rand.Int()
-	state, err := tree.NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i))
-	require.NoError(T, err)
-	v := types.RandomID()
+	defer klog.Flush()
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
 
 	expectedVal := M{
 		"blah": "hi",
 		"asdf": []interface{}{uint64(5), uint64(4), uint64(3)},
 	}
 
-	err = state.Update(v, func(tx *tree.DBNode) error {
-		err := tx.Set(nil, nil, M{
-			"Content-Type":   "some content type",
-			"Content-Length": int64(111),
-			//"value":          "abcdefg",
-			"value": expectedVal,
-		})
-		require.NoError(T, err)
-
-		return nil
+	db := setupDBTreeWithValue(T, nil, M{
+		"Content-Type":   "some content type",
+		"Content-Length": int64(111),
+		"value":          expectedVal,
 	})
-	require.NoError(T, err)
+	defer db.DeleteDB()
 
 	refResolver := &refResolverMock{}
 
-	err = state.View(v, func(tx *tree.DBNode) error {
-		memstate, err := tx.CopyToMemory(nil, nil)
-		require.NoError(T, err)
+	state := db.StateAtVersion(nil, false)
+	defer state.Close()
 
-		memstate.(*tree.MemoryNode).DebugPrint()
+	memstate, err := state.CopyToMemory(nil, nil)
+	require.NoError(T, err)
 
-		anyMissing, err := Resolve(memstate, refResolver)
-		require.False(T, anyMissing)
-		require.NoError(T, err)
+	memstate, anyMissing, err := Resolve(memstate, refResolver)
+	require.False(T, anyMissing)
+	require.NoError(T, err)
 
-		memstate.(*tree.MemoryNode).DebugPrint()
+	asNelSON, isNelSON := memstate.(*Frame)
+	require.True(T, isNelSON)
 
-		val, exists, err := memstate.Value(nil, nil)
-		require.True(T, exists)
-		require.NoError(T, err)
+	contentType, err := asNelSON.ContentType()
+	require.NoError(T, err)
+	require.Equal(T, "some content type", contentType)
 
-		asNelSON, isNelSON := val.(*Frame)
-		require.True(T, isNelSON)
+	contentLength, err := asNelSON.ContentLength()
+	require.NoError(T, err)
+	require.Equal(T, int64(111), contentLength)
 
-		require.Equal(T, "some content type", asNelSON.ContentType())
-		require.Equal(T, int64(111), asNelSON.ContentLength())
-
-		val, exists, err = asNelSON.Value()
-		require.True(T, exists)
-		require.NoError(T, err)
-		require.Equal(T, expectedVal, val)
-
-		return nil
-	})
+	val, exists, err := asNelSON.Value(nil, nil)
+	require.True(T, exists)
+	require.NoError(T, err)
+	require.Equal(T, expectedVal, val)
 }
 
-func xTestResolve_SimpleFrameInFrame(T *testing.T) {
-	i := rand.Int()
-	state, err := tree.NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i))
-	require.NoError(T, err)
-	v := types.RandomID()
+func TestResolve_SimpleFrameInFrame(T *testing.T) {
+	defer klog.Flush()
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
 
-	err = state.Update(v, func(tx *tree.DBNode) error {
-		err := tx.Set(tree.Keypath("foo"), nil, M{
-			"blah": M{
-				"Content-Type":   "outer",
-				"Content-Length": int64(111),
+	db := setupDBTreeWithValue(T, tree.Keypath("foo"), M{
+		"blah": M{
+			"Content-Type":   "outer",
+			"Content-Length": int64(111),
+			"value": M{
+				"Content-Length": int64(4321),
 				"value": M{
-					"Content-Length": int64(4321),
-					"value": M{
-						"Content-Type": "inner",
-						"value":        uint64(12345),
-					},
+					"Content-Type": "inner",
+					"value":        uint64(12345),
 				},
 			},
-		})
-		require.NoError(T, err)
-
-		return nil
+		},
 	})
-	require.NoError(T, err)
+	defer db.DeleteDB()
 
 	refResolver := &refResolverMock{}
 
-	err = state.View(v, func(tx *tree.DBNode) error {
-		memstate, err := tx.CopyToMemory(nil, nil)
-		require.NoError(T, err)
+	state := db.StateAtVersion(nil, false)
+	defer state.Close()
 
-		anyMissing, err := Resolve(memstate, refResolver)
-		require.False(T, anyMissing)
-		require.NoError(T, err)
+	memstate, err := state.CopyToMemory(nil, nil)
+	require.NoError(T, err)
 
-		val, exists, err := memstate.Value(tree.Keypath("foo/blah"), nil)
-		require.True(T, exists)
-		require.NoError(T, err)
+	memstate, anyMissing, err := Resolve(memstate, refResolver)
+	require.False(T, anyMissing)
+	require.NoError(T, err)
 
-		asNelSON, isNelSON := val.(*Frame)
-		require.True(T, isNelSON)
+	_, isMemoryNode := memstate.(*tree.MemoryNode)
+	require.True(T, isMemoryNode)
 
-		require.Equal(T, "inner", asNelSON.ContentType())
-		require.Equal(T, int64(4321), asNelSON.ContentLength())
+	memstate.DebugPrint()
 
-		val, exists, err = asNelSON.Value()
-		require.True(T, exists)
-		require.NoError(T, err)
-		require.Equal(T, uint64(12345), val)
+	node := memstate.NodeAt(tree.Keypath("foo/blah"), nil)
+	asNelSON, isNelSON := node.(*Frame)
+	require.True(T, isNelSON)
 
-		return nil
+	contentType, err := asNelSON.ContentType()
+	require.NoError(T, err)
+	require.Equal(T, "inner", contentType)
+
+	contentLength, err := asNelSON.ContentLength()
+	require.NoError(T, err)
+	require.Equal(T, int64(4321), contentLength)
+
+	val, exists, err := asNelSON.Value(nil, nil)
+	require.True(T, exists)
+	require.NoError(T, err)
+	require.Equal(T, uint64(12345), val)
+}
+
+func TestResolve_SimpleFrameInFrameWithRef(T *testing.T) {
+	defer klog.Flush()
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
+
+	db := setupDBTreeWithValue(T, tree.Keypath("foo"), M{
+		"value": "",
+
+		"Merge-Type": M{
+			"Content-Type": "resolver/js",
+			"value": M{
+				"src": M{
+					"Content-Type": "link",
+					"value":        "ref:deadbeef",
+				},
+			},
+		},
 	})
+	defer db.DeleteDB()
+
+	refResolver := &refResolverMock{}
+
+	state := db.StateAtVersion(nil, false)
+	defer state.Close()
+
+	memstate, err := state.CopyToMemory(nil, nil)
+	require.NoError(T, err)
+
+	memstate, anyMissing, err := Resolve(memstate, refResolver)
+	require.False(T, anyMissing)
+	require.NoError(T, err)
+
+	_, isMemoryNode := memstate.(*tree.MemoryNode)
+	require.True(T, isMemoryNode)
+
+	memstate.DebugPrint()
+
+	node := memstate.NodeAt(tree.Keypath("foo/Merge-Type"), nil)
+	node.DebugPrint()
+	require.IsType(T, &Frame{}, node)
+
+	asNelSON := node.(*Frame)
+
+	contentType, err := asNelSON.ContentType()
+	require.NoError(T, err)
+	require.Equal(T, "resolver/js", contentType)
+
+	contentLength, err := asNelSON.ContentLength()
+	require.NoError(T, err)
+	require.Equal(T, int64(0), contentLength)
+
+	val, exists, err := asNelSON.Value(nil, nil)
+	require.True(T, exists)
+	require.NoError(T, err)
+
+	expected := M{
+		"src": M{
+			"Content-Type": "link",
+			"value":        "ref:deadbeef",
+		},
+	}
+	require.Equal(T, expected, val)
 }
 
 func TestResolve_LinkToSimpleState(T *testing.T) {
-	localState, v := setupDBTreeWithValue(T, tree.Keypath("foo"), M{
+	defer klog.Flush()
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
+
+	localDB := setupDBTreeWithValue(T, tree.Keypath("foo"), M{
 		"blah": M{
 			"Content-Type": "outer",
 			"value": M{
@@ -154,49 +211,46 @@ func TestResolve_LinkToSimpleState(T *testing.T) {
 			},
 		},
 	})
-	defer localState.DeleteDB()
+	defer localDB.DeleteDB()
 
-	otherState, v2 := setupDBTreeWithValue(T, tree.Keypath("foo"), M{
+	otherDB := setupDBTreeWithValue(T, tree.Keypath("foo"), M{
 		"xyzzy": M{
 			"zork": uint64(55555),
 		},
 	})
-	defer otherState.DeleteDB()
+	defer otherDB.DeleteDB()
 
-	err := localState.View(v, func(localState *tree.DBNode) error {
-		return otherState.View(v2, func(otherState *tree.DBNode) error {
-			refResolver := &refResolverMock{
-				stateURIs: map[string]tree.Node{
-					"otherState/someChannel": otherState,
-				},
-			}
+	localState := localDB.StateAtVersion(nil, false)
+	otherState := otherDB.StateAtVersion(nil, false)
 
-			localStateMem, err := localState.CopyToMemory(nil, nil)
-			require.NoError(T, err)
+	refResolver := &refResolverMock{
+		stateURIs: map[string]tree.Node{
+			"otherState/someChannel": otherState,
+		},
+	}
 
-			anyMissing, err := Resolve(localStateMem, refResolver)
-			require.False(T, anyMissing)
-			require.NoError(T, err)
-
-			val, exists, err := localStateMem.Value(tree.Keypath("foo/blah"), nil)
-			require.True(T, exists)
-			require.NoError(T, err)
-
-			asNelSON, isNelSON := val.(*Frame)
-			require.True(T, isNelSON)
-
-			val, exists, err = asNelSON.Value()
-			require.True(T, exists)
-			require.NoError(T, err)
-			require.Equal(T, uint64(55555), val)
-			return nil
-		})
-	})
+	localStateMem, err := localState.CopyToMemory(nil, nil)
 	require.NoError(T, err)
+
+	localStateMem, anyMissing, err := Resolve(localStateMem, refResolver)
+	require.False(T, anyMissing)
+	require.NoError(T, err)
+
+	asNelSON, isNelSON := localStateMem.NodeAt(tree.Keypath("foo/blah"), nil).(*Frame)
+	require.True(T, isNelSON)
+
+	val, exists, err := asNelSON.Value(nil, nil)
+	require.True(T, exists)
+	require.NoError(T, err)
+	require.Equal(T, uint64(55555), val)
 }
 
 func TestResolve_LinkToMatryoshkaState(T *testing.T) {
-	localState, v := setupDBTreeWithValue(T, tree.Keypath("foo"), M{
+	defer klog.Flush()
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
+
+	localDB := setupDBTreeWithValue(T, tree.Keypath("foo"), M{
 		"blah": M{
 			"Content-Type": "ignore this",
 			"value": M{
@@ -208,9 +262,9 @@ func TestResolve_LinkToMatryoshkaState(T *testing.T) {
 			},
 		},
 	})
-	defer localState.DeleteDB()
+	defer localDB.DeleteDB()
 
-	otherState, v2 := setupDBTreeWithValue(T, tree.Keypath("foo"), M{
+	otherDB := setupDBTreeWithValue(T, tree.Keypath("foo"), M{
 		"xyzzy": M{
 			"zork": M{
 				"Content-Type":   "linked content type",
@@ -219,65 +273,32 @@ func TestResolve_LinkToMatryoshkaState(T *testing.T) {
 			},
 		},
 	})
-	defer otherState.DeleteDB()
+	defer otherDB.DeleteDB()
 
-	err := localState.View(v, func(localState *tree.DBNode) error {
-		return otherState.View(v2, func(otherState *tree.DBNode) error {
-			refResolver := &refResolverMock{
-				stateURIs: map[string]tree.Node{
-					"otherState/someChannel": otherState,
-				},
-			}
+	localState := localDB.StateAtVersion(nil, false)
+	otherState := otherDB.StateAtVersion(nil, false)
 
-			localStateMem, err := localState.CopyToMemory(nil, nil)
-			require.NoError(T, err)
+	refResolver := &refResolverMock{
+		stateURIs: map[string]tree.Node{
+			"otherState/someChannel": otherState,
+		},
+	}
 
-			anyMissing, err := Resolve(localStateMem, refResolver)
-			require.False(T, anyMissing)
-			require.NoError(T, err)
-
-			val, exists, err := localStateMem.Value(tree.Keypath("foo/blah"), nil)
-			require.True(T, exists)
-			require.NoError(T, err)
-
-			asNelSON, isNelSON := val.(*Frame)
-			require.True(T, isNelSON)
-
-			//require.Equal(T, "linked content type", asNelSON.ContentType())
-			//require.Equal(T, int64(9999), asNelSON.ContentLength())
-
-			val, exists, err = asNelSON.Value()
-			require.True(T, exists)
-			require.NoError(T, err)
-			require.Equal(T, uint64(55555), val)
-			return nil
-		})
-	})
+	localStateMem, err := localState.CopyToMemory(nil, nil)
 	require.NoError(T, err)
+
+	localStateMem, anyMissing, err := Resolve(localStateMem, refResolver)
+	require.False(T, anyMissing)
+	require.NoError(T, err)
+
+	asNelSON, isNelSON := localStateMem.NodeAt(tree.Keypath("foo/blah"), nil).(*Frame)
+	require.True(T, isNelSON)
+
+	//require.Equal(T, "linked content type", asNelSON.ContentType())
+	//require.Equal(T, int64(9999), asNelSON.ContentLength())
+
+	val, exists, err := asNelSON.Value(nil, nil)
+	require.True(T, exists)
+	require.NoError(T, err)
+	require.Equal(T, uint64(55555), val)
 }
-
-func PrettyJSON(x interface{}) string {
-	j, _ := json.MarshalIndent(x, "", "    ")
-	return string(j)
-}
-
-//func debugPrint_DBNode(T *testing.T, state *tree.DBTree) {
-//    keypaths, values, err := state.Contents(nil, nil)
-//    require.NoError(T, err)
-//    for i := range keypaths {
-//        fmt.Println("  -", string(keypaths[i]), values[i])
-//    }
-//}
-
-//
-//func debugPrint_MemoryNode(T *testing.T, memstate interface{}) {
-//    keypaths, values, err := memstate.(interface {
-//        Contents(keypathPrefix tree.Keypath, rng *[2]uint64) ([]tree.Keypath, []interface{}, error)
-//    }).Contents(nil, nil)
-//
-//    require.NoError(T, err)
-//
-//    for i := range keypaths {
-//        fmt.Println(" >>", string(keypaths[i]), values[i])
-//    }
-//}

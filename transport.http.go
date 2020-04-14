@@ -47,16 +47,10 @@ type httpTransport struct {
 
 	pendingAuthorizations map[types.ID][]byte
 
-	fetchHistoryHandler  FetchHistoryHandler
-	ackHandler           AckHandler
-	txHandler            TxHandler
-	privateTxHandler     PrivateTxHandler
-	verifyAddressHandler VerifyAddressHandler
-	fetchRefHandler      FetchRefHandler
-
 	subscriptionsIn   map[string]map[*httpSubscriptionIn]struct{}
 	subscriptionsInMu sync.RWMutex
 
+	host      Host
 	refStore  RefStore
 	peerStore PeerStore
 }
@@ -277,8 +271,8 @@ func (t *httpTransport) serveAuthorizeSelf(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	peer := &httpPeer{address: address, t: t, Writer: w}
-	err = t.verifyAddressHandler([]byte(challengeMsg), peer)
+	peer := t.makePeerWithAddress(w, nil, address)
+	err = t.host.OnVerifyAddressReceived([]byte(challengeMsg), peer)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -390,7 +384,7 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		err := t.fetchHistoryHandler(stateURI, parents, toVersion, &httpPeer{address: address, t: t, Writer: w, Flusher: f})
+		err := t.host.OnFetchHistoryRequestReceived(stateURI, parents, toVersion, t.makePeerWithAddress(w, f, address))
 		if err != nil {
 			t.Errorf("error fetching history: %v", err)
 			// @@TODO: close subscription?
@@ -569,7 +563,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		defer state.Close()
 
 		if raw {
-			state = state.AtKeypath(keypath, rng)
+			state = state.NodeAt(keypath, rng)
 
 		} else {
 			indexHTMLExists, err := state.Exists(keypath.Push(tree.Keypath("index.html")))
@@ -682,7 +676,7 @@ func (t *httpTransport) serveAck(w http.ResponseWriter, r *http.Request, address
 		return
 	}
 
-	t.ackHandler(txID, &httpPeer{address: address, t: t, Writer: w})
+	t.host.OnAckReceived(txID, t.makePeerWithAddress(w, nil, address))
 }
 
 func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, address types.Address) {
@@ -694,7 +688,7 @@ func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Reques
 		panic(err)
 	}
 
-	t.privateTxHandler(encryptedTx, &httpPeer{address: address, t: t, Writer: w})
+	t.host.OnPrivateTxReceived(encryptedTx, t.makePeerWithAddress(w, nil, address))
 }
 
 func (t *httpTransport) servePostRef(w http.ResponseWriter, r *http.Request) {
@@ -808,7 +802,7 @@ func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, addr
 	tx.From = pubkey.Address()
 	////////////////////////////////
 
-	t.txHandler(tx, &httpPeer{address: address, t: t, Writer: w})
+	t.host.OnTxReceived(tx, t.makePeerWithAddress(w, nil, address))
 }
 
 func parseRawParam(r *http.Request) (bool, error) {
@@ -838,6 +832,10 @@ func respondJSON(resp http.ResponseWriter, data interface{}) {
 	}
 }
 
+func (t *httpTransport) SetHost(h Host) {
+	t.host = h
+}
+
 func (t *httpTransport) trackSubscription(stateURI string, sub *httpSubscriptionIn) {
 	t.subscriptionsInMu.Lock()
 	defer t.subscriptionsInMu.Unlock()
@@ -858,38 +856,11 @@ func (t *httpTransport) untrackSubscription(stateURI string, sub *httpSubscripti
 	delete(t.subscriptionsIn[stateURI], sub)
 }
 
-func (t *httpTransport) SetFetchHistoryHandler(handler FetchHistoryHandler) {
-	t.fetchHistoryHandler = handler
-}
-
-func (t *httpTransport) SetTxHandler(handler TxHandler) {
-	t.txHandler = handler
-}
-
-func (t *httpTransport) SetPrivateTxHandler(handler PrivateTxHandler) {
-	t.privateTxHandler = handler
-}
-
-func (t *httpTransport) SetAckHandler(handler AckHandler) {
-	t.ackHandler = handler
-}
-
-func (t *httpTransport) SetVerifyAddressHandler(handler VerifyAddressHandler) {
-	t.verifyAddressHandler = handler
-}
-
-func (t *httpTransport) SetFetchRefHandler(handler FetchRefHandler) {
-	t.fetchRefHandler = handler
-}
-
 func (t *httpTransport) GetPeerByConnStrings(ctx context.Context, reachableAt StringSet) (Peer, error) {
 	if len(reachableAt) != 1 {
 		panic("weird")
 	}
-	for ra := range reachableAt {
-		return &httpPeer{t: t, reachableAt: ra}, nil
-	}
-	panic("unreachable")
+	return t.makePeer(nil, nil, reachableAt), nil
 }
 
 func (t *httpTransport) ForEachProviderOfStateURI(ctx context.Context, theURL string) (<-chan Peer, error) {
@@ -923,7 +894,7 @@ func (t *httpTransport) ForEachProviderOfStateURI(ctx context.Context, theURL st
 			}
 
 			select {
-			case ch <- &httpPeer{t: t, reachableAt: providerURL}:
+			case ch <- t.makePeer(nil, nil, NewStringSet([]string{providerURL})):
 			case <-ctx.Done():
 			}
 		}
@@ -949,7 +920,7 @@ func (t *httpTransport) ForEachSubscriberToStateURI(ctx context.Context, stateUR
 		for sub := range t.subscriptionsIn[stateURI] {
 			<-sub.chDoneCatchingUp
 			select {
-			case ch <- &httpPeer{t: t, Writer: sub.Writer, Flusher: sub.Flusher}:
+			case ch <- t.makePeer(sub.Writer, sub.Flusher, nil):
 			case <-ctx.Done():
 			}
 		}
@@ -1033,12 +1004,34 @@ func (t *httpTransport) addressFromCookie(r *http.Request) types.Address {
 	return types.AddressFromBytes(addressBytes)
 }
 
+func (t *httpTransport) makePeer(writer io.Writer, flusher http.Flusher, reachableAt StringSet) *httpPeer {
+	storedPeer := t.peerStore.PeerReachableAt("http", reachableAt)
+	peer := &httpPeer{t: t, Writer: writer, Flusher: flusher}
+	if storedPeer != nil {
+		peer.storedPeer = *storedPeer
+	} else {
+		peer.storedPeer.reachableAt = reachableAt
+	}
+	return peer
+}
+
+func (t *httpTransport) makePeerWithAddress(writer io.Writer, flusher http.Flusher, address types.Address) *httpPeer {
+	storedPeer := t.peerStore.PeersFromTransportWithAddress("http", address)
+	peer := &httpPeer{t: t, Writer: writer, Flusher: flusher}
+	if len(storedPeer) > 0 {
+		peer.storedPeer = *storedPeer[0]
+	} else {
+		peer.storedPeer.address = address
+	}
+	return peer
+}
+
 type httpPeer struct {
-	t       *httpTransport
-	address types.Address
+	storedPeer
+
+	t *httpTransport
 
 	// stream
-	reachableAt string
 	sync.Mutex
 	io.Writer
 	io.ReadCloser
@@ -1060,15 +1053,7 @@ func (p *httpPeer) Transport() Transport {
 }
 
 func (p *httpPeer) ReachableAt() StringSet {
-	return NewStringSet([]string{p.reachableAt})
-}
-
-func (p *httpPeer) Address() types.Address {
-	return p.address
-}
-
-func (p *httpPeer) SetAddress(addr types.Address) {
-	p.address = addr
+	return p.reachableAt
 }
 
 func (p *httpPeer) EnsureConnected(ctx context.Context) error {
@@ -1087,7 +1072,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 		var client http.Client
-		req, err := http.NewRequest("GET", p.reachableAt, nil)
+		req, err := http.NewRequest("GET", p.ReachableAt().Any(), nil)
 		if err != nil {
 			return err
 		}
@@ -1141,7 +1126,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 			}
 
 			client := http.Client{}
-			req, err := http.NewRequest("PUT", p.reachableAt, bytes.NewReader(bs))
+			req, err := http.NewRequest("PUT", p.ReachableAt().Any(), bytes.NewReader(bs))
 			if err != nil {
 				return err
 			}
@@ -1167,7 +1152,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("ACK", p.reachableAt, bytes.NewReader(txIDBytes))
+		req, err := http.NewRequest("ACK", p.ReachableAt().Any(), bytes.NewReader(txIDBytes))
 		if err != nil {
 			return err
 		}
@@ -1187,7 +1172,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("AUTHORIZE", p.reachableAt, nil)
+		req, err := http.NewRequest("AUTHORIZE", p.ReachableAt().Any(), nil)
 		if err != nil {
 			return err
 		}
@@ -1228,7 +1213,7 @@ func (p *httpPeer) WriteMsg(msg Msg) error {
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("PUT", p.reachableAt, bytes.NewReader(encPutBytes))
+		req, err := http.NewRequest("PUT", p.ReachableAt().Any(), bytes.NewReader(encPutBytes))
 		if err != nil {
 			return err
 		}

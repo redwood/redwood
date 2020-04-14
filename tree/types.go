@@ -60,20 +60,23 @@ type Node interface {
 	Close()
 	Keypath() Keypath
 	Subkeys() []Keypath
-	AtKeypath(keypath Keypath, rng *Range) Node
+	NodeAt(keypath Keypath, rng *Range) Node
+	ParentNodeFor(keypath Keypath) (Node, Keypath)
 	Value(keypath Keypath, rng *Range) (interface{}, bool, error)
 	UintValue(keypath Keypath) (uint64, bool, error)
 	IntValue(keypath Keypath) (int64, bool, error)
 	FloatValue(keypath Keypath) (float64, bool, error)
 	StringValue(keypath Keypath) (string, bool, error)
 	ContentLength() (int64, error)
-	NodeInfo() (NodeType, ValueType, uint64, error)
+	NodeInfo(keypath Keypath) (NodeType, ValueType, uint64, error)
 	Exists(keypath Keypath) (bool, error)
 	Set(keypath Keypath, rng *Range, val interface{}) error
 	Delete(keypath Keypath, rng *Range) error
 	Diff() *Diff
 	ResetDiff()
 	CopyToMemory(keypath Keypath, rng *Range) (Node, error)
+	Iterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator
+	ChildIterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator
 	DepthFirstIterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator
 	DebugPrint()
 }
@@ -85,6 +88,7 @@ const (
 	NodeTypeValue
 	NodeTypeMap
 	NodeTypeSlice
+	NodeTypeNode
 )
 
 func (nt NodeType) String() string {
@@ -95,6 +99,8 @@ func (nt NodeType) String() string {
 		return "Map"
 	case NodeTypeSlice:
 		return "Slice"
+	case NodeTypeNode:
+		return "Node"
 	default:
 		return "Invalid"
 	}
