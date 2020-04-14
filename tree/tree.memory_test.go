@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/plan-systems/klog"
+	"github.com/brynbellomy/klog"
 	"github.com/stretchr/testify/require"
 )
 
