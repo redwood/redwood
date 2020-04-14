@@ -352,7 +352,7 @@ func (n *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 
 	case NodeTypeNode:
 		// This should never happen because we call .ParentNodeFor above
-		return node.Value(keypath, rng)
+		return n.values[string(absKeypath)].(Node).Value(keypath, rng)
 
 	case NodeTypeValue:
 		val, exists := n.values[string(absKeypath)]
