@@ -63,6 +63,45 @@ func (tx Tx) IsPrivate() bool {
 	return len(tx.Recipients) > 0
 }
 
+func (tx *Tx) Copy() *Tx {
+	var parents []types.ID
+	if len(tx.Parents) > 0 {
+		parents = make([]types.ID, len(tx.Parents))
+		for i, id := range tx.Parents {
+			parents[i] = id
+		}
+	}
+
+	var patches []Patch
+	if len(tx.Patches) > 0 {
+		patches = make([]Patch, len(tx.Patches))
+		for i, p := range tx.Patches {
+			patches[i] = p.Copy()
+		}
+	}
+
+	var recipients []types.Address
+	if len(tx.Recipients) > 0 {
+		recipients := make([]types.Address, len(tx.Recipients))
+		for i, addr := range tx.Recipients {
+			recipients[i] = addr
+		}
+	}
+
+	return &Tx{
+		ID:         tx.ID,
+		Parents:    parents,
+		From:       tx.From,
+		Sig:        tx.Sig.Copy(),
+		URL:        tx.URL,
+		Patches:    patches,
+		Recipients: recipients,
+		Checkpoint: tx.Checkpoint,
+		Valid:      tx.Valid,
+		hash:       tx.hash,
+	}
+}
+
 func PrivateRootKeyForRecipients(recipients []types.Address) string {
 	var bs []byte
 	for _, r := range recipients {
