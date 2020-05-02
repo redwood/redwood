@@ -22,6 +22,7 @@ type Metacontroller interface {
 	FetchTxs(stateURI string) TxIterator
 	HaveTx(stateURI string, txID types.ID) (bool, error)
 
+	StateURIExists(stateURI string) bool
 	KnownStateURIs() []string
 	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
 	QueryIndex(stateURI string, version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
@@ -396,6 +397,13 @@ func (m *metacontroller) initializeIndexer(state *tree.DBNode, indexerConfigKeyp
 		c.BehaviorTree().addIndexer(indexerNodeKeypath, indexName, indexer)
 	}
 	return nil
+}
+
+func (m *metacontroller) StateURIExists(stateURI string) bool {
+	m.validStateURIsMu.Lock()
+	defer m.validStateURIsMu.Unlock()
+	_, exists := m.validStateURIs[stateURI]
+	return exists
 }
 
 func (m *metacontroller) KnownStateURIs() []string {
