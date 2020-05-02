@@ -3,18 +3,8 @@ package ctx
 import (
 	"fmt"
 
-	"github.com/plan-systems/klog"
+	"github.com/brynbellomy/klog"
 )
-
-func init() {
-
-	klog.InitFlags(nil)
-	klog.SetFormatter(&klog.FmtConstWidth{
-		FileNameCharWidth: 24,
-		UseColor:          true,
-	})
-
-}
 
 type Logger interface {
 	SetLogLabel(inLabel string)
