@@ -525,7 +525,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	{
 		leaves, err := t.controller.Leaves(stateURI)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("%+v", err), http.StatusNotFound)
+			http.Error(w, fmt.Sprintf("%v", err), http.StatusNotFound)
 			return
 		}
 		var leaf types.ID
@@ -958,7 +958,7 @@ var (
 func (t *httpTransport) ensureSessionIDCookie(w http.ResponseWriter, r *http.Request) (types.ID, error) {
 	sessionIDBytes, err := t.signedCookie(r, "sessionid")
 	if err != nil {
-		t.Errorf("error reading signed sessionid cookie: %v", err)
+		// t.Errorf("error reading signed sessionid cookie: %v", err)
 		return t.setSessionIDCookie(w)
 	}
 	return types.IDFromBytes(sessionIDBytes), nil
