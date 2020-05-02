@@ -47,11 +47,8 @@ type controller struct {
 	indices *tree.DBTree
 	leaves  map[types.ID]struct{}
 
-	chMempool     chan *Tx
-	mempool       []*Tx
+	mempool       Mempool
 	onTxProcessed TxProcessedHandler
-
-	chOnDownloadedRef chan struct{}
 }
 
 func NewController(address types.Address, stateURI string, stateDBRootPath string, txStore TxStore, txProcessedHandler TxProcessedHandler) (Controller, error) {
@@ -67,19 +64,18 @@ func NewController(address types.Address, stateURI string, stateDBRootPath strin
 	}
 
 	c := &controller{
-		Context:           &ctx.Context{},
-		address:           address,
-		stateURI:          stateURI,
-		mu:                sync.RWMutex{},
-		txStore:           txStore,
-		behaviorTree:      newBehaviorTree(),
-		states:            states,
-		indices:           indices,
-		leaves:            make(map[types.ID]struct{}),
-		chMempool:         make(chan *Tx, 100),
-		chOnDownloadedRef: make(chan struct{}),
-		onTxProcessed:     txProcessedHandler,
+		Context:       &ctx.Context{},
+		address:       address,
+		stateURI:      stateURI,
+		mu:            sync.RWMutex{},
+		txStore:       txStore,
+		behaviorTree:  newBehaviorTree(),
+		states:        states,
+		indices:       indices,
+		leaves:        make(map[types.ID]struct{}),
+		onTxProcessed: txProcessedHandler,
 	}
+	c.mempool = NewMempool(address, c.processMempoolTx)
 	return c, nil
 }
 
@@ -90,7 +86,12 @@ func (c *controller) Start() error {
 			c.SetLogLabel(c.address.Pretty() + " controller")
 
 			c.behaviorTree.addResolver(tree.Keypath(nil), &dumbResolver{})
-			go c.mempoolLoop()
+
+			c.CtxAddChild(c.mempool.Ctx(), nil)
+			err := c.mempool.Start()
+			if err != nil {
+				return err
+			}
 
 			return nil
 		},
@@ -107,7 +108,7 @@ func (c *controller) Start() error {
 }
 
 func (c *controller) OnDownloadedRef() {
-	c.chOnDownloadedRef <- struct{}{}
+	c.mempool.ForceReprocess()
 }
 
 func (c *controller) StateAtVersion(version *types.ID) tree.Node {
@@ -139,7 +140,7 @@ func (c *controller) AddTx(tx *Tx) error {
 		return nil
 	}
 
-	c.Infof(0, "new tx %v", tx.ID.Pretty())
+	c.Infof(0, "new tx %v (%v)", tx.ID.Pretty(), tx.Hash().String())
 
 	// Store the tx (so we can ignore txs we've seen before)
 	tx.Valid = false
@@ -148,53 +149,12 @@ func (c *controller) AddTx(tx *Tx) error {
 		return err
 	}
 
-	c.addToMempool(tx)
+	c.mempool.Add(tx)
 	return nil
 }
 
-func (c *controller) addToMempool(tx *Tx) {
-	select {
-	case <-c.Context.Done():
-	case c.chMempool <- tx:
-	}
-}
-
-func (c *controller) mempoolLoop() {
-	for {
-		select {
-		case <-c.Context.Done():
-			return
-		case tx := <-c.chMempool:
-			c.mempool = append(c.mempool, tx)
-			c.processMempool()
-		case <-c.chOnDownloadedRef:
-			c.processMempool()
-		}
-	}
-}
-
-func (c *controller) processMempool() {
-	for {
-		var anySucceeded bool
-		var newMempool []*Tx
-
-		for _, tx := range c.mempool {
-			err := c.processMempoolTx(tx)
-			if errors.Cause(err) == ErrNoParentYet || errors.Cause(err) == ErrMissingCriticalRefs {
-				c.Infof(0, "readding to mempool %v (%v)", tx.ID.Pretty(), err)
-				newMempool = append(newMempool, tx)
-			} else if err != nil {
-				c.Errorf("invalid tx %v: %+v: %v", tx.ID.Pretty(), err, PrettyJSON(tx))
-			} else {
-				anySucceeded = true
-				c.Successf("tx added to chain (%v)", tx.ID.Pretty())
-			}
-		}
-		c.mempool = newMempool
-		if !anySucceeded {
-			return
-		}
-	}
+func (c *controller) Mempool() map[types.Hash]*Tx {
+	return c.mempool.Get()
 }
 
 func (c *controller) processMempoolTx(tx *Tx) error {
@@ -354,7 +314,7 @@ func (c *controller) validateTxIntrinsics(tx *Tx) error {
 	for _, parentID := range tx.Parents {
 		parentTx, err := c.txStore.FetchTx(c.stateURI, parentID)
 		if errors.Cause(err) == types.Err404 {
-			return errors.Wrapf(ErrNoParentYet, "parent tx not found: %v", parentID.Pretty())
+			return errors.Wrapf(ErrNoParentYet, "parent tx not found: (%v) %v", tx.URL, parentID.Pretty())
 		} else if err != nil {
 			return err
 		} else if !parentTx.Valid && parentID != GenesisTxID {
