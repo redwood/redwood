@@ -1,7 +1,7 @@
 const ethers = require('ethers')
 const stringify = require('json-stable-stringify')
 
-var genesisTxID = '67656e6573697300000000000000000000000000000000000000000000000000'
+let genesisTxID = '67656e6573697300000000000000000000000000000000000000000000000000'
 
 
 module.exports = {
@@ -83,12 +83,12 @@ function createTxQueue(resolverFn, txProcessedCallback) {
 
 
 function hashTx(tx) {
-    var txHex = serializeTx(tx)
+    let txHex = serializeTx(tx)
     return ethers.utils.keccak256(Buffer.from(txHex, 'hex')).toString('hex')
 }
 
 function serializeTx(tx) {
-    var txHex = ''
+    let txHex = ''
     txHex += tx.id
     tx.parents.forEach(parent => txHex += parent)
     txHex += stringToHex(tx.url)
@@ -105,10 +105,10 @@ function stringToHex(s) {
 }
 
 function randomString(length) {
-    var result           = ''
-    var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-    var charactersLength = characters.length
-    for (var i = 0; i < length; i++) {
+    let result           = ''
+    let characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    let charactersLength = characters.length
+    for (let i = 0; i < length; i++) {
         result += characters.charAt(Math.floor(Math.random() * charactersLength))
     }
     return result
@@ -123,7 +123,7 @@ function uint8ArrayToHex(bytes) {
 }
 
 function isMergeableObject(val) {
-    var nonNullObject = val && typeof val === 'object'
+    let nonNullObject = val && typeof val === 'object'
 
     return nonNullObject
         && Object.prototype.toString.call(val) !== '[object RegExp]'
@@ -135,12 +135,12 @@ function emptyTarget(val) {
 }
 
 function cloneIfNecessary(value, optionsArgument) {
-    var clone = optionsArgument && optionsArgument.clone === true
+    let clone = optionsArgument && optionsArgument.clone === true
     return (clone && isMergeableObject(value)) ? deepmerge(emptyTarget(value), value, optionsArgument) : value
 }
 
 function defaultArrayMerge(target, source, optionsArgument) {
-    var destination = target.slice()
+    let destination = target.slice()
     source.forEach(function(e, i) {
         if (typeof destination[i] === 'undefined') {
             destination[i] = cloneIfNecessary(e, optionsArgument)
@@ -154,7 +154,7 @@ function defaultArrayMerge(target, source, optionsArgument) {
 }
 
 function mergeObject(target, source, optionsArgument) {
-    var destination = {}
+    let destination = {}
     if (isMergeableObject(target)) {
         Object.keys(target).forEach(function (key) {
             destination[key] = cloneIfNecessary(target[key], optionsArgument)
@@ -171,9 +171,9 @@ function mergeObject(target, source, optionsArgument) {
 }
 
 function deepmerge(target, source, optionsArgument) {
-    var array = Array.isArray(source);
-    var options = optionsArgument || { arrayMerge: defaultArrayMerge }
-    var arrayMerge = options.arrayMerge || defaultArrayMerge
+    let array = Array.isArray(source);
+    let options = optionsArgument || { arrayMerge: defaultArrayMerge }
+    let arrayMerge = options.arrayMerge || defaultArrayMerge
 
     if (array) {
         return Array.isArray(target) ? arrayMerge(target, source, optionsArgument) : cloneIfNecessary(source, optionsArgument)
