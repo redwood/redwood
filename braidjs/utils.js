@@ -38,10 +38,12 @@ function createTxQueue(resolverFn, txProcessedCallback) {
             for (let i = 0; i < queue.length; i++) {
                 let tx = queue[i]
                 let missingAParent = false
-                for (let p of tx.parents) {
-                    if (!haveTxs[p]) {
-                        missingAParent = true
-                        break
+                if (tx.parents && tx.parents.length > 0) {
+                    for (let p of tx.parents) {
+                        if (!haveTxs[p]) {
+                            missingAParent = true
+                            break
+                        }
                     }
                 }
                 if (!missingAParent) {
