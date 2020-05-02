@@ -29,6 +29,7 @@ type NodeConfig struct {
 	RPCListenHost           string   `yaml:"RPCListenHost"`
 	HTTPListenHost          string   `yaml:"HTTPListenHost"`
 	HTTPCookieSecret        string   `yaml:"HTTPCookieSecret"`
+	DevMode                 bool     `yaml:"DevMode"`
 	HDMnemonicPhrase        string   `yaml:"HDMnemonicPhrase"`
 	ContentAnnounceInterval Duration `yaml:"ContentAnnounceInterval"`
 	ContentRequestInterval  Duration `yaml:"ContentRequestInterval"`
@@ -43,7 +44,7 @@ type RPCClientConfig struct {
 }
 
 var DefaultConfig = func() Config {
-	configRoot, err := configRoot()
+	configRoot, err := ConfigRoot()
 	if err != nil {
 		panic(err)
 	}
@@ -94,7 +95,7 @@ var DefaultConfig = func() Config {
 	}
 }()
 
-func configRoot() (root string, _ error) {
+func ConfigRoot() (root string, _ error) {
 	configRoot, err := os.UserConfigDir()
 	if err != nil {
 		configRoot, err = os.Getwd()
@@ -109,7 +110,7 @@ func configRoot() (root string, _ error) {
 func dataRoot() (string, error) {
 	switch runtime.GOOS {
 	case "windows", "darwin", "plan9":
-		configRoot, err := configRoot()
+		configRoot, err := ConfigRoot()
 		if err != nil {
 			return "", err
 		}
@@ -127,7 +128,7 @@ func dataRoot() (string, error) {
 func ReadConfigAtPath(configPath string) (*Config, error) {
 	if configPath == "" {
 		var err error
-		configPath, err = configRoot()
+		configPath, err = ConfigRoot()
 		if err != nil {
 			return nil, err
 		}
