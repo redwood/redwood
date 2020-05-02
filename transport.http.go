@@ -453,8 +453,12 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 	stateURI := r.Header.Get("State-URI")
 	if stateURI == "" {
-		stateURI = strings.Join([]string{t.defaultStateURI, keypathStrs[0]}, "/")
-		keypathStrs = keypathStrs[1:]
+		queryStateURI := r.URL.Query().Get("state_uri")
+		if queryStateURI != "" {
+			stateURI = queryStateURI
+		} else {
+			stateURI = t.defaultStateURI
+		}
 	}
 
 	keypathStr := strings.Join(keypathStrs, string(tree.KeypathSeparator))
