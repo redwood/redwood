@@ -58,6 +58,44 @@ func ParsePatch(s []byte) (Patch, error) {
 	return Patch{}, errors.WithStack(ErrBadPatch)
 }
 
+func ParsePatchPath(s []byte) ([]byte, tree.Keypath, *tree.Range, error) {
+	var keypath tree.Keypath
+	var rng *tree.Range
+	var i int
+	for i = 0; i < len(s); {
+		switch s[i] {
+		case '.':
+			key, err := parseDotKey(s[i:])
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			keypath = keypath.Push(key)
+			i += len(key) + 1
+
+		case '[':
+			switch s[i+1] {
+			case '"', '\'':
+				key, err := parseBracketKey(s[i:])
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				keypath = keypath.Push(key)
+				i += len(key) + 4
+
+			case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+				var length int
+				var err error
+				rng, length, err = parseRange(s[i:])
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				i += length
+			}
+		}
+	}
+	return s[i:], keypath, rng, nil
+}
+
 func parseDotKey(s []byte) ([]byte, error) {
 	buf := []byte{}
 	// start at index 1, skip first dot
@@ -68,7 +106,7 @@ func parseDotKey(s []byte) ([]byte, error) {
 			buf = append(buf, s[i])
 		}
 	}
-	return nil, errors.WithStack(ErrBadPatch)
+	return buf, nil
 }
 
 func parseBracketKey(s []byte) ([]byte, error) {
