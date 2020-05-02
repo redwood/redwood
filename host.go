@@ -38,8 +38,9 @@ type Host interface {
 type host struct {
 	*ctx.Context
 
+	Metacontroller
+
 	transports        map[string]Transport
-	controller        Metacontroller
 	signingKeypair    *SigningKeypair
 	encryptingKeypair *EncryptingKeypair
 
@@ -61,7 +62,7 @@ var (
 	ErrPeerIsSelf = errors.New("peer is self")
 )
 
-func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, transports []Transport, controller Metacontroller, refStore RefStore, peerStore PeerStore) (Host, error) {
+func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, transports []Transport, metacontroller Metacontroller, refStore RefStore, peerStore PeerStore) (Host, error) {
 	transportsMap := make(map[string]Transport)
 	for _, tpt := range transports {
 		transportsMap[tpt.Name()] = tpt
@@ -69,7 +70,7 @@ func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypai
 	h := &host{
 		Context:           &ctx.Context{},
 		transports:        transportsMap,
-		controller:        controller,
+		Metacontroller:    metacontroller,
 		signingKeypair:    signingKeypair,
 		encryptingKeypair: encryptingKeypair,
 		subscriptionsOut:  make(map[string]map[peerTuple]*subscriptionOut),
@@ -93,11 +94,11 @@ func (h *host) Start() error {
 		func() error {
 			h.SetLogLabel(h.Address().Pretty() + " host")
 
-			// Set up the controller
-			h.controller.SetReceivedRefsHandler(h.onReceivedRefs)
+			// Set up the metacontroller
+			h.Metacontroller.SetReceivedRefsHandler(h.onReceivedRefs)
 
-			h.CtxAddChild(h.controller.Ctx(), nil)
-			err := h.controller.Start()
+			h.CtxAddChild(h.Metacontroller.Ctx(), nil)
+			err := h.Metacontroller.Start()
 			if err != nil {
 				return err
 			}
@@ -149,7 +150,7 @@ func (h *host) Transport(name string) Transport {
 }
 
 func (h *host) Controller() Metacontroller {
-	return h.controller
+	return h.Metacontroller
 }
 
 func (h *host) Address() types.Address {
@@ -160,15 +161,15 @@ func (h *host) OnTxReceived(tx Tx, peer Peer) {
 	h.Infof(0, "tx %v received from %v", tx.ID.Pretty(), peer.Address())
 	h.markTxSeenByPeer(peer, tx.ID)
 
-	have, err := h.controller.HaveTx(tx.URL, tx.ID)
+	have, err := h.Metacontroller.HaveTx(tx.URL, tx.ID)
 	if err != nil {
 		h.Errorf("error fetching tx %v from store: %v", tx.ID.Pretty(), err)
 	}
 
 	if !have {
-		err := h.controller.AddTx(&tx)
+		err := h.Metacontroller.AddTx(&tx)
 		if err != nil {
-			h.Errorf("error adding tx to controller: %v", err)
+			h.Errorf("error adding tx to metacontroller: %v", err)
 		}
 
 		err = h.broadcastTx(context.TODO(), tx)
@@ -205,17 +206,17 @@ func (h *host) OnPrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
 		return
 	}
 
-	have, err := h.controller.HaveTx(tx.URL, tx.ID)
+	have, err := h.Metacontroller.HaveTx(tx.URL, tx.ID)
 	if err != nil {
 		h.Errorf("error fetching tx %v from store: %v", tx.ID.Pretty(), err)
 		return
 	}
 
 	if !have {
-		// Add to controller
-		err := h.controller.AddTx(&tx)
+		// Add to metacontroller
+		err := h.Metacontroller.AddTx(&tx)
 		if err != nil {
-			h.Errorf("error adding tx to controller: %v", err)
+			h.Errorf("error adding tx to metacontroller: %v", err)
 		}
 
 		// Broadcast to subscribed peers
@@ -296,7 +297,7 @@ func (h *host) AddPeer(ctx context.Context, transportName string, reachableAt St
 }
 
 func (h *host) OnFetchHistoryRequestReceived(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error {
-	iter := h.controller.FetchTxs(stateURI)
+	iter := h.Metacontroller.FetchTxs(stateURI)
 	defer iter.Cancel()
 
 	for {
@@ -660,6 +661,7 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 
 				var peerWg sync.WaitGroup
 				for peer := range ch {
+					h.Warnf("rebroadcasting %v to %v", tx.ID.Pretty(), (map[string]struct{})(peer.ReachableAt()))
 					if h.txSeenByPeer(peer, tx.ID) {
 						h.Errorf("tx already seen by peer %v %v", peer.Transport().Name(), peer.Address())
 						continue
@@ -702,7 +704,7 @@ func (h *host) SendTx(ctx context.Context, tx Tx) error {
 		}
 	}
 
-	err := h.controller.AddTx(&tx)
+	err := h.Metacontroller.AddTx(&tx)
 	if err != nil {
 		return err
 	}
@@ -765,7 +767,7 @@ func (h *host) fetchMissingRefs() {
 	var fetchedAny bool
 	defer func() {
 		if fetchedAny {
-			h.controller.OnDownloadedRef()
+			h.Metacontroller.OnDownloadedRef()
 		}
 	}()
 
