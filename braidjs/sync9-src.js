@@ -25,7 +25,9 @@ module.exports = {
 
 function resolve_state(s9, sender, txHash, parents, patches) {
     const parentsObj = {}
-    parents.forEach(p => parentsObj[p] = true)
+    if (parents && parents.length > 0) {
+        parents.forEach(p => parentsObj[p] = true)
+    }
     sync9_add_version(s9, txHash, parentsObj, patches, null)
     return sync9_read(s9)
 }
