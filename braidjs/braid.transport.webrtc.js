@@ -1,7 +1,10 @@
 
 
 module.exports = function (opts) {
-    const { onFoundPeers } = opts
+    let { onFoundPeers, onLostPeers } = opts
+
+    onFoundPeers = onFoundPeers || function () {}
+    onLostPeers  = onLostPeers  || function () {}
 
     let webrtcPeerID
     let onTxReceived
@@ -10,6 +13,7 @@ module.exports = function (opts) {
     const me = new Peer()
     me.on('open', async (_webrtcPeerID) => {
         webrtcPeerID = _webrtcPeerID
+        console.log('webrtc: i am', webrtcPeerID)
         onFoundPeers({ webrtc: { [webrtcPeerID]: true } })
     })
     me.on('connection', (conn) => {
@@ -20,6 +24,7 @@ module.exports = function (opts) {
     function initConnCallbacks(conn) {
         conn.on('open', () => {
             console.log('webrtc: connected to ' + conn.peer)
+            onFoundPeers({ webrtc: { [conn.peer]: true } })
         })
         conn.on('data', (data) => {
             const tx = JSON.parse(data)
@@ -28,6 +33,7 @@ module.exports = function (opts) {
             }
         })
         conn.on('close', () => {
+            onLostPeers({ webrtc: { [webrtcPeerID]: true } })
             delete conns[conn.peer]
         })
     }
@@ -37,6 +43,7 @@ module.exports = function (opts) {
         for (let peerID of Object.keys(conns)) {
             conns[peerID].on('data', (data) => {
                 const tx = JSON.parse(data)
+                console.log('webrtc: received from peer', peerID, '~>', tx)
                 onTxReceived(null, tx)
             })
         }
@@ -65,9 +72,10 @@ module.exports = function (opts) {
         put: (tx) => {
             Object.keys(conns).forEach(peerID => {
                 try {
+                    console.log('webrtc: sending to peer', peerID, '~>', tx)
                     conns[peerID].send(JSON.stringify(tx))
                 } catch (err) {
-                    console.error('error sending to peer ~>', err)
+                    console.error('webrtc: error sending to peer ~>', err)
                 }
             })
         },
