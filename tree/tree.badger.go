@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/dgraph-io/badger/v2"
 	badgerpb "github.com/dgraph-io/badger/v2/pb"
@@ -116,7 +117,14 @@ func (tx *DBNode) Close() {
 }
 
 func (tx *DBNode) Save() error {
-	return tx.tx.Commit()
+	var err error
+	var wg sync.WaitGroup
+	wg.Add(1)
+	tx.tx.CommitWith(func(innerErr error) {
+		err = innerErr
+		wg.Done()
+	})
+	return err
 }
 
 func (tx *DBNode) Keypath() Keypath {
