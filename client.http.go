@@ -37,22 +37,31 @@ type httpClient struct {
 	peerReachableAddress string
 	sigkeys              *SigningKeypair
 	cookieJar            http.CookieJar
+	tls                  bool
 }
 
-func NewHTTPClient(peerReachableAddress string, sigkeys *SigningKeypair) (HTTPClient, error) {
+func NewHTTPClient(peerReachableAddress string, sigkeys *SigningKeypair, tls bool) (HTTPClient, error) {
 	cookieJar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
 	}
 
-	return &httpClient{peerReachableAddress: peerReachableAddress, sigkeys: sigkeys, cookieJar: cookieJar}, nil
+	return &httpClient{
+		peerReachableAddress: peerReachableAddress,
+		sigkeys:              sigkeys,
+		cookieJar:            cookieJar,
+		tls:                  tls,
+	}, nil
 }
 
 func (c *httpClient) client() *http.Client {
-	config := &tls.Config{
-		InsecureSkipVerify: true,
+	var tlsConfig *tls.Config
+	if c.tls {
+		tlsConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
 	}
-	tr := &http.Transport{TLSClientConfig: config}
+	tr := &http.Transport{TLSClientConfig: tlsConfig}
 	return &http.Client{Jar: c.cookieJar, Transport: tr}
 }
 
