@@ -15,7 +15,9 @@
   "dependencies": {
     "es6-promise": "^4.2.8",
     "ethers": "^4.0.38",
+    "form-data": "^3.0.0",
     "isomorphic-fetch": "^2.2.1",
+    "json-stable-stringify": "^1.0.1",
     "peerjs": "^1.1.0"
   },
   "devDependencies": {
