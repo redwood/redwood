@@ -92,8 +92,15 @@ module.exports = function (opts) {
     }
 
     async function storeRef(file) {
-        const formData = new FormData()
-        formData.append(`ref`, file)
+        let formData
+        if (typeof window !== 'undefined') {
+            formData = new FormData()
+            formData.append('ref', file)
+        } else {
+            let FormData = require('form-data')
+            formData = new FormData()
+            formData.append('ref', file)
+        }
 
         const resp = await wrappedFetch(`/`, {
             method: 'PUT',
