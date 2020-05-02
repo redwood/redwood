@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/brynbellomy/klog"
+
 	rw "github.com/brynbellomy/redwood"
 	"github.com/brynbellomy/redwood/ctx"
 	"github.com/brynbellomy/redwood/demos/demoutils"
@@ -17,14 +19,18 @@ type app struct {
 }
 
 func main() {
-
-	flag.Parse()
-	flag.Set("logtostderr", "true")
-	flag.Set("v", "2")
+	flagset := flag.NewFlagSet("", flag.ContinueOnError)
+	klog.InitFlags(flagset)
+	flagset.Set("logtostderr", "true")
+	flagset.Set("v", "2")
+	klog.SetFormatter(&klog.FmtConstWidth{
+		FileNameCharWidth: 24,
+		UseColor:          true,
+	})
 
 	// Make two Go hosts that will communicate with one another over libp2p
-	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "cookiesecret1", "server1.crt", "server1.key")
-	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "cookiesecret2", "server2.crt", "server2.key")
+	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "localhost:21231/chat", "cookiesecret1", "server1.crt", "server1.key")
+	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "localhost:21231/chat", "cookiesecret2", "server2.crt", "server2.key")
 
 	err := host1.Start()
 	if err != nil {

@@ -9,8 +9,8 @@ $ go run main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/chat/talk0>
-- <https://localhost:21242/chat/talk0>
+- <https://localhost:21232/talk0>
+- <https://localhost:21242/talk0>
 
 **(Note: due to the self-signed TLS certificates, your browser will complain that you're "not safe")**
 

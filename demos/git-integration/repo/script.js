@@ -1,7 +1,5 @@
 
-var i = 0
-setInterval(function() {
-    document.querySelector('#script-output').innerHTML = '' + i
-    i++
-}, 1000)
 
+window.updateScriptValue = function(i) {
+    return i + 1
+}
