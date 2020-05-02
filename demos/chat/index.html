@@ -183,7 +183,7 @@
             var msg = messages[i]
             var refAvailable
             if (msg.attachment) {
-                refAvailable = await available('/chat/talk0/messages/value[' + i + ']/attachment')
+                refAvailable = await available('/talk0/messages/value[' + i + ']/attachment')
                 allRefsAvailable = allRefsAvailable && refAvailable
             }
             var sender = currentState && currentState.users && currentState.users[msg.sender]
@@ -195,7 +195,7 @@
             html += '        <div>' + msg.text + '</div>'
             if (msg.attachment) {
             if (refAvailable) {
-            html += '        <img src="/chat/talk0/messages/value[' + i + ']/attachment" />'
+            html += '        <img src="/talk0/messages/value[' + i + ']/attachment" />'
             } else {
             refsStillLoading = true
             html += '        <div>(loading...)</div>'

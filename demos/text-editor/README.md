@@ -9,8 +9,8 @@ $ go run main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/editor>
-- <https://localhost:21242/editor>
+- <https://localhost:21232>
+- <https://localhost:21242>
 
 **(Note: due to the self-signed TLS certificates, your browser will complain that you're "not safe")**
 

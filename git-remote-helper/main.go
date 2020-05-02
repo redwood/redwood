@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/brynbellomy/git2go"
+	"github.com/brynbellomy/klog"
 	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood"
@@ -41,6 +43,15 @@ var repo *git.Repository
 type M = map[string]interface{}
 
 func main() {
+	flagset := flag.NewFlagSet("", flag.ContinueOnError)
+	klog.InitFlags(flagset)
+	flagset.Set("logtostderr", "true")
+	flagset.Set("v", "2")
+	klog.SetFormatter(&klog.FmtConstWidth{
+		FileNameCharWidth: 24,
+		UseColor:          true,
+	})
+
 	var GIT_DIR = os.Getenv("GIT_DIR")
 
 	if GIT_DIR == "" {
@@ -62,7 +73,7 @@ func main() {
 	}
 
 	// @@TODO: read node url from config
-	client, err := redwood.NewHTTPClient("https://localhost:21232", sigkeys)
+	client, err := redwood.NewHTTPClient("http://localhost:21232", sigkeys, false)
 	if err != nil {
 		die(err)
 	}
@@ -71,6 +82,7 @@ func main() {
 	if err != nil {
 		die(err)
 	}
+	logf("authorized successfully")
 
 	err = speakGit(os.Stdin, os.Stdout, client)
 	if err != nil {
@@ -83,7 +95,7 @@ func speakGit(r io.Reader, w io.Writer, client redwood.HTTPClient) error {
 	for scanner.Scan() {
 		text := scanner.Text()
 		text = strings.TrimSpace(text)
-		fmt.Fprintln(os.Stderr, "[git]", text)
+		logf("[git] %v", text)
 
 		switch {
 
@@ -219,7 +231,7 @@ func fetch(client redwood.HTTPClient, commitHash string) error {
 		return err
 	}
 
-	ctrl, err := redwood.NewController(types.Address{}, StateURI, dbRoot, fetch_onTxProcessed(&wg, chErr, client, odb))
+	ctrl, err := redwood.NewController(types.Address{}, StateURI, dbRoot, redwood.NewMemoryTxStore(), fetch_onTxProcessed(&wg, chErr, client, odb))
 	if err != nil {
 		return err
 	}
@@ -260,6 +272,10 @@ func fetch_onTxProcessed(wg *sync.WaitGroup, chErr chan error, client redwood.HT
 				chErr <- err
 			}
 		}()
+
+		if tx.ID == redwood.GenesisTxID {
+			return nil
+		}
 
 		commitFiles, exists := getMap(state, RootKeypath.Push(tree.Keypath("files")))
 		if !exists {
@@ -800,11 +816,8 @@ func getMap(m tree.Node, keypath tree.Keypath) (map[string]interface{}, bool) {
 func walkLinks(n tree.Node, fn func(linkType nelson.LinkType, linkStr string, keypath tree.Keypath) error) error {
 	iter := n.DepthFirstIterator(nil, false, 0)
 	defer iter.Close()
-	for {
-		node := iter.Next()
-		if node == nil {
-			return nil
-		}
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		node := iter.Node()
 
 		parentKeypath, key := node.Keypath().Pop()
 		if key.Equals(nelson.ContentTypeKey) {

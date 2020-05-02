@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/brynbellomy/klog"
+
 	rw "github.com/brynbellomy/redwood"
 	"github.com/brynbellomy/redwood/ctx"
 	"github.com/brynbellomy/redwood/demos/demoutils"
@@ -24,13 +26,18 @@ func main() {
 		http.ListenAndServe("localhost:6060", nil)
 	}()
 
-	flag.Parse()
-	flag.Set("logtostderr", "true")
-	flag.Set("v", "2")
+	flagset := flag.NewFlagSet("", flag.ContinueOnError)
+	klog.InitFlags(flagset)
+	flagset.Set("logtostderr", "true")
+	flagset.Set("v", "2")
+	klog.SetFormatter(&klog.FmtConstWidth{
+		FileNameCharWidth: 24,
+		UseColor:          true,
+	})
 
 	// Make two Go hosts that will communicate with one another over libp2p
-	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "cookiesecret1", "server1.crt", "server1.key")
-	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "cookiesecret2", "server2.crt", "server2.key")
+	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "localhost:21231/gitdemo", "cookiesecret1", "server1.crt", "server1.key")
+	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "localhost:21231/gitdemo", "cookiesecret2", "server2.crt", "server2.key")
 
 	err := host1.Start()
 	if err != nil {
@@ -154,7 +161,13 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 	}
 
-	commit1RepoTxID, err := types.IDFromHex("65cfaaa3194b0e36d90730fc1950596a6c117080000000000000000000000000")
+	// If you alter the contents of the ./repo subdirectory, you'll need to determine the
+	// git commit hash of the first commit again, and then tweak these variables.  Otherwise,
+	// you'll get a "bad object" error from git.
+	commit1Hash := "e7098ece1ce234fac2c8c4f5ffdf049d5266f9f2"
+	commit1Timestamp := "2020-05-01T19:00:45-05:00"
+
+	commit1RepoTxID, err := types.IDFromHex(commit1Hash)
 	if err != nil {
 		panic(err)
 	}
@@ -277,16 +290,16 @@ func sendTxs(host1, host2 rw.Host) {
 			Checkpoint: true,
 			Patches: []rw.Patch{
 				mustParsePatch(`.message = "First commit\n"`),
-				mustParsePatch(`.timestamp = "2019-12-12T17:12:19-06:00"`),
+				mustParsePatch(`.timestamp = "` + commit1Timestamp + `"`),
 				mustParsePatch(`.author = {
 					"email": "bryn.bellomy@gmail.com",
 					"name": "Bryn Bellomy",
-					"timestamp": "2019-12-12T17:12:19-06:00"
+					"timestamp": "` + commit1Timestamp + `"
 				}`),
 				mustParsePatch(`.committer = {
 					"email": "bryn.bellomy@gmail.com",
 					"name": "Bryn Bellomy",
-					"timestamp": "2019-12-12T17:12:19-06:00"
+					"timestamp": "` + commit1Timestamp + `"
 				}`),
 				mustParsePatch(`.files = {
 					"README.md": {
@@ -322,7 +335,7 @@ func sendTxs(host1, host2 rw.Host) {
 			Patches: []rw.Patch{
 				mustParsePatch(`.refs = {
 					"heads": {
-						"master": "65cfaaa3194b0e36d90730fc1950596a6c117080"
+						"master": "` + commit1Hash + `"
 					}
 				}`),
 			},

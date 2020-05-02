@@ -7,7 +7,7 @@ import (
 	rw "github.com/brynbellomy/redwood"
 )
 
-func MakeHost(signingKeypairHex string, port uint, cookieSecretStr, tlsCertFilename, tlsKeyFilename string) rw.Host {
+func MakeHost(signingKeypairHex string, port uint, defaultStateURI, cookieSecretStr, tlsCertFilename, tlsKeyFilename string) rw.Host {
 	signingKeypair, err := rw.SigningKeypairFromHex(signingKeypairHex)
 	if err != nil {
 		panic(err)
@@ -44,7 +44,19 @@ func MakeHost(signingKeypairHex string, port uint, cookieSecretStr, tlsCertFilen
 
 	var cookieSecret [32]byte
 	copy(cookieSecret[:], []byte(cookieSecretStr))
-	httptransport, err := rw.NewHTTPTransport(signingKeypair.Address(), fmt.Sprintf("localhost:%v", port+1), "localhost:21231", metacontroller, refStore, peerStore, signingKeypair, cookieSecret, tlsCertFilename, tlsKeyFilename)
+	httptransport, err := rw.NewHTTPTransport(
+		signingKeypair.Address(),
+		fmt.Sprintf("localhost:%v", port+1),
+		defaultStateURI,
+		metacontroller,
+		refStore,
+		peerStore,
+		signingKeypair,
+		cookieSecret,
+		tlsCertFilename,
+		tlsKeyFilename,
+		true,
+	)
 	if err != nil {
 		panic(err)
 	}

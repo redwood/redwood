@@ -99,7 +99,7 @@
                 let n = 0
                 for (let patch of tx.patches) {
                     let parsed = Braid.sync9.parse_change(patch)
-                    if (parsed.range[0] <= editor.selectionStart) {
+                    if (parsed.range && parsed.range[0] <= editor.selectionStart) {
                         n += parsed.val.length - (parsed.range[1] - parsed.range[0])
                     }
                 }
@@ -502,7 +502,7 @@ var keyboardCharMap = [
   ["",""], // [7]
   ["",""], // [8]
   ["",""], // [9]
-  ["", ""], // [10]		
+  ["", ""], // [10]
   ["",""], // [11]
   ["",""], // [12]
   ["\r", "\r"], // [13]	- MOST control characters are ignored.  This one (Carriage Return, or "Enter") is significant!
