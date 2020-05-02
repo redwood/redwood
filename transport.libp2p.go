@@ -553,6 +553,7 @@ func (t *libp2pTransport) periodicallyUpdatePeerStore() {
 				err := peer.EnsureConnected(context.TODO())
 				if err != nil {
 					t.Errorf("error connecting to peer: %+v", err)
+					return
 				}
 				defer peer.CloseConn()
 
