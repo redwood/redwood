@@ -115,12 +115,9 @@ func Resolve(outerNode tree.Node, refResolver ReferenceResolver) (tree.Node, boo
 
 	iter := outerNode.DepthFirstIterator(nil, false, 0)
 	defer iter.Close()
-	for {
-		node := iter.Next()
-		if node == nil {
-			break
-		}
 
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		node := iter.Node()
 		keypath := node.Keypath().RelativeTo(outerNode.Keypath())
 
 		parentKeypath, key := keypath.Pop()
@@ -194,7 +191,7 @@ func Resolve(outerNode tree.Node, refResolver ReferenceResolver) (tree.Node, boo
 						if err != nil {
 							return nil, false, err
 						}
-						iter.(interface{ SeekTo(keypath tree.Keypath) }).SeekTo(parentKeypath)
+						iter.SeekTo(parentKeypath)
 					}
 
 					break TravelUpwards

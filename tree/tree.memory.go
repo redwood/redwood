@@ -648,7 +648,8 @@ func (n *MemoryNode) ResetDiff() {
 
 type memoryIterator struct {
 	i           int
-	end         int
+	start, end  int
+	done        bool
 	backingNode *MemoryNode
 	iterNode    *MemoryNode
 }
@@ -658,38 +659,66 @@ func (n *MemoryNode) Iterator(keypath Keypath, prefetchValues bool, prefetchSize
 		return node.Iterator(relKeypath, prefetchValues, prefetchSize)
 	}
 
-	i, end := n.findPrefixRange(n.keypath.Push(keypath))
+	start, end := n.findPrefixRange(n.keypath.Push(keypath))
 
 	return &memoryIterator{
 		iterNode:    &MemoryNode{keypaths: n.keypaths, values: n.values, nodeTypes: n.nodeTypes, sliceLengths: n.sliceLengths},
 		backingNode: n,
-		i:           i,
+		start:       start,
 		end:         end,
 	}
 }
 
+func (iter *memoryIterator) Rewind() {
+	iter.i = iter.start
+	iter.done = false
+	iter.iterNode.keypath = iter.backingNode.keypaths[iter.i]
+}
+
+func (iter *memoryIterator) Valid() bool {
+	return !iter.done
+}
+
 func (iter *memoryIterator) SeekTo(keypath Keypath) {
 	newIdx := 0
+	found := false
 	for i := 0; i < len(iter.backingNode.keypaths); i++ {
 		if iter.backingNode.keypaths[i].Equals(keypath) {
 			newIdx = i
+			found = true
 			break
 		}
 	}
-	iter.i = newIdx
+	if found {
+		iter.i = newIdx
+		iter.done = false
+		iter.iterNode.keypath = iter.backingNode.keypaths[iter.i]
+	} else {
+		iter.done = true
+	}
 }
 
-func (iter *memoryIterator) Next() Node {
-	if iter.i == iter.end-1 {
+func (iter *memoryIterator) Node() Node {
+	if iter.done {
 		return nil
 	}
-
-	iter.i++
-	iter.iterNode.keypath = iter.backingNode.keypaths[iter.i]
 	return iter.iterNode
 }
 
-func (iter *memoryIterator) Close() {}
+func (iter *memoryIterator) Next() {
+	if iter.done {
+		return
+	} else if iter.i == iter.end-1 {
+		iter.done = true
+		return
+	}
+	iter.i++
+	iter.iterNode.keypath = iter.backingNode.keypaths[iter.i]
+}
+
+func (iter *memoryIterator) Close() {
+	iter.done = true
+}
 
 type memoryChildIterator struct {
 	*memoryIterator
@@ -702,21 +731,23 @@ func (n *MemoryNode) ChildIterator(keypath Keypath, prefetchValues bool, prefetc
 	return &memoryChildIterator{n.Iterator(keypath, prefetchValues, prefetchSize).(*memoryIterator)}
 }
 
-func (iter *memoryChildIterator) Next() Node {
-	for {
-		node := iter.memoryIterator.Next()
-		if node == nil {
-			return nil
-		} else if node.Keypath().NumParts() == iter.memoryIterator.backingNode.keypath.NumParts()+1 {
-			return node
+func (iter *memoryChildIterator) Node() Node {
+	return iter.memoryIterator.Node()
+}
+
+func (iter *memoryChildIterator) Next() {
+	for ; iter.memoryIterator.Valid(); iter.memoryIterator.Next() {
+		node := iter.memoryIterator.Node()
+		if node.Keypath().NumParts() == iter.memoryIterator.backingNode.keypath.NumParts()+1 {
+			return
 		}
 	}
 }
 
 type memoryDepthFirstIterator struct {
 	i           int
-	end         int
-	prevLen     int
+	start, end  int
+	done        bool
 	backingNode *MemoryNode
 	iterNode    *MemoryNode
 }
@@ -725,40 +756,67 @@ func (n *MemoryNode) DepthFirstIterator(keypath Keypath, prefetchValues bool, pr
 	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
 		return node.DepthFirstIterator(relKeypath, prefetchValues, prefetchSize)
 	}
-	end, i := n.findPrefixRange(n.keypath.Push(keypath))
+	end, start := n.findPrefixRange(n.keypath.Push(keypath))
 
 	return &memoryDepthFirstIterator{
 		iterNode:    &MemoryNode{keypaths: n.keypaths, values: n.values, nodeTypes: n.nodeTypes, sliceLengths: n.sliceLengths},
 		backingNode: n,
-		i:           i,
+		start:       start,
 		end:         end,
-		prevLen:     len(n.keypaths),
 	}
 }
 
 func (iter *memoryDepthFirstIterator) SeekTo(keypath Keypath) {
 	newIdx := iter.end
+	found := false
 	for i := len(iter.backingNode.keypaths) - 1; i >= 0; i-- {
 		if iter.backingNode.keypaths[i].Equals(keypath) {
 			newIdx = i
+			found = true
 			break
 		}
 	}
-	iter.i = newIdx
+	if found {
+		iter.i = newIdx
+		iter.done = false
+		iter.iterNode.keypath = iter.backingNode.keypaths[iter.i]
+	} else {
+		iter.done = true
+	}
 }
 
-func (iter *memoryDepthFirstIterator) Next() Node {
-	if iter.i == iter.end {
+func (iter *memoryDepthFirstIterator) Valid() bool {
+	return !iter.done
+}
+
+func (iter *memoryDepthFirstIterator) Rewind() {
+	iter.i = iter.start - 1
+	iter.done = false
+	iter.iterNode.keypath = iter.backingNode.keypaths[iter.i]
+}
+
+func (iter *memoryDepthFirstIterator) Node() Node {
+	if iter.done {
 		return nil
+	}
+	return iter.iterNode
+}
+
+func (iter *memoryDepthFirstIterator) Next() {
+	if iter.done {
+		return
+	} else if iter.i == iter.end {
+		iter.done = true
+		return
 	}
 
 	iter.i--
 	iter.iterNode.keypath = iter.backingNode.keypaths[iter.i]
-	iter.prevLen = len(iter.backingNode.keypaths)
-	return iter.iterNode
 }
 
-func (iter *memoryDepthFirstIterator) Close() {}
+func (iter *memoryDepthFirstIterator) Close() {
+	iter.done = true
+}
 
 func (n *MemoryNode) MarshalJSON() ([]byte, error) {
 	v, _, err := n.Value(nil, nil)
