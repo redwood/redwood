@@ -143,6 +143,12 @@ func (sig *Signature) UnmarshalJSON(bs []byte) error {
 	return nil
 }
 
+func (sig Signature) Copy() Signature {
+	cp := make(Signature, len(sig))
+	copy(cp, sig)
+	return cp
+}
+
 type ChallengeMsg []byte
 
 func GenerateChallengeMsg() ([]byte, error) {
