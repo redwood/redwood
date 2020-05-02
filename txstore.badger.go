@@ -31,7 +31,9 @@ func (p *badgerTxStore) Start() error {
 		func() error {
 			p.SetLogLabel(p.address.Pretty() + " store:badger")
 			p.Infof(0, "opening badger store at %v", p.dbFilename)
-			db, err := badger.Open(badger.DefaultOptions(p.dbFilename))
+			opts := badger.DefaultOptions(p.dbFilename)
+			opts.Logger = nil
+			db, err := badger.Open(opts)
 			if err != nil {
 				return err
 			}
