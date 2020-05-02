@@ -3,6 +3,7 @@ package redwood
 import (
 	"bytes"
 	"regexp"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -27,13 +28,17 @@ func NewPermissionsValidator(config tree.Node) (Validator, error) {
 	if !isMap {
 		return nil, errors.New("permissions validator needs a map of permissions as its config")
 	}
-	return &permissionsValidator{permissions: asMap}, nil
+	lowercasePerms := make(map[string]interface{}, len(asMap))
+	for address, perms := range asMap {
+		lowercasePerms[strings.ToLower(address)] = perms
+	}
+	return &permissionsValidator{permissions: lowercasePerms}, nil
 }
 
 var senderRegexp = regexp.MustCompile("\\${sender}")
 
 func (v *permissionsValidator) ValidateTx(state tree.Node, tx *Tx) error {
-	perms, exists := v.permissions[tx.From.Hex()]
+	perms, exists := v.permissions[strings.ToLower(tx.From.Hex())]
 	if !exists {
 		perms, exists = v.permissions["*"]
 		if !exists {
