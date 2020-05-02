@@ -1,20 +1,27 @@
 package tree
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"strconv"
 
 	"github.com/pkg/errors"
 )
 
 func EncodeSliceIndex(x uint64) Keypath {
-	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, x)
-	return b
+	enc := []byte(strconv.FormatUint(x, 10))
+	pad := bytes.Repeat([]byte("0"), 8-len(enc))
+	enc = append(pad, enc...)
+	return Keypath(enc)
 }
 
 func DecodeSliceIndex(k Keypath) uint64 {
-	return binary.BigEndian.Uint64(k)
+	x, err := strconv.ParseUint(string(k), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return x
 }
 
 func EncodeSliceLen(x uint64) Keypath {
