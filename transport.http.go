@@ -44,6 +44,7 @@ type httpTransport struct {
 	tlsCertFilename string
 	tlsKeyFilename  string
 	cookieJar       http.CookieJar
+	devMode         bool
 
 	pendingAuthorizations map[types.ID][]byte
 
@@ -65,6 +66,7 @@ func NewHTTPTransport(
 	sigkeys *SigningKeypair,
 	cookieSecret [32]byte,
 	tlsCertFilename, tlsKeyFilename string,
+	devMode bool,
 ) (Transport, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
@@ -87,6 +89,7 @@ func NewHTTPTransport(
 		cookieSecret:          cookieSecret,
 		tlsCertFilename:       tlsCertFilename,
 		tlsKeyFilename:        tlsKeyFilename,
+		devMode:               devMode,
 		cookieJar:             jar,
 		pendingAuthorizations: make(map[types.ID][]byte),
 		ownURL:                ownURL,
@@ -110,31 +113,32 @@ func (t *httpTransport) Start() error {
 				}
 			}
 
-			go func() {
-				//caCert, err := ioutil.ReadFile("client.crt")
-				//if err != nil {
-				//    log.Fatal(err)
-				//}
-				//caCertPool := x509.NewCertPool()
-				//caCertPool.AppendCertsFromPEM(caCert)
-				cfg := &tls.Config{
-					// ClientAuth: tls.RequireAndVerifyClientCert,
-					// ClientCAs:  caCertPool,
-				}
+			t.peerStore.AddReachableAddresses(t.Name(), NewStringSet([]string{t.ownURL}))
 
-				srv := &http.Server{
-					Addr:      t.listenAddr,
-					Handler:   t,
-					TLSConfig: cfg,
-				}
-				err := srv.ListenAndServeTLS(t.tlsCertFilename, t.tlsKeyFilename)
-				if err != nil {
-					fmt.Printf("%+v\n", err.Error())
-					panic("http transport failed to start")
+			go func() {
+				if !t.devMode {
+					srv := &http.Server{
+						Addr:      t.listenAddr,
+						Handler:   t,
+						TLSConfig: &tls.Config{},
+					}
+					err := srv.ListenAndServeTLS(t.tlsCertFilename, t.tlsKeyFilename)
+					if err != nil {
+						fmt.Printf("%+v\n", err.Error())
+						panic("http transport failed to start")
+					}
+				} else {
+					srv := &http.Server{
+						Addr:    t.listenAddr,
+						Handler: t,
+					}
+					err := srv.ListenAndServe()
+					if err != nil {
+						fmt.Printf("%+v\n", err.Error())
+						panic("http transport failed to start")
+					}
 				}
 			}()
-
-			t.peerStore.AddReachableAddresses(t.Name(), NewStringSet([]string{t.ownURL}))
 
 			return nil
 		},
@@ -186,6 +190,10 @@ func forEachAltSvcHeaderPeer(header string, fn func(transportName, reachableAt s
 func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
+	if t.devMode {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	}
+
 	sessionID, err := t.ensureSessionIDCookie(w, r)
 	if err != nil {
 		t.Errorf("error reading sessionID cookie: %v", err)
@@ -214,6 +222,9 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "HEAD":
+
+	case "OPTIONS":
+		w.Header().Set("Access-Control-Allow-Headers", "State-URI")
 
 	case "AUTHORIZE":
 		// Address verification requests (2 kinds)
