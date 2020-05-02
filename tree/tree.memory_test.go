@@ -279,12 +279,8 @@ func TestMemoryNode_DepthFirstIterator(T *testing.T) {
 			iter := state.DepthFirstIterator(test.iterKeypath, false, 0)
 			defer iter.Close()
 			var i int
-			for {
-				node := iter.Next()
-				if node == nil {
-					break
-				}
-
+			for iter.Rewind(); iter.Valid(); iter.Next() {
+				node := iter.Node()
 				require.Equal(T, expected[len(expected)-i-1].keypath, node.Keypath())
 				i++
 			}
@@ -310,7 +306,8 @@ func xTestAsdf(T *testing.T) {
 
 	iter := t.DepthFirstIterator(nil, false, 0)
 	for {
-		node := iter.Next()
+		iter.Next()
+		node := iter.Node()
 		if node == nil {
 			break
 		}
@@ -340,7 +337,8 @@ func BenchmarkDepthFirstIterator(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		a := []Keypath{}
 		for {
-			node := iter.Next()
+			iter.Next()
+			node := iter.Node()
 			if node == nil {
 				break
 			}
@@ -348,8 +346,6 @@ func BenchmarkDepthFirstIterator(b *testing.B) {
 		}
 	}
 }
-
-type M = map[string]interface{}
 
 func BenchmarkDepthFirstNativeGoWalk(b *testing.B) {
 	x := M{

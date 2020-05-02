@@ -138,7 +138,11 @@ func (vt ValueType) String() string {
 }
 
 type Iterator interface {
-	Next() Node
+	Rewind()
+	SeekTo(keypath Keypath)
+	Valid() bool
+	Next()
+	Node() Node
 	Close()
 }
 
