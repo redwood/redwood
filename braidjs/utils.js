@@ -1,4 +1,5 @@
 const ethers = require('ethers')
+const stringify = require('json-stable-stringify')
 
 var genesisTxID = '67656e6573697300000000000000000000000000000000000000000000000000'
 
@@ -15,6 +16,9 @@ module.exports = {
     hexToUint8Array,
     uint8ArrayToHex,
     deepmerge,
+    JSON: {
+        stringify,
+    },
 }
 
 
