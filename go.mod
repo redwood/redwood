@@ -12,7 +12,7 @@ require (
 	github.com/brynbellomy/git2go v0.0.0-20191127205451-32796717b4d5
 	github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d
 	github.com/brynbellomy/go-structomancer v1.0.1 // indirect
-	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae // indirect
+	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae
 	github.com/btcsuite/btcd v0.0.0-20190213025234-306aecffea32
 	github.com/btcsuite/btcutil v0.0.0-20190207003914-4c204d697803
 	github.com/btcsuite/goleveldb v1.0.0 // indirect
@@ -29,6 +29,7 @@ require (
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/gin-gonic/gin v1.4.0 // indirect
 	github.com/git-lfs/gitobj v1.4.1 // indirect
+	github.com/gizak/termui/v3 v3.1.0 // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/graphql-go/graphql v0.7.8
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
