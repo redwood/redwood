@@ -8,7 +8,9 @@ import (
 )
 
 type refResolverMock struct {
-	stateURIs map[string]tree.Node
+	stateURIs       map[string]tree.Node
+	refObjectReader io.ReadCloser
+	refObjectLength int64
 }
 
 func (m *refResolverMock) StateAtVersion(stateURI string, version *types.ID) (tree.Node, error) {
@@ -20,5 +22,5 @@ func (m *refResolverMock) StateAtVersion(stateURI string, version *types.ID) (tr
 }
 
 func (m *refResolverMock) RefObjectReader(refHash types.Hash) (io.ReadCloser, int64, error) {
-	return nil, 0, nil
+	return m.refObjectReader, m.refObjectLength, nil
 }

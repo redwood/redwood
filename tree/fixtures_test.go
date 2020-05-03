@@ -130,7 +130,7 @@ var (
 	}
 )
 
-func countNodesOfType(nodeType NodeType, outs ...fixtureOutput) int {
+func countNodesOfType(nodeType NodeType, outs []fixtureOutput) int {
 	i := 0
 	for _, out := range outs {
 		if out.nodeType == nodeType {
@@ -151,15 +151,24 @@ func combineFixtureOutputs(keypathPrefix Keypath, fixtures ...fixture) []fixture
 	return outs
 }
 
-func makeAtKeypathFixtureOutputs(atKeypath Keypath) []fixtureOutput {
-	if atKeypath.NumParts() == 0 {
+func prefixFixtureOutputs(keypathPrefix Keypath, outs []fixtureOutput) []fixtureOutput {
+	newOuts := []fixtureOutput{}
+	for _, out := range outs {
+		newOuts = append(newOuts, fixtureOutput{keypath: keypathPrefix.Push(out.keypath), nodeType: out.nodeType, value: out.value})
+	}
+	sort.Slice(newOuts, func(i, j int) bool { return bytes.Compare(newOuts[i].keypath, newOuts[j].keypath) < 0 })
+	return newOuts
+}
+
+func makeSetKeypathFixtureOutputs(setKeypath Keypath) []fixtureOutput {
+	if setKeypath.NumParts() == 0 {
 		return nil
 	}
 	var current Keypath
 	var outs []fixtureOutput
-	atKeypathParts := append([]Keypath{nil}, atKeypath.Parts()...)
-	atKeypathParts = atKeypathParts[:len(atKeypathParts)-1] // Remove the last item -- it's added by the test fixture
-	for _, part := range atKeypathParts {
+	setKeypathParts := append([]Keypath{nil}, setKeypath.Parts()...)
+	setKeypathParts = setKeypathParts[:len(setKeypathParts)-1] // Remove the last item -- it's added by the test fixture
+	for _, part := range setKeypathParts {
 		current = current.Push(part)
 		outs = append(outs, fixtureOutput{
 			keypath:  current,
@@ -169,10 +178,20 @@ func makeAtKeypathFixtureOutputs(atKeypath Keypath) []fixtureOutput {
 	return outs
 }
 
-func takeFixtureOutputsWithPrefix(prefix Keypath, outs ...fixtureOutput) []fixtureOutput {
+func filterFixtureOutputsWithPrefix(prefix Keypath, outs ...fixtureOutput) []fixtureOutput {
 	var newOuts []fixtureOutput
 	for _, out := range outs {
 		if out.keypath.StartsWith(prefix) {
+			newOuts = append(newOuts, out)
+		}
+	}
+	return newOuts
+}
+
+func filterFixtureOutputsToDirectDescendantsOf(prefix Keypath, outs ...fixtureOutput) []fixtureOutput {
+	var newOuts []fixtureOutput
+	for _, out := range outs {
+		if out.keypath.StartsWith(prefix) && out.keypath.NumParts() == prefix.NumParts()+1 {
 			newOuts = append(newOuts, out)
 		}
 	}
@@ -209,6 +228,20 @@ func removeFixtureOutputPrefixes(prefix Keypath, outs ...fixtureOutput) []fixtur
 		}
 	}
 	return newOuts
+}
+
+func reverseFixtureOutputs(outs ...fixtureOutput) []fixtureOutput {
+	var newOuts []fixtureOutput
+	for i := len(outs) - 1; i >= 0; i-- {
+		newOuts = append(newOuts, outs[i])
+	}
+	return newOuts
+}
+
+func debugPrintFixtureOutputs(outs []fixtureOutput) {
+	for _, out := range outs {
+		fmt.Println(out.keypath)
+	}
 }
 
 func mustEncodeGoValue(x interface{}) []byte {

@@ -3,7 +3,9 @@ package nelson
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/brynbellomy/klog"
@@ -110,8 +112,6 @@ func TestResolve_SimpleFrameInFrame(T *testing.T) {
 	_, isMemoryNode := memstate.(*tree.MemoryNode)
 	require.True(T, isMemoryNode)
 
-	memstate.DebugPrint()
-
 	node := memstate.NodeAt(tree.Keypath("foo/blah"), nil)
 	asNelSON, isNelSON := node.(*Frame)
 	require.True(T, isNelSON)
@@ -136,8 +136,6 @@ func TestResolve_SimpleFrameInFrameWithRef(T *testing.T) {
 	flag.Set("v", "2")
 
 	db := setupDBTreeWithValue(T, tree.Keypath("foo"), M{
-		"value": "",
-
 		"Merge-Type": M{
 			"Content-Type": "resolver/js",
 			"value": M{
@@ -150,7 +148,11 @@ func TestResolve_SimpleFrameInFrameWithRef(T *testing.T) {
 	})
 	defer db.DeleteDB()
 
-	refResolver := &refResolverMock{}
+	stringReader := ioutil.NopCloser(strings.NewReader("xyzzy"))
+	refResolver := &refResolverMock{
+		refObjectReader: stringReader,
+		refObjectLength: 5,
+	}
 
 	state := db.StateAtVersion(nil, false)
 	defer state.Close()
@@ -165,10 +167,7 @@ func TestResolve_SimpleFrameInFrameWithRef(T *testing.T) {
 	_, isMemoryNode := memstate.(*tree.MemoryNode)
 	require.True(T, isMemoryNode)
 
-	memstate.DebugPrint()
-
 	node := memstate.NodeAt(tree.Keypath("foo/Merge-Type"), nil)
-	node.DebugPrint()
 	require.IsType(T, &Frame{}, node)
 
 	asNelSON := node.(*Frame)
@@ -186,12 +185,21 @@ func TestResolve_SimpleFrameInFrameWithRef(T *testing.T) {
 	require.NoError(T, err)
 
 	expected := M{
-		"src": M{
-			"Content-Type": "link",
-			"value":        "ref:deadbeef",
-		},
+		"src": stringReader,
 	}
 	require.Equal(T, expected, val)
+
+	// Now, test the innermost value, which should be the strings.Reader returned by the refResolverMock
+	node = memstate.NodeAt(tree.Keypath("foo/Merge-Type/src"), nil)
+	require.IsType(T, &Frame{}, node)
+	val, exists, err = node.Value(nil, nil)
+	require.NoError(T, err)
+	require.True(T, exists)
+	require.Equal(T, stringReader, val)
+
+	contentLength, err = node.ContentLength()
+	require.NoError(T, err)
+	require.Equal(T, int64(5), contentLength)
 }
 
 func TestResolve_LinkToSimpleState(T *testing.T) {

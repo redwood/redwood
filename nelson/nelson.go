@@ -73,13 +73,25 @@ func (frame *Frame) Value(keypath tree.Keypath, rng *tree.Range) (interface{}, b
 	return frame.Node.Value(keypath, rng)
 }
 
+func (frame *Frame) NodeAt(keypath tree.Keypath, rng *tree.Range) tree.Node {
+	if len(keypath) == 0 && rng == nil {
+		return frame
+	}
+	return frame.Node.NodeAt(keypath, rng)
+}
+
 func (frame *Frame) ParentNodeFor(keypath tree.Keypath) (tree.Node, tree.Keypath) {
 	// This is necessary -- otherwise, fetching a Frame node will actually
 	// return the underlying tree.Node
 	if len(keypath) == 0 {
 		return frame, nil
 	}
-	return frame.Node.ParentNodeFor(keypath)
+	parent, relKeypath := frame.Node.ParentNodeFor(keypath)
+	if parent == frame.Node {
+		return frame, relKeypath
+	} else {
+		return parent, relKeypath
+	}
 }
 
 func (frame *Frame) MarshalJSON() ([]byte, error) {

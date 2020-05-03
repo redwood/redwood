@@ -1,34 +1,31 @@
 package tree
 
 import (
-	"flag"
-	"fmt"
 	"strconv"
 	"testing"
 
-	"github.com/brynbellomy/klog"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMemoryNode_Set(T *testing.T) {
 	tests := []struct {
-		name      string
-		atKeypath Keypath
-		keypath   Keypath
-		rng       *Range
-		fixtures  []fixture
+		name       string
+		setKeypath Keypath
+		atKeypath  Keypath
+		rng        *Range
+		fixture    fixture
 	}{
-		{"root keypath, single set, map value", Keypath(nil), Keypath(nil), nil, []fixture{fixture1}},
-		{"root keypath, single set, map value 2", Keypath(nil), Keypath(nil), nil, []fixture{fixture2}},
-		{"root keypath, single set, float value", Keypath(nil), Keypath(nil), nil, []fixture{fixture5}},
-		{"root keypath, single set, string value", Keypath(nil), Keypath(nil), nil, []fixture{fixture6}},
-		{"root keypath, single set, bool value", Keypath(nil), Keypath(nil), nil, []fixture{fixture7}},
+		{"root keypath, single set, map value", Keypath(nil), Keypath(nil), nil, fixture1},
+		{"root keypath, single set, map value 2", Keypath(nil), Keypath(nil), nil, fixture2},
+		{"root keypath, single set, float value", Keypath(nil), Keypath(nil), nil, fixture5},
+		{"root keypath, single set, string value", Keypath(nil), Keypath(nil), nil, fixture6},
+		{"root keypath, single set, bool value", Keypath(nil), Keypath(nil), nil, fixture7},
 
-		{"non-root keypath, single set, map value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture1}},
-		{"non-root keypath, single set, map value 2", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture2}},
-		{"non-root keypath, single set, float value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture5}},
-		{"non-root keypath, single set, string value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture6}},
-		{"non-root keypath, single set, bool value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture7}},
+		{"non-root keypath, single set, map value", Keypath("foo/bar"), Keypath(nil), nil, fixture1},
+		{"non-root keypath, single set, map value 2", Keypath("foo/bar"), Keypath(nil), nil, fixture2},
+		{"non-root keypath, single set, float value", Keypath("foo/bar"), Keypath(nil), nil, fixture5},
+		{"non-root keypath, single set, string value", Keypath("foo/bar"), Keypath(nil), nil, fixture6},
+		{"non-root keypath, single set, bool value", Keypath("foo/bar"), Keypath(nil), nil, fixture7},
 	}
 
 	for _, test := range tests {
@@ -36,27 +33,23 @@ func TestMemoryNode_Set(T *testing.T) {
 		T.Run(test.name, func(T *testing.T) {
 			state := NewMemoryNode().NodeAt(test.atKeypath, nil).(*MemoryNode)
 
-			for _, f := range test.fixtures {
-				err := state.Set(test.keypath, test.rng, f.input)
-				require.NoError(T, err)
-			}
+			err := state.Set(test.setKeypath, test.rng, test.fixture.input)
+			require.NoError(T, err)
 
-			prefixOutputs := makeAtKeypathFixtureOutputs(test.atKeypath)
-			expectedNodesFromAtKeypath := len(prefixOutputs)
-			if expectedNodesFromAtKeypath > 0 {
-				expectedNodesFromAtKeypath--
-			}
+			prefixOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
+			expectedNodesFromSetKeypath := len(prefixOutputs)
 
-			expectedNumValues := countNodesOfType(NodeTypeValue, combineFixtureOutputs(nil, test.fixtures...)...)
-			expectedNumSlices := countNodesOfType(NodeTypeSlice, combineFixtureOutputs(nil, test.fixtures...)...)
-			expectedNumMaps := countNodesOfType(NodeTypeMap, combineFixtureOutputs(nil, test.fixtures...)...) + expectedNodesFromAtKeypath
+			expectedNumValues := countNodesOfType(NodeTypeValue, test.fixture.output)
+			expectedNumSlices := countNodesOfType(NodeTypeSlice, test.fixture.output)
+			expectedNumMaps := countNodesOfType(NodeTypeMap, test.fixture.output) + expectedNodesFromSetKeypath
 			expectedNumNodes := expectedNumValues + expectedNumSlices + expectedNumMaps
 			require.Equal(T, expectedNumValues, len(state.values))
 			require.Equal(T, expectedNumNodes, len(state.nodeTypes))
 			require.Equal(T, expectedNumNodes, len(state.keypaths))
 
-			valueOutputs := combineFixtureOutputs(test.atKeypath, test.fixtures...)
-			expected := append(prefixOutputs[:len(prefixOutputs)-1], valueOutputs...)
+			expected := prefixFixtureOutputs(test.setKeypath, test.fixture.output)
+			expected = append(prefixOutputs, expected...)
+
 			for i, kp := range state.keypaths {
 				require.Equal(T, expected[i].keypath, kp)
 				require.Equal(T, expected[i].nodeType, state.nodeTypes[string(kp)])
@@ -68,77 +61,7 @@ func TestMemoryNode_Set(T *testing.T) {
 	}
 }
 
-func TestMemoryNode_ParentNodeFor(T *testing.T) {
-	defer klog.Flush()
-	flag.Set("logtostderr", "true")
-	flag.Set("v", "2")
-
-	T.Run("non-root node", func(T *testing.T) {
-		state := NewMemoryNode().(*MemoryNode)
-		innerNode := NewMemoryNode().(*MemoryNode)
-
-		err := state.Set(Keypath("foo"), nil, M{
-			"one":   uint64(123),
-			"two":   M{"two a": false, "two b": nil},
-			"three": "hello",
-		})
-		require.NoError(T, err)
-		state.DebugPrint()
-
-		err = innerNode.Set(Keypath("bar"), nil, M{
-			"baz": M{
-				"xyzzy": "zork",
-			},
-		})
-		require.NoError(T, err)
-		innerNode.DebugPrint()
-
-		err = state.Set(Keypath("foo/two"), nil, innerNode)
-		require.NoError(T, err)
-		state.DebugPrint()
-
-		node, keypath := state.ParentNodeFor(Keypath("foo/two/bar/baz/xyzzy"))
-		require.Equal(T, Keypath("bar/baz/xyzzy"), keypath)
-		memNode := node.(*MemoryNode)
-		require.Equal(T, innerNode.keypaths, memNode.keypaths)
-	})
-
-	T.Run("root node", func(T *testing.T) {
-		state := NewMemoryNode().(*MemoryNode)
-		innerNode := NewMemoryNode().(*MemoryNode)
-
-		err := state.Set(Keypath("foo"), nil, M{
-			"one":   uint64(123),
-			"two":   M{"two a": false, "two b": nil},
-			"three": "hello",
-		})
-		require.NoError(T, err)
-		state.DebugPrint()
-
-		err = innerNode.Set(Keypath("bar"), nil, M{
-			"baz": M{
-				"xyzzy": "zork",
-			},
-		})
-		require.NoError(T, err)
-		innerNode.DebugPrint()
-
-		err = state.Set(nil, nil, innerNode)
-		require.NoError(T, err)
-		state.DebugPrint()
-
-		node, keypath := state.ParentNodeFor(Keypath("bar/baz/xyzzy"))
-		require.Equal(T, Keypath("bar/baz/xyzzy"), keypath)
-		memNode := node.(*MemoryNode)
-		require.Equal(T, innerNode.keypaths, memNode.keypaths)
-	})
-}
-
 func TestMemoryNode_SetNode(T *testing.T) {
-	defer klog.Flush()
-	flag.Set("logtostderr", "true")
-	flag.Set("v", "2")
-
 	T.Run("inner MemoryNode", func(T *testing.T) {
 		state := NewMemoryNode().(*MemoryNode)
 		innerNode := NewMemoryNode().(*MemoryNode)
@@ -183,34 +106,91 @@ func TestMemoryNode_SetNode(T *testing.T) {
 	})
 }
 
+func TestMemoryNode_ParentNodeFor(T *testing.T) {
+	T.Run("non-root node", func(T *testing.T) {
+		state := NewMemoryNode().(*MemoryNode)
+		innerNode := NewMemoryNode().(*MemoryNode)
+
+		err := state.Set(Keypath("foo"), nil, M{
+			"one":   uint64(123),
+			"two":   M{"two a": false, "two b": nil},
+			"three": "hello",
+		})
+		require.NoError(T, err)
+
+		err = innerNode.Set(Keypath("bar"), nil, M{
+			"baz": M{
+				"xyzzy": "zork",
+			},
+		})
+		require.NoError(T, err)
+
+		err = state.Set(Keypath("foo/two"), nil, innerNode)
+		require.NoError(T, err)
+
+		node, keypath := state.ParentNodeFor(Keypath("foo/two/bar/baz/xyzzy"))
+		require.Equal(T, Keypath("bar/baz/xyzzy"), keypath)
+		memNode := node.(*MemoryNode)
+		require.Equal(T, innerNode.keypaths, memNode.keypaths)
+	})
+
+	T.Run("root node", func(T *testing.T) {
+		state := NewMemoryNode().(*MemoryNode)
+		innerNode := NewMemoryNode().(*MemoryNode)
+
+		err := state.Set(Keypath("foo"), nil, M{
+			"one":   uint64(123),
+			"two":   M{"two a": false, "two b": nil},
+			"three": "hello",
+		})
+		require.NoError(T, err)
+		state.DebugPrint()
+
+		err = innerNode.Set(Keypath("bar"), nil, M{
+			"baz": M{
+				"xyzzy": "zork",
+			},
+		})
+		require.NoError(T, err)
+		innerNode.DebugPrint()
+
+		err = state.Set(nil, nil, innerNode)
+		require.NoError(T, err)
+		state.DebugPrint()
+
+		node, keypath := state.ParentNodeFor(Keypath("bar/baz/xyzzy"))
+		require.Equal(T, Keypath("bar/baz/xyzzy"), keypath)
+		memNode := node.(*MemoryNode)
+		require.Equal(T, innerNode.keypaths, memNode.keypaths)
+	})
+}
+
 func TestMemoryNode_Delete(T *testing.T) {
 	tests := []struct {
 		name          string
-		atKeypath     Keypath
 		setKeypath    Keypath
-		deleteKeypath Keypath
 		setRange      *Range
+		deleteKeypath Keypath
 		deleteRange   *Range
 		fixture       fixture
 	}{
-		{"root keypath, single set, map value", Keypath(nil), Keypath(nil), Keypath("flox"), nil, nil, fixture1},
-		//{"root keypath, single set, map value 2", Keypath(nil), Keypath(nil), nil, fixture2},
-		//{"root keypath, single set, float value", Keypath(nil), Keypath(nil), nil, fixture5},
-		//{"root keypath, single set, string value", Keypath(nil), Keypath(nil), nil, fixture6},
-		//{"root keypath, single set, bool value", Keypath(nil), Keypath(nil), nil, fixture7},
-		//
-		//{"non-root keypath, single set, map value", Keypath("foo/bar"), Keypath(nil), nil, fixture1},
-		//{"non-root keypath, single set, map value 2", Keypath("foo/bar"), Keypath(nil), nil, fixture2},
-		//{"non-root keypath, single set, float value", Keypath("foo/bar"), Keypath(nil), nil, fixture5},
-		//{"non-root keypath, single set, string value", Keypath("foo/bar"), Keypath(nil), nil, fixture6},
-		//{"non-root keypath, single set, bool value", Keypath("foo/bar"), Keypath(nil), nil, fixture7},
+		{"root keypath, single set, map value", Keypath(nil), nil, Keypath("flox"), nil, fixture1},
+		{"root keypath, single set, map value 2", Keypath(nil), nil, Keypath("eee"), nil, fixture2},
+		{"root keypath, single set, float value", Keypath(nil), nil, Keypath(nil), nil, fixture5},
+		{"root keypath, single set, string value", Keypath(nil), nil, Keypath(nil), nil, fixture6},
+		{"root keypath, single set, bool value", Keypath(nil), nil, Keypath(nil), nil, fixture7},
+
+		{"non-root keypath, single set, map value", Keypath("foo/bar"), nil, Keypath(nil), nil, fixture1},
+		{"non-root keypath, single set, map value 2", Keypath("foo/bar"), nil, Keypath(nil), nil, fixture2},
+		{"non-root keypath, single set, float value", Keypath("foo/bar"), nil, Keypath(nil), nil, fixture5},
+		{"non-root keypath, single set, string value", Keypath("foo/bar"), nil, Keypath(nil), nil, fixture6},
+		{"non-root keypath, single set, bool value", Keypath("foo/bar"), nil, Keypath(nil), nil, fixture7},
 	}
 
 	for _, test := range tests {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
-			//state := NewMemoryNode(NodeTypeMap).NodeAt(test.atKeypath).(*MemoryNode)
-			state := NewMemoryNode().NodeAt(test.atKeypath, nil).(*MemoryNode)
+			state := NewMemoryNode().(*MemoryNode)
 
 			err := state.Set(test.setKeypath, test.setRange, test.fixture.input)
 			require.NoError(T, err)
@@ -220,16 +200,16 @@ func TestMemoryNode_Delete(T *testing.T) {
 
 			remainingOutputs := removeFixtureOutputsWithPrefix(test.deleteKeypath, test.fixture.output...)
 
-			expectedNumValues := countNodesOfType(NodeTypeValue, remainingOutputs...)
-			expectedNumSlices := countNodesOfType(NodeTypeSlice, remainingOutputs...)
-			expectedNumMaps := countNodesOfType(NodeTypeMap, remainingOutputs...) + test.atKeypath.NumParts()
-			expectedNumNodes := expectedNumValues + expectedNumSlices + expectedNumMaps
-			require.Equal(T, expectedNumValues, len(state.values))
-			require.Equal(T, expectedNumNodes, len(state.nodeTypes))
-			require.Equal(T, expectedNumNodes, len(state.keypaths))
+			// expectedNumValues := countNodesOfType(NodeTypeValue, remainingOutputs)
+			// expectedNumSlices := countNodesOfType(NodeTypeSlice, remainingOutputs)
+			// expectedNumMaps := countNodesOfType(NodeTypeMap, remainingOutputs) + test.deleteKeypath.NumParts()
+			// expectedNumNodes := expectedNumValues + expectedNumSlices + expectedNumMaps
+			// require.Equal(T, expectedNumValues, len(state.values))
+			// require.Equal(T, expectedNumNodes, len(state.nodeTypes))
+			// require.Equal(T, expectedNumNodes, len(state.keypaths))
 
-			prefixOutputs := makeAtKeypathFixtureOutputs(test.atKeypath)
-			expected := append(prefixOutputs[:len(prefixOutputs)-1], remainingOutputs...)
+			setKeypathOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
+			expected := append(setKeypathOutputs, remainingOutputs...)
 			for i, kp := range state.keypaths {
 				require.Equal(T, expected[i].keypath, kp)
 				require.Equal(T, expected[i].nodeType, state.nodeTypes[string(kp)])
@@ -241,47 +221,55 @@ func TestMemoryNode_Delete(T *testing.T) {
 	}
 }
 
-func TestMemoryNode_DepthFirstIterator(T *testing.T) {
+func TestMemoryNode_Iterator(T *testing.T) {
 	tests := []struct {
 		name        string
-		atKeypath   Keypath
+		setKeypath  Keypath
 		iterKeypath Keypath
 		fixture     fixture
 	}{
-		{"root keypath set, root keypath iter, map value", Keypath(nil), Keypath(nil), fixture1},
-		//{"root keypath, single set, map value 2", Keypath(nil), Keypath(nil), nil, []fixture{fixture2}},
-		//{"root keypath, single set, float value", Keypath(nil), Keypath(nil), nil, []fixture{fixture5}},
-		//{"root keypath, single set, string value", Keypath(nil), Keypath(nil), nil, []fixture{fixture6}},
-		//{"root keypath, single set, bool value", Keypath(nil), Keypath(nil), nil, []fixture{fixture7}},
-		//
-		{"root keypath set, non-root keypath iter, map value", Keypath(nil), Keypath("flox"), fixture1},
-		//{"non-root keypath, single set, map value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture1}},
-		//{"non-root keypath, single set, map value 2", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture2}},
-		//{"non-root keypath, single set, float value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture5}},
-		//{"non-root keypath, single set, string value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture6}},
-		//{"non-root keypath, single set, bool value", Keypath("foo/bar"), Keypath(nil), nil, []fixture{fixture7}},
+		{"root set, root iter, map value", Keypath(nil), Keypath(nil), fixture1},
+		{"root set, root iter, map value 2", Keypath(nil), Keypath(nil), fixture2},
+		{"root set, root iter, float value", Keypath(nil), Keypath(nil), fixture5},
+		{"root set, root iter, string value", Keypath(nil), Keypath(nil), fixture6},
+		{"root set, root iter, bool value", Keypath(nil), Keypath(nil), fixture7},
+
+		{"non-root set, root iter, map value", Keypath("foo/bar"), Keypath(nil), fixture1},
+		{"non-root set, root iter, map value 2", Keypath("foo/bar"), Keypath(nil), fixture2},
+		{"non-root set, root iter, float value", Keypath("foo/bar"), Keypath(nil), fixture5},
+		{"non-root set, root iter, string value", Keypath("foo/bar"), Keypath(nil), fixture6},
+		{"non-root set, root iter, bool value", Keypath("foo/bar"), Keypath(nil), fixture7},
+
+		{"root set, non-root iter, map value", Keypath(nil), Keypath("flox"), fixture1},
+		{"root set, non-root iter, map value 2", Keypath(nil), Keypath("flox"), fixture2},
+		{"root set, non-root iter, float value", Keypath(nil), Keypath("flox"), fixture5},
+		{"root set, non-root iter, string value", Keypath(nil), Keypath("flox"), fixture6},
+		{"root set, non-root iter, bool value", Keypath(nil), Keypath("flox"), fixture7},
+
+		{"non-root set, non-root iter, map value", Keypath("foo/bar"), Keypath("flox"), fixture1},
+		{"non-root set, non-root iter, map value 2", Keypath("foo/bar"), Keypath("flox"), fixture2},
+		{"non-root set, non-root iter, float value", Keypath("foo/bar"), Keypath("flox"), fixture5},
+		{"non-root set, non-root iter, string value", Keypath("foo/bar"), Keypath("flox"), fixture6},
+		{"non-root set, non-root iter, bool value", Keypath("foo/bar"), Keypath("flox"), fixture7},
 	}
 
 	for _, test := range tests {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
-			//state := NewMemoryNode(NodeTypeMap).NodeAt(test.atKeypath).(*MemoryNode)
-			state := NewMemoryNode().NodeAt(test.atKeypath, nil).(*MemoryNode)
+			state := NewMemoryNode()
+			state.Set(test.setKeypath, nil, test.fixture.input)
 
-			err := state.Set(nil, nil, test.fixture.input)
-			require.NoError(T, err)
+			setKeypathOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
+			valueOutputs := prefixFixtureOutputs(test.setKeypath, test.fixture.output)
+			expected := append(setKeypathOutputs, valueOutputs...)
+			expected = filterFixtureOutputsWithPrefix(test.iterKeypath, expected...)
 
-			prefixOutputs := makeAtKeypathFixtureOutputs(test.atKeypath)
-			valueOutputs := combineFixtureOutputs(test.atKeypath, test.fixture)
-			expected := append(prefixOutputs[:len(prefixOutputs)-1], valueOutputs...)
-			expected = takeFixtureOutputsWithPrefix(test.iterKeypath, expected...)
-
-			iter := state.DepthFirstIterator(test.iterKeypath, false, 0)
+			iter := state.Iterator(test.iterKeypath, false, 0)
 			defer iter.Close()
 			var i int
 			for iter.Rewind(); iter.Valid(); iter.Next() {
 				node := iter.Node()
-				require.Equal(T, expected[len(expected)-i-1].keypath, node.Keypath())
+				require.Equal(T, expected[i].keypath, node.Keypath())
 				i++
 			}
 			require.Equal(T, len(expected), i)
@@ -290,43 +278,121 @@ func TestMemoryNode_DepthFirstIterator(T *testing.T) {
 	}
 }
 
-func xTestAsdf(T *testing.T) {
-	t := NewMemoryNode()
-	t.Set(Keypath("foo/bar/xyzzy"), nil, []interface{}{1, 2, 3})
-	t.Set(Keypath("foo/hello"), nil, "hey there")
-	t.Set(Keypath("bling/blang"), nil, map[string]interface{}{"name": "bryn", "age": 33})
+func TestMemoryNode_ChildIterator(T *testing.T) {
+	tests := []struct {
+		name        string
+		setKeypath  Keypath
+		iterKeypath Keypath
+		fixture     fixture
+	}{
+		{"root set, root iter, map value", Keypath(nil), Keypath(nil), fixture1},
+		{"root set, root iter, map value 2", Keypath(nil), Keypath(nil), fixture2},
+		{"root set, root iter, float value", Keypath(nil), Keypath(nil), fixture5},
+		{"root set, root iter, string value", Keypath(nil), Keypath(nil), fixture6},
+		{"root set, root iter, bool value", Keypath(nil), Keypath(nil), fixture7},
 
-	for _, kp := range t.(*MemoryNode).keypaths {
-		fmt.Println(string(kp))
+		{"non-root set, root iter, map value", Keypath("foo/bar"), Keypath(nil), fixture1},
+		{"non-root set, root iter, map value 2", Keypath("foo/bar"), Keypath(nil), fixture2},
+		{"non-root set, root iter, float value", Keypath("foo/bar"), Keypath(nil), fixture5},
+		{"non-root set, root iter, string value", Keypath("foo/bar"), Keypath(nil), fixture6},
+		{"non-root set, root iter, bool value", Keypath("foo/bar"), Keypath(nil), fixture7},
+
+		{"root set, non-root iter, map value", Keypath(nil), Keypath("flox"), fixture1},
+		{"root set, non-root iter, map value 2", Keypath(nil), Keypath("flox"), fixture2},
+		{"root set, non-root iter, float value", Keypath(nil), Keypath("flox"), fixture5},
+		{"root set, non-root iter, string value", Keypath(nil), Keypath("flox"), fixture6},
+		{"root set, non-root iter, bool value", Keypath(nil), Keypath("flox"), fixture7},
+
+		{"non-root set, non-root iter, map value", Keypath("foo/bar"), Keypath("flox"), fixture1},
+		{"non-root set, non-root iter, map value 2", Keypath("foo/bar"), Keypath("flox"), fixture2},
+		{"non-root set, non-root iter, float value", Keypath("foo/bar"), Keypath("flox"), fixture5},
+		{"non-root set, non-root iter, string value", Keypath("foo/bar"), Keypath("flox"), fixture6},
+		{"non-root set, non-root iter, bool value", Keypath("foo/bar"), Keypath("flox"), fixture7},
 	}
 
-	fmt.Println()
-	fmt.Println("-------")
-	fmt.Println()
+	for _, test := range tests {
+		test := test
+		T.Run(test.name, func(T *testing.T) {
+			state := NewMemoryNode()
+			state.Set(test.setKeypath, nil, test.fixture.input)
 
-	iter := t.DepthFirstIterator(nil, false, 0)
-	for {
-		iter.Next()
-		node := iter.Node()
-		if node == nil {
-			break
-		}
+			setKeypathOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
+			prefixedOutputs := prefixFixtureOutputs(test.setKeypath, test.fixture.output)
+			expected := append(setKeypathOutputs, prefixedOutputs...)
+			expected = filterFixtureOutputsToDirectDescendantsOf(test.iterKeypath, expected...)
+
+			iter := state.ChildIterator(test.iterKeypath, false, 0)
+			defer iter.Close()
+			var i int
+			for iter.Rewind(); iter.Valid(); iter.Next() {
+				node := iter.Node()
+				require.Equal(T, expected[i].keypath, node.Keypath())
+				i++
+			}
+			require.Equal(T, len(expected), i)
+
+		})
 	}
 }
 
-//func BenchmarkDepthFirstWalk(b *testing.B) {
-//    t := NewMemoryNode(NodeTypeMap)
-//    t.Set(Keypath("foo/bar/xyzzy"), nil, []interface{}{1, 2, 3})
-//    t.Set(Keypath("foo/hello"), nil, "hey there")
-//    t.Set(Keypath("bling/blang"), nil, map[string]interface{}{"name": "bryn", "age": 33})
-//    for n := 0; n < b.N; n++ {
-//        a := []Keypath{}
-//        t.WalkDFS(func(node Node) error {
-//            a = append(a, node.(*MemoryNode).keypath)
-//            return nil
-//        })
-//    }
-//}
+func TestMemoryNode_DepthFirstIterator(T *testing.T) {
+	tests := []struct {
+		name        string
+		setKeypath  Keypath
+		iterKeypath Keypath
+		fixture     fixture
+	}{
+		{"root set, root iter, map value", Keypath(nil), Keypath(nil), fixture1},
+		{"root set, root iter, map value 2", Keypath(nil), Keypath(nil), fixture2},
+		{"root set, root iter, float value", Keypath(nil), Keypath(nil), fixture5},
+		{"root set, root iter, string value", Keypath(nil), Keypath(nil), fixture6},
+		{"root set, root iter, bool value", Keypath(nil), Keypath(nil), fixture7},
+
+		{"non-root set, root iter, map value", Keypath("foo/bar"), Keypath(nil), fixture1},
+		{"non-root set, root iter, map value 2", Keypath("foo/bar"), Keypath(nil), fixture2},
+		{"non-root set, root iter, float value", Keypath("foo/bar"), Keypath(nil), fixture5},
+		{"non-root set, root iter, string value", Keypath("foo/bar"), Keypath(nil), fixture6},
+		{"non-root set, root iter, bool value", Keypath("foo/bar"), Keypath(nil), fixture7},
+
+		{"root set, non-root iter, map value", Keypath(nil), Keypath("flox"), fixture1},
+		{"root set, non-root iter, map value 2", Keypath(nil), Keypath("eee"), fixture2},
+		{"root set, non-root iter, float value", Keypath(nil), Keypath("flox"), fixture5},
+		{"root set, non-root iter, string value", Keypath(nil), Keypath("flox"), fixture6},
+		{"root set, non-root iter, bool value", Keypath(nil), Keypath("flox"), fixture7},
+
+		{"non-root set, non-root iter, map value", Keypath("foo/bar"), Keypath("foo/bar/flox"), fixture1},
+		{"non-root set, non-root iter, map value 2", Keypath("foo/bar"), Keypath("foo/bar/eee"), fixture2},
+		{"non-root set, non-root iter, float value", Keypath("foo/bar"), Keypath("foo/bar"), fixture5},
+		{"non-root set, non-root iter, string value", Keypath("foo/bar"), Keypath("foo/bar"), fixture6},
+		{"non-root set, non-root iter, bool value", Keypath("foo/bar"), Keypath("foo/bar"), fixture7},
+		{"non-root set, non-root iter, nonexistent value", Keypath("foo/bar"), Keypath("foo/bar/asdf"), fixture7},
+	}
+
+	for _, test := range tests {
+		test := test
+		T.Run(test.name, func(T *testing.T) {
+			state := NewMemoryNode()
+			state.Set(test.setKeypath, nil, test.fixture.input)
+
+			prefixOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
+			valueOutputs := combineFixtureOutputs(test.setKeypath, test.fixture)
+			expected := append(prefixOutputs, valueOutputs...)
+			expected = filterFixtureOutputsWithPrefix(test.iterKeypath, expected...)
+			expected = reverseFixtureOutputs(expected...)
+
+			iter := state.DepthFirstIterator(test.iterKeypath, false, 0)
+			defer iter.Close()
+			var i int
+			for iter.Rewind(); iter.Valid(); iter.Next() {
+				node := iter.Node()
+				require.Equal(T, expected[i].keypath, node.Keypath())
+				i++
+			}
+			require.Equal(T, len(expected), i)
+
+		})
+	}
+}
 
 func BenchmarkDepthFirstIterator(b *testing.B) {
 	t := NewMemoryNode()
@@ -417,8 +483,6 @@ func walkTree(tree interface{}, fn func(keypath []string, val interface{}) error
 }
 
 func TestMemoryNode_CopyToMemory(T *testing.T) {
-	//T.Parallel()
-	//
 	//state := NewMemoryNode(NodeTypeMap).(*MemoryNode)
 	//
 	//_, err := state.Set(nil, nil, testVal1)
@@ -449,8 +513,6 @@ func TestMemoryNode_CopyToMemory(T *testing.T) {
 }
 
 func TestMemoryNode_CopyToMemory_AtKeypath(T *testing.T) {
-	T.Parallel()
-
 	node := NewMemoryNode()
 	err := node.Set(nil, nil, fixture1.input)
 	require.NoError(T, err)
@@ -458,14 +520,14 @@ func TestMemoryNode_CopyToMemory_AtKeypath(T *testing.T) {
 	copied, err := node.NodeAt(Keypath("asdf"), nil).CopyToMemory(nil, nil)
 	require.NoError(T, err)
 
-	expected := takeFixtureOutputsWithPrefix(Keypath("asdf"), fixture1.output...)
+	expected := filterFixtureOutputsWithPrefix(Keypath("asdf"), fixture1.output...)
 
 	memnode := copied.(*MemoryNode)
 	for i, kp := range memnode.keypaths {
 		require.Equal(T, expected[i].keypath, kp)
 		require.Equal(T, expected[i].nodeType, memnode.nodeTypes[string(kp)])
-		if memnode.nodeTypes[string(kp)] == NodeTypeSlice {
-			require.Equal(T, len(expected[i].value.([]interface{})), memnode.sliceLengths[string(kp)])
+		if memnode.nodeTypes[string(kp)] == NodeTypeSlice || memnode.nodeTypes[string(kp)] == NodeTypeMap {
+			require.Equal(T, len(expected[i].value.([]interface{})), memnode.contentLengths[string(kp)])
 		}
 	}
 	require.NoError(T, err)
