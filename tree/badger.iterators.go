@@ -18,12 +18,11 @@ type dbIterator struct {
 var _ Iterator = (*dbIterator)(nil)
 
 func newIteratorFromBadgerIterator(iter *badger.Iterator, keypath Keypath, rootNode *DBNode) *dbIterator {
-	rootKeypath := rootNode.addKeyPrefix(rootNode.rootKeypath.Push(keypath))
-	scanPrefix := rootKeypath.Copy()
+	rootKeypath := rootNode.rootKeypath.Push(keypath)
+	scanPrefix := rootNode.addKeyPrefix(rootKeypath)
 	if len(scanPrefix) != len(rootNode.keyPrefix) {
 		scanPrefix = append(scanPrefix, KeypathSeparator[0])
 	}
-
 	return &dbIterator{
 		iter:        iter,
 		tx:          rootNode.tx,
@@ -35,11 +34,14 @@ func newIteratorFromBadgerIterator(iter *badger.Iterator, keypath Keypath, rootN
 }
 
 func (iter *dbIterator) Rewind() {
-	rootItem, err := iter.tx.Get(iter.rootKeypath)
+	rootItem, err := iter.tx.Get(iter.rootNode.addKeyPrefix(iter.rootKeypath))
 	if err == badger.ErrKeyNotFound || err != nil { // Just being explicit here
 		// Ignore the root.  Just start iterating from the first actual iterator keypath
 		iter.rootItem = nil
 		iter.iter.Seek(iter.scanPrefix)
+		if !iter.iter.ValidForPrefix(iter.scanPrefix) {
+			return
+		}
 		iter.setNode(iter.iter.Item())
 		return
 	}
@@ -47,23 +49,29 @@ func (iter *dbIterator) Rewind() {
 	iter.setNode(rootItem)
 }
 
-func (iter *dbIterator) SeekTo(keypath Keypath) {
-	if keypath.Equals(iter.rootKeypath) {
+func (iter *dbIterator) SeekTo(relKeypath Keypath) {
+	if relKeypath == nil {
 		iter.Rewind()
 		return
 	}
 	iter.rootItem = nil
-	iter.iter.Seek(keypath)
-	if iter.Valid() {
-		iter.setNode(iter.iter.Item())
+	absKeypath := iter.rootKeypath.Push(relKeypath)
+	iter.iter.Seek(iter.rootNode.addKeyPrefix(absKeypath))
+	if !iter.iter.ValidForPrefix(iter.scanPrefix) {
+		return
 	}
+	iter.setNode(iter.iter.Item())
 }
 
 func (iter *dbIterator) Next() {
 	if iter.rootItem != nil {
 		iter.rootItem = nil
-		if len(iter.rootNode.rmKeyPrefix(iter.rootKeypath)) > 0 {
-			iter.iter.Seek(iter.scanPrefix)
+		iter.iter.Seek(iter.scanPrefix)
+		if !iter.Valid() {
+			return
+		}
+		if len(iter.rootNode.rmKeyPrefix(iter.scanPrefix)) == 0 {
+			iter.iter.Next()
 		}
 	} else {
 		iter.iter.Next()
@@ -109,23 +117,27 @@ func newChildIteratorFromBadgerIterator(iter *badger.Iterator, keypath Keypath, 
 	dbIter := newIteratorFromBadgerIterator(iter, keypath, rootNode)
 	return &dbChildIterator{
 		dbIterator:              dbIter,
-		strippedAbsKeypathParts: rootNode.rmKeyPrefix(dbIter.rootKeypath).NumParts(),
+		strippedAbsKeypathParts: dbIter.rootKeypath.NumParts(),
 	}
 }
 
-func (iter *dbChildIterator) Node() Node {
-	return iter.dbIterator.Node()
-}
-
 func (iter *dbChildIterator) Next() {
+	if !iter.dbIterator.Valid() {
+		return
+	}
+	iter.dbIterator.Next()
 	for ; iter.dbIterator.Valid(); iter.dbIterator.Next() {
 		node := iter.dbIterator.Node()
-		numParts := iter.rootNode.rmKeyPrefix(node.Keypath()).NumParts()
-
+		numParts := node.Keypath().NumParts()
 		if numParts == iter.strippedAbsKeypathParts+1 {
 			return
 		}
 	}
+}
+
+func (iter *dbChildIterator) Rewind() {
+	iter.dbIterator.Rewind()
+	iter.Next()
 }
 
 type dbDepthFirstIterator struct {
@@ -135,6 +147,7 @@ type dbDepthFirstIterator struct {
 	tx          *badger.Txn
 	rootNode    *DBNode
 	iterNode    *DBNode
+	rootItem    *badger.Item
 	done        bool
 }
 
@@ -142,30 +155,33 @@ type dbDepthFirstIterator struct {
 var _ Iterator = (*dbDepthFirstIterator)(nil)
 
 func (iter *dbDepthFirstIterator) Valid() bool {
-	return Keypath(iter.iter.Item().Key()).Equals(iter.rootKeypath) || iter.iter.ValidForPrefix(iter.scanPrefix)
+	if iter.rootItem != nil {
+		return true
+	} else if iter.done {
+		return false
+	}
+	return iter.iter.ValidForPrefix(iter.scanPrefix)
 }
 
-func (iter *dbDepthFirstIterator) setNode() {
-	if !iter.Valid() {
-		return
-	}
-	item := iter.iter.Item()
-	iter.iterNode.rootKeypath = iter.rootNode.rmKeyPrefix(item.KeyCopy(iter.iterNode.rootKeypath))
+func (iter *dbDepthFirstIterator) setNode(item *badger.Item) {
+	iter.iterNode.rootKeypath = item.KeyCopy(iter.iterNode.rootKeypath)
+	iter.iterNode.rootKeypath = iter.rootNode.rmKeyPrefix(iter.iterNode.rootKeypath)
 	if len(iter.iterNode.rootKeypath) == 0 {
 		iter.iterNode.rootKeypath = nil
 	}
 }
 
 func (iter *dbDepthFirstIterator) Rewind() {
+	iter.rootItem = nil
 	iter.done = false
-	iter.iter.Rewind()
-	iter.setNode()
+	iter.iter.Seek(append(iter.scanPrefix, byte(0xff)))
+	iter.syncAfterJump()
 }
 
 func (iter *dbDepthFirstIterator) SeekTo(keypath Keypath) {
-	iter.done = false
-	iter.iter.Seek(keypath)
-	iter.setNode()
+	absKeypath := iter.rootKeypath.Push(keypath)
+	iter.iter.Seek(iter.rootNode.addKeyPrefix(absKeypath))
+	iter.syncAfterJump()
 }
 
 func (iter *dbDepthFirstIterator) Node() Node {
@@ -176,10 +192,40 @@ func (iter *dbDepthFirstIterator) Node() Node {
 }
 
 func (iter *dbDepthFirstIterator) Next() {
-	if !iter.Valid() {
+	if iter.done {
+		return
+	} else if iter.rootItem != nil {
+		iter.rootItem = nil
+		iter.done = true
 		return
 	}
 	iter.iter.Next()
+	iter.syncAfterJump()
+}
+
+func (iter *dbDepthFirstIterator) syncAfterJump() {
+	if !iter.iter.Valid() {
+		iter.rootItem = nil
+		iter.done = true
+		return
+	}
+
+	item := iter.iter.Item()
+	kp := iter.rootNode.rmKeyPrefix(item.Key())
+	if kp.Equals(iter.rootKeypath) {
+		item := iter.iter.Item()
+		iter.setNode(item)
+		iter.rootItem = item
+		iter.done = false
+
+	} else if iter.iter.ValidForPrefix(iter.scanPrefix) {
+		iter.setNode(item)
+		iter.done = false
+
+	} else {
+		iter.rootItem = nil
+		iter.done = true
+	}
 }
 
 func (iter *dbDepthFirstIterator) Close() {
