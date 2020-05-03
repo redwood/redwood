@@ -29,9 +29,18 @@ type Tx struct {
 	Recipients []types.Address `json:"recipients,omitempty"`
 	Checkpoint bool            `json:"checkpoint"` // @@TODO: probably not ideal
 
-	Valid bool       `json:"valid"`
-	hash  types.Hash `json:"-"`
+	Status TxStatus   `json:"status"`
+	hash   types.Hash `json:"-"`
 }
+
+type TxStatus string
+
+const (
+	TxStatusUnknown   TxStatus = ""
+	TxStatusInMempool TxStatus = "in mempool"
+	TxStatusInvalid   TxStatus = "invalid"
+	TxStatusValid     TxStatus = "valid"
+)
 
 func (tx Tx) Hash() types.Hash {
 	if tx.hash == types.EmptyHash {
@@ -97,7 +106,7 @@ func (tx *Tx) Copy() *Tx {
 		Patches:    patches,
 		Recipients: recipients,
 		Checkpoint: tx.Checkpoint,
-		Valid:      tx.Valid,
+		Status:     tx.Status,
 		hash:       tx.hash,
 	}
 }

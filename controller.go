@@ -3,7 +3,6 @@ package redwood
 import (
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/pkg/errors"
 
@@ -37,7 +36,6 @@ type controller struct {
 
 	address  types.Address
 	stateURI string
-	mu       sync.RWMutex
 
 	txStore TxStore
 
@@ -67,7 +65,6 @@ func NewController(address types.Address, stateURI string, stateDBRootPath strin
 		Context:       &ctx.Context{},
 		address:       address,
 		stateURI:      stateURI,
-		mu:            sync.RWMutex{},
 		txStore:       txStore,
 		behaviorTree:  newBehaviorTree(),
 		states:        states,
@@ -103,6 +100,10 @@ func (c *controller) Start() error {
 			if err != nil {
 				c.Errorf("error closing state db: %v", err)
 			}
+			err = c.indices.Close()
+			if err != nil {
+				c.Errorf("error closing index db: %v", err)
+			}
 		},
 	)
 }
@@ -128,9 +129,6 @@ func (c *controller) SetBehaviorTree(tree *behaviorTree) {
 }
 
 func (c *controller) AddTx(tx *Tx) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	// Ignore duplicates
 	exists, err := c.txStore.TxExists(c.stateURI, tx.ID)
 	if err != nil {
@@ -143,7 +141,7 @@ func (c *controller) AddTx(tx *Tx) error {
 	c.Infof(0, "new tx %v (%v)", tx.ID.Pretty(), tx.Hash().String())
 
 	// Store the tx (so we can ignore txs we've seen before)
-	tx.Valid = false
+	tx.Status = TxStatusInMempool
 	err = c.txStore.AddTx(tx)
 	if err != nil {
 		return err
@@ -155,6 +153,48 @@ func (c *controller) AddTx(tx *Tx) error {
 
 func (c *controller) Mempool() map[types.Hash]*Tx {
 	return c.mempool.Get()
+}
+
+var (
+	ErrNoParentYet         = errors.New("no parent yet")
+	ErrPendingParent       = errors.New("parent pending validation")
+	ErrInvalidParent       = errors.New("invalid parent")
+	ErrInvalidSignature    = errors.New("invalid signature")
+	ErrInvalidTx           = errors.New("invalid tx")
+	ErrTxMissingParents    = errors.New("tx must have parents")
+	ErrMissingCriticalRefs = errors.New("missing critical refs")
+)
+
+func (c *controller) validateTxIntrinsics(tx *Tx) (err error) {
+	defer annotate(&err, "stateURI=%v tx=%v", tx.URL, tx.ID.Pretty())
+
+	if len(tx.Parents) == 0 && tx.ID != GenesisTxID {
+		return ErrTxMissingParents
+	}
+
+	for _, parentID := range tx.Parents {
+		parentTx, err := c.txStore.FetchTx(c.stateURI, parentID)
+		if errors.Cause(err) == types.Err404 {
+			return errors.Wrapf(ErrNoParentYet, "parent=%v", parentID.Pretty())
+		} else if err != nil {
+			return errors.Wrapf(err, "parent=%v", parentID.Pretty())
+		} else if parentTx.Status == TxStatusInvalid {
+			return errors.Wrapf(ErrInvalidParent, "parent=%v", parentID.Pretty())
+		} else if parentTx.Status == TxStatusInMempool {
+			return errors.Wrapf(ErrPendingParent, "parent=%v", parentID.Pretty())
+		}
+	}
+
+	sigPubKey, err := RecoverSigningPubkey(tx.Hash(), tx.Sig)
+	if err != nil {
+		return errors.Wrap(ErrInvalidSignature, err.Error())
+	} else if sigPubKey.VerifySignature(tx.Hash(), tx.Sig) == false {
+		return ErrInvalidSignature
+	} else if sigPubKey.Address() != tx.From {
+		return errors.Wrapf(ErrInvalidSignature, "address doesn't match (expected=%v received=%v)", tx.From.Hex(), sigPubKey.Address().Hex())
+	}
+
+	return nil
 }
 
 func (c *controller) processMempoolTx(tx *Tx) error {
@@ -194,7 +234,13 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 			txCopy.Patches = patchesTrimmed
 			err := c.behaviorTree.validators[string(validatorKeypath)].ValidateTx(state.NodeAt(validatorKeypath, nil), &txCopy)
 			if err != nil {
-				return err
+				// Mark the tx invalid and save it to the DB
+				tx.Status = TxStatusInvalid
+				err = c.txStore.AddTx(tx)
+				if err != nil {
+					return err
+				}
+				return errors.Wrap(ErrInvalidTx, err.Error())
 			}
 
 			patches = unprocessedPatches
@@ -245,7 +291,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 
 			err = c.behaviorTree.resolvers[string(resolverKeypath)].ResolveState(stateToResolve, tx.From, tx.ID, tx.Parents, patchesTrimmed)
 			if err != nil {
-				return err
+				return errors.Wrap(ErrInvalidTx, err.Error())
 			}
 
 			if resolverConfig != nil {
@@ -291,48 +337,11 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 	c.leaves[tx.ID] = struct{}{}
 
 	// Mark the tx valid and save it to the DB
-	tx.Valid = true
+	tx.Status = TxStatusValid
 	err = c.txStore.AddTx(tx)
 	if err != nil {
 		return err
 	}
-	return nil
-}
-
-var (
-	ErrNoParentYet         = errors.New("no parent yet")
-	ErrMissingCriticalRefs = errors.New("missing critical refs")
-	ErrInvalidSignature    = errors.New("invalid signature")
-	ErrTxMissingParents    = errors.New("tx must have parents")
-)
-
-func (c *controller) validateTxIntrinsics(tx *Tx) error {
-	if len(tx.Parents) == 0 && tx.ID != GenesisTxID {
-		return ErrTxMissingParents
-	}
-
-	for _, parentID := range tx.Parents {
-		parentTx, err := c.txStore.FetchTx(c.stateURI, parentID)
-		if errors.Cause(err) == types.Err404 {
-			return errors.Wrapf(ErrNoParentYet, "parent tx not found: (%v) %v", tx.URL, parentID.Pretty())
-		} else if err != nil {
-			return err
-		} else if !parentTx.Valid && parentID != GenesisTxID {
-			return errors.Wrapf(ErrNoParentYet, "parent tx not valid: %v", parentID.Pretty())
-		}
-	}
-
-	if tx.ID != GenesisTxID {
-		sigPubKey, err := RecoverSigningPubkey(tx.Hash(), tx.Sig)
-		if err != nil {
-			return errors.Wrap(ErrInvalidSignature, err.Error())
-		} else if sigPubKey.VerifySignature(tx.Hash(), tx.Sig) == false {
-			return errors.Wrapf(ErrInvalidSignature, "cannot be verified")
-		} else if sigPubKey.Address() != tx.From {
-			return errors.Wrapf(ErrInvalidSignature, "address doesn't match (%v expected, %v received)", tx.From.Hex(), sigPubKey.Address().Hex())
-		}
-	}
-
 	return nil
 }
 
