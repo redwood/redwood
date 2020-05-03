@@ -101,12 +101,18 @@ func (m *mempool) processMempool(txs map[types.Hash]*Tx) {
 
 		for _, tx := range txs {
 			err := m.processCallback(tx)
-			if errors.Cause(err) == ErrNoParentYet || errors.Cause(err) == ErrMissingCriticalRefs {
+			if errors.Cause(err) == ErrNoParentYet || errors.Cause(err) == ErrMissingCriticalRefs || errors.Cause(err) == ErrInvalidParent || errors.Cause(err) == ErrPendingParent {
 				m.Infof(0, "readding to mempool %v (%v)", tx.ID.Pretty(), err)
 				newMempool[tx.Hash()] = tx
-			} else if err != nil {
+
+			} else if errors.Cause(err) == ErrInvalidTx {
 				m.Errorf("invalid tx %v: %+v: %v", tx.ID.Pretty(), err, PrettyJSON(tx))
 				delete(txs, tx.Hash())
+
+			} else if err != nil {
+				m.Errorf("error processing tx %v: %+v: %v", tx.ID.Pretty(), err, PrettyJSON(tx))
+				delete(txs, tx.Hash())
+
 			} else {
 				anySucceeded = true
 				m.Successf("tx added to chain (%v) %v", tx.URL, tx.ID.Pretty())

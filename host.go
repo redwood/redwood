@@ -164,6 +164,8 @@ func (h *host) OnTxReceived(tx Tx, peer Peer) {
 	have, err := h.Metacontroller.HaveTx(tx.URL, tx.ID)
 	if err != nil {
 		h.Errorf("error fetching tx %v from store: %v", tx.ID.Pretty(), err)
+		// @@TODO: does it make sense to return here?
+		return
 	}
 
 	if !have {
@@ -661,12 +663,12 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 
 				var peerWg sync.WaitGroup
 				for peer := range ch {
-					h.Warnf("rebroadcasting %v to %v", tx.ID.Pretty(), (map[string]struct{})(peer.ReachableAt()))
+					h.Debugf("rebroadcasting %v to %v", tx.ID.Pretty(), (map[string]struct{})(peer.ReachableAt()))
 					if h.txSeenByPeer(peer, tx.ID) {
 						h.Errorf("tx already seen by peer %v %v", peer.Transport().Name(), peer.Address())
 						continue
 					}
-					h.Errorf("tx %v NOT already seen by peer: %v %v %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address(), PrettyJSON(peer.ReachableAt()))
+					h.Debugf("tx %v NOT already seen by peer: %v %v %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address(), PrettyJSON(peer.ReachableAt()))
 
 					peerWg.Add(1)
 					peer := peer
