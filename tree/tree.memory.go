@@ -861,6 +861,15 @@ func (iter *memoryDepthFirstIterator) Close() {
 	iter.done = true
 }
 
+func (n *MemoryNode) UnmarshalJSON(bs []byte) error {
+	var val interface{}
+	err := json.Unmarshal(bs, &val)
+	if err != nil {
+		return err
+	}
+	return n.Set(nil, nil, val)
+}
+
 func (n *MemoryNode) MarshalJSON() ([]byte, error) {
 	v, _, err := n.Value(nil, nil)
 	if err != nil {
