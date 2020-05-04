@@ -1165,7 +1165,7 @@ func (n *DBNode) DepthFirstIterator(keypath Keypath, prefetchValues bool, prefet
 }
 
 type Indexer interface {
-	IndexKeyForNode(node Node) (Keypath, error)
+	IndexNode(relKeypath Keypath, state Node) (Keypath, Node, error)
 }
 
 func prettyJSON(x interface{}) string {
@@ -1195,10 +1195,10 @@ func (t *DBTree) BuildIndex(version *types.ID, keypath Keypath, node Node, index
 		childNode := iter.Node()
 		relKeypath := childNode.Keypath().RelativeTo(node.Keypath())
 
-		indexKey, err := indexer.IndexKeyForNode(childNode)
+		indexKey, indexNode, err := indexer.IndexNode(relKeypath, childNode)
 		if err != nil {
 			return err
-		} else if indexKey == nil {
+		} else if indexKey == nil || indexNode == nil {
 			continue
 		}
 
@@ -1219,7 +1219,7 @@ func (t *DBTree) BuildIndex(version *types.ID, keypath Keypath, node Node, index
 			relKeypath = rest.Unshift(indexKey)
 		}
 
-		err = index.Set(relKeypath, nil, childNode)
+		err = index.Set(relKeypath, nil, indexNode)
 		if err != nil {
 			t.Error(err)
 			return err

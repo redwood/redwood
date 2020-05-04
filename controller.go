@@ -350,7 +350,7 @@ func (c *controller) HaveTx(txID types.ID) (bool, error) {
 }
 
 func (c *controller) QueryIndex(version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (node tree.Node, err error) {
-	defer withStack(&err)
+	defer annotate(&err, "keypath=%v index=%v index_arg=%v rng=%v", keypath, indexName, queryParam, rng)
 
 	indexNode := c.indices.IndexAtVersion(version, keypath, indexName, false)
 

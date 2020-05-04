@@ -559,7 +559,14 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 	if indexName != "" {
 		// Index query
-		state, err = t.controller.QueryIndex(stateURI, version, keypath, tree.Keypath(indexName), tree.Keypath(indexArg), rng)
+
+		// You can specify an index_arg of * in order to fetch the entire index
+		var indexArgKeypath tree.Keypath
+		if indexArg != "*" {
+			indexArgKeypath = tree.Keypath(indexArg)
+		}
+
+		state, err = t.controller.QueryIndex(stateURI, version, keypath, tree.Keypath(indexName), indexArgKeypath, rng)
 		if errors.Cause(err) == types.Err404 {
 			http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
 			return
