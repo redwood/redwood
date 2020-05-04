@@ -258,7 +258,7 @@ func (n *MemoryNode) Exists(keypath Keypath) (bool, error) {
 
 	absKeypath := n.keypath.Push(keypath)
 
-	_, exists := n.values[string(absKeypath)]
+	_, exists := n.nodeTypes[string(absKeypath)]
 	return exists, nil
 }
 
