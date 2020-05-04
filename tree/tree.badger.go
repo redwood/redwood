@@ -722,7 +722,7 @@ func (tx *DBNode) setNode(keypath Keypath, node Node) error {
 	defer iter.Close()
 
 	prefixedKeypath := tx.addKeyPrefix(tx.rootKeypath.Push(keypath))
-	for ; iter.Node() != nil; iter.Next() {
+	for iter.Rewind(); iter.Valid(); iter.Next() {
 		child := iter.Node()
 
 		var encoded []byte
@@ -749,6 +749,9 @@ func (tx *DBNode) setNode(keypath Keypath, node Node) error {
 				}
 			}
 			encoded, err = encodeNode(nodeType, valueType, length, val)
+			if err != nil {
+				return err
+			}
 		}
 
 		relKeypath := child.Keypath().RelativeTo(node.Keypath())
