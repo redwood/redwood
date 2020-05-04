@@ -37,7 +37,7 @@ func NewJSIndexer(config tree.Node) (Indexer, error) {
 
 	ctx, _ := v8go.NewContext(nil)
 
-	_, err = ctx.RunScript("var global = {}; var indexKey; "+string(srcStr), "")
+	_, err = ctx.RunScript("var global = {}; var result; "+string(srcStr), "")
 	if err != nil {
 		return nil, err
 	}
@@ -46,43 +46,54 @@ func NewJSIndexer(config tree.Node) (Indexer, error) {
 	return &jsIndexer{vm: ctx}, nil
 }
 
-func (i *jsIndexer) IndexKeyForNode(node tree.Node) (_ tree.Keypath, err error) {
+func (i *jsIndexer) IndexNode(relKeypath tree.Keypath, node tree.Node) (_ tree.Keypath, _ tree.Node, err error) {
 	defer withStack(&err)
 
 	exists, err := node.Exists(nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	} else if !exists {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	nodeJSON, err := json.Marshal(node)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	script := "indexKey = global.indexKeyForNode(" + string(nodeJSON) + ")"
+	script := `result = JSON.stringify(global.indexNode("` + relKeypath.String() + `", ` + string(nodeJSON) + `))`
 	_, err = i.vm.RunScript(script, "")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	indexKeyVal, err := i.vm.RunScript("indexKey", "")
+	resultVal, err := i.vm.RunScript("result", "")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// The indexer can return undefined or null to indicate that this keypath shouldn't be indexed
-	switch indexKeyVal.String() {
+	switch resultVal.String() {
 	case "undefined", "null":
-		return nil, nil
+		return nil, nil, nil
 	}
 
-	var output string
-	err = json.Unmarshal([]byte(indexKeyVal.String()), &output)
+	var output [2]interface{}
+	err = json.Unmarshal([]byte(resultVal.String()), &output)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return tree.Keypath(output), nil
+	indexKey, ok := output[0].(string)
+	if !ok {
+		return nil, nil, errors.New("index key must be a string")
+	}
+
+	nodeToIndex := tree.NewMemoryNode()
+	err = nodeToIndex.Set(nil, nil, output[1])
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return tree.Keypath(indexKey), nodeToIndex, nil
 }

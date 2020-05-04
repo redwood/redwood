@@ -18,7 +18,7 @@ type Validator interface {
 }
 
 type Indexer interface {
-	IndexKeyForNode(state tree.Node) (tree.Keypath, error)
+	IndexNode(relKeypath tree.Keypath, state tree.Node) (tree.Keypath, tree.Node, error)
 }
 
 type ResolverConstructor func(config tree.Node, internalState map[string]interface{}) (Resolver, error)
