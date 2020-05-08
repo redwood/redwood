@@ -16,14 +16,14 @@ $ go run main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232>
-- <https://localhost:21242>
+- <https://localhost:21232/demo>
+- <https://localhost:21242/demo>
 
-Now, let's clone the demo repo:
+Now, let's clone the demo repo.  Notice in the command below that the address of the local node is specified before the `@` character, and the State-URI is specified after.  If the Redwood node you were cloning from were actually hosted at `somegitprovider.org/gitdemo` rather than our small local environment, this portion of the URL could be omitted.
 
 ```sh
-$ git clone redwood://localhost:21231/git /tmp/redwood-git
-$ cd /tmp/redwood-git
+$ cd /tmp
+$ git clone redwood://localhost:21231@somegitprovider.org/gitdemo
 ```
 
 You'll notice that the file tree is identical to the one shown in your browser.  Also, notice that you can navigate to these files directly in the web browser -- the contents of the Git repo are served directly by Redwood (there are ways to handle staging/dev setups, but they're not covered by the demo).

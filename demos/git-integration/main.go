@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"time"
 
@@ -14,7 +12,6 @@ import (
 	"github.com/brynbellomy/redwood/ctx"
 	"github.com/brynbellomy/redwood/demos/demoutils"
 	"github.com/brynbellomy/redwood/types"
-	// "github.com/brynbellomy/redwood/remotestore"
 )
 
 type app struct {
@@ -22,10 +19,6 @@ type app struct {
 }
 
 func main() {
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
-
 	flagset := flag.NewFlagSet("", flag.ContinueOnError)
 	klog.InitFlags(flagset)
 	flagset.Set("logtostderr", "true")
@@ -36,8 +29,8 @@ func main() {
 	})
 
 	// Make two Go hosts that will communicate with one another over libp2p
-	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "localhost:21231/gitdemo", "cookiesecret1", "server1.crt", "server1.key")
-	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "localhost:21231/gitdemo", "cookiesecret2", "server2.crt", "server2.key")
+	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "somegitprovider.org/gitdemo", "cookiesecret1", "server1.crt", "server1.key")
+	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "somegitprovider.org/gitdemo", "cookiesecret2", "server2.crt", "server2.key")
 
 	err := host1.Start()
 	if err != nil {
@@ -58,47 +51,23 @@ func main() {
 		nil,
 	)
 
-	// Connect the two peers
+	// Connect the two peers using libp2p
 	libp2pTransport := host1.Transport("libp2p").(interface{ Libp2pPeerID() string })
 	host2.AddPeer(host2.Ctx(), "libp2p", rw.NewStringSet([]string{"/ip4/0.0.0.0/tcp/21231/p2p/" + libp2pTransport.Libp2pPeerID()}))
-	//err = host2.AddPeer(host2.Ctx(), "http", "https://localhost:21232")
-	//if err != nil {
-	//    panic(err)
-	//}
-	//err = host1.AddPeer(host1.Ctx(), "http", "https://localhost:21242")
-	//if err != nil {
-	//    panic(err)
-	//}
 
 	time.Sleep(2 * time.Second)
 
 	// Both consumers subscribe to the URL
 	ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
 	go func() {
-		anySucceeded, _ := host2.Subscribe(ctx, "localhost:21231/gitdemo")
-		if !anySucceeded {
-			panic("host2 could not subscribe")
-		}
-		anySucceeded, _ = host2.Subscribe(ctx, "localhost:21231/git")
-		if !anySucceeded {
-			panic("host2 could not subscribe")
-		}
-		anySucceeded, _ = host2.Subscribe(ctx, "localhost:21231/git-reflog")
+		anySucceeded, _ := host2.Subscribe(ctx, "somegitprovider.org/gitdemo")
 		if !anySucceeded {
 			panic("host2 could not subscribe")
 		}
 	}()
 
 	go func() {
-		anySucceeded, _ := host1.Subscribe(ctx, "localhost:21231/gitdemo")
-		if !anySucceeded {
-			panic("host1 could not subscribe")
-		}
-		anySucceeded, _ = host1.Subscribe(ctx, "localhost:21231/git")
-		if !anySucceeded {
-			panic("host1 could not subscribe")
-		}
-		anySucceeded, _ = host1.Subscribe(ctx, "localhost:21231/git-reflog")
+		anySucceeded, _ := host1.Subscribe(ctx, "somegitprovider.org/gitdemo")
 		if !anySucceeded {
 			panic("host1 could not subscribe")
 		}
@@ -164,8 +133,8 @@ func sendTxs(host1, host2 rw.Host) {
 	// If you alter the contents of the ./repo subdirectory, you'll need to determine the
 	// git commit hash of the first commit again, and then tweak these variables.  Otherwise,
 	// you'll get a "bad object" error from git.
-	commit1Hash := "e7098ece1ce234fac2c8c4f5ffdf049d5266f9f2"
-	commit1Timestamp := "2020-05-01T19:00:45-05:00"
+	commit1Hash := "09c69f61e0e5c433e8b7c8be2124aeb1e558f13f"
+	commit1Timestamp := "2020-05-07T17:01:31-05:00"
 
 	commit1RepoTxID, err := types.IDFromHex(commit1Hash)
 	if err != nil {
@@ -173,17 +142,27 @@ func sendTxs(host1, host2 rw.Host) {
 	}
 
 	//
-	// Setup our git repo's 3 backing channels using 3 transactions.
+	// Setup our git repo's state tree.
 	//
 	var (
-		// The "gitdemo" channel simply contains an index.html page for viewing the current state of the repo.
+		// The "gitdemo" channel contains:
+		//   - A link to the current worktree so that we can browse it like a regular website.
+		//   - All of the commit data that Git expects.  The files are stored under a "files" key,
+		//         and other important metadata are stored under the other keys.
+		//   - A mapping of refs (usually, branches) to commit hashes.
+		//   - A permissions validator that allows anyone to write to the repo but tries to keep
+		//         people from writing to the wrong keys.
 		genesisDemo = rw.Tx{
 			ID:      rw.GenesisTxID,
 			Parents: []types.ID{},
 			From:    host1.Address(),
-			URL:     "localhost:21231/gitdemo",
+			URL:     "somegitprovider.org/gitdemo",
 			Patches: []rw.Patch{
 				mustParsePatch(` = {
+                    "demo": {
+                        "Content-Type": "link",
+                        "value": "state:somegitprovider.org/gitdemo/refs/heads/master/worktree"
+                    },
 					"Merge-Type": {
 						"Content-Type": "resolver/dumb",
 						"value": {}
@@ -195,86 +174,36 @@ func sendTxs(host1, host2 rw.Host) {
 								"^.*$": {
 									"write": true
 								}
-							}
+							},
+                            "*": {
+                                "^\\.refs\\..*": {
+                                    "write": true
+                                },
+                                "^\\.commits\\.[a-f0-9]+\\.parents\\..*": {
+                                    "write": true
+                                },
+                                "^\\.commits\\.[a-f0-9]+\\.message\\..*": {
+                                    "write": true
+                                },
+                                "^\\.commits\\.[a-f0-9]+\\.timestamp\\..*": {
+                                    "write": true
+                                },
+                                "^\\.commits\\.[a-f0-9]+\\.author\\..*": {
+                                    "write": true
+                                },
+                                "^\\.commits\\.[a-f0-9]+\\.committer\\..*": {
+                                    "write": true
+                                },
+                                "^\\.commits\\.[a-f0-9]+\\.files\\..*": {
+                                    "write": true
+                                }
+                            }
 						}
 					},
-					"providers": [
-						"localhost:21231",
-						"localhost:21241"
-					],
-					"index.html": {
-						"Content-Type": "link",
-						"value": "state:localhost:21231/git/files/index.html"
-					}
-				}`),
-			},
-		}
-
-		// The "git" channel stores the file tree for each commit.  The files are stored under a "files" key,
-		// and other important metadata are stored under the other keys.  The permissions validator allows
-		// any user to write to these keys, but you'll want to set up your own repo to be more restrictive.
-		genesisRepo = rw.Tx{
-			ID:      rw.GenesisTxID,
-			Parents: []types.ID{},
-			From:    host1.Address(),
-			URL:     "localhost:21231/git",
-			Patches: []rw.Patch{
-				mustParsePatch(` = {
-					"Validator": {
-						"Content-Type": "validator/permissions",
-						"value": {
-							"96216849c49358b10257cb55b28ea603c874b05e": {
-								"^.*$": {
-									"write": true
-								}
-							},
-							"*": {
-								"^\\.message.*": {
-									"write": true
-								},
-								"^\\.timestamp.*": {
-									"write": true
-								},
-								"^\\.author.*": {
-									"write": true
-								},
-								"^\\.committer.*": {
-									"write": true
-								},
-								"^\\.files.*": {
-									"write": true
-								}
-							}
-						}
-					}
-				}`),
-			},
-		}
-
-		// The "git-reflog" channel contains a single "refs" key which stores the current commit
-		// for each ref (i.e. each branch or tag).
-		genesisReflog = rw.Tx{
-			ID:      rw.GenesisTxID,
-			Parents: []types.ID{},
-			From:    host1.Address(),
-			URL:     "localhost:21231/git-reflog",
-			Patches: []rw.Patch{
-				mustParsePatch(` = {
-					"Validator": {
-						"Content-Type": "validator/permissions",
-						"value": {
-							"96216849c49358b10257cb55b28ea603c874b05e": {
-								"^.*$": {
-									"write": true
-								}
-							},
-							"*": {
-								"^\\.refs.*": {
-									"write": true
-								}
-							}
-						}
-					}
+                    "refs": {
+                        "heads": {}
+                    },
+                    "commits": {}
 				}`),
 			},
 		}
@@ -284,24 +213,24 @@ func sendTxs(host1, host2 rw.Host) {
 		// cloned using the command "git clone redwood://localhost:21231/git"
 		commit1Repo = rw.Tx{
 			ID:         commit1RepoTxID,
-			Parents:    []types.ID{genesisRepo.ID},
+			Parents:    []types.ID{genesisDemo.ID},
 			From:       host1.Address(),
-			URL:        "localhost:21231/git",
+			URL:        "somegitprovider.org/gitdemo",
 			Checkpoint: true,
 			Patches: []rw.Patch{
-				mustParsePatch(`.message = "First commit\n"`),
-				mustParsePatch(`.timestamp = "` + commit1Timestamp + `"`),
-				mustParsePatch(`.author = {
+				mustParsePatch(`.commits.` + commit1Hash + `.message = "First commit\n"`),
+				mustParsePatch(`.commits.` + commit1Hash + `.timestamp = "` + commit1Timestamp + `"`),
+				mustParsePatch(`.commits.` + commit1Hash + `.author = {
 					"email": "bryn.bellomy@gmail.com",
 					"name": "Bryn Bellomy",
 					"timestamp": "` + commit1Timestamp + `"
 				}`),
-				mustParsePatch(`.committer = {
+				mustParsePatch(`.commits.` + commit1Hash + `.committer = {
 					"email": "bryn.bellomy@gmail.com",
 					"name": "Bryn Bellomy",
 					"timestamp": "` + commit1Timestamp + `"
 				}`),
-				mustParsePatch(`.files = {
+				mustParsePatch(`.commits.` + commit1Hash + `.files = {
 					"README.md": {
 						"Content-Type": "link",
 						"mode": 33188,
@@ -323,30 +252,17 @@ func sendTxs(host1, host2 rw.Host) {
 						"value": "ref:` + scriptJSHash.Hex() + `"
 					}
 				}`),
-			},
-		}
-
-		commit1Reflog = rw.Tx{
-			ID:         types.RandomID(),
-			Parents:    []types.ID{genesisReflog.ID},
-			From:       host1.Address(),
-			URL:        "localhost:21231/git-reflog",
-			Checkpoint: true,
-			Patches: []rw.Patch{
-				mustParsePatch(`.refs = {
-					"heads": {
-						"master": "` + commit1Hash + `"
-					}
-				}`),
+				mustParsePatch(`.refs.heads.master.HEAD = "` + commit1Hash + `"`),
+				mustParsePatch(`.refs.heads.master.worktree = {
+                    "Content-Type": "link",
+                    "value": "state:somegitprovider.org/gitdemo/commits/` + commit1Hash + `/files"
+                }`),
 			},
 		}
 	)
 
 	sendTx(genesisDemo)
-	sendTx(genesisRepo)
-	sendTx(genesisReflog)
 	sendTx(commit1Repo)
-	sendTx(commit1Reflog)
 }
 
 func mustParsePatch(s string) rw.Patch {

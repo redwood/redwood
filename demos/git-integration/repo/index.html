@@ -50,7 +50,7 @@
             <div id="script-output"></div>
             <br/>
             <strong>redwood.jpg</strong><br/>
-            <img src="/files/redwood.jpg?state_uri=localhost:21231/git" />
+            <img src="redwood.jpg?state_uri=somegitprovider.org/gitdemo" />
             <br/>
             <strong>README.md</strong><br/>
             <textarea id="readme" readonly></textarea>
@@ -61,14 +61,7 @@
             <button id='btn-view-debug-network'>Network</button>
             <div id='tab-state'>
                 <code>
-                    <h2>channel: git</h2>
-                    <pre id='debug-state-git'>
-                    </pre>
-                    <h2>channel: git-reflog</h2>
-                    <pre id='debug-state-reflog'>
-                    </pre>
-                    <h2>channel: gitdemo</h2>
-                    <pre id='debug-state-demo'>
+                    <pre id='debug-state'>
                     </pre>
                 </code>
             </div>
@@ -87,7 +80,7 @@
         </div>
     </div>
     <div id="scriptjs-wrapper">
-        <script id="scriptjs" src="/files/script.js?state_uri=localhost:21231/git"></script>
+        <script id="scriptjs" src="/demo/script.js?state_uri=somegitprovider.org/gitdemo"></script>
     </div>
 </body>
 
@@ -99,29 +92,17 @@
     //
     var identity = Braid.identity.random()
 
-    var currentState = { git: null, reflog: null, demo: null }
-    var mostRecentTxID = { git: null, reflog: null, demo: null }
-    var txs = { git: [], reflog: [], demo: [] }
-    var queueDemo = Braid.utils.createTxQueue(
-        (from, vid, parents, patches) => Braid.dumb.resolve_state(currentState.demo, from, vid, parents, patches),
+    var currentState = {}
+    var mostRecentTxID = null
+    var txs = []
+    var queue = Braid.utils.createTxQueue(
+        (from, vid, parents, patches) => Braid.dumb.resolve_state(currentState, from, vid, parents, patches),
         async (tx, newState) => {
-            mostRecentTxID.demo = tx.id
+            mostRecentTxID = tx.id
 
             // Update the debug state UI
-            currentState.demo = newState
-            txs.demo.push(tx)
-            refreshDebugUI()
-        }
-    )
-
-    var queueGit = Braid.utils.createTxQueue(
-        (from, vid, parents, patches) => Braid.dumb.resolve_state(currentState.git, from, vid, parents, patches),
-        async (tx, newState) => {
-            mostRecentTxID.git = tx.id
-
-            // Update the debug state UI
-            currentState.git = newState
-            txs.git.push(tx)
+            currentState = newState
+            txs.push(tx)
             refreshDebugUI()
 
             // Update the files UI
@@ -133,21 +114,9 @@
         }
     )
 
-    var queueGitReflog = Braid.utils.createTxQueue(
-        (from, vid, parents, patches) => Braid.dumb.resolve_state(currentState.reflog, from, vid, parents, patches),
-        async (tx, newState) => {
-            mostRecentTxID.reflog = tx.id
-
-            // Update the debug state UI
-            currentState.reflog = newState
-            txs.reflog.push(tx)
-            refreshDebugUI()
-        }
-    )
-
     var braidClient = Braid.createPeer({
         identity: identity,
-        httpHost: '',
+        httpHost: 'http://localhost:21232',
         webrtc: true,
         onFoundPeersCallback: (peers) => {
             knownPeers = peers
@@ -156,9 +125,7 @@
     })
 
     braidClient.authorize().then(() => {
-        braidClient.subscribe('localhost:21231/gitdemo', '/', [ Braid.utils.genesisTxID ], queueDemo.defaultTxHandler)
-        braidClient.subscribe('localhost:21231/git',     '/', [ Braid.utils.genesisTxID ], queueGit.defaultTxHandler)
-        braidClient.subscribe('localhost:21231/git-reflog',     '/', [ Braid.utils.genesisTxID ], queueGitReflog.defaultTxHandler)
+        braidClient.subscribe('somegitprovider.org/gitdemo', '/', [ Braid.utils.genesisTxID ], queue.defaultTxHandler)
     })
 
     //
@@ -179,26 +146,31 @@
     var imageElem = document.querySelector('img')
     async function refreshFilesUI() {
         // Reload README.md and redwood.jpg
-        readmeElem.innerHTML = await (await fetch('/files/README.md?state_uri=localhost:21231/git&' + new Date().getTime())).text()
-        imageElem.src = '/files/redwood.jpg?state_uri=localhost:21231/git&' + new Date().getTime() // force a refresh of the image
+        readmeElem.innerHTML = await (await fetch('/demo/README.md?state_uri=somegitprovider.org/gitdemo&' + new Date().getTime())).text()
+        imageElem.src = '/demo/redwood.jpg?state_uri=somegitprovider.org/gitdemo&' + new Date().getTime() // force a refresh of the image
 
         // Reload script.js
         scriptWrapperElem.removeChild(document.querySelector('#scriptjs'))
         var newScript = document.createElement('script')
         newScript.id = 'scriptjs'
         newScript.type = 'text/javascript'
-        newScript.src = '/files/script.js?state_uri=localhost:21231/git&' + new Date().getTime()
+        newScript.src = '/demo/script.js?state_uri=somegitprovider.org/gitdemo&' + new Date().getTime()
         scriptWrapperElem.appendChild(newScript)
 
         // Reload the files view
         let newHTML = '<strong>Git repo:</strong><br/>'
-        renderDir(currentState.git.files, [], 1)
+        try {
+            var commit = currentState.refs.heads.master.HEAD
+            var files = currentState.commits[commit].files
+            renderDir(files || {}, [], 1)
+        } catch (err) {}
+
         filesElem.innerHTML = newHTML
 
         function renderDir(dir, keypath, currentIndent) {
             for (let filename of Object.keys(dir)) {
                 let pathParts = [].concat(['files'], keypath, [filename])
-                newHTML +=  `<div style="margin-left: ${currentIndent * 20}px">- <a href="/${pathParts.join('/')}?state_uri=localhost:21231/git">${filename}</a></div>`
+                newHTML +=  `<div style="margin-left: ${currentIndent * 20}px">- <a href="/demo/${pathParts.join('/')}?state_uri=somegitprovider.org/gitdemo">${filename}</a></div>`
                 if (!isFile(dir[filename])) {
                     renderDir(dir[filename], [].concat(keypath, [filename]), currentIndent + 1)
                 }
@@ -218,18 +190,14 @@
     var debugTabButtonState = document.getElementById('btn-view-debug-state')
     var debugTabButtonTxs = document.getElementById('btn-view-debug-txs')
     var debugTabButtonNetwork = document.getElementById('btn-view-debug-network')
-    var debugStateElemGit = document.getElementById('debug-state-git')
-    var debugStateElemReflog = document.getElementById('debug-state-reflog')
-    var debugStateElemDemo = document.getElementById('debug-state-demo')
+    var debugStateElem = document.getElementById('debug-state')
     var debugTxsElem = document.getElementById('debug-txs')
     var debugNetworkElem = document.getElementById('debug-network')
     var debugStateTab = document.getElementById('tab-state')
     var debugTxsTab = document.getElementById('tab-txs')
     var debugNetworkTab = document.getElementById('tab-network')
     function refreshDebugUI() {
-        debugStateElemGit.innerHTML = JSON.stringify(currentState.git, null, 4)
-        debugStateElemReflog.innerHTML = JSON.stringify(currentState.reflog, null, 4)
-        debugStateElemDemo.innerHTML = JSON.stringify(currentState.demo, null, 4)
+        debugStateElem.innerHTML = JSON.stringify(currentState, null, 4)
         debugTxsElem.innerHTML = JSON.stringify(txs, null, 4)
         debugNetworkElem.innerHTML = JSON.stringify(knownPeers, null, 4)
     }
