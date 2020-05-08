@@ -5,12 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/brynbellomy/git2go"
-	"github.com/brynbellomy/klog"
 	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood"
@@ -43,24 +42,19 @@ var repo *git.Repository
 type M = map[string]interface{}
 
 func main() {
-	flagset := flag.NewFlagSet("", flag.ContinueOnError)
-	klog.InitFlags(flagset)
-	flagset.Set("logtostderr", "true")
-	flagset.Set("v", "2")
-	klog.SetFormatter(&klog.FmtConstWidth{
-		FileNameCharWidth: 24,
-		UseColor:          true,
-	})
-
 	var GIT_DIR = os.Getenv("GIT_DIR")
 
 	if GIT_DIR == "" {
 		die(errors.New("empty GIT_DIR"))
 	}
 
-	remoteURLParts := strings.Split(strings.Replace(os.Args[2], "redwood://", "", -1), "/")
-	StateURI = strings.Join(remoteURLParts[:2], "/")
-	RootKeypath = tree.Keypath(strings.Join(remoteURLParts[2:], string(tree.KeypathSeparator)))
+	re := regexp.MustCompile(`redwood://(?:([^@]*)@)?(.*)`)
+	matches := re.FindStringSubmatch(os.Args[2])
+	host := matches[1]
+	stateURIAndPath := strings.Split(matches[2], "/")
+
+	StateURI = strings.Join(stateURIAndPath[:2], "/")
+	RootKeypath = tree.Keypath(strings.Join(stateURIAndPath[2:], string(tree.KeypathSeparator)))
 
 	gitDir, err := filepath.Abs(filepath.Dir(GIT_DIR))
 	if err != nil {
@@ -72,8 +66,7 @@ func main() {
 		die(err)
 	}
 
-	// @@TODO: read node url from config
-	client, err := redwood.NewHTTPClient("http://localhost:21232", sigkeys, false)
+	client, err := redwood.NewHTTPClient("http://"+host, sigkeys, false)
 	if err != nil {
 		die(err)
 	}
@@ -82,7 +75,7 @@ func main() {
 	if err != nil {
 		die(err)
 	}
-	logf("authorized successfully")
+	logf("redwood: authorized with " + host)
 
 	err = speakGit(os.Stdin, os.Stdout, client)
 	if err != nil {
@@ -163,32 +156,55 @@ func speakGit(r io.Reader, w io.Writer, client redwood.HTTPClient) error {
 }
 
 func getRefs(client redwood.HTTPClient) ([]string, error) {
-	stateReader, _, _, err := client.Get(StateURI+"-reflog", nil, RootKeypath.Push(tree.Keypath("refs/heads")), nil, true)
+	stateReader, _, _, err := client.Get(StateURI, nil, RootKeypath.Push(tree.Keypath("refs/heads")), nil, true)
 	if err != nil {
 		return nil, err
 	}
 	defer stateReader.Close()
 
-	var heads map[string]interface{}
+	var heads map[string]map[string]interface{}
 	err = json.NewDecoder(stateReader).Decode(&heads)
 	if err != nil {
 		return nil, err
 	}
 
 	refsList := []string{}
-	for refName, commitHash := range heads {
-		commitHashStr, is := commitHash.(string)
+	for refName, refObject := range heads {
+		maybeCommitHash, exists := refObject["HEAD"]
+		if !exists {
+			logf("no commit for ref %v", refName)
+			continue
+		}
+		commitHash, is := maybeCommitHash.(string)
 		if !is {
 			logf("no commit for ref %v", refName)
 			continue
 		}
-		refsList = append(refsList, fmt.Sprintf("%s %s", commitHashStr, "refs/heads/"+refName))
+		refsList = append(refsList, fmt.Sprintf("%s %s", commitHash, "refs/heads/"+refName))
 	}
 	refsList = append(refsList, "@refs/heads/master HEAD")
 	return refsList, nil
 }
 
-func fetch(client redwood.HTTPClient, commitHash string) error {
+type Commit struct {
+	Hash      string    `json:"-"`
+	Parents   []string  `json:"parents"`
+	Message   string    `json:"message"`
+	Timestamp time.Time `json:"timestamp"`
+	Author    struct {
+		Name      string    `json:"name"`
+		Email     string    `json:"email"`
+		Timestamp time.Time `json:"timestamp"`
+	} `json:"author"`
+	Committer struct {
+		Name      string    `json:"name"`
+		Email     string    `json:"email"`
+		Timestamp time.Time `json:"timestamp"`
+	} `json:"committer"`
+	Files *tree.MemoryNode `json:"files"`
+}
+
+func fetch(client redwood.HTTPClient, headCommitHash string) error {
 	odb, err := repo.Odb()
 	if err != nil {
 		return errors.WithStack(err)
@@ -196,292 +212,209 @@ func fetch(client redwood.HTTPClient, commitHash string) error {
 
 	// Fetch just the ancestors of the requested commit
 	// @@TODO: exclude anything we already have
-	txID, err := types.IDFromHex(commitHash)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	txs := map[types.ID]*redwood.Tx{}
-	stack := []types.ID{txID}
-	branch := []types.ID{txID}
+	stack := []string{headCommitHash}
+	var commits []Commit
 	for len(stack) > 0 {
-		txID := stack[0]
+		commitHash := stack[0]
 		stack = stack[1:]
 
-		tx, err := client.FetchTx(StateURI, txID)
+		stateReader, _, _, err := client.Get(StateURI, nil, RootKeypath.Push(tree.Keypath("commits/"+commitHash)), nil, true)
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		defer stateReader.Close()
 
-		txs[txID] = tx
+		var commit Commit
+		commit.Files = tree.NewMemoryNode().(*tree.MemoryNode)
+		err = json.NewDecoder(stateReader).Decode(&commit)
+		if err != nil {
+			return err
+		}
+		commit.Hash = commitHash
 
-		for _, pid := range tx.Parents {
-			if pid == redwood.GenesisTxID {
-				continue
-			}
+		for _, pid := range commit.Parents {
 			stack = append(stack, pid)
-			branch = append(branch, pid)
+		}
+		commits = append(commits, commit)
+	}
+
+	refs := &sync.Map{}
+
+	// We have to fetch the commits in reverse, from oldest to newest,
+	// because writing each one to disk requires having its parents
+	for i := len(commits) - 1; i >= 0; i-- {
+		commit := commits[i]
+		err = fetchCommit(commit.Hash, commit, client, odb, refs)
+		if err != nil {
+			return err
 		}
 	}
 
-	var wg sync.WaitGroup
+	return nil
+}
+
+func fetchCommit(commitHash string, commit Commit, client redwood.HTTPClient, odb *git.Odb, refs *sync.Map) (err error) {
+	defer annotate(&err, "fetchCommit")
+
+	logf("commit: %v", commitHash)
+
+	idx, err := git.NewIndex()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	wg := &sync.WaitGroup{}
 	chErr := make(chan error)
 
-	dbRoot, err := ioutil.TempDir("", "")
-	if err != nil {
-		return err
-	}
+	err = walkLinks(commit.Files, func(linkType nelson.LinkType, linkStr string, filePath tree.Keypath) error {
+		wg.Add(1)
 
-	ctrl, err := redwood.NewController(types.Address{}, StateURI, dbRoot, redwood.NewMemoryTxStore(), fetch_onTxProcessed(&wg, chErr, client, odb))
-	if err != nil {
-		return err
-	}
-	err = ctrl.Start()
-	if err != nil {
-		return err
-	}
+		go func() {
+			defer wg.Done()
+			var err error
+			defer func() {
+				if err != nil {
+					chErr <- err
+				}
+			}()
 
-	wg.Add(len(branch))
-	for i := len(branch) - 1; i >= 0; i-- {
-		txID := branch[i]
-		ctrl.AddTx(txs[txID])
+			refObj, _, _, err := client.Get(StateURI, nil, tree.Keypath("commits/"+commitHash+"/files").Push(filePath).Push(tree.Keypath("value")), nil, true)
+			if err != nil {
+				err = errors.WithStack(err)
+				return
+			}
+			defer refObj.Close()
+
+			bs, err := ioutil.ReadAll(refObj)
+			if err != nil {
+				err = errors.WithStack(err)
+				return
+			}
+
+			type refEntry struct {
+				oid  git.Oid
+				size int64
+			}
+
+			refHashStr := string(bs[len("ref:"):])
+			refEntryInterface, alreadyExists := refs.LoadOrStore(refHashStr, &refEntry{git.Oid{}, 0})
+			if !alreadyExists {
+				absFileKeypath := tree.Keypath("commits/" + commitHash + "/files").Push(filePath)
+
+				ref, size, _, err := client.Get(StateURI, nil, absFileKeypath, nil, false)
+				if err != nil {
+					err = errors.WithStack(err)
+					return
+				}
+				defer ref.Close()
+				logf("ref:    %v %v", linkStr, filePath)
+
+				writeStream, err := odb.NewWriteStream(size, git.ObjectBlob)
+				if err != nil {
+					err = errors.WithStack(err)
+					return
+				}
+
+				_, err = io.Copy(writeStream, ref)
+				if err != nil {
+					err = errors.WithStack(err)
+					writeStream.Close()
+					return
+				}
+
+				err = writeStream.Close()
+				if err != nil {
+					err = errors.WithStack(err)
+					return
+				}
+
+				refEntry := &refEntry{writeStream.Id, size}
+				refs.Store(refHashStr, refEntry)
+				refEntryInterface = refEntry
+			}
+			entry := refEntryInterface.(*refEntry)
+			oid := entry.oid
+			size := entry.size
+
+			mode, ok, err := commit.Files.FloatValue(filePath.Push(tree.Keypath("mode")))
+			if err != nil {
+				err = errors.Wrap(err, "error fetching mode:")
+				return
+			} else if !ok {
+				err = errors.New("missing mode")
+				return
+			}
+
+			err = idx.Add(&git.IndexEntry{
+				Ctime: git.IndexTime{
+					Seconds: int32(time.Now().Unix()),
+				},
+				Mtime: git.IndexTime{
+					Seconds: int32(time.Now().Unix()),
+				},
+				Mode: git.Filemode(int(mode)),
+				Uid:  uint32(os.Getuid()),
+				Gid:  uint32(os.Getgid()),
+				Size: uint32(size),
+				Id:   &oid,
+				Path: string(filePath),
+			})
+			if err != nil {
+				err = errors.Wrap(err, "error adding files to index:")
+				return
+			}
+		}()
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	go func() {
 		defer close(chErr)
 		wg.Wait()
 	}()
-
 	for err := range chErr {
-		logf("error: %v", errors.WithStack(err))
+		return err
 	}
 
-	return nil
-}
-
-func fetch_onTxProcessed(wg *sync.WaitGroup, chErr chan error, client redwood.HTTPClient, odb *git.Odb) redwood.TxProcessedHandler {
-	var done bool
-	return func(_ redwood.Controller, tx *redwood.Tx, state *tree.DBNode) (err error) {
-		defer wg.Done()
-		if done {
-			return nil
-		}
-
-		defer func() {
-			if err != nil {
-				done = true
-				chErr <- err
-			}
-		}()
-
-		if tx.ID == redwood.GenesisTxID {
-			return nil
-		}
-
-		commitFiles, exists := getMap(state, RootKeypath.Push(tree.Keypath("files")))
-		if !exists {
-			err = errors.New("missing commit files")
-			return
-		}
-		commitTimestampStr, exists := getString(state, RootKeypath.Push(tree.Keypath("timestamp")))
-		if !exists {
-			err = errors.New("missing commit timestamp")
-			return
-		}
-		var commitTimestamp time.Time
-		err = commitTimestamp.UnmarshalText([]byte(commitTimestampStr))
-		if err != nil {
-			return
-		}
-		commitMessage, exists := getString(state, RootKeypath.Push(tree.Keypath("message")))
-		if !exists {
-			err = errors.New("missing commit message")
-			return
-		}
-		commitAuthorName, exists := getString(state, RootKeypath.Push(tree.Keypath("author/name")))
-		if !exists {
-			err = errors.New("missing commit author name")
-			return
-		}
-		commitAuthorEmail, exists := getString(state, RootKeypath.Push(tree.Keypath("author/email")))
-		if !exists {
-			err = errors.New("missing commit author email")
-			return
-		}
-		commitAuthorTimestampStr, exists := getString(state, RootKeypath.Push(tree.Keypath("author/timestamp")))
-		if !exists {
-			err = errors.New("missing commit author timestamp")
-			return
-		}
-		var commitAuthorTimestamp time.Time
-		err = commitAuthorTimestamp.UnmarshalText([]byte(commitAuthorTimestampStr))
-		if err != nil {
-			return
-		}
-		commitCommitterName, exists := getString(state, RootKeypath.Push(tree.Keypath("committer/name")))
-		if !exists {
-			err = errors.New("missing commit commiter name")
-			return
-		}
-		commitCommitterEmail, exists := getString(state, RootKeypath.Push(tree.Keypath("committer/email")))
-		if !exists {
-			err = errors.New("missing commit committer email")
-			return
-		}
-		commitCommitterTimestampStr, exists := getString(state, RootKeypath.Push(tree.Keypath("committer/timestamp")))
-		if !exists {
-			err = errors.New("missing commit committer timestamp")
-			return
-		}
-		var commitCommitterTimestamp time.Time
-		err = commitCommitterTimestamp.UnmarshalText([]byte(commitCommitterTimestampStr))
-		if err != nil {
-			return
-		}
-
-		mn := tree.NewMemoryNode()
-		mn.Set(nil, nil, commitFiles)
-
-		idx, err := git.NewIndex()
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		err = walkLinks(mn, func(linkType nelson.LinkType, linkStr string, keypath tree.Keypath) error {
-			ref, size, _, err := client.Get(StateURI, &tx.ID, tree.Keypath("files").Push(keypath), nil, false)
-			if err != nil {
-				panic(err)
-				return err
-			}
-			defer ref.Close()
-
-			writeStream, err := odb.NewWriteStream(size, git.ObjectBlob)
-			if err != nil {
-				panic(err)
-				return errors.WithStack(err)
-			}
-
-			_, err = io.Copy(writeStream, ref)
-			if err != nil {
-				panic(err)
-				writeStream.Close()
-				return errors.WithStack(err)
-			}
-
-			err = writeStream.Close()
-			if err != nil {
-				panic(err)
-				return errors.WithStack(err)
-			}
-
-			refJSONReader, _, _, err := client.Get(StateURI, &tx.ID, tree.Keypath("files").Push(keypath), nil, true)
-			if err != nil {
-				panic(err)
-				return err
-			}
-			defer refJSONReader.Close()
-			refJSON := make(map[string]interface{})
-			bs, err := ioutil.ReadAll(refJSONReader)
-			if err != nil {
-				panic(err)
-			}
-			err = json.Unmarshal(bs, &refJSON)
-			if err != nil {
-				panic(err)
-			}
-
-			oid := writeStream.Id
-
-			modeval, exists := refJSON["mode"]
-			if !exists {
-				return errors.New("missing mode")
-			}
-			mode, isFloat := modeval.(float64)
-			if !isFloat {
-				return errors.New("bad mode")
-			}
-
-			_, err = idx.EntryByPath(string(keypath), int(git.IndexStageNormal))
-			if err != nil && git.IsErrorCode(err, git.ErrNotFound) == false {
-				panic(err)
-				return errors.WithStack(err)
-
-			} else if git.IsErrorCode(err, git.ErrNotFound) {
-				// Adding a new entry
-				idx.Add(&git.IndexEntry{
-					Ctime: git.IndexTime{
-						Seconds: int32(time.Now().Unix()),
-					},
-					Mtime: git.IndexTime{
-						Seconds: int32(time.Now().Unix()),
-					},
-					Mode: git.Filemode(int(mode)),
-					Uid:  uint32(os.Getuid()),
-					Gid:  uint32(os.Getgid()),
-					Size: uint32(size),
-					Id:   &oid,
-					Path: string(keypath),
-				})
-
-			}
-			//else {
-			//    // Updating an existing entry
-			//    entry.Id = &oid
-			//    entry.Size = uint32(size)
-			//    entry.Ctime.Seconds = int32(ctime)
-			//    entry.Mtime.Seconds = int32(mtime)
-			//}
-			return nil
-		})
-		if err != nil {
-			panic(err)
-			return
-		}
-
-		//
-		// Write the tree and all of its children to disk
-		//
-		treeOid, err := idx.WriteTreeTo(repo)
-		if err != nil {
-			panic(err)
-			return
-		}
-		tree, err := repo.LookupTree(treeOid)
-		if err != nil {
-			panic(err)
-			return
-		}
-
-		//
-		// Create a commit based on the new tree
-		//
-		var (
-			message   = commitMessage
-			author    = &git.Signature{Name: commitAuthorName, Email: commitAuthorEmail, When: commitAuthorTimestamp}
-			committer = &git.Signature{Name: commitCommitterName, Email: commitCommitterEmail, When: commitCommitterTimestamp}
-		)
-
-		var parentCommits []*git.Commit
-		if tx.Parents[0] != redwood.GenesisTxID {
-			for _, p := range tx.Parents {
-				oid := git.NewOidFromBytes(p[:])
-
-				var parentCommit *git.Commit
-				parentCommit, err = repo.LookupCommit(oid)
-				if err != nil {
-					panic(err)
-					return
-				}
-
-				parentCommits = append(parentCommits, parentCommit)
-			}
-		}
-
-		_, err = repo.CreateCommit("", author, committer, message, tree, parentCommits...)
-		if err != nil {
-			return
-		}
-		return nil
+	//
+	// Write the tree and all of its children to disk
+	//
+	treeOid, err := idx.WriteTreeTo(repo)
+	if err != nil {
+		return err
 	}
+	tree, err := repo.LookupTree(treeOid)
+	if err != nil {
+		return err
+	}
+
+	//
+	// Create a commit based on the new tree
+	//
+	var (
+		author    = &git.Signature{Name: commit.Author.Name, Email: commit.Author.Email, When: commit.Author.Timestamp}
+		committer = &git.Signature{Name: commit.Committer.Name, Email: commit.Committer.Email, When: commit.Committer.Timestamp}
+	)
+
+	var parentCommits []*git.Commit
+	for _, pid := range commit.Parents {
+		oid, err := git.NewOid(pid)
+		if err != nil {
+			return err
+		}
+
+		var parentCommit *git.Commit
+		parentCommit, err = repo.LookupCommit(oid)
+		if err != nil {
+			return err
+		}
+		parentCommits = append(parentCommits, parentCommit)
+	}
+
+	_, err = repo.CreateCommit("", author, committer, commit.Message, tree, parentCommits...)
+	return err
 }
 
 func push(srcRefName string, destRefName string, client redwood.HTTPClient) error {
@@ -529,31 +462,29 @@ func push(srcRefName string, destRefName string, client redwood.HTTPClient) erro
 func pushRef(destRefName string, commitId *git.Oid, client redwood.HTTPClient) error {
 	branchKeypath := RootKeypath.Push(tree.Keypath(destRefName))
 
-	stateURI := StateURI + "-reflog"
-
-	resp, _, parents, err := client.Get(stateURI, nil, branchKeypath, nil, true)
+	parentID, err := types.IDFromHex(commitId.String())
 	if err != nil {
 		return err
-	}
-	defer resp.Close()
-
-	bs, err := ioutil.ReadAll(resp)
-	if err != nil {
-		panic(err)
-	}
-	currentCommit := string(bs)
-	if currentCommit == "" {
-		parents = []types.ID{redwood.GenesisTxID}
 	}
 
 	tx := &redwood.Tx{
 		ID:      types.RandomID(),
-		URL:     StateURI + "-reflog",
+		URL:     StateURI,
 		From:    sigkeys.Address(),
-		Parents: parents,
+		Parents: []types.ID{parentID},
 		Patches: []redwood.Patch{{
-			Keypath: branchKeypath,
+			Keypath: branchKeypath.Push(tree.Keypath("HEAD")),
 			Val:     commitId.String(),
+		}, {
+			Keypath: branchKeypath.Push(tree.Keypath("reflog")),
+			Range:   &tree.Range{0, 0},
+			Val:     commitId.String(),
+		}, {
+			Keypath: branchKeypath.Push(tree.Keypath("worktree")),
+			Val: map[string]interface{}{
+				"Content-Type": "link",
+				"value":        "state:" + StateURI + "/commits/" + commitId.String() + "/files",
+			},
 		}},
 	}
 
@@ -667,19 +598,27 @@ func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient
 			}
 		}()
 
-		// @@TODO: merge commits with multiple parents
-		var parentID types.ID
+		var parents []types.ID
+		var parentStrs []string
 		if commit.ParentCount() == 0 {
-			parentID = redwood.GenesisTxID
+			parents = []types.ID{redwood.GenesisTxID}
 		} else {
-			var err error
-			parentID, err = types.IDFromHex(commit.ParentId(0).String())
-			if err != nil {
-				return
+			for i := uint(0); i < commit.ParentCount(); i++ {
+				parentStr := commit.ParentId(i).String()
+				parentStrs = append(parentStrs, parentStr)
+
+				var parentID types.ID
+				var err error
+				parentID, err = types.IDFromHex(parentStr)
+				if err != nil {
+					return
+				}
+				parents = append(parents, parentID)
 			}
 		}
 
-		commitID, err := types.IDFromHex(commit.Id().String())
+		commitHash := commit.Id().String()
+		commitID, err := types.IDFromHex(commitHash)
 		if err != nil {
 			return
 		}
@@ -688,12 +627,17 @@ func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient
 			ID:         commitID,
 			URL:        StateURI,
 			From:       sigkeys.Address(),
-			Parents:    []types.ID{parentID},
+			Parents:    parents,
 			Checkpoint: true,
 		}
 
 		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("message"),
+			Keypath: tree.Keypath("commits/" + commitHash + "/parents"),
+			Val:     parentStrs,
+		})
+
+		tx.Patches = append(tx.Patches, redwood.Patch{
+			Keypath: tree.Keypath("commits/" + commitHash + "/message"),
 			Val:     commit.Message(),
 		})
 		timeStr, err := commit.Time().MarshalText()
@@ -701,7 +645,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient
 			return
 		}
 		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("timestamp"),
+			Keypath: tree.Keypath("commits/" + commitHash + "/timestamp"),
 			Val:     string(timeStr),
 		})
 		author := commit.Author()
@@ -710,7 +654,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient
 			return
 		}
 		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("author"),
+			Keypath: tree.Keypath("commits/" + commitHash + "/author"),
 			Val: M{
 				"name":      author.Name,
 				"email":     author.Email,
@@ -723,7 +667,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient
 			return
 		}
 		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("committer"),
+			Keypath: tree.Keypath("commits/" + commitHash + "/committer"),
 			Val: M{
 				"name":      committer.Name,
 				"email":     committer.Email,
@@ -745,7 +689,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient
 			}, true)
 		}
 		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("files"),
+			Keypath: tree.Keypath("commits/" + commitHash + "/files"),
 			Val:     fileTree,
 		})
 
@@ -772,63 +716,25 @@ func logf(msg string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, msg+"\n", args...)
 }
 
-func getValue(x tree.Node, keypath tree.Keypath) (interface{}, bool) {
-	v, exists, err := x.Value(keypath, nil)
-	if err != nil || !exists {
-		return nil, false
-	}
-	return v, true
-}
-
-func getString(m tree.Node, keypath tree.Keypath) (string, bool) {
-	x, exists := getValue(m, keypath)
-	if !exists {
-		return "", false
-	}
-	if s, isString := x.(string); isString {
-		return s, true
-	}
-	return "", false
-}
-
-func getFloat64(m tree.Node, keypath tree.Keypath) (float64, bool) {
-	x, exists := getValue(m, keypath)
-	if !exists {
-		return 0, false
-	}
-	if f, isFloat := x.(float64); isFloat {
-		return f, true
-	}
-	return 0, false
-}
-
-func getMap(m tree.Node, keypath tree.Keypath) (map[string]interface{}, bool) {
-	x, exists := getValue(m, keypath)
-	if !exists {
-		return nil, false
-	}
-	if asMap, isMap := x.(map[string]interface{}); isMap {
-		return asMap, true
-	}
-	return nil, false
-}
-
 func walkLinks(n tree.Node, fn func(linkType nelson.LinkType, linkStr string, keypath tree.Keypath) error) error {
 	iter := n.DepthFirstIterator(nil, false, 0)
 	defer iter.Close()
+
 	for iter.Rewind(); iter.Valid(); iter.Next() {
 		node := iter.Node()
 
 		parentKeypath, key := node.Keypath().Pop()
 		if key.Equals(nelson.ContentTypeKey) {
-			contentType, err := nelson.GetContentType(n.NodeAt(parentKeypath, nil))
+			parentNode := n.NodeAt(parentKeypath, nil)
+
+			contentType, err := nelson.GetContentType(parentNode)
 			if err != nil && errors.Cause(err) != types.Err404 {
 				return err
 			} else if contentType != "link" {
 				continue
 			}
 
-			linkStr, _, err := node.StringValue(nelson.ValueKey)
+			linkStr, _, err := parentNode.StringValue(nelson.ValueKey)
 			if err != nil {
 				return err
 			}
@@ -877,5 +783,11 @@ func setValueAtKeypath(x interface{}, keypath []string, val interface{}, clobber
 		asMap[keypath[len(keypath)-1]] = val
 	} else {
 		panic("bad")
+	}
+}
+
+func annotate(err *error, msg string, args ...interface{}) {
+	if *err != nil {
+		*err = errors.Wrapf(*err, msg, args...)
 	}
 }
