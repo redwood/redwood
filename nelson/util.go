@@ -65,10 +65,10 @@ func GetReadCloser(val interface{}) (io.ReadCloser, bool) {
 		return ioutil.NopCloser(bytes.NewBufferString(v)), true
 	case []byte:
 		return ioutil.NopCloser(bytes.NewBuffer(v)), true
-	case io.Reader:
-		return ioutil.NopCloser(v), true
 	case io.ReadCloser:
 		return v, true
+	case io.Reader:
+		return ioutil.NopCloser(v), true
 	//case *Frame:
 	//    rc, exists, err := v.ValueReader(nil, nil)
 	//    if err != nil {
@@ -140,7 +140,7 @@ type LinkType int
 const (
 	LinkTypeUnknown LinkType = iota
 	LinkTypeRef
-	LinkTypePath
+	LinkTypeState
 	LinkTypeURL // @@TODO
 )
 
@@ -148,7 +148,7 @@ func DetermineLinkType(linkStr string) (LinkType, string) {
 	if strings.HasPrefix(linkStr, "ref:") {
 		return LinkTypeRef, linkStr[len("ref:"):]
 	} else if strings.HasPrefix(linkStr, "state:") {
-		return LinkTypePath, linkStr[len("state:"):]
+		return LinkTypeState, linkStr[len("state:"):]
 	}
 	return LinkTypeUnknown, linkStr
 }

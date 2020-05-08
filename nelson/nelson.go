@@ -122,6 +122,105 @@ func prettyJSON(x interface{}) string {
 	return string(j)
 }
 
+func Seek(node tree.Node, keypath tree.Keypath, refResolver ReferenceResolver) (_ tree.Node, exists bool, _ error) {
+	for {
+		isNelSONFrame, err := node.Exists(ValueKey)
+		if err != nil {
+			return nil, false, err
+		}
+
+		// Regular node, keep drilling down
+		if !isNelSONFrame {
+			if len(keypath) == 0 {
+				break
+			}
+
+			nodeExists, err := node.Exists(keypath.Part(0))
+			if err != nil {
+				return nil, false, err
+			} else if !nodeExists {
+				return nil, false, nil
+			}
+
+			node = node.NodeAt(keypath.Part(0), nil)
+			_, keypath = keypath.Shift()
+			continue
+		}
+
+		contentType, _, err := node.StringValue(ContentTypeKey)
+		if err != nil && errors.Cause(err) != types.Err404 {
+			return nil, false, err
+		}
+
+		// Simple NelSON frame
+		if contentType != "link" {
+			node = node.NodeAt(ValueKey, nil)
+			continue
+		}
+
+		// Link
+		linkStr, isString, err := node.StringValue(ValueKey)
+		if err != nil && errors.Cause(err) != types.Err404 {
+			return nil, false, err
+		} else if !isString {
+			return nil, false, nil
+		}
+
+		linkType, linkValue := DetermineLinkType(linkStr)
+		if linkType == LinkTypeRef {
+			if len(keypath) > 0 {
+				return nil, false, nil
+			}
+
+			frame := &Frame{Node: node}
+
+			hash, err := types.HashFromHex(linkValue)
+			if err != nil {
+				return nil, false, err
+			}
+			reader, contentLength, err := refResolver.RefObjectReader(hash)
+			if goerrors.Is(err, os.ErrNotExist) {
+				return nil, false, nil
+			} else if err != nil {
+				return nil, false, err
+			}
+			frame.overrideValue = reader
+			frame.contentLength = contentLength
+			frame.fullyResolved = true
+			return frame, true, nil
+
+		} else if linkType == LinkTypeState {
+			stateURI, linkedKeypath, version, err := ParseStateLink(linkValue)
+			if err != nil {
+				return nil, false, err
+			}
+
+			keypath = keypath.Unshift(linkedKeypath)
+
+			state, err := refResolver.StateAtVersion(stateURI, version)
+			if err != nil {
+				return nil, false, err
+			}
+
+			nodeExists, err := state.Exists(keypath.Part(0))
+			if err != nil {
+				return nil, false, err
+			} else if !nodeExists {
+				return nil, false, err
+			}
+
+			node = state.NodeAt(keypath.Part(0), nil)
+			_, keypath = keypath.Shift()
+			continue
+
+		} else {
+			return nil, false, errors.New("unknown link type")
+		}
+
+	}
+	return node, true, nil
+}
+
 func Resolve(outerNode tree.Node, refResolver ReferenceResolver) (tree.Node, bool, error) {
 	var anyMissing bool
 
@@ -243,23 +342,13 @@ func resolveLink(frame *Frame, linkStr string, refResolver ReferenceResolver) (a
 			return false
 		}
 
-	} else if linkType == LinkTypePath {
-		parts := strings.Split(linkValue, "/")
-		var version *types.ID
-		if i := strings.Index(parts[1], "@"); i >= 0 {
-			vstr := parts[1][i:]
-			v, err := types.IDFromHex(vstr)
-			if err != nil {
-				frame.err = err
-				return true
-			}
-			version = &v
-			parts[1] = parts[1][:i]
+	} else if linkType == LinkTypeState {
+		stateURI, keypath, version, err := ParseStateLink(linkValue)
+		if err != nil {
+			frame.err = err
+			return true
 		}
-		// @@TODO: support range
 
-		stateURI := strings.Join(parts[:2], "/")
-		keypath := tree.Keypath(linkValue[len(stateURI)+1:])
 		state, err := refResolver.StateAtVersion(stateURI, version)
 		if err != nil {
 			frame.err = err
@@ -295,4 +384,23 @@ func resolveLink(frame *Frame, linkStr string, refResolver ReferenceResolver) (a
 		frame.err = errors.Errorf("unsupported link type: %v", linkStr)
 		return true
 	}
+}
+
+func ParseStateLink(linkValue string) (string, tree.Keypath, *types.ID, error) {
+	parts := strings.Split(linkValue, "/")
+	var version *types.ID
+	if i := strings.Index(parts[1], "@"); i >= 0 {
+		vstr := parts[1][i:]
+		v, err := types.IDFromHex(vstr)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		version = &v
+		parts[1] = parts[1][:i]
+	}
+	// @@TODO: support range
+
+	stateURI := strings.Join(parts[:2], "/")
+	keypath := tree.Keypath(linkValue[len(stateURI)+1:])
+	return stateURI, keypath, version, nil
 }
