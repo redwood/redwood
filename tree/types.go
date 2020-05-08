@@ -16,46 +16,6 @@ var (
 	CurrentVersion = types.EmptyID
 )
 
-type Range [2]int64
-
-func (rng *Range) Copy() *Range {
-	if rng == nil {
-		return nil
-	}
-	return &Range{rng[0], rng[1]}
-}
-
-func (rng *Range) Valid() bool {
-	if rng[1] < rng[0] {
-		return false
-	}
-	if rng[0] < 0 && rng[1] > 0 {
-		return false
-	}
-	return true
-}
-
-func (rng *Range) Size() uint64 {
-	if rng[0] < 0 {
-		return uint64(-(rng[0] - rng[1]))
-	}
-	return uint64(rng[1] - rng[0])
-}
-
-func (rng *Range) ValidForLength(length uint64) bool {
-	if rng[0] < 0 {
-		return uint64(-rng[0]) <= length
-	}
-	return uint64(rng[1]) <= length
-}
-
-func (rng *Range) IndicesForLength(length uint64) (uint64, uint64) {
-	if rng[0] < 0 {
-		return uint64(int64(length) + rng[0]), uint64(int64(length) + rng[1])
-	}
-	return uint64(rng[0]), uint64(rng[1])
-}
-
 type Node interface {
 	Close()
 	Keypath() Keypath
@@ -67,7 +27,7 @@ type Node interface {
 	IntValue(keypath Keypath) (int64, bool, error)
 	FloatValue(keypath Keypath) (float64, bool, error)
 	StringValue(keypath Keypath) (string, bool, error)
-	ContentLength() (int64, error)
+	Length() (uint64, error)
 	NodeInfo(keypath Keypath) (NodeType, ValueType, uint64, error)
 	Exists(keypath Keypath) (bool, error)
 	Set(keypath Keypath, rng *Range, val interface{}) error
@@ -135,6 +95,46 @@ func (vt ValueType) String() string {
 	default:
 		return "Invalid"
 	}
+}
+
+type Range [2]int64
+
+func (rng *Range) Copy() *Range {
+	if rng == nil {
+		return nil
+	}
+	return &Range{rng[0], rng[1]}
+}
+
+func (rng *Range) Valid() bool {
+	if rng[1] < rng[0] {
+		return false
+	}
+	if rng[0] < 0 && rng[1] > 0 {
+		return false
+	}
+	return true
+}
+
+func (rng *Range) Size() uint64 {
+	if rng[0] < 0 {
+		return uint64(-(rng[0] - rng[1]))
+	}
+	return uint64(rng[1] - rng[0])
+}
+
+func (rng *Range) ValidForLength(length uint64) bool {
+	if rng[0] < 0 {
+		return uint64(-rng[0]) <= length
+	}
+	return uint64(rng[1]) <= length
+}
+
+func (rng *Range) IndicesForLength(length uint64) (uint64, uint64) {
+	if rng[0] < 0 {
+		return uint64(int64(length) + rng[0]), uint64(int64(length) + rng[1])
+	}
+	return uint64(rng[0]), uint64(rng[1])
 }
 
 type Iterator interface {

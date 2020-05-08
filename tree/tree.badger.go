@@ -210,7 +210,7 @@ func (tx *DBNode) Value(relKeypath Keypath, rng *Range) (_ interface{}, _ bool, 
 	item, err := tx.tx.Get(rootKeypath)
 	if err != nil {
 		if err == badger.ErrKeyNotFound {
-			err = errors.Wrapf(types.Err404, "(keypath: %v)", rootKeypath)
+			return nil, false, nil
 		}
 		return nil, false, err
 	}
@@ -384,7 +384,7 @@ func (tx *DBNode) StringValue(keypath Keypath) (string, bool, error) {
 	return s, true, nil
 }
 
-func (tx *DBNode) ContentLength() (int64, error) {
+func (tx *DBNode) Length() (uint64, error) {
 	item, err := tx.tx.Get(tx.addKeyPrefix(tx.rootKeypath))
 	if err != nil {
 		return 0, err
@@ -411,13 +411,13 @@ func (tx *DBNode) ContentLength() (int64, error) {
 
 	switch nodeType {
 	case NodeTypeMap:
-		return int64(length), nil
+		return length, nil
 	case NodeTypeSlice:
-		return int64(length), nil
+		return length, nil
 	case NodeTypeValue:
 		switch valueType {
 		case ValueTypeString:
-			return int64(length), nil
+			return length, nil
 		default:
 			return 0, nil
 		}
@@ -960,16 +960,16 @@ func (tx *DBNode) CopyToMemory(relKeypath Keypath, rng *Range) (n Node, err erro
 
 	if rootNodeType == NodeTypeMap {
 		if rng != nil {
-			mNode.contentLengths[""] = int(rng.Size())
+			mNode.contentLengths[""] = rng.Size()
 		} else {
-			mNode.contentLengths[""] = int(length)
+			mNode.contentLengths[""] = length
 		}
 	} else if rootNodeType == NodeTypeSlice {
 		if rng != nil {
-			mNode.contentLengths[""] = int(rng.Size())
+			mNode.contentLengths[""] = rng.Size()
 			startIdx, _ = rng.IndicesForLength(length)
 		} else {
-			mNode.contentLengths[""] = int(length)
+			mNode.contentLengths[""] = length
 		}
 	}
 
@@ -1005,7 +1005,7 @@ func (tx *DBNode) CopyToMemory(relKeypath Keypath, rng *Range) (n Node, err erro
 		newKeypaths = append(newKeypaths, relKeypath)
 		mNode.nodeTypes[string(relKeypath)] = nodeType
 		if nodeType == NodeTypeSlice || nodeType == NodeTypeMap {
-			mNode.contentLengths[string(relKeypath)] = int(length)
+			mNode.contentLengths[string(relKeypath)] = length
 		} else if nodeType == NodeTypeValue {
 			mNode.values[string(relKeypath)] = decoded
 		}
@@ -1044,9 +1044,9 @@ func (tx *DBNode) DebugPrint() {
 		}
 
 		if item.IsDeletedOrExpired() {
-			fmt.Printf("  - %s %v %v %v %v (DELETED)\n", tx.rmKeyPrefix(Keypath(item.Key())), nodeType, valueType, length, val)
+			fmt.Printf("  - %s %v %v %v %v (DELETED)\n", Keypath(item.Key()), nodeType, valueType, length, val)
 		} else {
-			fmt.Printf("  - %s %v %v %v %v\n", tx.rmKeyPrefix(Keypath(item.Key())), nodeType, valueType, length, val)
+			fmt.Printf("  - %s %v %v %v %v\n", Keypath(item.Key()), nodeType, valueType, length, val)
 		}
 	}
 }

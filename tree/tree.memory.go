@@ -21,7 +21,7 @@ type MemoryNode struct {
 	keypaths       []Keypath
 	values         map[string]interface{}
 	nodeTypes      map[string]NodeType
-	contentLengths map[string]int
+	contentLengths map[string]uint64
 	copied         bool
 	diff           *Diff
 }
@@ -33,7 +33,7 @@ func NewMemoryNode() Node {
 		keypaths:       nil,
 		values:         make(map[string]interface{}),
 		nodeTypes:      make(map[string]NodeType),
-		contentLengths: make(map[string]int),
+		contentLengths: make(map[string]uint64),
 		copied:         false,
 		diff:           NewDiff(),
 	}
@@ -100,7 +100,7 @@ func (t *MemoryNode) makeCopy() {
 	keypaths := make([]Keypath, end-start)
 	values := make(map[string]interface{}, end-start)
 	nodeTypes := make(map[string]NodeType, end-start)
-	contentLengths := make(map[string]int)
+	contentLengths := make(map[string]uint64)
 
 	copy(keypaths, t.keypaths[start:end])
 
@@ -432,16 +432,16 @@ func (n *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 	}
 }
 
-func (n *MemoryNode) ContentLength() (int64, error) {
+func (n *MemoryNode) Length() (uint64, error) {
 	switch n.nodeTypes[string(n.keypath)] {
 	case NodeTypeMap:
-		return int64(n.contentLengths[string(n.keypath)]), nil
+		return n.contentLengths[string(n.keypath)], nil
 	case NodeTypeSlice:
-		return int64(n.contentLengths[string(n.keypath)]), nil
+		return n.contentLengths[string(n.keypath)], nil
 	case NodeTypeValue:
 		switch v := n.values[string(n.keypath)].(type) {
 		case string:
-			return int64(len(v)), nil
+			return uint64(len(v)), nil
 		default:
 			return 0, nil
 		}
@@ -503,10 +503,10 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 		switch nv := nodeValue.(type) {
 		case map[string]interface{}:
 			t.nodeTypes[string(absNodeKeypath)] = NodeTypeMap
-			t.contentLengths[string(absNodeKeypath)] = len(nv)
+			t.contentLengths[string(absNodeKeypath)] = uint64(len(nv))
 		case []interface{}:
 			t.nodeTypes[string(absNodeKeypath)] = NodeTypeSlice
-			t.contentLengths[string(absNodeKeypath)] = len(nv)
+			t.contentLengths[string(absNodeKeypath)] = uint64(len(nv))
 		case Node:
 			t.nodeTypes[string(absNodeKeypath)] = NodeTypeNode
 			t.values[string(absNodeKeypath)] = nodeValue
@@ -550,9 +550,9 @@ func (n *MemoryNode) Delete(keypath Keypath, rng *Range) error {
 
 		switch n.nodeTypes[string(absKeypath)] {
 		case NodeTypeMap:
-			n.contentLengths[string(absKeypath)] -= int(rng.Size())
+			n.contentLengths[string(absKeypath)] -= rng.Size()
 		case NodeTypeSlice:
-			n.contentLengths[string(absKeypath)] -= int(rng.Size())
+			n.contentLengths[string(absKeypath)] -= rng.Size()
 		case NodeTypeValue:
 			if s, isString := n.values[string(absKeypath)].(string); isString {
 				if !rng.ValidForLength(uint64(len(s))) {
@@ -862,6 +862,11 @@ func (iter *memoryDepthFirstIterator) Close() {
 }
 
 func (n *MemoryNode) UnmarshalJSON(bs []byte) error {
+	if n == nil {
+		newNode := NewMemoryNode().(*MemoryNode)
+		*n = *newNode
+	}
+
 	var val interface{}
 	err := json.Unmarshal(bs, &val)
 	if err != nil {
