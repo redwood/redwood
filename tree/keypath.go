@@ -20,21 +20,6 @@ func (k Keypath) Copy() Keypath {
 
 func (k Keypath) String() string {
 	return string(k)
-	//parts := k.Parts()
-	//if len(parts) == 0 {
-	//    return ""
-	//}
-	//partStrings := make([]string, len(parts))
-	//for i, part := range parts {
-	//    if len(part) == 8 {
-	//        partStrings[i] = fmt.Sprintf("%v", DecodeSliceIndex(part))
-	//    } else if len(part) == 0 {
-	//        partStrings[i] = "<nil>"
-	//    } else {
-	//        partStrings[i] = string(part)
-	//    }
-	//}
-	//return strings.Join(partStrings, string(KeypathSeparator))
 }
 
 func (k Keypath) LengthAsParent() int {

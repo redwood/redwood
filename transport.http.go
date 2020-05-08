@@ -222,6 +222,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "HEAD":
+		// This is mainly used to poll for new peers
 
 	case "OPTIONS":
 		w.Header().Set("Access-Control-Allow-Headers", "State-URI")
@@ -588,16 +589,18 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			state = state.NodeAt(keypath, rng)
 
 		} else {
-			indexHTMLExists, err := state.Exists(keypath.Push(tree.Keypath("index.html")))
+			var exists bool
+			state, exists, err = nelson.Seek(state, keypath, t.controller)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 				return
+			} else if !exists {
+				http.Error(w, fmt.Sprintf("not found: %v", keypath), http.StatusNotFound)
+				return
 			}
-			if indexHTMLExists {
-				keypath = keypath.Push(tree.Keypath("index.html"))
-			}
+			keypath = nil
 
-			state, err = state.CopyToMemory(keypath, rng)
+			state, err = state.CopyToMemory(nil, rng)
 			if errors.Cause(err) == types.Err404 {
 				http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
 				return
@@ -610,6 +613,16 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 				return
+			}
+
+			indexHTMLExists, err := state.Exists(keypath.Push(tree.Keypath("index.html")))
+			if err != nil {
+				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+				return
+			}
+			if indexHTMLExists {
+				keypath = keypath.Push(tree.Keypath("index.html"))
+				state = state.NodeAt(tree.Keypath("index.html"), nil)
 			}
 		}
 	}
