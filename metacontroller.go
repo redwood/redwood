@@ -116,6 +116,12 @@ func (m *metacontroller) replayStoredTxs() error {
 		if err != nil {
 			return err
 		}
+
+		if tx.Status == TxStatusValid {
+			m.validStateURIsMu.Lock()
+			m.validStateURIs[tx.URL] = struct{}{}
+			m.validStateURIsMu.Unlock()
+		}
 	}
 	return nil
 }
