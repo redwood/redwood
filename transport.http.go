@@ -622,12 +622,23 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	if contentType == "application/octet-stream" {
 		contentType = GuessContentTypeFromFilename(string(keypath.Part(-1)))
 	}
+	w.Header().Set("Content-Type", contentType)
 
 	contentLength, err := nelson.GetContentLength(state)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 		return
 	}
+	if contentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+	}
+
+	resourceLength, err := state.Length()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Resource-Length", strconv.FormatUint(resourceLength, 10))
 
 	var val interface{}
 	var exists bool
@@ -654,11 +665,6 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		respBuf = ioutil.NopCloser(bytes.NewBuffer(j))
 	}
 	defer respBuf.Close()
-
-	w.Header().Set("Content-Type", contentType)
-	if contentLength > 0 {
-		w.Header().Set("Content-Length", strconv.Itoa(int(contentLength)))
-	}
 
 	// Right now, this is just to facilitate the Chrome extension
 	allowSubscribe := map[string]bool{
