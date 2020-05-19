@@ -99,7 +99,7 @@ GEM
     sass-listen (4.0.0)
       rb-fsevent (~> 0.9, >= 0.9.4)
       rb-inotify (~> 0.9, >= 0.9.7)
-    sassc (2.2.1)
+    sassc (2.3.0)
       ffi (~> 1.9)
     servolux (0.13.0)
     sprockets (3.7.2)
