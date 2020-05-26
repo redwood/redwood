@@ -38,7 +38,7 @@ type Node interface {
 	Iterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator
 	ChildIterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator
 	DepthFirstIterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator
-	DebugPrint()
+	DebugPrint(printFn func(inFormat string, args ...interface{}), newlines bool, indentLevel int)
 }
 
 type NodeType uint8
@@ -138,6 +138,7 @@ func (rng *Range) IndicesForLength(length uint64) (uint64, uint64) {
 }
 
 type Iterator interface {
+	RootKeypath() Keypath
 	Rewind()
 	SeekTo(keypath Keypath)
 	Valid() bool
