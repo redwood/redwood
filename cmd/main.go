@@ -307,7 +307,7 @@ var replCommands = map[string]struct {
 			}
 			app.Debugf("stateURI: %v / keypath: %v / range: %v", stateURI, keypath, rng)
 			state = state.NodeAt(keypath, rng)
-			state.DebugPrint()
+			state.DebugPrint(app.Debugf, false, 0)
 			fmt.Println(rw.PrettyJSON(state))
 			return nil
 		},

@@ -30,7 +30,7 @@ type Metacontroller interface {
 
 	SetReceivedRefsHandler(handler ReceivedRefsHandler)
 	OnDownloadedRef()
-	RefObjectReader(refHash types.Hash) (io.ReadCloser, int64, error)
+	RefObjectReader(refID types.RefID) (io.ReadCloser, int64, error)
 
 	DebugLockResolvers()
 }
@@ -164,13 +164,12 @@ func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DB
 
 	// Walk the tree and initialize validators and resolvers
 	// @@TODO: inefficient
-	if !m.resolversLocked {
-		newBehaviorTree := newBehaviorTree()
-		newBehaviorTree.addResolver(nil, &dumbResolver{})
+	newBehaviorTree := newBehaviorTree()
+	newBehaviorTree.addResolver(nil, &dumbResolver{})
 
-		var refs []types.Hash
-		defer func() {
-			if m.receivedRefsHandler != nil {
+	var refs []types.RefID
+	defer func() {
+		if m.receivedRefsHandler != nil {
 				m.receivedRefsHandler(refs)
 			}
 		}()
@@ -193,16 +192,17 @@ func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DB
 				linkStr, _, err := state.StringValue(keypath)
 				if err != nil {
 					return err
-				}
-				linkType, linkValue := nelson.DetermineLinkType(linkStr)
-				if linkType == nelson.LinkTypeRef {
-					hash, err := types.HashFromHex(linkValue)
-					if err != nil {
-						return err
-					}
-					refs = append(refs, hash)
-				}
 			}
+			linkType, linkValue := nelson.DetermineLinkType(linkStr)
+			if linkType == nelson.LinkTypeRef {
+				var refID types.RefID
+				err := refID.UnmarshalText([]byte(linkValue))
+				if err != nil {
+					return err
+				}
+				refs = append(refs, refID)
+			}
+		}
 		}
 
 		// Remove deleted resolvers and validators
@@ -275,7 +275,6 @@ func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DB
 					}
 				}
 				parentKeypath = nextParentKeypath
-			}
 		}
 	}
 
@@ -484,8 +483,8 @@ func (m *metacontroller) QueryIndex(stateURI string, version *types.ID, keypath 
 	return ctrl.QueryIndex(version, keypath, indexName, queryParam, rng)
 }
 
-func (m *metacontroller) RefObjectReader(refHash types.Hash) (io.ReadCloser, int64, error) {
-	return m.refStore.Object(refHash)
+func (m *metacontroller) RefObjectReader(refID types.RefID) (io.ReadCloser, int64, error) {
+	return m.refStore.Object(refID)
 }
 
 func (m *metacontroller) Leaves(stateURI string) (map[types.ID]struct{}, error) {

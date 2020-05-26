@@ -30,7 +30,7 @@ type HTTPClient interface {
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
 	Get(stateURI string, version *types.ID, keypath tree.Keypath, rng *tree.Range, raw bool) (io.ReadCloser, int64, []types.ID, error)
 	Put(tx *Tx) error
-	StoreRef(file io.Reader) (types.Hash, error)
+	StoreRef(file io.Reader) (StoreRefResponse, error)
 }
 
 type httpClient struct {
@@ -296,7 +296,7 @@ func (c *httpClient) Put(tx *Tx) error {
 	return nil
 }
 
-func (c *httpClient) StoreRef(file io.Reader) (types.Hash, error) {
+func (c *httpClient) StoreRef(file io.Reader) (StoreRefResponse, error) {
 	client := c.client()
 
 	var buf bytes.Buffer
@@ -307,35 +307,35 @@ func (c *httpClient) StoreRef(file io.Reader) (types.Hash, error) {
 	h.Set("Content-Type", "application/octet-stream")
 	fileWriter, err := w.CreatePart(h)
 	if err != nil {
-		return types.Hash{}, errors.WithStack(err)
+		return StoreRefResponse{}, errors.WithStack(err)
 	}
 
 	// @@TODO: streaming?
 	_, err = io.Copy(fileWriter, file)
 	if err != nil {
-		return types.Hash{}, errors.WithStack(err)
+		return StoreRefResponse{}, errors.WithStack(err)
 	}
 	w.Close()
 
 	req, err := http.NewRequest("PUT", c.peerReachableAddress, &buf)
 	if err != nil {
-		return types.Hash{}, errors.WithStack(err)
+		return StoreRefResponse{}, errors.WithStack(err)
 	}
 	req.Header.Set("Ref", "true")
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return types.Hash{}, errors.WithStack(err)
+		return StoreRefResponse{}, errors.WithStack(err)
 	} else if resp.StatusCode != 200 {
-		return types.Hash{}, errors.Errorf("error verifying peer address: (%v) %v", resp.StatusCode, resp.Status)
+		return StoreRefResponse{}, errors.Errorf("error verifying peer address: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
 
 	var body StoreRefResponse
 	err = json.NewDecoder(resp.Body).Decode(&body)
 	if err != nil {
-		return types.Hash{}, errors.WithStack(err)
+		return StoreRefResponse{}, errors.WithStack(err)
 	}
-	return body.Hash, nil
+	return body, nil
 }

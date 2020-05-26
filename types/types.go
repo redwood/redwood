@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"encoding/hex"
 	"math/rand"
 
@@ -212,4 +213,64 @@ func (h *Hash) UnmarshalText(text []byte) error {
 	}
 	copy((*h)[:], bs)
 	return nil
+}
+
+type RefID struct {
+	HashAlg HashAlg
+	Hash    Hash
+}
+
+type HashAlg int
+
+const (
+	HashAlgUnknown HashAlg = iota
+	SHA1
+	SHA3
+)
+
+func (alg HashAlg) String() string {
+	switch alg {
+	case HashAlgUnknown:
+		return "unknown"
+	case SHA1:
+		return "sha1"
+	case SHA3:
+		return "sha3"
+	default:
+		return "ERR:(bad value for HashAlg)"
+	}
+}
+
+func (refID RefID) String() string {
+	hashStr := refID.Hash.Hex()
+	if refID.HashAlg == SHA1 {
+		hashStr = hashStr[:40]
+	}
+	return refID.HashAlg.String() + ":" + hashStr
+}
+
+func (refID RefID) MarshalText() ([]byte, error) {
+	return []byte(refID.String()), nil
+}
+
+func (refID *RefID) UnmarshalText(bs []byte) error {
+	if bytes.HasPrefix(bs, []byte("sha1:")) && len(bs) >= 45 {
+		hash, err := HashFromHex(string(bs[5:]))
+		if err != nil {
+			return err
+		}
+		copy(refID.Hash[:], hash[:20])
+		refID.HashAlg = SHA1
+		return nil
+
+	} else if bytes.HasPrefix(bs, []byte("sha3:")) && len(bs) == 69 {
+		hash, err := HashFromHex(string(bs[5:]))
+		if err != nil {
+			return err
+		}
+		copy(refID.Hash[:], hash[:])
+		refID.HashAlg = SHA3
+		return nil
+	}
+	return errors.Errorf("bad ref ID: '%v' (hasPrefix: %v, len: %v)", string(bs), bytes.HasPrefix(bs, []byte("sha3:")), len(bs))
 }

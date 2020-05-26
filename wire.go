@@ -50,7 +50,8 @@ type FetchRefResponseBody struct {
 }
 
 type StoreRefResponse struct {
-	Hash types.Hash `json:"hash"`
+	SHA1 types.Hash `json:"sha1"`
+	SHA3 types.Hash `json:"sha3"`
 }
 
 type EncryptedTx struct {
@@ -180,12 +181,12 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		msg.Payload = resp
 
 	case MsgType_FetchRef:
-		var hash types.Hash
-		err := json.Unmarshal([]byte(m.PayloadBytes), &hash)
+		var refID types.RefID
+		err := json.Unmarshal([]byte(m.PayloadBytes), &refID)
 		if err != nil {
 			return err
 		}
-		msg.Payload = hash
+		msg.Payload = refID
 
 	case MsgType_FetchRefResponse:
 		var resp FetchRefResponse
