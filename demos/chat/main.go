@@ -127,10 +127,10 @@ func sendTxs(host1, host2 rw.Host) {
 		// anything anywhere in the state tree.
 		//
 		genesisTx = rw.Tx{
-			ID:      rw.GenesisTxID,
-			Parents: []types.ID{},
-			From:    host1.Address(),
-			URL:     "localhost:21231/chat",
+			ID:       rw.GenesisTxID,
+			Parents:  []types.ID{},
+			From:     host1.Address(),
+			StateURI: "localhost:21231/chat",
 			Patches: []rw.Patch{
 				mustParsePatch(` = {
 					"Merge-Type": {
@@ -168,10 +168,10 @@ func sendTxs(host1, host2 rw.Host) {
 		//   - a "permissions" validator (which says that any user may write to the .messages key)
 		//
 		tx1 = rw.Tx{
-			ID:      types.IDFromString("tx1"),
-			Parents: []types.ID{rw.GenesisTxID},
-			From:    host1.Address(),
-			URL:     "localhost:21231/chat",
+			ID:       types.IDFromString("tx1"),
+			Parents:  []types.ID{rw.GenesisTxID},
+			From:     host1.Address(),
+			StateURI: "localhost:21231/chat",
 			Patches: []rw.Patch{
 				mustParsePatch(`.talk0 = {
 					"messages": {
@@ -227,10 +227,10 @@ func sendTxs(host1, host2 rw.Host) {
 	//
 	var (
 		ptx1 = rw.Tx{
-			ID:      types.IDFromString("p1"),
-			Parents: []types.ID{tx1.ID},
-			From:    host1.Address(),
-			URL:     "localhost:21231/chat",
+			ID:       types.IDFromString("p1"),
+			Parents:  []types.ID{tx1.ID},
+			From:     host1.Address(),
+			StateURI: "localhost:21231/chat",
 			Patches: []rw.Patch{
 				mustParsePatch(`.users = {
 					"Validator": {
@@ -248,10 +248,10 @@ func sendTxs(host1, host2 rw.Host) {
 		}
 
 		ptx2 = rw.Tx{
-			ID:      types.IDFromString("p2"),
-			Parents: []types.ID{ptx1.ID},
-			From:    host1.Address(),
-			URL:     "localhost:21231/chat",
+			ID:       types.IDFromString("p2"),
+			Parents:  []types.ID{ptx1.ID},
+			From:     host1.Address(),
+			StateURI: "localhost:21231/chat",
 			Patches: []rw.Patch{
 				mustParsePatch(`.users.` + host1.Address().Hex() + ` = {
                     "name": "Paul Stamets",
@@ -263,10 +263,10 @@ func sendTxs(host1, host2 rw.Host) {
 		// Here, we also add a private portion of Paul Stamets' user profile.  Only he can view this data.
 		ptx3recipients = []types.Address{host1.Address()}
 		ptx3           = rw.Tx{
-			ID:      types.IDFromString("p3"),
-			Parents: []types.ID{ptx2.ID},
-			From:    host1.Address(),
-			URL:     "localhost:21231/" + rw.PrivateRootKeyForRecipients(ptx3recipients),
+			ID:       types.IDFromString("p3"),
+			Parents:  []types.ID{ptx2.ID},
+			From:     host1.Address(),
+			StateURI: "localhost:21231/" + rw.PrivateRootKeyForRecipients(ptx3recipients),
 			Patches: []rw.Patch{
 				mustParsePatch(`.profile = {
                     "public": {
@@ -292,30 +292,30 @@ func sendTxs(host1, host2 rw.Host) {
 	//
 	var (
 		tx2 = rw.Tx{
-			ID:      types.IDFromString("tx2"),
-			Parents: []types.ID{ptx2.ID},
-			From:    host1.Address(),
-			URL:     "localhost:21231/chat",
+			ID:       types.IDFromString("tx2"),
+			Parents:  []types.ID{ptx2.ID},
+			From:     host1.Address(),
+			StateURI: "localhost:21231/chat",
 			Patches: []rw.Patch{
 				mustParsePatch(`.talk0.messages.value[0:0] = [{"text":"hello!","sender":"` + host1.Address().String() + `"}]`),
 			},
 		}
 
 		tx3 = rw.Tx{
-			ID:      types.IDFromString("tx3"),
-			Parents: []types.ID{tx2.ID},
-			From:    host1.Address(),
-			URL:     "localhost:21231/chat",
+			ID:       types.IDFromString("tx3"),
+			Parents:  []types.ID{tx2.ID},
+			From:     host1.Address(),
+			StateURI: "localhost:21231/chat",
 			Patches: []rw.Patch{
 				mustParsePatch(`.talk0.messages.value[1:1] = [{"text":"well hello to you too","sender":"` + host2.Address().String() + `"}]`),
 			},
 		}
 
 		tx4 = rw.Tx{
-			ID:      types.IDFromString("tx4"),
-			Parents: []types.ID{tx3.ID},
-			From:    host1.Address(),
-			URL:     "localhost:21231/chat",
+			ID:       types.IDFromString("tx4"),
+			Parents:  []types.ID{tx3.ID},
+			From:     host1.Address(),
+			StateURI: "localhost:21231/chat",
 			Patches: []rw.Patch{
 				mustParsePatch(`.talk0.messages.value[2:2] = [{
 					"text": "who needs a meme?",

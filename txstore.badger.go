@@ -61,7 +61,7 @@ func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
 		return err
 	}
 
-	key := makeTxKey(tx.URL, tx.ID)
+	key := makeTxKey(tx.StateURI, tx.ID)
 	err = p.db.Update(func(txn *badger.Txn) error {
 		return txn.Set(key, []byte(bs))
 	})

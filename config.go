@@ -13,34 +13,46 @@ import (
 )
 
 type Config struct {
-	*NodeConfig      `yaml:"Node"`
-	*RPCClientConfig `yaml:"RPCClient"`
+	Node          *NodeConfig          `yaml:"Node"`
+	P2PTransport  *P2PTransportConfig  `yaml:"P2PTransport"`
+	HTTPTransport *HTTPTransportConfig `yaml:"HTTPTransport"`
+	HTTPRPC       *HTTPRPCConfig       `yaml:"HTTPRPC"`
 
-	configPath string     `yaml:"-"`
-	mu         sync.Mutex `yaml:"-"`
+	configPath string       `yaml:"-"`
+	mu         sync.RWMutex `yaml:"-"`
 }
 
 type NodeConfig struct {
-	P2PKeyFile              string   `yaml:"P2PKeyFile"`
-	P2PListenAddr           string   `yaml:"P2PListenAddr"`
-	P2PListenPort           uint     `yaml:"P2PListenPort"`
-	BootstrapPeers          []string `yaml:"BootstrapPeers"`
-	RPCListenNetwork        string   `yaml:"RPCListenNetwork"`
-	RPCListenHost           string   `yaml:"RPCListenHost"`
-	HTTPListenHost          string   `yaml:"HTTPListenHost"`
-	HTTPCookieSecret        string   `yaml:"HTTPCookieSecret"`
-	DevMode                 bool     `yaml:"DevMode"`
-	HDMnemonicPhrase        string   `yaml:"HDMnemonicPhrase"`
-	ContentAnnounceInterval Duration `yaml:"ContentAnnounceInterval"`
-	ContentRequestInterval  Duration `yaml:"ContentRequestInterval"`
-	FindProviderTimeout     Duration `yaml:"FindProviderTimeout"`
-	DefaultStateURI         string   `yaml:"DefaultStateURI"`
-	StateURIs               []string `yaml:"StateURIs"`
-	DataRoot                string   `yaml:"DataRoot"`
+	HDMnemonicPhrase        string          `yaml:"HDMnemonicPhrase"`
+	BootstrapPeers          []BootstrapPeer `yaml:"BootstrapPeers"`
+	SubscribedStateURIs     []string        `yaml:"SubscribedStateURIs"`
+	MaxPeersPerSubscription uint64          `yaml:"MaxPeersPerSubscription"`
+	DataRoot                string          `yaml:"DataRoot"`
+	DevMode                 bool            `yaml:"DevMode"`
 }
 
-type RPCClientConfig struct {
-	Host string `yaml:"Host"`
+type BootstrapPeer struct {
+	Transport     string   `yaml:"Transport"`
+	DialAddresses []string `yaml:"DialAddresses"`
+}
+
+type P2PTransportConfig struct {
+	Enabled    bool   `yaml:"Enabled"`
+	KeyFile    string `yaml:"KeyFile"`
+	ListenAddr string `yaml:"ListenAddr"`
+	ListenPort uint   `yaml:"ListenPort"`
+}
+
+type HTTPTransportConfig struct {
+	Enabled         bool   `yaml:"Enabled"`
+	ListenHost      string `yaml:"ListenHost"`
+	CookieSecret    string `yaml:"CookieSecret"`
+	DefaultStateURI string `yaml:"DefaultStateURI"`
+}
+
+type HTTPRPCConfig struct {
+	Enabled    bool   `yaml:"Enabled"`
+	ListenHost string `yaml:"ListenHost"`
 }
 
 var DefaultConfig = func() Config {
@@ -70,27 +82,29 @@ var DefaultConfig = func() Config {
 	}
 
 	return Config{
-		NodeConfig: &NodeConfig{
-			P2PKeyFile:              filepath.Join(configRoot, "p2p_key"),
-			P2PListenAddr:           "0.0.0.0",
-			P2PListenPort:           21231,
-			RPCListenNetwork:        "tcp",
-			RPCListenHost:           "0.0.0.0:21232",
-			HTTPListenHost:          ":8080",
-			HTTPCookieSecret:        string(httpCookieSecret),
+		Node: &NodeConfig{
 			HDMnemonicPhrase:        hdMnemonicPhrase,
-			ContentAnnounceInterval: Duration(15 * time.Second),
-			ContentRequestInterval:  Duration(15 * time.Second),
-			FindProviderTimeout:     Duration(10 * time.Second),
-			StateURIs:               []string{},
+			BootstrapPeers:          []BootstrapPeer{},
+			SubscribedStateURIs:     []string{},
+			MaxPeersPerSubscription: 4,
 			DataRoot:                dataRoot,
-			BootstrapPeers: []string{
-				"/dns4/jupiter.axon.science/tcp/1337/p2p/16Uiu2HAm4cL1W1yHcsQuDp9R19qeyAewekCdqyVM39WMykjVL2mt",
-				"/dns4/saturn.axon.science/tcp/1337/p2p/16Uiu2HAkvBf1UUPvSFFyGWd5bECPc58qrMbiis2JW8q1AZG8zUgH",
-			},
+			DevMode:                 false,
 		},
-		RPCClientConfig: &RPCClientConfig{
-			Host: "0.0.0.0:21232",
+		P2PTransport: &P2PTransportConfig{
+			Enabled:    true,
+			KeyFile:    filepath.Join(configRoot, "p2p_key"),
+			ListenAddr: "0.0.0.0",
+			ListenPort: 21231,
+		},
+		HTTPTransport: &HTTPTransportConfig{
+			Enabled:         true,
+			ListenHost:      ":8080",
+			CookieSecret:    string(httpCookieSecret),
+			DefaultStateURI: "",
+		},
+		HTTPRPC: &HTTPRPCConfig{
+			Enabled:    false,
+			ListenHost: ":8081",
 		},
 	}
 }()
@@ -160,6 +174,12 @@ func ReadConfigAtPath(configPath string) (*Config, error) {
 	return &cfg, nil
 }
 
+func (c *Config) Read(fn func()) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	fn()
+}
+
 func (c *Config) Update(fn func() error) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -194,15 +214,15 @@ func (c *Config) Path() string {
 }
 
 func (c *Config) RefDataRoot() string {
-	return filepath.Join(c.DataRoot, "refs")
+	return filepath.Join(c.Node.DataRoot, "refs")
 }
 
 func (c *Config) TxDBRoot() string {
-	return filepath.Join(c.DataRoot, "txs")
+	return filepath.Join(c.Node.DataRoot, "txs")
 }
 
 func (c *Config) StateDBRoot() string {
-	return filepath.Join(c.DataRoot, "states")
+	return filepath.Join(c.Node.DataRoot, "states")
 }
 
 type Duration time.Duration

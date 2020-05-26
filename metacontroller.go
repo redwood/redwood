@@ -120,7 +120,7 @@ func (m *metacontroller) replayStoredTxs() error {
 
 		if tx.Status == TxStatusValid {
 			m.validStateURIsMu.Lock()
-			m.validStateURIs[tx.URL] = struct{}{}
+			m.validStateURIs[tx.StateURI] = struct{}{}
 			m.validStateURIsMu.Unlock()
 		}
 	}
@@ -160,7 +160,7 @@ func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DB
 	}
 
 	m.validStateURIsMu.Lock()
-	m.validStateURIs[tx.URL] = struct{}{}
+	m.validStateURIs[tx.StateURI] = struct{}{}
 	m.validStateURIsMu.Unlock()
 
 	// Walk the tree and initialize validators and resolvers
@@ -437,13 +437,13 @@ var (
 
 func (m *metacontroller) AddTx(tx *Tx) error {
 	if tx.IsPrivate() {
-		parts := strings.Split(tx.URL, "/")
+		parts := strings.Split(tx.StateURI, "/")
 		if parts[len(parts)-1] != tx.PrivateRootKey() {
 			return ErrInvalidPrivateRootKey
 		}
 	}
 
-	ctrl, err := m.ensureController(tx.URL)
+	ctrl, err := m.ensureController(tx.StateURI)
 	if err != nil {
 		return err
 	}

@@ -57,7 +57,7 @@ func main() {
 
 	time.Sleep(2 * time.Second)
 
-	// Both consumers subscribe to the URL
+	// Both consumers subscribe to the StateURI
 	ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
 	go func() {
 		anySucceeded, _ := host2.Subscribe(ctx, "somegitprovider.org/gitdemo")
@@ -153,10 +153,10 @@ func sendTxs(host1, host2 rw.Host) {
 		//   - A permissions validator that allows anyone to write to the repo but tries to keep
 		//         people from writing to the wrong keys.
 		genesisDemo = rw.Tx{
-			ID:      rw.GenesisTxID,
-			Parents: []types.ID{},
-			From:    host1.Address(),
-			URL:     "somegitprovider.org/gitdemo",
+			ID:       rw.GenesisTxID,
+			Parents:  []types.ID{},
+			From:     host1.Address(),
+			StateURI: "somegitprovider.org/gitdemo",
 			Patches: []rw.Patch{
 				mustParsePatch(` = {
                     "demo": {
@@ -215,7 +215,7 @@ func sendTxs(host1, host2 rw.Host) {
 			ID:         commit1RepoTxID,
 			Parents:    []types.ID{genesisDemo.ID},
 			From:       host1.Address(),
-			URL:        "somegitprovider.org/gitdemo",
+			StateURI:   "somegitprovider.org/gitdemo",
 			Checkpoint: true,
 			Patches: []rw.Patch{
 				mustParsePatch(`.commits.` + commit1Hash + ` = {

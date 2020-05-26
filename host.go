@@ -168,7 +168,7 @@ func (h *host) OnTxReceived(tx Tx, peer Peer) {
 	h.Infof(0, "tx %v received from %v peer %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address())
 	h.markTxSeenByPeer(peer, tx.ID)
 
-	have, err := h.Metacontroller.HaveTx(tx.URL, tx.ID)
+	have, err := h.Metacontroller.HaveTx(tx.StateURI, tx.ID)
 	if err != nil {
 		h.Errorf("error fetching tx %v from store: %v", tx.ID.Pretty(), err)
 		// @@TODO: does it make sense to return here?
@@ -215,7 +215,7 @@ func (h *host) OnPrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
 		return
 	}
 
-	have, err := h.Metacontroller.HaveTx(tx.URL, tx.ID)
+	have, err := h.Metacontroller.HaveTx(tx.StateURI, tx.ID)
 	if err != nil {
 		h.Errorf("error fetching tx %v from store: %v", tx.ID.Pretty(), err)
 		return
@@ -669,9 +669,9 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 
 				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
-				ch, err := transport.ForEachSubscriberToStateURI(ctx, tx.URL)
+				ch, err := transport.ForEachSubscriberToStateURI(ctx, tx.StateURI)
 				if err != nil {
-					h.Errorf("error fetching subscribers to url '%v' from transport %v", tx.URL, transport.Name())
+					h.Errorf("error fetching subscribers to url '%v' from transport %v", tx.StateURI, transport.Name())
 					return
 				}
 
@@ -713,10 +713,25 @@ func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
 func (h *host) SendTx(ctx context.Context, tx Tx) error {
 	h.Info(0, "adding tx ", tx.ID.Pretty())
 
+	if tx.From == (types.Address{}) {
+		tx.From = h.signingKeypair.Address()
+	}
+
 	if len(tx.Sig) == 0 {
 		err := h.SignTx(&tx)
 		if err != nil {
 			return err
+		}
+	}
+
+	if len(tx.Parents) == 0 && tx.ID != GenesisTxID {
+		parents, err := h.Metacontroller.Leaves(tx.StateURI)
+		if err != nil {
+			return err
+		}
+
+		for parent := range parents {
+			tx.Parents = append(tx.Parents, parent)
 		}
 	}
 

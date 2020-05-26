@@ -830,7 +830,7 @@ func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, addr
 		Parents:    parents,
 		Sig:        sig,
 		Patches:    patches,
-		URL:        stateURI,
+		StateURI:   stateURI,
 		Checkpoint: checkpoint,
 	}
 

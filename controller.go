@@ -144,7 +144,7 @@ func (c *controller) AddTx(tx *Tx) error {
 	defer c.addTxMu.Unlock()
 
 	// Ignore duplicates
-	exists, err := c.txStore.TxExists(tx.URL, tx.ID)
+	exists, err := c.txStore.TxExists(tx.StateURI, tx.ID)
 	if err != nil {
 		return err
 	} else if exists {
@@ -183,7 +183,7 @@ func (c *controller) processMempoolTx(tx *Tx) processTxOutcome {
 	err := c.tryApplyTx(tx)
 
 	if err == nil {
-		c.Successf("tx added to chain (%v) %v", tx.URL, tx.ID.Pretty())
+		c.Successf("tx added to chain (%v) %v", tx.StateURI, tx.ID.Pretty())
 		return processTxOutcome_Succeeded
 	}
 
@@ -203,7 +203,7 @@ func (c *controller) processMempoolTx(tx *Tx) processTxOutcome {
 }
 
 func (c *controller) tryApplyTx(tx *Tx) (err error) {
-	defer annotate(&err, "stateURI=%v tx=%v", tx.URL, tx.ID.Pretty())
+	defer annotate(&err, "stateURI=%v tx=%v", tx.StateURI, tx.ID.Pretty())
 
 	//
 	// Validate the tx's intrinsics
@@ -213,7 +213,7 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 	}
 
 	for _, parentID := range tx.Parents {
-		parentTx, err := c.txStore.FetchTx(tx.URL, parentID)
+		parentTx, err := c.txStore.FetchTx(tx.StateURI, parentID)
 		if errors.Cause(err) == types.Err404 {
 			return errors.Wrapf(ErrNoParentYet, "parent=%v", parentID.Pretty())
 		} else if err != nil {

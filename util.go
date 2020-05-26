@@ -29,6 +29,14 @@ func withStack(err *error) {
 	}
 }
 
+func combineErrors(errs []error) string {
+	var errStrings []string
+	for _, err := range errs {
+		errStrings = append(errStrings, err.Error())
+	}
+	return strings.Join(errStrings, "\n")
+}
+
 func getValue(x interface{}, keypath []string) (interface{}, bool) {
 	for i := 0; i < len(keypath); i++ {
 		if asMap, isMap := x.(map[string]interface{}); isMap {
@@ -345,6 +353,14 @@ func (s StringSet) Any() string {
 		return x
 	}
 	return ""
+}
+
+func (s StringSet) Slice() []string {
+	var slice []string
+	for x := range s {
+		slice = append(slice, x)
+	}
+	return slice
 }
 
 func (s StringSet) Copy() StringSet {
