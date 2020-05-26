@@ -12,12 +12,12 @@ Once the helper is installed, you can run the git demo with the following comman
 
 ```sh
 $ cd demos/git-integration
-$ go run main.go
+$ go run --tags static main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/demo>
-- <https://localhost:21242/demo>
+- <http://localhost:21232/demo>
+- <http://localhost:21242/demo>
 
 Now, let's clone the demo repo.  Notice in the command below that the address of the local node is specified before the `@` character, and the State-URI is specified after.  If the Redwood node you were cloning from were actually hosted at `somegitprovider.org/gitdemo` rather than our small local environment, this portion of the URL could be omitted.
 

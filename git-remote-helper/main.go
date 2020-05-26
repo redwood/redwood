@@ -27,6 +27,8 @@ import (
 )
 
 // @@TODO: read keys from config
+
+// @@TODO: read keys from config
 var sigkeys = func() *redwood.SigningKeypair {
 	sigkeys, err := redwood.GenerateSigningKeypair()
 	if err != nil {
@@ -562,7 +564,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient
 				}
 			}
 
-			hash, err := client.StoreRef(bytes.NewReader(blob.Contents()))
+			resp, err := client.StoreRef(bytes.NewReader(blob.Contents()))
 			if err != nil {
 				select {
 				case <-ctx.Done():
@@ -574,7 +576,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient
 			select {
 			case <-ctx.Done():
 				return
-			case chUploaded <- uploaded{treeEntry.fullPath, contentType, treeEntry.oid.String(), hash, treeEntry.mode}:
+			case chUploaded <- uploaded{treeEntry.fullPath, contentType, treeEntry.oid.String(), resp.SHA1, treeEntry.mode}:
 			}
 		}()
 	}
@@ -684,7 +686,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient
 			}
 			setValueAtKeypath(fileTree, strings.Split(uploaded.name, "/"), M{
 				"Content-Type": "link",
-				"value":        "ref:" + uploaded.hash.Hex(),
+				"value":        "ref:sha1:" + uploaded.hash.Hex()[:40],
 				"mode":         int(uploaded.mode),
 			}, true)
 		}

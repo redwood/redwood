@@ -94,7 +94,7 @@ func sendTxs(host1, host2 rw.Host) {
 	if err != nil {
 		panic(err)
 	}
-	indexHTMLHash, err := host1.AddRef(indexHTML, "text/html")
+	_, indexHTMLHash, err := host1.AddRef(indexHTML)
 	if err != nil {
 		panic(err)
 	}
@@ -102,7 +102,7 @@ func sendTxs(host1, host2 rw.Host) {
 	if err != nil {
 		panic(err)
 	}
-	memeHash, err := host1.AddRef(meme, "image/jpg")
+	_, memeHash, err := host1.AddRef(meme)
 	if err != nil {
 		panic(err)
 	}
@@ -208,7 +208,7 @@ func sendTxs(host1, host2 rw.Host) {
 						"Content-Type": "text/html",
 						"value": {
 							"Content-Type": "link",
-							"value": "ref:` + indexHTMLHash.String() + `"
+							"value": "ref:sha3:` + indexHTMLHash.String() + `"
 						}
 					}
 				}`),
@@ -324,7 +324,7 @@ func sendTxs(host1, host2 rw.Host) {
 						"Content-Type": "image/jpg",
 						"value": {
 							"Content-Type": "link",
-							"value":"ref:` + memeHash.String() + `"
+							"value":"ref:sha3:` + memeHash.String() + `"
 						}
 					}
 				}]`),

@@ -183,7 +183,7 @@
             var msg = messages[i]
             var refAvailable
             if (msg.attachment) {
-                refAvailable = await available('/talk0/messages/value[' + i + ']/attachment')
+                refAvailable = await available('/talk0/messages[' + i + ']/attachment?state_uri=localhost:21231/chat')
                 allRefsAvailable = allRefsAvailable && refAvailable
             }
             var sender = currentState && currentState.users && currentState.users[msg.sender]
@@ -195,7 +195,7 @@
             html += '        <div>' + msg.text + '</div>'
             if (msg.attachment) {
             if (refAvailable) {
-            html += '        <img src="/talk0/messages/value[' + i + ']/attachment" />'
+            html += '        <img src="/talk0/messages[' + i + ']/attachment?state_uri=localhost:21231/chat" />'
             } else {
             refsStillLoading = true
             html += '        <div>(loading...)</div>'
@@ -297,12 +297,12 @@
     async function sendMessage() {
         var attachment = null
         if (inputFile.files.length > 0) {
-            var refHash = await braidClient.storeRef(inputFile.files[0])
+            var refHashes = await braidClient.storeRef(inputFile.files[0])
             attachment = {
                 'Content-Type': inputFile.files[0].type,
                 'value': {
                     'Content-Type': 'link',
-                    'value': 'ref:' + refHash,
+                    'value': 'ref:sha3:' + refHashes.sha3,
                 },
             }
         }
@@ -310,7 +310,7 @@
         var tx = {
             id: Braid.utils.randomID(),
             parents: Object.keys(s9.leaves),
-            url: 'localhost:21231/chat',
+            stateURI: 'localhost:21231/chat',
             patches: [
                 '.talk0.messages.value[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify([{
                     attachment: attachment,
@@ -342,7 +342,7 @@
         var tx = {
             id: Braid.utils.randomID(),
             parents: Object.keys(s9.leaves),
-            url: 'localhost:21231/chat',
+            stateURI: 'localhost:21231/chat',
             patches: [
                 '.users.' + identity.address.toLowerCase() + ' = ' + JSON.stringify({
                     name: inputUsername.value,

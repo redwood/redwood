@@ -145,7 +145,7 @@
         var tx = {
             id: Braid.utils.randomID(),
             parents: Object.keys(s9.leaves),
-            url: 'localhost:21231/editor',
+            stateURI: 'localhost:21231/editor',
             patches: [
                 '.text.value[' + editor.selectionStart + ':' + editor.selectionEnd + '] = ' + JSON.stringify(char),
             ],

@@ -56,10 +56,10 @@ function createPeer(opts) {
         }
     }
 
-    async function get(stateURI, keypath) {
+    async function get({ stateURI, keypath, raw }) {
         for (let tpt of transports) {
             if (tpt.get) {
-                return tpt.get(stateURI, keypath)
+                return tpt.get({ stateURI, keypath, raw })
             }
         }
     }

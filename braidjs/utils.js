@@ -90,8 +90,8 @@ function hashTx(tx) {
 function serializeTx(tx) {
     let txHex = ''
     txHex += tx.id
-    tx.parents.forEach(parent => txHex += parent)
-    txHex += stringToHex(tx.url)
+    ;(tx.parents || []).forEach(parent => txHex += parent)
+    txHex += stringToHex(tx.stateURI)
     tx.patches.forEach(patch => txHex += stringToHex(patch))
     return txHex
 }

@@ -50,7 +50,7 @@
             <div id="script-output"></div>
             <br/>
             <strong>redwood.jpg</strong><br/>
-            <img src="redwood.jpg?state_uri=somegitprovider.org/gitdemo" />
+            <img src="/demo/redwood.jpg?state_uri=somegitprovider.org/gitdemo" />
             <br/>
             <strong>README.md</strong><br/>
             <textarea id="readme" readonly></textarea>
@@ -110,6 +110,7 @@
                 refreshFilesUI()
             } catch (err) {
                 // This is almost assuredly because currentState.git.files doesn't exist yet
+                console.error('tx recvd ~>', err)
             }
         }
     )
