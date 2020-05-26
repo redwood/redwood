@@ -68,7 +68,7 @@ func (r *jsResolver) InternalState() map[string]interface{} {
 	return r.internalState
 }
 
-func (r *jsResolver) ResolveState(state tree.Node, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) (err error) {
+func (r *jsResolver) ResolveState(state tree.Node, refStore RefStore, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) (err error) {
 	defer annotate(&err, "jsResolver.ResolveState")
 
 	convertedPatches := make([]interface{}, len(patches))

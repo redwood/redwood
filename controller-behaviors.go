@@ -9,7 +9,7 @@ import (
 )
 
 type Resolver interface {
-	ResolveState(state tree.Node, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) error
+	ResolveState(state tree.Node, refStore RefStore, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) error
 	InternalState() map[string]interface{}
 }
 
