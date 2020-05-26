@@ -144,7 +144,6 @@ func TestMemoryNode_ParentNodeFor(T *testing.T) {
 			"three": "hello",
 		})
 		require.NoError(T, err)
-		state.DebugPrint()
 
 		err = innerNode.Set(Keypath("bar"), nil, M{
 			"baz": M{
@@ -152,11 +151,9 @@ func TestMemoryNode_ParentNodeFor(T *testing.T) {
 			},
 		})
 		require.NoError(T, err)
-		innerNode.DebugPrint()
 
 		err = state.Set(nil, nil, innerNode)
 		require.NoError(T, err)
-		state.DebugPrint()
 
 		node, keypath := state.ParentNodeFor(Keypath("bar/baz/xyzzy"))
 		require.Equal(T, Keypath("bar/baz/xyzzy"), keypath)
