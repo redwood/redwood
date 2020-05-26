@@ -319,6 +319,80 @@ func TestDBNode_Iterator(T *testing.T) {
 	}
 }
 
+func TestDBNode_ReusableIterator(T *testing.T) {
+	val := M{
+		"aaa": uint64(123),
+		"bbb": uint64(123),
+		"ccc": M{
+			"111": M{
+				"a": uint64(1),
+				"b": uint64(1),
+				"c": uint64(1),
+			},
+		},
+		"ddd": uint64(123),
+		"eee": uint64(123),
+	}
+
+	db := setupDBTreeWithValue(T, Keypath("foo"), val)
+	defer db.DeleteDB()
+
+	state := db.StateAtVersion(nil, true)
+	iter := state.Iterator(Keypath("foo"), false, 0)
+	defer iter.Close()
+
+	iter.Rewind()
+	require.True(T, iter.Valid())
+	require.Equal(T, Keypath("foo"), iter.Node().Keypath())
+
+	iter.Next()
+	require.True(T, iter.Valid())
+	require.Equal(T, Keypath("foo/aaa"), iter.Node().Keypath())
+
+	iter.Next()
+	require.True(T, iter.Valid())
+	require.Equal(T, Keypath("foo/bbb"), iter.Node().Keypath())
+
+	iter.Next()
+	require.True(T, iter.Valid())
+	require.Equal(T, Keypath("foo/ccc"), iter.Node().Keypath())
+
+	{
+		reusableIter := iter.Node().Iterator(Keypath("111"), true, 10)
+		require.IsType(T, &reusableIterator{}, reusableIter)
+
+		reusableIter.Rewind()
+		require.True(T, reusableIter.Valid())
+		require.Equal(T, Keypath("foo/ccc/111"), reusableIter.Node().Keypath())
+
+		reusableIter.Next()
+		require.True(T, reusableIter.Valid())
+		require.Equal(T, Keypath("foo/ccc/111/a"), reusableIter.Node().Keypath())
+
+		reusableIter.Next()
+		require.True(T, reusableIter.Valid())
+		require.Equal(T, Keypath("foo/ccc/111/b"), reusableIter.Node().Keypath())
+
+		reusableIter.Next()
+		require.True(T, reusableIter.Valid())
+		require.Equal(T, Keypath("foo/ccc/111/c"), reusableIter.Node().Keypath())
+
+		reusableIter.Next()
+		require.False(T, reusableIter.Valid())
+
+		require.True(T, iter.Valid())
+		require.Equal(T, Keypath("foo/ccc"), iter.Node().Keypath())
+
+		reusableIter.Close()
+
+		require.Equal(T, []byte("foo/ccc"), iter.(*dbIterator).iter.Item().Key()[33:])
+
+		iter.Next()
+		require.True(T, iter.Valid())
+		require.Equal(T, Keypath("foo/ccc/111"), iter.Node().Keypath())
+	}
+}
+
 func TestDBNode_ChildIterator(T *testing.T) {
 	tests := []struct {
 		name        string
@@ -375,6 +449,76 @@ func TestDBNode_ChildIterator(T *testing.T) {
 			require.Equal(T, len(expected), i)
 
 		})
+	}
+}
+
+func TestDBNode_ReusableChildIterator(T *testing.T) {
+	val := M{
+		"aaa": uint64(123),
+		"bbb": uint64(123),
+		"ccc": M{
+			"111": M{
+				"a": uint64(1),
+				"b": uint64(1),
+				"c": uint64(1),
+			},
+		},
+		"ddd": uint64(123),
+		"eee": uint64(123),
+	}
+
+	db := setupDBTreeWithValue(T, Keypath("foo"), val)
+	defer db.DeleteDB()
+
+	state := db.StateAtVersion(nil, true)
+	iter := state.ChildIterator(Keypath("foo"), false, 0)
+	defer iter.Close()
+
+	iter.Rewind()
+	require.True(T, iter.Valid())
+	require.Equal(T, Keypath("foo/aaa"), iter.Node().Keypath())
+
+	iter.Next()
+	require.True(T, iter.Valid())
+	require.Equal(T, Keypath("foo/bbb"), iter.Node().Keypath())
+
+	iter.Next()
+	require.True(T, iter.Valid())
+	require.Equal(T, Keypath("foo/ccc"), iter.Node().Keypath())
+
+	{
+		reusableIter := iter.Node().Iterator(Keypath("111"), true, 10)
+		require.IsType(T, &reusableIterator{}, reusableIter)
+
+		reusableIter.Rewind()
+		require.True(T, reusableIter.Valid())
+		require.Equal(T, Keypath("foo/ccc/111"), reusableIter.Node().Keypath())
+
+		reusableIter.Next()
+		require.True(T, reusableIter.Valid())
+		require.Equal(T, Keypath("foo/ccc/111/a"), reusableIter.Node().Keypath())
+
+		reusableIter.Next()
+		require.True(T, reusableIter.Valid())
+		require.Equal(T, Keypath("foo/ccc/111/b"), reusableIter.Node().Keypath())
+
+		reusableIter.Next()
+		require.True(T, reusableIter.Valid())
+		require.Equal(T, Keypath("foo/ccc/111/c"), reusableIter.Node().Keypath())
+
+		reusableIter.Next()
+		require.False(T, reusableIter.Valid())
+
+		require.True(T, iter.Valid())
+		require.Equal(T, Keypath("foo/ccc"), iter.Node().Keypath())
+
+		reusableIter.Close()
+
+		// require.Equal(T, []byte("foo/ccc"), iter.(*dbChildIterator).iter.Item().Key()[33:])
+
+		iter.Next()
+		require.True(T, iter.Valid())
+		require.Equal(T, Keypath("foo/ddd"), iter.Node().Keypath())
 	}
 }
 

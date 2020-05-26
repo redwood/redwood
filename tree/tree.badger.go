@@ -82,6 +82,9 @@ func (t *DBTree) StateAtVersion(version *types.ID, mutable bool) *DBNode {
 		tx:        t.db.NewTransaction(mutable),
 		keyPrefix: t.makeStateKeyPrefix(*version),
 		diff:      diff,
+		activeIterator: &activeIterator{
+			mutable: mutable,
+		},
 	}
 }
 
@@ -92,6 +95,9 @@ func (t *DBTree) IndexAtVersion(version *types.ID, keypath Keypath, indexName Ke
 	return &DBNode{
 		tx:        t.db.NewTransaction(mutable),
 		keyPrefix: t.makeIndexKeyPrefix(*version, keypath, indexName),
+		activeIterator: &activeIterator{
+			mutable: mutable,
+		},
 	}
 }
 
@@ -104,9 +110,15 @@ func (t *DBTree) Value(version *types.ID, keypathPrefix Keypath, rng *Range) (in
 type DBNode struct {
 	tx          *badger.Txn
 	diff        *Diff
-	keyPrefix   []byte
-	rootKeypath Keypath
-	rng         *Range
+	keyPrefix      []byte
+	rootKeypath    Keypath
+	rng            *Range
+	activeIterator *activeIterator
+}
+
+type activeIterator struct {
+	mutable bool
+	iter    Iterator
 }
 
 // Ensure DBNode implements the Node interface
@@ -131,8 +143,15 @@ func (tx *DBNode) Keypath() Keypath {
 	return tx.rootKeypath
 }
 
-func (tx *DBNode) NodeAt(keypath Keypath, rng *Range) Node {
-	return &DBNode{tx: tx.tx, rootKeypath: tx.rootKeypath.Push(keypath), rng: tx.rng, keyPrefix: tx.keyPrefix, diff: tx.diff}
+func (n *DBNode) NodeAt(keypath Keypath, rng *Range) Node {
+	return &DBNode{
+		tx:             n.tx,
+		rootKeypath:    n.rootKeypath.Push(keypath),
+		rng:            n.rng,
+		keyPrefix:      n.keyPrefix,
+		diff:           n.diff,
+		activeIterator: n.activeIterator,
+	}
 }
 
 func (n *DBNode) ParentNodeFor(keypath Keypath) (Node, Keypath) {
@@ -1125,19 +1144,26 @@ func (t *DBTree) DebugPrint(keypathPrefix Keypath, rng *Range) ([]Keypath, []int
 }
 
 func (n *DBNode) Iterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator {
+	// Badger doesn't allow more than one iterator open inside of a RW transaction
+	if n.activeIterator.mutable && n.activeIterator.iter != nil {
+		return newReusableIterator(n.activeIterator.iter, keypath, n)
+	}
+
 	opts := badger.DefaultIteratorOptions
 	opts.Reverse = false
 	opts.PrefetchValues = prefetchValues
 	opts.PrefetchSize = prefetchSize
-	iter := n.tx.NewIterator(opts)
-	return newIteratorFromBadgerIterator(iter, keypath, n)
+	badgerIter := n.tx.NewIterator(opts)
+	iter := newIteratorFromBadgerIterator(badgerIter, keypath, n)
+	n.activeIterator.iter = iter
+	return iter
 }
 
 func (n *DBNode) ChildIterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator {
-	dbIter := n.Iterator(keypath, prefetchValues, prefetchSize).(*dbIterator)
+	dbIter := n.Iterator(keypath, prefetchValues, prefetchSize)
 	return &dbChildIterator{
-		dbIterator:              dbIter,
-		strippedAbsKeypathParts: dbIter.rootKeypath.NumParts(),
+		Iterator:                dbIter,
+		strippedAbsKeypathParts: dbIter.RootKeypath().NumParts(),
 	}
 }
 
@@ -1251,16 +1277,20 @@ func (t *DBTree) BuildIndex(version *types.ID, keypath Keypath, node Node, index
 	return index.Save()
 }
 
-func (n *DBNode) scanChildrenForward(rootNodeType NodeType, rootKeypath Keypath, rng *Range, length uint64, prefetchValues bool, fn func(absKeypath Keypath, item *badger.Item) error) error {
+func (n *DBNode) scanChildrenForward(
+	rootNodeType NodeType,
+	relKeypath Keypath,
+	rng *Range,
+	length uint64,
+	prefetchValues bool,
+	fn func(absKeypath Keypath, item *badger.Item) error,
+) error {
 	var startKeypath Keypath
 	var endKeypath Keypath
 	var subkeyIdx uint64
 	var endIdx uint64
 
-	opts := badger.DefaultIteratorOptions
-	opts.PrefetchSize = 10
-	opts.PrefetchValues = prefetchValues
-	iter := n.tx.NewIterator(opts)
+	iter := n.Iterator(relKeypath, prefetchValues, 10)
 	defer iter.Close()
 
 	if rootNodeType == NodeTypeMap {
@@ -1272,12 +1302,14 @@ func (n *DBNode) scanChildrenForward(rootNodeType NodeType, rootKeypath Keypath,
 			}
 			var startIdx uint64
 			startIdx, endIdx = rng.IndicesForLength(length)
-			startKeypath = n.keypathAtMapIndex(rootKeypath, startIdx, iter)
-			startKeypath = n.addKeyPrefix(startKeypath)
+			startKeypath = n.keypathOfNthSubkey(relKeypath, startIdx).RelativeTo(relKeypath)
 			subkeyIdx = startIdx
 
+			iter.SeekTo(startKeypath)
+
 		} else {
-			startKeypath = append(rootKeypath, KeypathSeparator[0])
+			iter.Rewind()
+			iter.Next()
 		}
 
 	} else if rootNodeType == NodeTypeSlice {
@@ -1288,34 +1320,36 @@ func (n *DBNode) scanChildrenForward(rootNodeType NodeType, rootKeypath Keypath,
 				return nil
 			}
 			startIdx, endIdx := rng.IndicesForLength(length)
-			startKeypath = n.rmKeyPrefix(rootKeypath).PushIndex(startIdx)
-			startKeypath = n.addKeyPrefix(startKeypath)
-			endKeypath = n.rmKeyPrefix(rootKeypath).PushIndex(endIdx)
-			endKeypath = n.addKeyPrefix(endKeypath)
+			startKeypath = relKeypath.PushIndex(startIdx)
+			endKeypath = relKeypath.PushIndex(endIdx)
+
+			iter.SeekTo(EncodeSliceIndex(startIdx))
 
 		} else {
-			startKeypath = append(rootKeypath, KeypathSeparator[0])
+			iter.Rewind()
+			iter.Next()
 		}
 	} else {
 		return errors.New("scanChildrenForward can only be called on a map or slice")
 	}
 
-	var validPrefix Keypath
-	if len(n.rmKeyPrefix(rootKeypath)) > 0 {
-		validPrefix = append(rootKeypath, KeypathSeparator[0])
-	} else {
-		validPrefix = rootKeypath
-	}
-
 	var prevKeypath Keypath
 	var shouldStop bool
-	for iter.Seek(startKeypath); iter.ValidForPrefix(validPrefix) && !shouldStop; iter.Next() {
-		item := iter.Item()
+	for ; iter.Valid() && !shouldStop; iter.Next() {
+		var item *badger.Item
+		switch i := iter.(type) {
+		case *dbIterator:
+			item = i.iter.Item()
+		case *reusableIterator:
+			item = i.badgerIter.Item()
+		default:
+			panic("this should never happen")
+		}
 		absKeypath := Keypath(item.Key())
 
 		// If we have a range, we have to figure out when to stop iterating
 		if rng != nil {
-			if rootNodeType == NodeTypeSlice && absKeypath.Equals(endKeypath) {
+			if rootNodeType == NodeTypeSlice && n.rmKeyPrefix(absKeypath).Equals(endKeypath) {
 				break
 
 			} else if rootNodeType == NodeTypeMap {
@@ -1342,10 +1376,10 @@ func (n *DBNode) scanChildrenForward(rootNodeType NodeType, rootKeypath Keypath,
 	return nil
 }
 
-// keypathAtMapIndex finds the Nth direct subkey in a map (where N is specified by `desiredIdx`).
-func (n *DBNode) keypathAtMapIndex(keypathPrefix Keypath, desiredIdx uint64, bIter *badger.Iterator) Keypath {
-	iter := newChildIteratorFromBadgerIterator(bIter, n.rmKeyPrefix(keypathPrefix), n)
-	defer bIter.Seek(keypathPrefix)
+// keypathOfNthSubkey finds the Nth direct subkey in a map.
+func (node *DBNode) keypathOfNthSubkey(keypathPrefix Keypath, n uint64) Keypath {
+	iter := node.ChildIterator(keypathPrefix, false, 0)
+	defer iter.Close()
 
 	var idx uint64
 	for iter.Rewind(); iter.Valid(); iter.Next() {
@@ -1354,7 +1388,7 @@ func (n *DBNode) keypathAtMapIndex(keypathPrefix Keypath, desiredIdx uint64, bIt
 			return nil
 		}
 
-		if idx == desiredIdx {
+		if idx == n {
 			return node.Keypath()
 		}
 		idx++

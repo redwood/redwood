@@ -677,6 +677,10 @@ func (iter *memoryIterator) noItems() bool {
 	return iter.start == -1 && iter.end == -1
 }
 
+func (iter *memoryIterator) RootKeypath() Keypath {
+	return iter.rootKeypath
+}
+
 func (iter *memoryIterator) Rewind() {
 	if iter.noItems() {
 		iter.done = true
@@ -794,6 +798,10 @@ func (n *MemoryNode) DepthFirstIterator(keypath Keypath, prefetchValues bool, pr
 
 func (iter *memoryDepthFirstIterator) noItems() bool {
 	return iter.start == -1 && iter.end == -1
+}
+
+func (iter *memoryDepthFirstIterator) RootKeypath() Keypath {
+	panic("this should never be called")
 }
 
 func (iter *memoryDepthFirstIterator) SeekTo(keypath Keypath) {
