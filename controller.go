@@ -28,7 +28,7 @@ type Controller interface {
 	OnDownloadedRef()
 }
 
-type ReceivedRefsHandler func(refs []types.Hash)
+type ReceivedRefsHandler func(refs []types.RefID)
 type TxProcessedHandler func(c Controller, tx *Tx, state *tree.DBNode) error
 
 type controller struct {

@@ -155,7 +155,9 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	var msg Msg
 	err := ReadMsg(stream, &msg)
 	if err != nil {
-		panic(err)
+		t.Errorf("incoming stream error: %v", err)
+		stream.Close()
+		return
 	}
 
 	peer := t.makeConnectedPeer(stream)
@@ -237,12 +239,12 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	case MsgType_FetchRef:
 		defer peer.CloseConn()
 
-		refHash, ok := msg.Payload.(types.Hash)
+		refID, ok := msg.Payload.(types.RefID)
 		if !ok {
 			t.Errorf("FetchRef message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
-		t.host.OnFetchRefReceived(refHash, peer)
+		t.host.OnFetchRefReceived(refID, peer)
 
 	case MsgType_Private:
 		encryptedTx, ok := msg.Payload.(EncryptedTx)
@@ -325,8 +327,8 @@ func (t *libp2pTransport) ForEachProviderOfStateURI(ctx context.Context, stateUR
 	return ch, nil
 }
 
-func (t *libp2pTransport) ForEachProviderOfRef(ctx context.Context, refHash types.Hash) (<-chan Peer, error) {
-	refCid, err := cidForString("ref:" + refHash.String())
+func (t *libp2pTransport) ForEachProviderOfRef(ctx context.Context, refID types.RefID) (<-chan Peer, error) {
+	refCid, err := cidForString("ref:" + refID.String())
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -346,7 +348,7 @@ func (t *libp2pTransport) ForEachProviderOfRef(ctx context.Context, refHash type
 					continue
 				}
 
-				t.Infof(0, `found peer %v for ref "%v"`, pinfo.ID, refHash.String())
+				t.Infof(0, `found peer %v for ref "%v"`, pinfo.ID, refID.String())
 
 				select {
 				case ch <- t.makeDisconnectedPeer(pinfo):
@@ -568,18 +570,18 @@ func (t *libp2pTransport) periodicallyUpdatePeerStore() {
 	}
 }
 
-func (t *libp2pTransport) AnnounceRef(refHash types.Hash) error {
+func (t *libp2pTransport) AnnounceRef(refID types.RefID) error {
 	ctxInner, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)
 	defer cancel()
 
-	c, err := cidForString("ref:" + refHash.String())
+	c, err := cidForString("ref:" + refID.String())
 	if err != nil {
 		return err
 	}
 
 	err = t.dht.Provide(ctxInner, c, true)
 	if err != nil && err != kbucket.ErrLookupFailure {
-		t.Errorf(`announce: could not dht.Provide refHash "%v": %v`, refHash.String(), err)
+		t.Errorf(`announce: could not dht.Provide ref "%v": %v`, refID.String(), err)
 		return err
 	}
 

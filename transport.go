@@ -18,9 +18,9 @@ type Transport interface {
 	GetPeerByConnStrings(ctx context.Context, reachableAt StringSet) (Peer, error)
 	ForEachProviderOfStateURI(ctx context.Context, stateURI string) (<-chan Peer, error)
 	ForEachSubscriberToStateURI(ctx context.Context, stateURI string) (<-chan Peer, error)
-	ForEachProviderOfRef(ctx context.Context, refHash types.Hash) (<-chan Peer, error)
+	ForEachProviderOfRef(ctx context.Context, refID types.RefID) (<-chan Peer, error)
 	PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan Peer, error)
-	AnnounceRef(refHash types.Hash) error
+	AnnounceRef(refID types.RefID) error
 }
 
 type Peer interface {
@@ -41,7 +41,7 @@ type AckHandler func(txID types.ID, peer Peer)
 type TxHandler func(tx Tx, peer Peer)
 type PrivateTxHandler func(encryptedTx EncryptedTx, peer Peer)
 type VerifyAddressHandler func(challengeMsg types.ChallengeMsg, peer Peer) error
-type FetchRefHandler func(refHash types.Hash, peer Peer)
+type FetchRefHandler func(refHash types.RefID, peer Peer)
 
 type subscriptionOut struct {
 	peer   Peer

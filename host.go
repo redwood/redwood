@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,9 +20,9 @@ type Host interface {
 	Start() error
 
 	// Get(ctx context.Context, url string) (interface{}, error)
-	Subscribe(ctx context.Context, stateURI string) (bool, []error)
+	Subscribe(ctx context.Context, stateURI string) (bool, error)
 	SendTx(ctx context.Context, tx Tx) error
-	AddRef(reader io.ReadCloser, contentType string) (types.Hash, error)
+	AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error)
 	AddPeer(ctx context.Context, transportName string, reachableAt StringSet) error
 	Transport(name string) Transport
 	Controller() Metacontroller
@@ -32,7 +33,7 @@ type Host interface {
 	OnPrivateTxReceived(encryptedTx EncryptedTx, peer Peer)
 	OnAckReceived(txID types.ID, peer Peer)
 	OnVerifyAddressReceived(challengeMsg types.ChallengeMsg, peer Peer) error
-	OnFetchRefReceived(refHash types.Hash, peer Peer)
+	OnFetchRefReceived(refID types.RefID, peer Peer)
 }
 
 type host struct {
@@ -51,8 +52,8 @@ type host struct {
 	peerStore PeerStore
 	refStore  RefStore
 
-	missingRefs   map[types.Hash]struct{}
-	chMissingRefs chan []types.Hash
+	missingRefs   map[types.RefID]struct{}
+	chMissingRefs chan []types.RefID
 	chFetchRefs   chan struct{}
 }
 
@@ -77,8 +78,8 @@ func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypai
 		peerSeenTxs:       make(map[peerTuple]map[types.ID]bool),
 		peerStore:         peerStore,
 		refStore:          refStore,
-		missingRefs:       make(map[types.Hash]struct{}),
-		chMissingRefs:     make(chan []types.Hash, 100),
+		missingRefs:       make(map[types.RefID]struct{}),
+		chMissingRefs:     make(chan []types.RefID, 100),
 		chFetchRefs:       make(chan struct{}),
 	}
 	return h, nil
@@ -99,6 +100,12 @@ func (h *host) Start() error {
 
 			h.CtxAddChild(h.Metacontroller.Ctx(), nil)
 			err := h.Metacontroller.Start()
+			if err != nil {
+				return err
+			}
+
+			h.CtxAddChild(h.refStore.Ctx(), nil)
+			err = h.refStore.Start()
 			if err != nil {
 				return err
 			}
@@ -158,7 +165,7 @@ func (h *host) Address() types.Address {
 }
 
 func (h *host) OnTxReceived(tx Tx, peer Peer) {
-	h.Infof(0, "tx %v received from %v", tx.ID.Pretty(), peer.Address())
+	h.Infof(0, "tx %v received from %v peer %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address())
 	h.markTxSeenByPeer(peer, tx.ID)
 
 	have, err := h.Metacontroller.HaveTx(tx.URL, tx.ID)
@@ -318,7 +325,7 @@ func (h *host) OnFetchHistoryRequestReceived(stateURI string, parents []types.ID
 	return nil
 }
 
-func (h *host) Subscribe(ctx context.Context, stateURI string) (bool, []error) {
+func (h *host) Subscribe(ctx context.Context, stateURI string) (bool, error) {
 	var anySucceeded bool
 	var errs []error
 	for _, transport := range h.transports {
@@ -329,7 +336,14 @@ func (h *host) Subscribe(ctx context.Context, stateURI string) (bool, []error) {
 			anySucceeded = true
 		}
 	}
-	return anySucceeded, errs
+	var errStrings []string
+	for _, err := range errs {
+		errStrings = append(errStrings, err.Error())
+	}
+	if len(errStrings) > 0 {
+		return anySucceeded, errors.New(strings.Join(errStrings, "\n"))
+	}
+	return anySucceeded, nil
 }
 
 func (h *host) subscribeWithTransport(ctx context.Context, transport Transport, stateURI string) error {
@@ -725,8 +739,8 @@ func (h *host) SignTx(tx *Tx) error {
 	return err
 }
 
-func (h *host) AddRef(reader io.ReadCloser, contentType string) (types.Hash, error) {
-	return h.refStore.StoreObject(reader, contentType)
+func (h *host) AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error) {
+	return h.refStore.StoreObject(reader)
 }
 
 func (h *host) fetchRefsLoop() {
@@ -753,7 +767,7 @@ func (h *host) fetchRefsLoop() {
 	}
 }
 
-func (h *host) onReceivedRefs(refs []types.Hash) {
+func (h *host) onReceivedRefs(refs []types.RefID) {
 	if len(refs) == 0 {
 		return
 	}
@@ -775,32 +789,37 @@ func (h *host) fetchMissingRefs() {
 
 	var succeeded sync.Map
 	var wg sync.WaitGroup
-	for ref := range h.missingRefs {
-		if h.refStore.HaveObject(ref) {
-			succeeded.Store(ref, struct{}{})
+	for refID := range h.missingRefs {
+		have, err := h.refStore.HaveObject(refID)
+		if err != nil {
+			h.Warnf("error checking refstore for ref %v: %v", refID, err)
+			continue
+		}
+		if have {
+			succeeded.Store(refID, struct{}{})
 			continue
 		}
 
 		wg.Add(1)
-		ref := ref
+		refID := refID
 		go func() {
 			defer wg.Done()
-			success := h.fetchRef(ref)
+			success := h.fetchRef(refID)
 			if success {
 				fetchedAny = true
-				succeeded.Store(ref, struct{}{})
+				succeeded.Store(refID, struct{}{})
 			}
 		}()
 	}
 	wg.Wait()
 
 	succeeded.Range(func(key interface{}, _ interface{}) bool {
-		delete(h.missingRefs, key.(types.Hash))
+		delete(h.missingRefs, key.(types.RefID))
 		return true
 	})
 }
 
-func (h *host) fetchRef(ref types.Hash) bool {
+func (h *host) fetchRef(ref types.RefID) bool {
 	chPeers := make(chan Peer)
 	ctx, cancel := context.WithCancel(h.Ctx())
 	defer cancel()
@@ -809,8 +828,11 @@ func (h *host) fetchRef(ref types.Hash) bool {
 		transport := transport
 		go func() {
 			ch, err := transport.ForEachProviderOfRef(ctx, ref)
-			if err != nil {
-				h.Errorf("error finding providers of ref %v from transport %v: %v", ref.String(), transport.Name(), err)
+			if errors.Cause(err) == types.ErrUnimplemented {
+				// do nothing
+				return
+			} else if err != nil {
+				h.Errorf("error finding providers of ref %s from transport %v: %v", ref, transport.Name(), err)
 				return
 			}
 			for peer := range ch {
@@ -899,18 +921,29 @@ func (h *host) fetchRef(ref types.Hash) bool {
 			}
 		}()
 
-		hash, err := h.refStore.StoreObject(pr, "application/octet-stream")
+		sha1Hash, sha3Hash, err := h.refStore.StoreObject(pr)
 		if err != nil {
-			h.Errorf("protocol probs: %v", err)
+			h.Errorf("could not store ref: %v", err)
 			continue
 		}
-		h.Infof(0, "stored ref %v", hash)
 		// @@TODO: check stored refHash against the one we requested
 
 		for _, transport := range h.transports {
-			err = transport.AnnounceRef(hash)
-			if err != nil {
-				h.Errorf("error announcing ref %v over transport %v: %v", hash.String(), transport.Name(), err)
+			sha1RefID := types.RefID{HashAlg: types.SHA1, Hash: sha1Hash}
+			err = transport.AnnounceRef(sha1RefID)
+			if errors.Cause(err) == types.ErrUnimplemented {
+				continue
+			} else if err != nil {
+				h.Warnf("error announcing ref %v over transport %v: %v", sha1RefID, transport.Name(), err)
+				// this is a non-critical error, don't bail out
+			}
+
+			sha3RefID := types.RefID{HashAlg: types.SHA3, Hash: sha3Hash}
+			err = transport.AnnounceRef(sha3RefID)
+			if errors.Cause(err) == types.ErrUnimplemented {
+				continue
+			} else if err != nil {
+				h.Warnf("error announcing ref %v over transport %v: %v", sha3RefID, transport.Name(), err)
 				// this is a non-critical error, don't bail out
 			}
 		}
@@ -923,10 +956,10 @@ const (
 	REF_CHUNK_SIZE = 1024 // @@TODO: tunable buffer size?
 )
 
-func (h *host) OnFetchRefReceived(refHash types.Hash, peer Peer) {
+func (h *host) OnFetchRefReceived(refID types.RefID, peer Peer) {
 	defer peer.CloseConn()
 
-	objectReader, _, err := h.refStore.Object(refHash)
+	objectReader, _, err := h.refStore.Object(refID)
 	// @@TODO: handle the case where we don't have the ref more gracefully
 	if err != nil {
 		panic(err)

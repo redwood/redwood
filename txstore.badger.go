@@ -53,7 +53,9 @@ func makeTxKey(stateURI string, txID types.ID) []byte {
 	return append([]byte("tx:"+stateURI+":"), txID[:]...)
 }
 
-func (p *badgerTxStore) AddTx(tx *Tx) error {
+func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
+	defer annotate(&err, "AddTx")
+
 	bs, err := json.Marshal(tx)
 	if err != nil {
 		return err

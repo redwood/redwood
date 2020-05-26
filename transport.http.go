@@ -740,20 +740,19 @@ func (t *httpTransport) servePostRef(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	file, header, err := r.FormFile("ref")
+	file, _, err := r.FormFile("ref")
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
 
-	hash, err := t.refStore.StoreObject(file, header.Header.Get("Content-Type"))
+	sha1Hash, sha3Hash, err := t.refStore.StoreObject(file)
 	if err != nil {
 		t.Errorf("error storing ref: %v", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-
-	respondJSON(w, StoreRefResponse{hash})
+	respondJSON(w, StoreRefResponse{SHA1: sha1Hash, SHA3: sha3Hash})
 }
 
 func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, address types.Address) {
@@ -943,8 +942,8 @@ func (t *httpTransport) ForEachProviderOfStateURI(ctx context.Context, theURL st
 	return ch, nil
 }
 
-func (t *httpTransport) ForEachProviderOfRef(ctx context.Context, refHash types.Hash) (<-chan Peer, error) {
-	return nil, errors.New("unimplemented")
+func (t *httpTransport) ForEachProviderOfRef(ctx context.Context, refID types.RefID) (<-chan Peer, error) {
+	return nil, types.ErrUnimplemented
 }
 
 func (t *httpTransport) ForEachSubscriberToStateURI(ctx context.Context, stateURI string) (<-chan Peer, error) {
@@ -970,11 +969,11 @@ func (t *httpTransport) ForEachSubscriberToStateURI(ctx context.Context, stateUR
 }
 
 func (t *httpTransport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan Peer, error) {
-	return nil, errors.New("unimplemented")
+	return nil, types.ErrUnimplemented
 }
 
-func (t *httpTransport) AnnounceRef(refHash types.Hash) error {
-	return errors.New("unimplemented")
+func (t *httpTransport) AnnounceRef(refID types.RefID) error {
+	return types.ErrUnimplemented
 }
 
 var (

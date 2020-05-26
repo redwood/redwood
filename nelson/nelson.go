@@ -59,10 +59,17 @@ func (frame *Frame) ContentLength() (int64, error) {
 	return frame.contentLength, nil
 }
 
-func (frame *Frame) DebugPrint() {
-	log.Debug("NelSON Frame ----------------------------------------")
-	frame.Node.DebugPrint()
-	log.Debug("---------------------------------------------------")
+func (frame *Frame) DebugPrint(printFn func(inFormat string, args ...interface{}), newlines bool, indentLevel int) {
+	if newlines {
+		oldPrintFn := printFn
+		printFn = func(inFormat string, args ...interface{}) { oldPrintFn(inFormat+"\n", args...) }
+	}
+
+	indent := strings.Repeat(" ", 4*indentLevel)
+
+	printFn(indent + "NelSON Frame {")
+	frame.Node.DebugPrint(printFn, false, indentLevel+1)
+	printFn(indent + "}")
 }
 
 func (frame *Frame) Value(keypath tree.Keypath, rng *tree.Range) (interface{}, bool, error) {
@@ -114,7 +121,7 @@ func (frame *Frame) ValueNode() tree.Node {
 
 type ReferenceResolver interface {
 	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
-	RefObjectReader(refHash types.Hash) (io.ReadCloser, int64, error)
+	RefObjectReader(refID types.RefID) (io.ReadCloser, int64, error)
 }
 
 func prettyJSON(x interface{}) string {
@@ -174,11 +181,12 @@ func Seek(node tree.Node, keypath tree.Keypath, refResolver ReferenceResolver) (
 
 			frame := &Frame{Node: node}
 
-			hash, err := types.HashFromHex(linkValue)
+			var refID types.RefID
+			err := refID.UnmarshalText([]byte(linkValue))
 			if err != nil {
 				return nil, false, err
 			}
-			reader, contentLength, err := refResolver.RefObjectReader(hash)
+			reader, contentLength, err := refResolver.RefObjectReader(refID)
 			if goerrors.Is(err, os.ErrNotExist) {
 				return nil, false, nil
 			} else if err != nil {
@@ -324,12 +332,13 @@ func Resolve(outerNode tree.Node, refResolver ReferenceResolver) (tree.Node, boo
 func resolveLink(frame *Frame, linkStr string, refResolver ReferenceResolver) (anyMissing bool) {
 	linkType, linkValue := DetermineLinkType(linkStr)
 	if linkType == LinkTypeRef {
-		hash, err := types.HashFromHex(linkValue)
+		var refID types.RefID
+		err := refID.UnmarshalText([]byte(linkValue))
 		if err != nil {
 			frame.err = err
 			return true
 		}
-		reader, contentLength, err := refResolver.RefObjectReader(hash)
+		reader, contentLength, err := refResolver.RefObjectReader(refID)
 		if goerrors.Is(err, os.ErrNotExist) {
 			frame.err = types.Err404
 			return true
