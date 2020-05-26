@@ -263,6 +263,7 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 
 			txCopy := *tx
 			txCopy.Patches = patchesTrimmed
+
 			validator := c.behaviorTree.validators[string(validatorKeypath)]
 			err := validator.ValidateTx(state.NodeAt(validatorKeypath, nil), &txCopy)
 			if err != nil {

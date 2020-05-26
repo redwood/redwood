@@ -87,7 +87,7 @@ func sendTxs(host1, host2 rw.Host) {
 	if err != nil {
 		panic(err)
 	}
-	indexHTMLHash, err := host1.AddRef(indexHTML, "text/html")
+	indexHTMLHash, _, err := host1.AddRef(indexHTML)
 	if err != nil {
 		panic(err)
 	}
@@ -95,7 +95,7 @@ func sendTxs(host1, host2 rw.Host) {
 	if err != nil {
 		panic(err)
 	}
-	scriptJSHash, err := host1.AddRef(scriptJS, "application/javascript")
+	scriptJSHash, _, err := host1.AddRef(scriptJS)
 	if err != nil {
 		panic(err)
 	}
@@ -103,7 +103,7 @@ func sendTxs(host1, host2 rw.Host) {
 	if err != nil {
 		panic(err)
 	}
-	readmeHash, err := host1.AddRef(readme, "text/markdown")
+	readmeHash, _, err := host1.AddRef(readme)
 	if err != nil {
 		panic(err)
 	}
@@ -111,7 +111,7 @@ func sendTxs(host1, host2 rw.Host) {
 	if err != nil {
 		panic(err)
 	}
-	redwoodJpgHash, err := host1.AddRef(redwoodJpg, "image/jpeg")
+	redwoodJpgHash, _, err := host1.AddRef(redwoodJpg)
 	if err != nil {
 		panic(err)
 	}
@@ -133,8 +133,8 @@ func sendTxs(host1, host2 rw.Host) {
 	// If you alter the contents of the ./repo subdirectory, you'll need to determine the
 	// git commit hash of the first commit again, and then tweak these variables.  Otherwise,
 	// you'll get a "bad object" error from git.
-	commit1Hash := "09c69f61e0e5c433e8b7c8be2124aeb1e558f13f"
-	commit1Timestamp := "2020-05-07T17:01:31-05:00"
+	commit1Hash := "2d4518de34a9583d61b32c9bf3b4cf0bdc1c8734"
+	commit1Timestamp := "2020-05-26T16:42:24-05:00"
 
 	commit1RepoTxID, err := types.IDFromHex(commit1Hash)
 	if err != nil {
@@ -179,22 +179,22 @@ func sendTxs(host1, host2 rw.Host) {
                                 "^\\.refs\\..*": {
                                     "write": true
                                 },
-                                "^\\.commits\\.[a-f0-9]+\\.parents\\..*": {
+                                "^\\.commits\\.[a-f0-9]+\\.parents": {
                                     "write": true
                                 },
-                                "^\\.commits\\.[a-f0-9]+\\.message\\..*": {
+                                "^\\.commits\\.[a-f0-9]+\\.message": {
                                     "write": true
                                 },
-                                "^\\.commits\\.[a-f0-9]+\\.timestamp\\..*": {
+                                "^\\.commits\\.[a-f0-9]+\\.timestamp": {
                                     "write": true
                                 },
-                                "^\\.commits\\.[a-f0-9]+\\.author\\..*": {
+                                "^\\.commits\\.[a-f0-9]+\\.author": {
                                     "write": true
                                 },
-                                "^\\.commits\\.[a-f0-9]+\\.committer\\..*": {
+                                "^\\.commits\\.[a-f0-9]+\\.committer": {
                                     "write": true
                                 },
-                                "^\\.commits\\.[a-f0-9]+\\.files\\..*": {
+                                "^\\.commits\\.[a-f0-9]+\\.files": {
                                     "write": true
                                 }
                             }
@@ -210,7 +210,7 @@ func sendTxs(host1, host2 rw.Host) {
 
 		// Finally, we submit two transactions (one to "git" and one to "git-reflog") that simulate what
 		// would happen if a user were to push their first commit to the repo.  The repo is now able to be
-		// cloned using the command "git clone redwood://localhost:21231/git"
+		// cloned using the command "git clone redwood://localhost:21232@somegitprovider.org/gitdemo"
 		commit1Repo = rw.Tx{
 			ID:         commit1RepoTxID,
 			Parents:    []types.ID{genesisDemo.ID},
@@ -218,44 +218,48 @@ func sendTxs(host1, host2 rw.Host) {
 			URL:        "somegitprovider.org/gitdemo",
 			Checkpoint: true,
 			Patches: []rw.Patch{
-				mustParsePatch(`.commits.` + commit1Hash + `.message = "First commit\n"`),
-				mustParsePatch(`.commits.` + commit1Hash + `.timestamp = "` + commit1Timestamp + `"`),
-				mustParsePatch(`.commits.` + commit1Hash + `.author = {
-					"email": "bryn.bellomy@gmail.com",
-					"name": "Bryn Bellomy",
-					"timestamp": "` + commit1Timestamp + `"
-				}`),
-				mustParsePatch(`.commits.` + commit1Hash + `.committer = {
-					"email": "bryn.bellomy@gmail.com",
-					"name": "Bryn Bellomy",
-					"timestamp": "` + commit1Timestamp + `"
-				}`),
-				mustParsePatch(`.commits.` + commit1Hash + `.files = {
-					"README.md": {
-						"Content-Type": "link",
-						"mode": 33188,
-						"value": "ref:` + readmeHash.Hex() + `"
-					},
-					"redwood.jpg": {
-						"Content-Type": "link",
-						"mode": 33188,
-						"value": "ref:` + redwoodJpgHash.Hex() + `"
-					},
-					"index.html": {
-						"Content-Type": "link",
-						"mode": 33188,
-						"value": "ref:` + indexHTMLHash.Hex() + `"
-					},
-					"script.js": {
-						"Content-Type": "link",
-						"mode": 33188,
-						"value": "ref:` + scriptJSHash.Hex() + `"
-					}
-				}`),
-				mustParsePatch(`.refs.heads.master.HEAD = "` + commit1Hash + `"`),
-				mustParsePatch(`.refs.heads.master.worktree = {
-                    "Content-Type": "link",
-                    "value": "state:somegitprovider.org/gitdemo/commits/` + commit1Hash + `/files"
+				mustParsePatch(`.commits.` + commit1Hash + ` = {
+                    "message": "First commit\n",
+                    "timestamp": "` + commit1Timestamp + `",
+                    "author": {
+                        "name": "Bryn Bellomy",
+                        "email": "bryn.bellomy@gmail.com",
+                        "timestamp": "` + commit1Timestamp + `"
+                    },
+                    "committer": {
+                        "name": "Bryn Bellomy",
+                        "email": "bryn.bellomy@gmail.com",
+                        "timestamp": "` + commit1Timestamp + `"
+                    },
+                    "files": {
+                        "README.md": {
+                            "Content-Type": "link",
+                            "mode": 33188,
+                            "value": "ref:sha1:` + readmeHash.Hex() + `"
+                        },
+                        "redwood.jpg": {
+                            "Content-Type": "link",
+                            "mode": 33188,
+                            "value": "ref:sha1:` + redwoodJpgHash.Hex() + `"
+                        },
+                        "index.html": {
+                            "Content-Type": "link",
+                            "mode": 33188,
+                            "value": "ref:sha1:` + indexHTMLHash.Hex() + `"
+                        },
+                        "script.js": {
+                            "Content-Type": "link",
+                            "mode": 33188,
+                            "value": "ref:sha1:` + scriptJSHash.Hex() + `"
+                        }
+                    }
+                }`),
+				mustParsePatch(`.refs.heads.master = {
+                    "HEAD": "` + commit1Hash + `",
+                    "worktree": {
+                        "Content-Type": "link",
+                        "value": "state:somegitprovider.org/gitdemo/commits/` + commit1Hash + `/files"
+                    }
                 }`),
 			},
 		}

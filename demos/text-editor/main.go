@@ -93,7 +93,7 @@ func sendTxs(host1, host2 rw.Host) {
 	if err != nil {
 		panic(err)
 	}
-	sync9Hash, err := host1.AddRef(sync9, "application/js")
+	_, sync9Hash, err := host1.AddRef(sync9)
 	if err != nil {
 		panic(err)
 	}
@@ -101,7 +101,7 @@ func sendTxs(host1, host2 rw.Host) {
 	if err != nil {
 		panic(err)
 	}
-	indexHTMLHash, err := host1.AddRef(indexHTML, "text/html")
+	_, indexHTMLHash, err := host1.AddRef(indexHTML)
 	if err != nil {
 		panic(err)
 	}
@@ -140,12 +140,22 @@ func sendTxs(host1, host2 rw.Host) {
 					"text": {
 						"value": "",
 
+                        "Validator": {
+                            "Content-Type": "validator/permissions",
+                            "value": {
+                                "*": {
+                                    "^\\.value.*": {
+                                        "write": true
+                                    }
+                                }
+                            }
+                        },
 						"Merge-Type": {
 							"Content-Type": "resolver/js",
 							"value": {
 								"src": {
 									"Content-Type": "link",
-									"value": "ref:` + sync9Hash.String() + `"
+									"value": "ref:sha3:` + sync9Hash.String() + `"
 								}
 							}
 						}
@@ -154,7 +164,7 @@ func sendTxs(host1, host2 rw.Host) {
 						"Content-Type": "text/html",
 						"value": {
 							"Content-Type": "link",
-							"value": "ref:` + indexHTMLHash.String() + `"
+							"value": "ref:sha3:` + indexHTMLHash.String() + `"
 						}
 					},
 					"Merge-Type": {

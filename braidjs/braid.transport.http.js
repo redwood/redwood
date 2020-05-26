@@ -65,7 +65,8 @@ module.exports = function (opts) {
         }
     }
 
-    async function get({ stateURI, keypath, raw }) {
+    async function get(opts) {
+        let { stateURI, keypath, raw } = opts
         if (raw) {
             keypath = keypath + '?raw=1'
         }
@@ -82,11 +83,11 @@ module.exports = function (opts) {
             method: 'PUT',
             body: tx.patches.join('\n'),
             headers: {
+                'State-URI': tx.stateURI,
                 'Version': tx.id,
-                'Parents': tx.parents.join(','),
+                'Parents': (tx.parents || []).join(','),
                 'Signature': tx.sig,
                 'Patch-Type': 'braid',
-                'State-URI': tx.url,
             },
         })
     }
@@ -110,7 +111,7 @@ module.exports = function (opts) {
             body: formData,
         })
 
-        return (await resp.json()).hash
+        return (await resp.json())
     }
 
     async function authorize(identity) {

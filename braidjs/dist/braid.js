@@ -161,91 +161,96 @@ function createPeer(opts) {
     return _subscribe.apply(this, arguments);
   }
 
-  function get(_x5, _x6) {
+  function get(_x5) {
     return _get.apply(this, arguments);
   }
 
   function _get() {
     _get = _asyncToGenerator(
     /*#__PURE__*/
-    regeneratorRuntime.mark(function _callee3(stateURI, keypath) {
-      var _iteratorNormalCompletion2, _didIteratorError2, _iteratorError2, _iterator2, _step2, tpt;
+    regeneratorRuntime.mark(function _callee3(_ref) {
+      var stateURI, keypath, raw, _iteratorNormalCompletion2, _didIteratorError2, _iteratorError2, _iterator2, _step2, tpt;
 
       return regeneratorRuntime.wrap(function _callee3$(_context3) {
         while (1) {
           switch (_context3.prev = _context3.next) {
             case 0:
+              stateURI = _ref.stateURI, keypath = _ref.keypath, raw = _ref.raw;
               _iteratorNormalCompletion2 = true;
               _didIteratorError2 = false;
               _iteratorError2 = undefined;
-              _context3.prev = 3;
+              _context3.prev = 4;
               _iterator2 = transports[Symbol.iterator]();
 
-            case 5:
+            case 6:
               if (_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done) {
-                _context3.next = 12;
+                _context3.next = 13;
                 break;
               }
 
               tpt = _step2.value;
 
               if (!tpt.get) {
-                _context3.next = 9;
+                _context3.next = 10;
                 break;
               }
 
-              return _context3.abrupt("return", tpt.get(stateURI, keypath));
+              return _context3.abrupt("return", tpt.get({
+                stateURI: stateURI,
+                keypath: keypath,
+                raw: raw
+              }));
 
-            case 9:
+            case 10:
               _iteratorNormalCompletion2 = true;
-              _context3.next = 5;
+              _context3.next = 6;
               break;
 
-            case 12:
-              _context3.next = 18;
+            case 13:
+              _context3.next = 19;
               break;
 
-            case 14:
-              _context3.prev = 14;
-              _context3.t0 = _context3["catch"](3);
+            case 15:
+              _context3.prev = 15;
+              _context3.t0 = _context3["catch"](4);
               _didIteratorError2 = true;
               _iteratorError2 = _context3.t0;
 
-            case 18:
-              _context3.prev = 18;
+            case 19:
               _context3.prev = 19;
+              _context3.prev = 20;
 
               if (!_iteratorNormalCompletion2 && _iterator2["return"] != null) {
                 _iterator2["return"]();
               }
 
-            case 21:
-              _context3.prev = 21;
+            case 22:
+              _context3.prev = 22;
 
               if (!_didIteratorError2) {
-                _context3.next = 24;
+                _context3.next = 25;
                 break;
               }
 
               throw _iteratorError2;
 
-            case 24:
-              return _context3.finish(21);
-
             case 25:
-              return _context3.finish(18);
+              return _context3.finish(22);
 
             case 26:
+              return _context3.finish(19);
+
+            case 27:
             case "end":
               return _context3.stop();
           }
         }
-      }, _callee3, null, [[3, 14, 18, 26], [19,, 21, 25]]);
+      }, _callee3, null, [[4, 15, 19, 27], [20,, 22, 26]]);
     }));
     return _get.apply(this, arguments);
   }
 
-  function put(_x7) {
+  function put(_x6) {
     return _put.apply(this, arguments);
   }
 
@@ -269,81 +274,80 @@ function createPeer(opts) {
 
             case 7:
               if (_iteratorNormalCompletion3 = (_step3 = _iterator3.next()).done) {
-                _context4.next = 22;
+                _context4.next = 21;
                 break;
               }
 
               tpt = _step3.value;
 
               if (!tpt.put) {
-                _context4.next = 19;
+                _context4.next = 18;
                 break;
               }
 
-              console.log('putting to transport', tpt.transportName());
-              _context4.prev = 11;
-              _context4.next = 14;
+              _context4.prev = 10;
+              _context4.next = 13;
               return tpt.put(tx);
 
-            case 14:
-              _context4.next = 19;
+            case 13:
+              _context4.next = 18;
               break;
 
-            case 16:
-              _context4.prev = 16;
-              _context4.t0 = _context4["catch"](11);
+            case 15:
+              _context4.prev = 15;
+              _context4.t0 = _context4["catch"](10);
               console.error('error PUTting to peer ~>', _context4.t0);
 
-            case 19:
+            case 18:
               _iteratorNormalCompletion3 = true;
               _context4.next = 7;
               break;
 
-            case 22:
-              _context4.next = 28;
+            case 21:
+              _context4.next = 27;
               break;
 
-            case 24:
-              _context4.prev = 24;
+            case 23:
+              _context4.prev = 23;
               _context4.t1 = _context4["catch"](5);
               _didIteratorError3 = true;
               _iteratorError3 = _context4.t1;
 
-            case 28:
+            case 27:
+              _context4.prev = 27;
               _context4.prev = 28;
-              _context4.prev = 29;
 
               if (!_iteratorNormalCompletion3 && _iterator3["return"] != null) {
                 _iterator3["return"]();
               }
 
-            case 31:
-              _context4.prev = 31;
+            case 30:
+              _context4.prev = 30;
 
               if (!_didIteratorError3) {
-                _context4.next = 34;
+                _context4.next = 33;
                 break;
               }
 
               throw _iteratorError3;
 
+            case 33:
+              return _context4.finish(30);
+
             case 34:
-              return _context4.finish(31);
+              return _context4.finish(27);
 
             case 35:
-              return _context4.finish(28);
-
-            case 36:
             case "end":
               return _context4.stop();
           }
         }
-      }, _callee4, null, [[5, 24, 28, 36], [11, 16], [29,, 31, 35]]);
+      }, _callee4, null, [[5, 23, 27, 35], [10, 15], [28,, 30, 34]]);
     }));
     return _put.apply(this, arguments);
   }
 
-  function storeRef(_x8) {
+  function storeRef(_x7) {
     return _storeRef.apply(this, arguments);
   }
 
@@ -598,7 +602,8 @@ module.exports = function (opts) {
         }
     }
 
-    async function get({ stateURI, keypath, raw }) {
+    async function get(opts) {
+        let { stateURI, keypath, raw } = opts
         if (raw) {
             keypath = keypath + '?raw=1'
         }
@@ -615,11 +620,11 @@ module.exports = function (opts) {
             method: 'PUT',
             body: tx.patches.join('\n'),
             headers: {
+                'State-URI': tx.stateURI,
                 'Version': tx.id,
-                'Parents': tx.parents.join(','),
+                'Parents': (tx.parents || []).join(','),
                 'Signature': tx.sig,
                 'Patch-Type': 'braid',
-                'State-URI': tx.url,
             },
         })
     }
@@ -643,7 +648,7 @@ module.exports = function (opts) {
             body: formData,
         })
 
-        return (await resp.json()).hash
+        return (await resp.json())
     }
 
     async function authorize(identity) {
@@ -801,7 +806,6 @@ module.exports = function (opts) {
         },
 
         put: (tx) => {
-            console.log('webrtc.put ~>', conns)
             Object.keys(conns).forEach(peerID => {
                 try {
                     console.log('webrtc: sending to peer', peerID, '~>', tx)
@@ -952,7 +956,6 @@ function _constructIdentity(wallet) {
         address: address,
         signTx: (tx) => {
             const txHash = utils.hashTx(tx)
-            console.log('hash ~>', tx.id, txHash.toString())
             const signed = wallet.signingKey.signDigest(txHash)
             return signed.r.slice(2) + signed.s.slice(2) + '0' + signed.recoveryParam
         },
@@ -10681,6 +10684,11 @@ var json = typeof JSON !== 'undefined' ? JSON : require('jsonify');
 module.exports = function (obj, opts) {
     if (!opts) opts = {};
     if (typeof opts === 'function') opts = { cmp: opts };
+    var space = opts.space || '';
+    if (typeof space === 'number') space = Array(space+1).join(' ');
+    var cycles = (typeof opts.cycles === 'boolean') ? opts.cycles : false;
+    var replacer = opts.replacer || function(key, value) { return value; };
+
     var cmp = opts.cmp && (function (f) {
         return function (node) {
             return function (a, b) {
@@ -10690,28 +10698,57 @@ module.exports = function (obj, opts) {
             };
         };
     })(opts.cmp);
-    
-    return (function stringify (node) {
+
+    var seen = [];
+    return (function stringify (parent, key, node, level) {
+        var indent = space ? ('\n' + new Array(level + 1).join(space)) : '';
+        var colonSeparator = space ? ': ' : ':';
+
+        if (node && node.toJSON && typeof node.toJSON === 'function') {
+            node = node.toJSON();
+        }
+
+        node = replacer.call(parent, key, node);
+
+        if (node === undefined) {
+            return;
+        }
         if (typeof node !== 'object' || node === null) {
             return json.stringify(node);
         }
         if (isArray(node)) {
             var out = [];
             for (var i = 0; i < node.length; i++) {
-                out.push(stringify(node[i]));
+                var item = stringify(node, i, node[i], level+1) || json.stringify(null);
+                out.push(indent + space + item);
             }
-            return '[' + out.join(',') + ']';
+            return '[' + out.join(',') + indent + ']';
         }
         else {
+            if (seen.indexOf(node) !== -1) {
+                if (cycles) return json.stringify('__cycle__');
+                throw new TypeError('Converting circular structure to JSON');
+            }
+            else seen.push(node);
+
             var keys = objectKeys(node).sort(cmp && cmp(node));
             var out = [];
             for (var i = 0; i < keys.length; i++) {
                 var key = keys[i];
-                out.push(stringify(key) + ':' + stringify(node[key]));
+                var value = stringify(node, key, node[key], level+1);
+
+                if(!value) continue;
+
+                var keyValue = json.stringify(key)
+                    + colonSeparator
+                    + value;
+                ;
+                out.push(indent + space + keyValue);
             }
-            return '{' + out.join(',') + '}';
+            seen.splice(seen.indexOf(node), 1);
+            return '{' + out.join(',') + indent + '}';
         }
-    })(obj);
+    })({ '': obj }, '', obj, 0);
 };
 
 var isArray = Array.isArray || function (x) {
@@ -13652,8 +13689,8 @@ function hashTx(tx) {
 function serializeTx(tx) {
     let txHex = ''
     txHex += tx.id
-    tx.parents.forEach(parent => txHex += parent)
-    txHex += stringToHex(tx.url)
+    ;(tx.parents || []).forEach(parent => txHex += parent)
+    txHex += stringToHex(tx.stateURI)
     tx.patches.forEach(patch => txHex += stringToHex(patch))
     return txHex
 }
