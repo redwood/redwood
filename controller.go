@@ -37,7 +37,8 @@ type controller struct {
 	address  types.Address
 	stateURI string
 
-	txStore TxStore
+	txStore  TxStore
+	refStore RefStore
 
 	behaviorTree *behaviorTree
 
@@ -49,7 +50,14 @@ type controller struct {
 	onTxProcessed TxProcessedHandler
 }
 
-func NewController(address types.Address, stateURI string, stateDBRootPath string, txStore TxStore, txProcessedHandler TxProcessedHandler) (Controller, error) {
+func NewController(
+	address types.Address,
+	stateURI string,
+	stateDBRootPath string,
+	txStore TxStore,
+	refStore RefStore,
+	txProcessedHandler TxProcessedHandler,
+) (Controller, error) {
 	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(stateURI)
 	states, err := tree.NewDBTree(filepath.Join(stateDBRootPath, stateURIClean))
 	if err != nil {
@@ -66,6 +74,7 @@ func NewController(address types.Address, stateURI string, stateDBRootPath strin
 		address:       address,
 		stateURI:      stateURI,
 		txStore:       txStore,
+		refStore:      refStore,
 		behaviorTree:  newBehaviorTree(),
 		states:        states,
 		indices:       indices,
@@ -289,7 +298,7 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 				state.Diff().SetEnabled(true)
 			}
 
-			err = c.behaviorTree.resolvers[string(resolverKeypath)].ResolveState(stateToResolve, tx.From, tx.ID, tx.Parents, patchesTrimmed)
+			err = c.behaviorTree.resolvers[string(resolverKeypath)].ResolveState(stateToResolve, c.refStore, tx.From, tx.ID, tx.Parents, patchesTrimmed)
 			if err != nil {
 				return errors.Wrap(ErrInvalidTx, err.Error())
 			}

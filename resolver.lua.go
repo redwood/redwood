@@ -48,7 +48,7 @@ func (r *luaResolver) InternalState() map[string]interface{} {
 	return nil
 }
 
-func (r *luaResolver) ResolveState(state tree.Node, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) (err error) {
+func (r *luaResolver) ResolveState(state tree.Node, refStore RefStore, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) (err error) {
 	defer annotate(&err, "luaResolver.ResolveState")
 
 	luaPatches, err := luaconv.Wrap(r.L, reflect.ValueOf(patches))

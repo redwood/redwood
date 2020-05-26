@@ -1,6 +1,7 @@
 package redwood
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -134,7 +135,7 @@ func (m *metacontroller) ensureController(stateURI string) (Controller, error) {
 	if ctrl == nil {
 		// Set up the controller
 		var err error
-		ctrl, err = NewController(m.address, stateURI, m.dbRootPath, m.txStore, m.txProcessedHandler)
+		ctrl, err = NewController(m.address, stateURI, m.dbRootPath, m.txStore, m.refStore, m.txProcessedHandler)
 		if err != nil {
 			return nil, err
 		}
@@ -170,28 +171,28 @@ func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DB
 	var refs []types.RefID
 	defer func() {
 		if m.receivedRefsHandler != nil {
-				m.receivedRefsHandler(refs)
+			m.receivedRefsHandler(refs)
+		}
+	}()
+
+	diff := state.Diff()
+
+	// Find all refs in the tree and notify the Host to start fetching them
+	for kp := range diff.Added {
+		keypath := tree.Keypath(kp)
+		parentKeypath, key := keypath.Pop()
+		switch {
+		case key.Equals(nelson.ValueKey):
+			contentType, err := nelson.GetContentType(state.NodeAt(parentKeypath, nil))
+			if err != nil && errors.Cause(err) != types.Err404 {
+				return err
+			} else if contentType != "link" {
+				continue
 			}
-		}()
 
-		diff := state.Diff()
-
-		// Find all refs in the tree and notify the Host to start fetching them
-		for kp := range diff.Added {
-			keypath := tree.Keypath(kp)
-			parentKeypath, key := keypath.Pop()
-			switch {
-			case key.Equals(nelson.ValueKey):
-				contentType, err := nelson.GetContentType(state.NodeAt(parentKeypath, nil))
-				if err != nil && errors.Cause(err) != types.Err404 {
-					return err
-				} else if contentType != "link" {
-					continue
-				}
-
-				linkStr, _, err := state.StringValue(keypath)
-				if err != nil {
-					return err
+			linkStr, _, err := state.StringValue(keypath)
+			if err != nil {
+				return err
 			}
 			linkType, linkValue := nelson.DetermineLinkType(linkStr)
 			if linkType == nelson.LinkTypeRef {
@@ -203,88 +204,88 @@ func (m *metacontroller) txProcessedHandler(c Controller, tx *Tx, state *tree.DB
 				refs = append(refs, refID)
 			}
 		}
+	}
+
+	// Remove deleted resolvers and validators
+	for kp := range diff.Removed {
+		parentKeypath, key := tree.Keypath(kp).Pop()
+		switch {
+		case key.Equals(MergeTypeKeypath):
+			c.BehaviorTree().removeResolver(parentKeypath)
+		case key.Equals(ValidatorKeypath):
+			c.BehaviorTree().removeValidator(parentKeypath)
+		case parentKeypath.Part(-1).Equals(tree.Keypath("Indices")):
+			//indicesKeypath, _ := parentKeypath.Pop()
+			//c.BehaviorTree().removeIndexer()
 		}
 
-		// Remove deleted resolvers and validators
-		for kp := range diff.Removed {
-			parentKeypath, key := tree.Keypath(kp).Pop()
+		for parentKeypath != nil {
+			nextParentKeypath, key := parentKeypath.Pop()
 			switch {
 			case key.Equals(MergeTypeKeypath):
-				c.BehaviorTree().removeResolver(parentKeypath)
+				err := m.initializeResolver(state, parentKeypath, c)
+				if err != nil {
+					return err
+				}
 			case key.Equals(ValidatorKeypath):
-				c.BehaviorTree().removeValidator(parentKeypath)
-			case parentKeypath.Part(-1).Equals(tree.Keypath("Indices")):
-				//indicesKeypath, _ := parentKeypath.Pop()
-				//c.BehaviorTree().removeIndexer()
+				err := m.initializeValidator(state, parentKeypath, c)
+				if err != nil {
+					return err
+				}
+			}
+			parentKeypath = nextParentKeypath
+		}
+	}
+
+	// Attach added resolvers and validators
+	for kp := range diff.Added {
+		keypath := tree.Keypath(kp)
+		parentKeypath, key := keypath.Pop()
+		switch {
+		case key.Equals(MergeTypeKeypath):
+			err := m.initializeResolver(state, keypath, c)
+			if err != nil {
+				return err
 			}
 
-			for parentKeypath != nil {
-				nextParentKeypath, key := parentKeypath.Pop()
-				switch {
-				case key.Equals(MergeTypeKeypath):
-					err := m.initializeResolver(state, parentKeypath, c)
-					if err != nil {
-						return err
-					}
-				case key.Equals(ValidatorKeypath):
-					err := m.initializeValidator(state, parentKeypath, c)
-					if err != nil {
-						return err
-					}
-				}
-				parentKeypath = nextParentKeypath
+		case key.Equals(ValidatorKeypath):
+			err := m.initializeValidator(state, keypath, c)
+			if err != nil {
+				return err
+			}
+
+		case key.Equals(tree.Keypath("Indices")):
+			err := m.initializeIndexer(state, keypath, c)
+			if err != nil {
+				return err
 			}
 		}
 
-		// Attach added resolvers and validators
-		for kp := range diff.Added {
-			keypath := tree.Keypath(kp)
-			parentKeypath, key := keypath.Pop()
+		for parentKeypath != nil {
+			nextParentKeypath, key := parentKeypath.Pop()
 			switch {
 			case key.Equals(MergeTypeKeypath):
-				err := m.initializeResolver(state, keypath, c)
+				err := m.initializeResolver(state, parentKeypath, c)
 				if err != nil {
 					return err
 				}
-
 			case key.Equals(ValidatorKeypath):
-				err := m.initializeValidator(state, keypath, c)
-				if err != nil {
-					return err
-				}
-
-			case key.Equals(tree.Keypath("Indices")):
-				err := m.initializeIndexer(state, keypath, c)
+				err := m.initializeValidator(state, parentKeypath, c)
 				if err != nil {
 					return err
 				}
 			}
-
-			for parentKeypath != nil {
-				nextParentKeypath, key := parentKeypath.Pop()
-				switch {
-				case key.Equals(MergeTypeKeypath):
-					err := m.initializeResolver(state, parentKeypath, c)
-					if err != nil {
-						return err
-					}
-				case key.Equals(ValidatorKeypath):
-					err := m.initializeValidator(state, parentKeypath, c)
-					if err != nil {
-						return err
-					}
-				}
-				parentKeypath = nextParentKeypath
+			parentKeypath = nextParentKeypath
 		}
 	}
 
 	return nil
 }
 
-func (m *metacontroller) initializeResolver(state *tree.DBNode, resolverKeypath tree.Keypath, c Controller) error {
+func (m *metacontroller) initializeResolver(state *tree.DBNode, resolverConfigKeypath tree.Keypath, c Controller) error {
 	// Resolve any refs (to code) in the resolver config object.  We copy the config so
 	// that we don't inject any refs into the state tree itself
-	config, err := state.CopyToMemory(resolverKeypath, nil)
+	config, err := state.CopyToMemory(resolverConfigKeypath, nil)
 	if err != nil {
 		return err
 	}
@@ -310,8 +311,8 @@ func (m *metacontroller) initializeResolver(state *tree.DBNode, resolverKeypath 
 
 	// @@TODO: if the resolver type changes, this totally breaks everything
 	var internalState map[string]interface{}
-	oldResolver, oldResolverKeypath := c.BehaviorTree().nearestResolverForKeypath(resolverKeypath)
-	if !oldResolverKeypath.Equals(resolverKeypath) {
+	oldResolver, oldResolverKeypath := c.BehaviorTree().nearestResolverForKeypath(resolverConfigKeypath)
+	if !oldResolverKeypath.Equals(resolverConfigKeypath) {
 		internalState = make(map[string]interface{})
 	} else {
 		internalState = oldResolver.InternalState()
@@ -322,14 +323,20 @@ func (m *metacontroller) initializeResolver(state *tree.DBNode, resolverKeypath 
 		return err
 	}
 
-	c.BehaviorTree().addResolver(resolverKeypath, resolver)
+	resolverNodeKeypath, _ := resolverConfigKeypath.Pop()
+
+	c.BehaviorTree().addResolver(resolverNodeKeypath, resolver)
 	return nil
 }
 
-func (m *metacontroller) initializeValidator(state *tree.DBNode, validatorKeypath tree.Keypath, c Controller) error {
+func debugPrint(inFormat string, args ...interface{}) {
+	fmt.Printf(inFormat, args...)
+}
+
+func (m *metacontroller) initializeValidator(state *tree.DBNode, validatorConfigKeypath tree.Keypath, c Controller) error {
 	// Resolve any refs (to code) in the validator config object.  We copy the config so
 	// that we don't inject any refs into the state tree itself
-	config, err := state.CopyToMemory(validatorKeypath, nil)
+	config, err := state.CopyToMemory(validatorConfigKeypath, nil)
 	if err != nil {
 		return err
 	}
@@ -358,7 +365,9 @@ func (m *metacontroller) initializeValidator(state *tree.DBNode, validatorKeypat
 		return err
 	}
 
-	c.BehaviorTree().addValidator(validatorKeypath, validator)
+	validatorNodeKeypath, _ := validatorConfigKeypath.Pop()
+
+	c.BehaviorTree().addValidator(validatorNodeKeypath, validator)
 	return nil
 }
 
