@@ -15,9 +15,13 @@ func (r *dumbResolver) InternalState() map[string]interface{} {
 	return map[string]interface{}{}
 }
 
-func (r *dumbResolver) ResolveState(state tree.Node, sender types.Address, txID types.ID, parents []types.ID, ps []Patch) error {
+func (r *dumbResolver) ResolveState(state tree.Node, refStore RefStore, sender types.Address, txID types.ID, parents []types.ID, ps []Patch) (err error) {
 	for _, p := range ps {
-		err := state.Set(p.Keypath, p.Range, p.Val)
+		if p.Val != nil {
+			err = state.Set(p.Keypath, p.Range, p.Val)
+		} else {
+			err = state.Delete(p.Keypath, p.Range)
+		}
 		if err != nil {
 			return err
 		}
