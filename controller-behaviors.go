@@ -38,6 +38,7 @@ func init() {
 		"resolver/dumb": NewDumbResolver,
 		"resolver/lua":  NewLuaResolver,
 		"resolver/js":   NewJSResolver,
+		"resolver/git":  NewGitResolver,
 		//"resolver/stack": NewStackResolver,
 	}
 	indexerRegistry = map[string]IndexerConstructor{
