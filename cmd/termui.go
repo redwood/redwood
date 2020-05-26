@@ -202,6 +202,9 @@ func (l *layout) HandleInput(evt ui.Event) bool {
 		case "<C-l>":
 			uiState.focusMode = focusMain
 			return true
+		case "<C-s>":
+			uiState.focusMode = focusSidebar
+			return true
 		}
 	}
 
@@ -218,7 +221,10 @@ func (l *layout) HandleInput(evt ui.Event) bool {
 		}
 	} else if uiState.focusMode == focusInput {
 		return l.input.HandleInput(evt)
+	} else if uiState.focusMode == focusSidebar {
+		return l.sidebar.HandleInput(evt)
 	}
+
 	return false
 }
 
@@ -456,8 +462,8 @@ type sidebar struct {
 
 func newSidebar() *sidebar {
 	list := widgets.NewList()
-	list.Rows = []string{"state 1", "state 2", "state 3"}
 	list.BorderStyle = ui.NewStyle(ui.ColorClear, ui.ColorClear, ui.ModifierClear)
+	list.SelectedRowStyle = ui.NewStyle(list.SelectedRowStyle.Fg, list.SelectedRowStyle.Bg, ui.ModifierReverse)
 	return &sidebar{
 		component: newComponent(list),
 		List:      list,
@@ -465,8 +471,57 @@ func newSidebar() *sidebar {
 }
 
 func (s *sidebar) Update() {
-	s.List.BorderStyle = ui.NewStyle(ui.ColorClear, ui.ColorClear, ui.ModifierClear)
+	if uiState.focusMode == focusSidebar {
+		s.List.BorderStyle = ui.NewStyle(ui.ColorRed, ui.ColorClear, ui.ModifierBold)
+	} else {
+		s.List.BorderStyle = ui.NewStyle(ui.ColorClear, ui.ColorClear, ui.ModifierClear)
+	}
 	s.List.Rows = uiState.stateURIs
+}
+
+func (s *sidebar) HandleInput(evt ui.Event) bool {
+	defer func() {
+		if uiState.logPanePreviousKey == "g" {
+			uiState.logPanePreviousKey = ""
+		} else {
+			uiState.logPanePreviousKey = evt.ID
+		}
+	}()
+	switch evt.ID {
+	case "<Enter>":
+		uiState.selectedState = s.List.SelectedRow
+		return true
+	case "j", "<Down>":
+		s.ScrollDown()
+		return true
+	case "k", "<Up>":
+		s.ScrollUp()
+		return true
+	case "<C-d>":
+		s.ScrollHalfPageDown()
+		return true
+	case "<C-u>":
+		s.ScrollHalfPageUp()
+		return true
+	case "<C-f>":
+		s.ScrollPageDown()
+		return true
+	case "<C-b>":
+		s.ScrollPageUp()
+		return true
+	case "g":
+		if uiState.logPanePreviousKey == "g" {
+			s.ScrollTop()
+			return true
+		}
+	case "<Home>":
+		s.ScrollTop()
+		return true
+	case "G", "<End>":
+		s.ScrollBottom()
+		return true
+	}
+	return false
 }
 
 func (s *sidebar) SetStateURIs(stateURIs []string) {
