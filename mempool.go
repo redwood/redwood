@@ -1,9 +1,8 @@
 package redwood
 
 import (
+	"fmt"
 	"sync"
-
-	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood/ctx"
 	"github.com/brynbellomy/redwood/types"
@@ -26,10 +25,10 @@ type mempool struct {
 	txSet            *txSet
 	chAdd            chan *Tx
 	chForceReprocess chan struct{}
-	processCallback  func(tx *Tx) error
+	processCallback  func(tx *Tx) processTxOutcome
 }
 
-func NewMempool(address types.Address, processCallback func(tx *Tx) error) Mempool {
+func NewMempool(address types.Address, processCallback func(tx *Tx) processTxOutcome) Mempool {
 	return &mempool{
 		Context:          &ctx.Context{},
 		address:          address,
@@ -74,13 +73,13 @@ func (m *mempool) mempoolLoop() {
 		select {
 		case <-m.Context.Done():
 			return
+
 		case tx := <-m.chAdd:
 			m.txSet.add(tx)
 			m.ForceReprocess()
+
 		case <-m.chForceReprocess:
-			txs := m.txSet.get()
-			m.txSet.clear()
-			m.processMempool(txs)
+			m.processMempool()
 		}
 	}
 }
@@ -94,36 +93,53 @@ func (m *mempool) ForceReprocess() {
 	}
 }
 
-func (m *mempool) processMempool(txs map[types.Hash]*Tx) {
+func (m *mempool) debugPrint() {
+	var lines []string
+	txs := m.txSet.get()
+	for hash, tx := range txs {
+		lines = append(lines, fmt.Sprintf("%v -> %v", hash, tx.ID))
+	}
+	m.Debugf("mempool = %v", PrettyJSON(lines))
+}
+
+type processTxOutcome int
+
+const (
+	processTxOutcome_Succeeded processTxOutcome = iota
+	processTxOutcome_Failed
+	processTxOutcome_Retry
+)
+
+func (m *mempool) processMempool() {
+	txs := m.txSet.get()
+	m.txSet.clear()
+
 	for {
 		var anySucceeded bool
-		newMempool := make(map[types.Hash]*Tx, len(txs))
 
 		for _, tx := range txs {
-			err := m.processCallback(tx)
-			if errors.Cause(err) == ErrNoParentYet || errors.Cause(err) == ErrMissingCriticalRefs || errors.Cause(err) == ErrInvalidParent || errors.Cause(err) == ErrPendingParent {
-				m.Infof(0, "readding to mempool %v (%v)", tx.ID.Pretty(), err)
-				newMempool[tx.Hash()] = tx
+			outcome := m.processCallback(tx)
 
-			} else if errors.Cause(err) == ErrInvalidTx {
-				m.Errorf("invalid tx %v: %+v: %v", tx.ID.Pretty(), err, PrettyJSON(tx))
+			switch outcome {
+			case processTxOutcome_Failed:
 				delete(txs, tx.Hash())
 
-			} else if err != nil {
-				m.Errorf("error processing tx %v: %+v: %v", tx.ID.Pretty(), err, PrettyJSON(tx))
-				delete(txs, tx.Hash())
+			case processTxOutcome_Retry:
+				// Leave it in the mempool
 
-			} else {
+			case processTxOutcome_Succeeded:
+				delete(txs, tx.Hash())
 				anySucceeded = true
-				m.Successf("tx added to chain (%v) %v", tx.URL, tx.ID.Pretty())
-				delete(txs, tx.Hash())
+
+			default:
+				panic("this should never happen")
 			}
 		}
-		m.txSet.addMany(newMempool)
 		if !anySucceeded {
-			return
+			break
 		}
 	}
+	m.txSet.addMany(txs)
 }
 
 type txSet struct {
