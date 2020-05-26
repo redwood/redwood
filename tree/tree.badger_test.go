@@ -145,21 +145,76 @@ func TestDBTree_Value_SliceWithRange(T *testing.T) {
 }
 
 func TestDBNode_Set_NoRange(T *testing.T) {
-	db := setupDBTreeWithValue(T, Keypath("data"), fixture1.input)
-	defer db.DeleteDB()
+	T.Run("slice", func(T *testing.T) {
+		db := setupDBTreeWithValue(T, Keypath("data"), fixture1.input)
+		defer db.DeleteDB()
 
-	state := db.StateAtVersion(nil, true)
+		state := db.StateAtVersion(nil, true)
 
-	state.Set(Keypath("data/flox"), nil, S{"a", "b", "c", "d"})
-	err := state.Save()
-	require.NoError(T, err)
+		fmt.Println("============")
 
-	state = db.StateAtVersion(nil, false)
+		err := state.Set(Keypath("data/flox"), nil, S{"a", "b", "c", "d"})
+		require.NoError(T, err)
 
-	val, exists, err := state.Value(Keypath("data/flox"), nil)
-	require.NoError(T, err)
-	require.True(T, exists)
-	require.Equal(T, S{"a", "b", "c", "d"}, val)
+		err = state.Save()
+		require.NoError(T, err)
+
+		state = db.StateAtVersion(nil, false)
+		state.DebugPrint(debugPrint, true, 0)
+
+		val, exists, err := state.Value(Keypath("data/flox"), nil)
+		require.NoError(T, err)
+		require.True(T, exists)
+		require.Equal(T, S{"a", "b", "c", "d"}, val)
+	})
+
+	// T.Run("memory node", func(T *testing.T) {
+	// 	db := setupDBTreeWithValue(T, Keypath("data"), fixture1.input)
+	// 	defer db.DeleteDB()
+
+	// 	state := db.StateAtVersion(nil, true)
+
+	// 	memNode := NewMemoryNode()
+
+	// 	memNode.Set(nil, nil, M{
+	// 		"foo": M{"one": uint64(1), "two": uint64(2)},
+	// 		"bar": S{"hi", float64(123)},
+	// 	})
+
+	// 	err := state.Set(Keypath("data/flox"), nil, memNode)
+	// 	require.NoError(T, err)
+
+	// 	err = state.Save()
+	// 	require.NoError(T, err)
+
+	// 	state = db.StateAtVersion(nil, false)
+	// 	state.DebugPrint(debugPrint, true, 0)
+	// })
+
+	// T.Run("db node inside memory node", func(T *testing.T) {
+	// 	db := setupDBTreeWithValue(T, Keypath("data"), fixture1.input)
+	// 	defer db.DeleteDB()
+
+	// 	state := db.StateAtVersion(nil, true)
+
+	// 	memNode := NewMemoryNode()
+	// 	innerDBNode := state.NodeAt(Keypath("data/flox"), nil)
+
+	// 	memNode.Set(nil, nil, M{
+	// 		"foo": innerDBNode,
+	// 	})
+
+	// 	memNode.DebugPrint(debugPrint, true, 0)
+
+	// 	err := state.Set(Keypath("data/hello/xyzzy"), nil, memNode)
+	// 	require.NoError(T, err)
+
+	// 	err = state.Save()
+	// 	require.NoError(T, err)
+
+	// 	state = db.StateAtVersion(nil, false)
+	// 	state.DebugPrint(debugPrint, true, 0)
+	// })
 }
 
 func TestDBTree_Set_Range_String(T *testing.T) {
@@ -258,6 +313,105 @@ func TestDBTree_Set_Range_Slice(T *testing.T) {
 			}, val)
 		})
 	}
+}
+
+func TestDBNode_Delete_NoRange(T *testing.T) {
+	T.Run("slice", func(T *testing.T) {
+		db := setupDBTreeWithValue(T, Keypath("data"), fixture1.input)
+		defer db.DeleteDB()
+
+		state := db.StateAtVersion(nil, true)
+
+		err := state.Delete(Keypath("data/flox"), nil)
+		require.NoError(T, err)
+
+		err = state.Save()
+		require.NoError(T, err)
+
+		state = db.StateAtVersion(nil, false)
+		state.DebugPrint(debugPrint, true, 0)
+
+		expected := append(
+			makeSetKeypathFixtureOutputs(Keypath("data")),
+			prefixFixtureOutputs(Keypath("data"), fixture1.output)...,
+		)
+		expected = removeFixtureOutputsWithPrefix(Keypath("data/flox"), expected...)
+		for _, x := range expected {
+			fmt.Println("EXPECT ~>", x.keypath)
+		}
+
+		iter := state.Iterator(nil, false, 0)
+		defer iter.Close()
+
+		i := 0
+		for iter.Rewind(); iter.Valid(); iter.Next() {
+			require.Equal(T, expected[i].keypath, iter.Node().Keypath())
+			i++
+		}
+	})
+}
+
+func TestDBTree_CopyToMemory(T *testing.T) {
+	tests := []struct {
+		name    string
+		keypath Keypath
+	}{
+		{"root value", Keypath(nil)},
+		{"value", Keypath("flo")},
+		{"slice", Keypath("flox")},
+		{"map", Keypath("flox").PushIndex(1)},
+	}
+
+	T.Run("after .NodeAt", func(T *testing.T) {
+		for _, test := range tests {
+			test := test
+			T.Run(test.name, func(T *testing.T) {
+				db := setupDBTreeWithValue(T, nil, fixture1.input)
+				defer db.DeleteDB()
+
+				state := db.StateAtVersion(nil, false)
+				defer state.Close()
+
+				copied, err := state.NodeAt(test.keypath, nil).CopyToMemory(nil, nil)
+				require.NoError(T, err)
+
+				expected := filterFixtureOutputsWithPrefix(test.keypath, fixture1.output...)
+				expected = removeFixtureOutputPrefixes(test.keypath, expected...)
+
+				memnode := copied.(*MemoryNode)
+				require.Equal(T, len(expected), len(memnode.keypaths))
+				for i := range memnode.keypaths {
+					require.Equal(T, expected[i].keypath, memnode.keypaths[i])
+				}
+			})
+		}
+	})
+
+	T.Run("without .NodeAt", func(T *testing.T) {
+		for _, test := range tests {
+			test := test
+			T.Run(test.name, func(T *testing.T) {
+				db := setupDBTreeWithValue(T, nil, fixture1.input)
+				defer db.DeleteDB()
+
+				state := db.StateAtVersion(nil, false)
+				defer state.Close()
+
+				copied, err := state.CopyToMemory(test.keypath, nil)
+				require.NoError(T, err)
+
+				expected := filterFixtureOutputsWithPrefix(test.keypath, fixture1.output...)
+				expected = removeFixtureOutputPrefixes(test.keypath, expected...)
+
+				memnode := copied.(*MemoryNode)
+				require.Equal(T, len(expected), len(memnode.keypaths))
+				for i := range memnode.keypaths {
+					require.Equal(T, expected[i].keypath, memnode.keypaths[i])
+				}
+			})
+		}
+	})
+
 }
 
 func TestDBNode_Iterator(T *testing.T) {
@@ -579,41 +733,6 @@ func TestDBNode_DepthFirstIterator(T *testing.T) {
 			}
 			require.Equal(T, len(expected), i)
 
-		})
-	}
-}
-
-func TestDBTree_CopyToMemory_AtKeypath(T *testing.T) {
-	tests := []struct {
-		name    string
-		keypath Keypath
-	}{
-		{"root value", Keypath(nil)},
-		{"value", Keypath("flo")},
-		{"slice", Keypath("flox")},
-		{"map", Keypath("flox").PushIndex(1)},
-	}
-
-	for _, test := range tests {
-		test := test
-		T.Run(test.name, func(T *testing.T) {
-			db := setupDBTreeWithValue(T, nil, fixture1.input)
-			defer db.DeleteDB()
-
-			state := db.StateAtVersion(nil, false)
-
-			copied, err := state.NodeAt(test.keypath, nil).CopyToMemory(nil, nil)
-			require.NoError(T, err)
-
-			expected := filterFixtureOutputsWithPrefix(test.keypath, fixture1.output...)
-			expected = removeFixtureOutputPrefixes(test.keypath, expected...)
-
-			memnode := copied.(*MemoryNode)
-			require.Equal(T, len(expected), len(memnode.keypaths))
-
-			for i := range memnode.keypaths {
-				require.Equal(T, expected[i].keypath, memnode.keypaths[i])
-			}
 		})
 	}
 }
