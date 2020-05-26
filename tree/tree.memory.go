@@ -3,8 +3,8 @@ package tree
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -200,12 +200,12 @@ func (n *MemoryNode) nodeType(keypath Keypath) NodeType {
 
 // NodeInfo returns metadata about the node: its NodeType, its ValueType
 // (if applicable), and the Content-Length of its value.
-func (n *MemoryNode) NodeInfo(keypath Keypath) (NodeType, ValueType, uint64, error) {
-	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+func (n *MemoryNode) NodeInfo(relKeypath Keypath) (NodeType, ValueType, uint64, error) {
+	if node, relKeypath := n.ParentNodeFor(relKeypath); n != node {
 		return node.NodeInfo(relKeypath)
 	}
 
-	absKeypath := n.keypath.Push(keypath)
+	absKeypath := n.keypath.Push(relKeypath)
 
 	switch n.nodeTypes[string(absKeypath)] {
 	case NodeTypeInvalid:
@@ -260,6 +260,14 @@ func (n *MemoryNode) Exists(keypath Keypath) (bool, error) {
 
 	_, exists := n.nodeTypes[string(absKeypath)]
 	return exists, nil
+}
+
+func (n *MemoryNode) innerNode(relKeypath Keypath) Node {
+	absKeypath := n.keypath.Push(relKeypath)
+	if n.nodeTypes[string(absKeypath)] == NodeTypeNode {
+		return n.values[string(absKeypath)].(Node)
+	}
+	return nil
 }
 
 func (n *MemoryNode) UintValue(keypath Keypath) (uint64, bool, error) {
@@ -510,6 +518,9 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 		case Node:
 			t.nodeTypes[string(absNodeKeypath)] = NodeTypeNode
 			t.values[string(absNodeKeypath)] = nodeValue
+
+			// @@TODO: does the length need to be set here?
+			// t.contentLengths
 		default:
 			t.nodeTypes[string(absNodeKeypath)] = NodeTypeValue
 			t.values[string(absNodeKeypath)] = nodeValue
