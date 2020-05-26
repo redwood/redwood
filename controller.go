@@ -3,6 +3,7 @@ package redwood
 import (
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -48,6 +49,7 @@ type controller struct {
 
 	mempool       Mempool
 	onTxProcessed TxProcessedHandler
+	addTxMu       sync.Mutex
 }
 
 func NewController(
@@ -138,8 +140,11 @@ func (c *controller) SetBehaviorTree(tree *behaviorTree) {
 }
 
 func (c *controller) AddTx(tx *Tx) error {
+	c.addTxMu.Lock()
+	defer c.addTxMu.Unlock()
+
 	// Ignore duplicates
-	exists, err := c.txStore.TxExists(c.stateURI, tx.ID)
+	exists, err := c.txStore.TxExists(tx.URL, tx.ID)
 	if err != nil {
 		return err
 	} else if exists {
@@ -174,15 +179,41 @@ var (
 	ErrMissingCriticalRefs = errors.New("missing critical refs")
 )
 
-func (c *controller) validateTxIntrinsics(tx *Tx) (err error) {
+func (c *controller) processMempoolTx(tx *Tx) processTxOutcome {
+	err := c.tryApplyTx(tx)
+
+	if err == nil {
+		c.Successf("tx added to chain (%v) %v", tx.URL, tx.ID.Pretty())
+		return processTxOutcome_Succeeded
+	}
+
+	switch errors.Cause(err) {
+	case ErrTxMissingParents, ErrInvalidParent, ErrInvalidSignature, ErrInvalidTx:
+		c.Errorf("invalid tx %v: %+v: %v", tx.ID.Pretty(), err, PrettyJSON(tx))
+		return processTxOutcome_Failed
+
+	case ErrPendingParent, ErrMissingCriticalRefs, ErrNoParentYet:
+		c.Infof(0, "readding to mempool %v (%v)", tx.ID.Pretty(), err)
+		return processTxOutcome_Retry
+
+	default:
+		c.Errorf("error processing tx %v: %+v: %v", tx.ID.Pretty(), err, PrettyJSON(tx))
+		return processTxOutcome_Failed
+	}
+}
+
+func (c *controller) tryApplyTx(tx *Tx) (err error) {
 	defer annotate(&err, "stateURI=%v tx=%v", tx.URL, tx.ID.Pretty())
 
+	//
+	// Validate the tx's intrinsics
+	//
 	if len(tx.Parents) == 0 && tx.ID != GenesisTxID {
 		return ErrTxMissingParents
 	}
 
 	for _, parentID := range tx.Parents {
-		parentTx, err := c.txStore.FetchTx(c.stateURI, parentID)
+		parentTx, err := c.txStore.FetchTx(tx.URL, parentID)
 		if errors.Cause(err) == types.Err404 {
 			return errors.Wrapf(ErrNoParentYet, "parent=%v", parentID.Pretty())
 		} else if err != nil {
@@ -201,15 +232,6 @@ func (c *controller) validateTxIntrinsics(tx *Tx) (err error) {
 		return ErrInvalidSignature
 	} else if sigPubKey.Address() != tx.From {
 		return errors.Wrapf(ErrInvalidSignature, "address doesn't match (expected=%v received=%v)", tx.From.Hex(), sigPubKey.Address().Hex())
-	}
-
-	return nil
-}
-
-func (c *controller) processMempoolTx(tx *Tx) error {
-	err := c.validateTxIntrinsics(tx)
-	if err != nil {
-		return err
 	}
 
 	state := c.states.StateAtVersion(nil, true)
@@ -241,13 +263,14 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 
 			txCopy := *tx
 			txCopy.Patches = patchesTrimmed
-			err := c.behaviorTree.validators[string(validatorKeypath)].ValidateTx(state.NodeAt(validatorKeypath, nil), &txCopy)
+			validator := c.behaviorTree.validators[string(validatorKeypath)]
+			err := validator.ValidateTx(state.NodeAt(validatorKeypath, nil), &txCopy)
 			if err != nil {
 				// Mark the tx invalid and save it to the DB
 				tx.Status = TxStatusInvalid
-				err = c.txStore.AddTx(tx)
-				if err != nil {
-					return err
+				err2 := c.txStore.AddTx(tx)
+				if err2 != nil {
+					return err2
 				}
 				return errors.Wrap(ErrInvalidTx, err.Error())
 			}
@@ -284,36 +307,10 @@ func (c *controller) processMempoolTx(tx *Tx) error {
 				continue
 			}
 
-			stateToResolve := state.NodeAt(resolverKeypath, nil)
-			resolverConfig, err := state.CopyToMemory(resolverKeypath.Push(MergeTypeKeypath), nil)
-			if err != nil && errors.Cause(err) != types.Err404 {
-				return err
-			}
-			if resolverConfig != nil {
-				state.Diff().SetEnabled(false)
-				err = stateToResolve.Delete(MergeTypeKeypath, nil)
-				if err != nil {
-					return err
-				}
-				state.Diff().SetEnabled(true)
-			}
-
-			err = c.behaviorTree.resolvers[string(resolverKeypath)].ResolveState(stateToResolve, c.refStore, tx.From, tx.ID, tx.Parents, patchesTrimmed)
+			resolver := c.behaviorTree.resolvers[string(resolverKeypath)]
+			err = resolver.ResolveState(state.NodeAt(resolverKeypath, nil), c.refStore, tx.From, tx.ID, tx.Parents, patchesTrimmed)
 			if err != nil {
 				return errors.Wrap(ErrInvalidTx, err.Error())
-			}
-
-			if resolverConfig != nil {
-				state.Diff().SetEnabled(false)
-				resolverConfigVal, _, err := resolverConfig.Value(nil, nil)
-				if err != nil {
-					return err
-				}
-				err = stateToResolve.Set(MergeTypeKeypath, nil, resolverConfigVal)
-				if err != nil {
-					return err
-				}
-				state.Diff().SetEnabled(true)
 			}
 
 			patches = unprocessedPatches
