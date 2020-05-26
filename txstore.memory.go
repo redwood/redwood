@@ -29,10 +29,10 @@ func (s memoryTxStore) Start() error {
 func (s memoryTxStore) AddTx(tx *Tx) error {
 	s.Lock()
 	defer s.Unlock()
-	if _, exists := s.txs[tx.URL]; !exists {
-		s.txs[tx.URL] = make(map[types.ID]*Tx)
+	if _, exists := s.txs[tx.StateURI]; !exists {
+		s.txs[tx.StateURI] = make(map[types.ID]*Tx)
 	}
-	s.txs[tx.URL][tx.ID] = tx
+	s.txs[tx.StateURI][tx.ID] = tx
 	return nil
 }
 

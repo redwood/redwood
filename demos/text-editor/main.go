@@ -63,7 +63,7 @@ func main() {
 	//    panic(err)
 	//}
 
-	// Both consumers subscribe to the URL
+	// Both consumers subscribe to the StateURI
 	ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
 	go func() {
 		anySucceeded, _ := host2.Subscribe(ctx, "localhost:21231/editor")
@@ -131,10 +131,10 @@ func sendTxs(host1, host2 rw.Host) {
 	//
 	var (
 		genesisTx = rw.Tx{
-			ID:      rw.GenesisTxID,
-			Parents: []types.ID{},
-			From:    host1.Address(),
-			URL:     "localhost:21231/editor",
+			ID:       rw.GenesisTxID,
+			Parents:  []types.ID{},
+			From:     host1.Address(),
+			StateURI: "localhost:21231/editor",
 			Patches: []rw.Patch{
 				mustParsePatch(` = {
 					"text": {

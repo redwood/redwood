@@ -100,7 +100,7 @@ func run(configPath string, gui bool) error {
 		return err
 	}
 
-	signingKeypair, err := rw.SigningKeypairFromHDMnemonic(config.HDMnemonicPhrase, rw.DefaultHDDerivationPath)
+	signingKeypair, err := rw.SigningKeypairFromHDMnemonic(config.Node.HDMnemonicPhrase, rw.DefaultHDDerivationPath)
 	if err != nil {
 		return err
 	}
@@ -115,35 +115,47 @@ func run(configPath string, gui bool) error {
 	peerStore := rw.NewPeerStore(signingKeypair.Address())
 	metacontroller := rw.NewMetacontroller(signingKeypair.Address(), config.StateDBRoot(), txStore, refStore)
 
-	libp2pTransport, err := rw.NewLibp2pTransport(signingKeypair.Address(), config.P2PListenPort, metacontroller, refStore, peerStore)
-	if err != nil {
-		return err
+	var transports []rw.Transport
+
+	if config.P2PTransport.Enabled {
+		libp2pTransport, err := rw.NewLibp2pTransport(
+			signingKeypair.Address(),
+			config.P2PTransport.ListenPort,
+			metacontroller,
+			refStore,
+			peerStore,
+		)
+		if err != nil {
+			return err
+		}
+		transports = append(transports, libp2pTransport)
 	}
 
-	tlsCertFilename := filepath.Join(config.DataRoot, "server.crt")
-	tlsKeyFilename := filepath.Join(config.DataRoot, "server.key")
+	if config.HTTPTransport.Enabled {
+		tlsCertFilename := filepath.Join(config.Node.DataRoot, "server.crt")
+		tlsKeyFilename := filepath.Join(config.Node.DataRoot, "server.key")
 
-	var cookieSecret [32]byte
-	copy(cookieSecret[:], []byte(config.HTTPCookieSecret))
+		var cookieSecret [32]byte
+		copy(cookieSecret[:], []byte(config.HTTPTransport.CookieSecret))
 
-	httpTransport, err := rw.NewHTTPTransport(
-		signingKeypair.Address(),
-		config.HTTPListenHost,
-		config.DefaultStateURI,
-		metacontroller,
-		refStore,
-		peerStore,
-		signingKeypair,
-		cookieSecret,
-		tlsCertFilename,
-		tlsKeyFilename,
-		config.DevMode,
-	)
-	if err != nil {
-		return err
+		httpTransport, err := rw.NewHTTPTransport(
+			signingKeypair.Address(),
+			config.HTTPTransport.ListenHost,
+			config.HTTPTransport.DefaultStateURI,
+			metacontroller,
+			refStore,
+			peerStore,
+			signingKeypair,
+			cookieSecret,
+			tlsCertFilename,
+			tlsKeyFilename,
+			config.Node.DevMode,
+		)
+		if err != nil {
+			return err
+		}
+		transports = append(transports, httpTransport)
 	}
-
-	transports := []rw.Transport{libp2pTransport, httpTransport}
 
 	host, err := rw.NewHost(signingKeypair, encryptingKeypair, transports, metacontroller, refStore, peerStore)
 	if err != nil {
@@ -153,6 +165,28 @@ func run(configPath string, gui bool) error {
 	err = host.Start()
 	if err != nil {
 		return err
+	}
+
+	if config.HTTPRPC.Enabled {
+		httpRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), config.HTTPRPC.ListenHost, host)
+
+		err = httpRPC.Start()
+		if err != nil {
+			return err
+		}
+		app.CtxAddChild(httpRPC.Ctx(), nil)
+	}
+
+	for _, bootstrapPeer := range config.Node.BootstrapPeers {
+		bootstrapPeer := bootstrapPeer
+		go func() {
+			app.Info(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
+			ctx, _ := context.WithTimeout(context.Background(), 15*time.Second)
+			err := host.AddPeer(ctx, bootstrapPeer.Transport, rw.NewStringSet(bootstrapPeer.DialAddresses))
+			if err != nil {
+				app.Errorf("error connecting to bootstrap peer: %v", err)
+			}
+		}()
 	}
 
 	app.CtxAddChild(host.Ctx(), nil)

@@ -65,8 +65,10 @@ module.exports = function (opts) {
         }
     }
 
-    async function get(opts) {
-        let { stateURI, keypath, raw } = opts
+    async function get({ stateURI, keypath, raw }) {
+        if (keypath.length > 0 && keypath[0] !== '/') {
+            keypath = '/' + keypath
+        }
         if (raw) {
             keypath = keypath + '?raw=1'
         }

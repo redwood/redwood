@@ -34,23 +34,23 @@ type HTTPClient interface {
 }
 
 type httpClient struct {
-	peerReachableAddress string
-	sigkeys              *SigningKeypair
-	cookieJar            http.CookieJar
-	tls                  bool
+	dialAddr  string
+	sigkeys   *SigningKeypair
+	cookieJar http.CookieJar
+	tls       bool
 }
 
-func NewHTTPClient(peerReachableAddress string, sigkeys *SigningKeypair, tls bool) (HTTPClient, error) {
+func NewHTTPClient(dialAddr string, sigkeys *SigningKeypair, tls bool) (HTTPClient, error) {
 	cookieJar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
 	}
 
 	return &httpClient{
-		peerReachableAddress: peerReachableAddress,
-		sigkeys:              sigkeys,
-		cookieJar:            cookieJar,
-		tls:                  tls,
+		dialAddr:  dialAddr,
+		sigkeys:   sigkeys,
+		cookieJar: cookieJar,
+		tls:       tls,
 	}, nil
 }
 
@@ -68,7 +68,7 @@ func (c *httpClient) client() *http.Client {
 func (c *httpClient) Authorize() error {
 	client := c.client()
 
-	req, err := http.NewRequest("AUTHORIZE", c.peerReachableAddress, nil)
+	req, err := http.NewRequest("AUTHORIZE", c.dialAddr, nil)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -97,7 +97,7 @@ func (c *httpClient) Authorize() error {
 
 	sigHex := hex.EncodeToString(sig)
 
-	req2, err := http.NewRequest("AUTHORIZE", c.peerReachableAddress, nil)
+	req2, err := http.NewRequest("AUTHORIZE", c.dialAddr, nil)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -121,7 +121,7 @@ type MaybeTx struct {
 func (c *httpClient) Subscribe(ctx context.Context, stateURI string) (chan MaybeTx, error) {
 	client := c.client()
 
-	req, err := http.NewRequest("GET", c.peerReachableAddress, nil)
+	req, err := http.NewRequest("GET", c.dialAddr, nil)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -170,7 +170,7 @@ func (c *httpClient) Subscribe(ctx context.Context, stateURI string) (chan Maybe
 
 func (c *httpClient) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 	client := c.client()
-	req, err := http.NewRequest("GET", c.peerReachableAddress+"/__tx/"+txID.Hex(), nil)
+	req, err := http.NewRequest("GET", c.dialAddr+"/__tx/"+txID.Hex(), nil)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -197,7 +197,7 @@ func (c *httpClient) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 
 func (c *httpClient) Get(stateURI string, version *types.ID, keypath tree.Keypath, rng *tree.Range, raw bool) (io.ReadCloser, int64, []types.ID, error) {
 	client := c.client()
-	url := c.peerReachableAddress + "/" + string(keypath)
+	url := c.dialAddr + "/" + string(keypath)
 	if raw {
 		url += "?raw=true"
 	}
@@ -273,13 +273,13 @@ func (c *httpClient) Put(tx *Tx) error {
 	}
 
 	client := c.client()
-	req, err := http.NewRequest("PUT", c.peerReachableAddress, &body)
+	req, err := http.NewRequest("PUT", c.dialAddr, &body)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
 	req.Header.Set("Version", tx.ID.Hex())
-	req.Header.Set("State-URI", tx.URL)
+	req.Header.Set("State-URI", tx.StateURI)
 	req.Header.Set("Signature", tx.Sig.Hex())
 	req.Header.Set("Parents", strings.Join(parentStrs, ","))
 	if tx.Checkpoint {
@@ -317,7 +317,7 @@ func (c *httpClient) StoreRef(file io.Reader) (StoreRefResponse, error) {
 	}
 	w.Close()
 
-	req, err := http.NewRequest("PUT", c.peerReachableAddress, &buf)
+	req, err := http.NewRequest("PUT", c.dialAddr, &buf)
 	if err != nil {
 		return StoreRefResponse{}, errors.WithStack(err)
 	}

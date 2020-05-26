@@ -24,7 +24,7 @@ type Tx struct {
 	Parents    []types.ID      `json:"parents"`
 	From       types.Address   `json:"from"`
 	Sig        types.Signature `json:"sig,omitempty"`
-	URL        string          `json:"url"`
+	StateURI   string          `json:"stateURI"`
 	Patches    []Patch         `json:"patches"`
 	Recipients []types.Address `json:"recipients,omitempty"`
 	Checkpoint bool            `json:"checkpoint"` // @@TODO: probably not ideal
@@ -52,7 +52,7 @@ func (tx Tx) Hash() types.Hash {
 			txBytes = append(txBytes, tx.Parents[i][:]...)
 		}
 
-		txBytes = append(txBytes, []byte(tx.URL)...)
+		txBytes = append(txBytes, []byte(tx.StateURI)...)
 
 		for i := range tx.Patches {
 			txBytes = append(txBytes, []byte(tx.Patches[i].String())...)
@@ -102,7 +102,7 @@ func (tx *Tx) Copy() *Tx {
 		Parents:    parents,
 		From:       tx.From,
 		Sig:        tx.Sig.Copy(),
-		URL:        tx.URL,
+		StateURI:   tx.StateURI,
 		Patches:    patches,
 		Recipients: recipients,
 		Checkpoint: tx.Checkpoint,
