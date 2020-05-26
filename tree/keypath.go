@@ -41,12 +41,46 @@ func (k Keypath) IndexByte(b byte) int {
 	return bytes.IndexByte(k, b)
 }
 
+func (k Keypath) ContainsPart(part Keypath) bool {
+	idx := bytes.Index(k, part)
+	if idx == -1 {
+		return false
+	}
+	if idx == 0 {
+		return len(k) == len(part) || k[len(part)] == KeypathSeparator[0]
+	} else if idx == len(k)-len(part) {
+		return k[idx-1] == KeypathSeparator[0]
+	} else {
+		return k[idx-1] == KeypathSeparator[0] && k[idx+len(part)] == KeypathSeparator[0]
+	}
+}
+
 func (k Keypath) RelativeTo(root Keypath) Keypath {
 	x := k[len(root):]
 	if len(x) > 0 && x[0] == KeypathSeparator[0] {
 		return x[1:]
 	}
 	return x
+}
+
+func (k Keypath) FirstNParts(n int) Keypath {
+	if n == 0 {
+		return nil
+	}
+
+	current := k
+	var endIdx int
+	for i := 0; i < n; i++ {
+		idx := bytes.IndexByte(current, KeypathSeparator[0])
+		current = current[idx+1:]
+		endIdx += idx
+
+		if i != 0 {
+			endIdx++
+		}
+	}
+
+	return k[:endIdx]
 }
 
 func (k Keypath) StartsWith(prefixParts Keypath) bool {
@@ -90,6 +124,10 @@ func (k Keypath) Push(part Keypath) Keypath {
 	k2[len(k)] = KeypathSeparator[0]
 	copy(k2[len(k)+1:], part)
 	return k2
+}
+
+func (k Keypath) Pushs(part string) Keypath {
+	return k.Push(Keypath(part))
 }
 
 func (k Keypath) PushIndex(idx uint64) Keypath {
