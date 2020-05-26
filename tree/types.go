@@ -39,6 +39,8 @@ type Node interface {
 	ChildIterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator
 	DepthFirstIterator(keypath Keypath, prefetchValues bool, prefetchSize int) Iterator
 	DebugPrint(printFn func(inFormat string, args ...interface{}), newlines bool, indentLevel int)
+
+	innerNode(relKeypath Keypath) Node
 }
 
 type NodeType uint8

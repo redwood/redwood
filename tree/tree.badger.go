@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/dgraph-io/badger/v2"
@@ -108,8 +109,8 @@ func (t *DBTree) Value(version *types.ID, keypathPrefix Keypath, rng *Range) (in
 }
 
 type DBNode struct {
-	tx          *badger.Txn
-	diff        *Diff
+	tx             *badger.Txn
+	diff           *Diff
 	keyPrefix      []byte
 	rootKeypath    Keypath
 	rng            *Range
@@ -181,10 +182,10 @@ func (tx *DBNode) Subkeys() []Keypath {
 	return keypaths
 }
 
-func (tx *DBNode) NodeInfo(keypath Keypath) (NodeType, ValueType, uint64, error) {
-	item, err := tx.tx.Get(tx.addKeyPrefix(tx.rootKeypath.Push(keypath)))
+func (n *DBNode) NodeInfo(keypath Keypath) (NodeType, ValueType, uint64, error) {
+	item, err := n.tx.Get(n.addKeyPrefix(n.rootKeypath.Push(keypath)))
 	if err == badger.ErrKeyNotFound {
-		return 0, 0, 0, errors.Wrap(types.Err404, tx.addKeyPrefix(tx.rootKeypath.Push(keypath)).String())
+		return 0, 0, 0, errors.Wrap(types.Err404, n.addKeyPrefix(n.rootKeypath.Push(keypath)).String())
 	} else if err != nil {
 		return 0, 0, 0, errors.WithStack(err)
 	}
@@ -202,8 +203,8 @@ func (tx *DBNode) NodeInfo(keypath Keypath) (NodeType, ValueType, uint64, error)
 	return nodeType, valueType, length, nil
 }
 
-func (tx *DBNode) Exists(keypath Keypath) (bool, error) {
-	_, err := tx.tx.Get(tx.addKeyPrefix(tx.rootKeypath.Push(keypath)))
+func (n *DBNode) Exists(keypath Keypath) (bool, error) {
+	_, err := n.tx.Get(n.addKeyPrefix(n.rootKeypath.Push(keypath)))
 	if err == badger.ErrKeyNotFound {
 		return false, nil
 	} else if err != nil {
@@ -276,7 +277,7 @@ func (tx *DBNode) Value(relKeypath Keypath, rng *Range) (_ interface{}, _ bool, 
 	}
 
 	var valueBuf []byte
-	err = tx.scanChildrenForward(rootNodeType, rootKeypath, rng, length, true, func(absKeypath Keypath, item *badger.Item) error {
+	err = tx.scanChildrenForward(rootNodeType, relKeypath, rng, length, true, func(absKeypath Keypath, item *badger.Item) error {
 		relKeypath := absKeypath.RelativeTo(rootKeypath)
 
 		// If we're ranging over a slice, transpose its indices to start from 0.
@@ -666,9 +667,10 @@ func (tx *DBNode) setNoRange(absKeypath Keypath, value interface{}) error {
 	}
 
 	// Set value types for intermediate keypaths in case they don't exist
-	partialKeypath, _ := absKeypath.Pop()
-	partialKeypath = tx.addKeyPrefix(partialKeypath)
-	for {
+	numParts := absKeypath.NumParts()
+	for i := 0; i < numParts; i++ {
+		partialKeypath := tx.addKeyPrefix(absKeypath.FirstNParts(i))
+
 		item, err := tx.tx.Get(partialKeypath)
 		if err == badger.ErrKeyNotFound || item.IsDeletedOrExpired() {
 			encoded, err := encodeNode(NodeTypeMap, ValueTypeInvalid, 1, nil)
@@ -681,29 +683,30 @@ func (tx *DBNode) setNoRange(absKeypath Keypath, value interface{}) error {
 			}
 		} else if err != nil {
 			return err
-		} else {
-			val, err := item.ValueCopy(nil)
-			if err != nil {
-				return err
-			}
-			if val[0] == 'v' {
-				encoded, err := encodeNode(NodeTypeMap, ValueTypeInvalid, 1, nil)
-				if err != nil {
-					return err
-				}
-				err = tx.tx.Set(partialKeypath, encoded)
-				if err != nil {
-					return err
-				}
-			}
 		}
-		if len(partialKeypath) == len(tx.keyPrefix)+len(tx.rootKeypath) {
-			break
-		}
-		partialKeypath, _ = partialKeypath.Pop()
-		if partialKeypath == nil {
-			partialKeypath = tx.addKeyPrefix(partialKeypath)
-		}
+		//  else {
+		// 	nodeType, _, _, err := tx.NodeInfo(partialKeypath)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// 	if nodeType == NodeTypeValue {
+		// 		encoded, err := encodeNode(NodeTypeMap, ValueTypeInvalid, 1, nil)
+		// 		if err != nil {
+		// 			return err
+		// 		}
+		// 		err = tx.tx.Set(partialKeypath, encoded)
+		// 		if err != nil {
+		// 			return err
+		// 		}
+		// 	}
+		// }
+		// if len(partialKeypath) == len(tx.keyPrefix)+len(tx.rootKeypath) {
+		// 	break
+		// }
+		// partialKeypath, _ = partialKeypath.Pop()
+		// if partialKeypath == nil {
+		// 	partialKeypath = tx.addKeyPrefix(partialKeypath)
+		// }
 	}
 
 	err = walkGoValue(value, func(nodeKeypath Keypath, nodeValue interface{}) error {
@@ -728,56 +731,78 @@ func (tx *DBNode) setNoRange(absKeypath Keypath, value interface{}) error {
 	return err
 }
 
-func (tx *DBNode) encodedBytes(keypath Keypath) ([]byte, error) {
-	item, err := tx.tx.Get(tx.addKeyPrefix(keypath))
+func (tx *DBNode) encodedBytes(absKeypath Keypath) ([]byte, error) {
+	item, err := tx.tx.Get(tx.addKeyPrefix(absKeypath))
 	if err != nil {
 		return nil, err
 	}
 	return item.ValueCopy(nil)
 }
 
-func (tx *DBNode) setNode(keypath Keypath, node Node) error {
+func (n *DBNode) innerNode(relKeypath Keypath) Node {
+	return nil
+}
+
+func (tx *DBNode) setNode(relKeypath Keypath, node Node) error {
 	iter := node.Iterator(nil, true, 10)
 	defer iter.Close()
 
-	prefixedKeypath := tx.addKeyPrefix(tx.rootKeypath.Push(keypath))
+	baseKeypath := tx.rootKeypath.Push(relKeypath)
+
 	for iter.Rewind(); iter.Valid(); iter.Next() {
 		child := iter.Node()
+		childRelKeypath := child.Keypath().RelativeTo(node.Keypath())
 
-		var encoded []byte
-		var err error
-		if asDBNode, isDBNode := node.(interface {
-			encodedBytes(keypath Keypath) ([]byte, error)
-		}); isDBNode {
-			encoded, err = asDBNode.encodedBytes(keypath)
-
-		} else {
-			nodeType, valueType, length, err := child.NodeInfo(nil)
+		// Other Node trees set inside of the parent node
+		if innerNode := node.innerNode(childRelKeypath); innerNode != nil {
+			err := tx.setNode(relKeypath.Push(childRelKeypath), innerNode)
 			if err != nil {
 				return err
 			}
-			var val interface{}
-			if nodeType == NodeTypeValue {
-				var exists bool
-				val, exists, err = child.Value(nil, nil)
-				if err != nil {
-					return err
-				} else if !exists {
-					// @@TODO: this shouldn't happen
-					continue
-				}
-			}
-			encoded, err = encodeNode(nodeType, valueType, length, val)
-			if err != nil {
-				return err
-			}
+			continue
 		}
 
-		relKeypath := child.Keypath().RelativeTo(node.Keypath())
-		err = tx.tx.Set(prefixedKeypath.Push(relKeypath), encoded)
+		// DBNodes
+		if asDBNode, isDBNode := child.(interface {
+			encodedBytes(keypath Keypath) ([]byte, error)
+		}); isDBNode {
+			encoded, err := asDBNode.encodedBytes(child.Keypath())
+			if err != nil {
+				return err
+			}
+			err = tx.tx.Set(tx.addKeyPrefix(baseKeypath.Push(childRelKeypath)), encoded)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Everything else
+		nodeType, valueType, length, err := node.NodeInfo(childRelKeypath)
 		if err != nil {
 			return err
 		}
+
+		var val interface{}
+		if nodeType == NodeTypeValue {
+			var exists bool
+			val, exists, err = child.Value(nil, nil)
+			if err != nil {
+				return err
+			} else if !exists {
+				// @@TODO: this shouldn't happen
+				continue
+			}
+		}
+		encoded, err := encodeNode(nodeType, valueType, length, val)
+		if err != nil {
+			return err
+		}
+		err = tx.tx.Set(tx.addKeyPrefix(baseKeypath.Push(childRelKeypath)), encoded)
+		if err != nil {
+			return err
+		}
+
 	}
 	return nil
 }
@@ -851,7 +876,7 @@ func (tx *DBNode) Delete(relKeypath Keypath, rng *Range) (err error) {
 
 	// Delete child nodes
 	{
-		tx.scanChildrenForward(rootNodeType, rootKeypath, rng, length, false, func(absKeypath Keypath, item *badger.Item) error {
+		tx.scanChildrenForward(rootNodeType, relKeypath, rng, length, false, func(absKeypath Keypath, item *badger.Item) error {
 			// This .Copy() is necessary.  See https://github.com/dgraph-io/badger/issues/494
 			err := tx.tx.Delete(absKeypath.Copy())
 			if err != nil {
@@ -870,7 +895,7 @@ func (tx *DBNode) Delete(relKeypath Keypath, rng *Range) (err error) {
 			renumberRange := &Range{int64(endIdx), int64(length)}
 			delta := -int64(rng.Size())
 
-			err := tx.scanChildrenForward(NodeTypeSlice, rootKeypath, renumberRange, length, true, func(absKeypath Keypath, item *badger.Item) error {
+			err := tx.scanChildrenForward(NodeTypeSlice, relKeypath, renumberRange, length, true, func(absKeypath Keypath, item *badger.Item) error {
 				valueBuf, err := item.ValueCopy(nil)
 				if err != nil {
 					return err
@@ -995,7 +1020,7 @@ func (tx *DBNode) CopyToMemory(relKeypath Keypath, rng *Range) (n Node, err erro
 	var newKeypaths []Keypath
 	var valBuf []byte
 
-	err = tx.scanChildrenForward(rootNodeType, rootKeypath, rng, length, true, func(absKeypath Keypath, item *badger.Item) error {
+	err = tx.scanChildrenForward(rootNodeType, relKeypath, rng, length, true, func(absKeypath Keypath, item *badger.Item) error {
 		relKeypath := absKeypath.RelativeTo(rootKeypath).Copy()
 
 		// If we're ranging over a slice, transpose its indices so that they start from 0
@@ -1509,6 +1534,9 @@ func encodeGoValue(nodeValue interface{}) ([]byte, error) {
 }
 
 func decodeNode(val []byte) (NodeType, ValueType, uint64, []byte, error) {
+	if len(val) == 0 {
+		return NodeTypeInvalid, ValueTypeInvalid, 0, nil, errors.WithStack(ErrNodeEncoding)
+	}
 	switch val[0] {
 	case 'm':
 		length := DecodeSliceLen(val[1:])
