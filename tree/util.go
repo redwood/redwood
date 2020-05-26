@@ -4,10 +4,17 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"runtime"
 	"strconv"
 
 	"github.com/pkg/errors"
 )
+
+func getFileAndLine() (string, int) {
+	pc, _, _, _ := runtime.Caller(2)
+	fn := runtime.FuncForPC(pc)
+	return fn.FileLine(pc)
+}
 
 func EncodeSliceIndex(x uint64) Keypath {
 	enc := []byte(strconv.FormatUint(x, 10))
@@ -121,4 +128,8 @@ func annotate(err *error, msg string, args ...interface{}) {
 	if *err != nil {
 		*err = errors.Wrapf(*err, msg, args...)
 	}
+}
+
+func debugPrint(inFormat string, args ...interface{}) {
+	fmt.Printf(inFormat, args...)
 }

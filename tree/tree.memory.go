@@ -1004,16 +1004,27 @@ func (s *MemoryNode) scanKeypathsWithPrefix(prefix Keypath, rng *Range, fn func(
 	return nil
 }
 
-func (t *MemoryNode) DebugPrint() {
-	fmt.Println("MemoryNode ----------------------------------------")
-	fmt.Println("- root keypath: ", t.keypath)
-	fmt.Println("- copied: ", t.copied)
+func (t *MemoryNode) DebugPrint(printFn func(inFormat string, args ...interface{}), newlines bool, indentLevel int) {
+	if newlines {
+		oldPrintFn := printFn
+		printFn = func(inFormat string, args ...interface{}) { oldPrintFn(inFormat+"\n", args...) }
+	}
+
+	indent := strings.Repeat(" ", 4*indentLevel)
+
+	file, line := getFileAndLine()
+	printFn(indent+"MemoryNode (root keypath: %v) (%v:%v) {", t.keypath, file, line)
 	for _, kp := range t.keypaths {
 		if t.nodeTypes[string(kp)] == NodeTypeSlice || t.nodeTypes[string(kp)] == NodeTypeMap {
-			fmt.Printf("  - %v %v %v %v\n", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.contentLengths[string(kp)])
+			printFn(indent+"    %v: %v %v %v", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.contentLengths[string(kp)])
+
+		} else if t.nodeTypes[string(kp)] == NodeTypeNode {
+			printFn(indent+"    %v: %v (%T) %v", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.contentLengths[string(kp)])
+			t.values[string(kp)].(Node).DebugPrint(printFn, false, indentLevel+1)
+
 		} else {
-			fmt.Printf("  - %v %v %v (%T)\n", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.values[string(kp)])
+			printFn(indent+"    %v: %v %v (%T)", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.values[string(kp)])
 		}
 	}
-	fmt.Println("---------------------------------------------------")
+	printFn(indent + "}")
 }

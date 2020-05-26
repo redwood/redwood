@@ -1038,16 +1038,22 @@ func (tx *DBNode) CopyToMemory(relKeypath Keypath, rng *Range) (n Node, err erro
 	return mNode, nil
 }
 
-func (tx *DBNode) DebugPrint() {
-	opts := badger.DefaultIteratorOptions
-	opts.PrefetchValues = true
-	iter := tx.tx.NewIterator(opts)
+func (tx *DBNode) DebugPrint(printFn func(inFormat string, args ...interface{}), newlines bool, indentLevel int) {
+	iter := tx.Iterator(nil, true, 10)
 	defer iter.Close()
 
-	fmt.Println("- root keypath:", tx.rootKeypath)
+	if newlines {
+		oldPrintFn := printFn
+		printFn = func(inFormat string, args ...interface{}) { oldPrintFn(inFormat+"\n", args...) }
+	}
+
+	indent := strings.Repeat(" ", 4*indentLevel)
+
+	file, line := getFileAndLine()
+	printFn(indent+"DBNode (root keypath: %v) (%v:%v) {", tx.rootKeypath, file, line)
 	for iter.Rewind(); iter.Valid(); iter.Next() {
-		item := iter.Item()
-		valBytes, err := item.ValueCopy(nil)
+		node := iter.Node()
+		valBytes, err := tx.encodedBytes(node.Keypath())
 		if err != nil {
 			panic(err)
 		}
@@ -1062,12 +1068,9 @@ func (tx *DBNode) DebugPrint() {
 			panic(err)
 		}
 
-		if item.IsDeletedOrExpired() {
-			fmt.Printf("  - %s %v %v %v %v (DELETED)\n", Keypath(item.Key()), nodeType, valueType, length, val)
-		} else {
-			fmt.Printf("  - %s %v %v %v %v\n", Keypath(item.Key()), nodeType, valueType, length, val)
-		}
+		printFn(indent+"    %s: %v %v %v %v", node.Keypath(), nodeType, valueType, length, val)
 	}
+	printFn(indent + "}")
 }
 
 func (t *DBTree) CopyVersion(dstVersion, srcVersion types.ID) error {
