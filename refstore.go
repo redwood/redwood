@@ -3,6 +3,7 @@ package redwood
 import (
 	"bytes"
 	"crypto/sha1"
+	"encoding/json"
 	goerrors "errors"
 	"fmt"
 	"io"
@@ -28,6 +29,11 @@ type RefStore interface {
 	ObjectFilepath(refID types.RefID) (string, error)
 	StoreObject(reader io.ReadCloser) (sha1Hash types.Hash, sha3Hash types.Hash, err error)
 	AllHashes() ([]types.RefID, error)
+
+	RefsNeeded() ([]types.RefID, error)
+	MarkRefsAsNeeded(refs []types.RefID)
+	OnRefsNeeded(fn func(refs []types.RefID))
+	OnRefsSaved(fn func())
 }
 
 type refStore struct {
@@ -36,6 +42,11 @@ type refStore struct {
 	rootPath string
 	metadata *badger.DB
 	fileMu   sync.Mutex
+
+	refsNeededListeners   []func(refs []types.RefID)
+	refsNeededListenersMu sync.RWMutex
+	refsSavedListeners    []func()
+	refsSavedListenersMu  sync.RWMutex
 }
 
 func NewRefStore(rootPath string) RefStore {
@@ -225,6 +236,12 @@ func (s *refStore) StoreObject(reader io.ReadCloser) (sha1Hash types.Hash, sha3H
 
 	s.Successf("saved ref (sha1: %v, sha3: %v)", sha1Hash.Hex(), sha3Hash.Hex())
 
+	s.unmarkRefsAsNeeded([]types.RefID{
+		{HashAlg: types.SHA1, Hash: sha1Hash},
+		{HashAlg: types.SHA3, Hash: sha3Hash},
+	})
+	s.notifyRefsSavedListeners()
+
 	return sha1Hash, sha3Hash, nil
 }
 
@@ -258,6 +275,186 @@ func (s *refStore) AllHashes() ([]types.RefID, error) {
 		refIDs = append(refIDs, types.RefID{HashAlg: types.SHA1, Hash: sha1Hash})
 	}
 	return refIDs, nil
+}
+
+func (s *refStore) RefsNeeded() ([]types.RefID, error) {
+	var missingRefs map[string]interface{}
+	err := s.metadata.View(func(txn *badger.Txn) error {
+		// @@TODO: super hacky
+		item, err := txn.Get([]byte("missing-refs"))
+		if err != nil {
+			return err
+		}
+
+		bs, err := item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+
+		return json.Unmarshal(bs, &missingRefs)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var missingRefsSlice []types.RefID
+	for refIDStr := range missingRefs {
+		var refID types.RefID
+		err := refID.UnmarshalText([]byte(refIDStr))
+		if err != nil {
+			s.Errorf("error unmarshaling refID: %v", err)
+			continue
+		}
+		missingRefsSlice = append(missingRefsSlice, refID)
+	}
+	return missingRefsSlice, nil
+}
+
+func (s *refStore) MarkRefsAsNeeded(refs []types.RefID) {
+	var actuallyNeeded []types.RefID
+	for _, refID := range refs {
+		have, err := s.HaveObject(refID)
+		if err != nil {
+			s.Errorf("error checking ref store for ref %v: %v", refID, err)
+			continue
+		}
+		if !have {
+			actuallyNeeded = append(actuallyNeeded, refID)
+		}
+	}
+
+	err := s.metadata.Update(func(txn *badger.Txn) error {
+		// @@TODO: super hacky
+		item, err := txn.Get([]byte("missing-refs"))
+		if err != nil {
+			return err
+		}
+
+		bs, err := item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+
+		var missingRefs map[string]interface{}
+		err = json.Unmarshal(bs, &missingRefs)
+		if err != nil {
+			return err
+		}
+
+		for _, refID := range actuallyNeeded {
+			refIDStr, err := refID.MarshalText()
+			if err != nil {
+				s.Errorf("can't marshal refID %+v to string: %v", refID, err)
+				continue
+			}
+			missingRefs[string(refIDStr)] = nil
+		}
+
+		bs, err = json.Marshal(missingRefs)
+		if err != nil {
+			return err
+		}
+
+		return txn.Set([]byte("missing-refs"), bs)
+	})
+	if err != nil {
+		s.Errorf("error updating list of needed refs: %v", err)
+		// don't error out
+	}
+
+	allNeeded, err := s.RefsNeeded()
+	if err != nil {
+		s.Errorf("error fetching list of needed refs: %v", err)
+		return
+	}
+
+	s.notifyRefsNeededListeners(allNeeded)
+}
+
+func (s *refStore) unmarkRefsAsNeeded(refs []types.RefID) {
+	err := s.metadata.Update(func(txn *badger.Txn) error {
+		// @@TODO: super hacky
+		item, err := txn.Get([]byte("missing-refs"))
+		if err != nil {
+			return err
+		}
+
+		bs, err := item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+
+		var missingRefs map[string]interface{}
+		err = json.Unmarshal(bs, &missingRefs)
+		if err != nil {
+			return err
+		}
+
+		for _, refID := range refs {
+			refIDStr, err := refID.MarshalText()
+			if err != nil {
+				s.Errorf("can't marshal refID %+v to string: %v", refID, err)
+				continue
+			}
+			delete(missingRefs, string(refIDStr))
+		}
+
+		bs, err = json.Marshal(missingRefs)
+		if err != nil {
+			return err
+		}
+
+		return txn.Set([]byte("missing-refs"), bs)
+	})
+	if err != nil {
+		s.Errorf("error updating list of needed refs: %v", err)
+	}
+}
+
+func (s *refStore) OnRefsNeeded(fn func(refs []types.RefID)) {
+	s.refsNeededListenersMu.Lock()
+	defer s.refsNeededListenersMu.Unlock()
+	s.refsNeededListeners = append(s.refsNeededListeners, fn)
+}
+
+func (s *refStore) notifyRefsNeededListeners(refs []types.RefID) {
+	s.refsNeededListenersMu.RLock()
+	defer s.refsNeededListenersMu.RUnlock()
+
+	var wg sync.WaitGroup
+	wg.Add(len(s.refsNeededListeners))
+
+	for _, handler := range s.refsNeededListeners {
+		handler := handler
+		go func() {
+			defer wg.Done()
+			handler(refs)
+		}()
+	}
+	wg.Wait()
+}
+
+func (s *refStore) OnRefsSaved(fn func()) {
+	s.refsSavedListenersMu.Lock()
+	defer s.refsSavedListenersMu.Unlock()
+	s.refsSavedListeners = append(s.refsSavedListeners, fn)
+}
+
+func (s *refStore) notifyRefsSavedListeners() {
+	s.refsSavedListenersMu.RLock()
+	defer s.refsSavedListenersMu.RUnlock()
+
+	var wg sync.WaitGroup
+	wg.Add(len(s.refsSavedListeners))
+
+	for _, handler := range s.refsSavedListeners {
+		handler := handler
+		go func() {
+			defer wg.Done()
+			handler()
+		}()
+	}
+	wg.Wait()
 }
 
 func (s *refStore) sha3ForSHA1(hash types.Hash) (types.Hash, error) {

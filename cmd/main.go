@@ -79,7 +79,6 @@ func run(configPath string, gui bool) error {
 		flagset := flag.NewFlagSet("", flag.ContinueOnError)
 		klog.InitFlags(flagset)
 		flagset.Set("logtostderr", "true")
-		// flagset.Set("log_file", "/tmp/asdf") // This is necessary to keep the logger in "single mode" -- otherwise logs will be duplicated
 		flagset.Set("v", "2")
 		klog.SetFormatter(&klog.FmtConstWidth{
 			FileNameCharWidth: 24,
@@ -113,7 +112,7 @@ func run(configPath string, gui bool) error {
 	txStore := rw.NewBadgerTxStore(config.TxDBRoot(), signingKeypair.Address())
 	refStore := rw.NewRefStore(config.RefDataRoot())
 	peerStore := rw.NewPeerStore(signingKeypair.Address())
-	metacontroller := rw.NewMetacontroller(signingKeypair.Address(), config.StateDBRoot(), txStore, refStore)
+	controllerHub := rw.NewControllerHub(signingKeypair.Address(), config.StateDBRoot(), txStore, refStore)
 
 	var transports []rw.Transport
 
@@ -121,7 +120,7 @@ func run(configPath string, gui bool) error {
 		libp2pTransport, err := rw.NewLibp2pTransport(
 			signingKeypair.Address(),
 			config.P2PTransport.ListenPort,
-			metacontroller,
+			controllerHub,
 			refStore,
 			peerStore,
 		)
@@ -142,7 +141,7 @@ func run(configPath string, gui bool) error {
 			signingKeypair.Address(),
 			config.HTTPTransport.ListenHost,
 			config.HTTPTransport.DefaultStateURI,
-			metacontroller,
+			controllerHub,
 			refStore,
 			peerStore,
 			signingKeypair,
@@ -157,7 +156,7 @@ func run(configPath string, gui bool) error {
 		transports = append(transports, httpTransport)
 	}
 
-	host, err := rw.NewHost(signingKeypair, encryptingKeypair, transports, metacontroller, refStore, peerStore)
+	host, err := rw.NewHost(signingKeypair, encryptingKeypair, transports, controllerHub, refStore, peerStore)
 	if err != nil {
 		return err
 	}
