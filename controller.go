@@ -1,6 +1,7 @@
 package redwood
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -23,14 +24,9 @@ type Controller interface {
 	StateAtVersion(version *types.ID) tree.Node
 	QueryIndex(version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
 	Leaves() map[types.ID]struct{}
-	BehaviorTree() *behaviorTree
-	SetBehaviorTree(tree *behaviorTree)
 
-	OnDownloadedRef()
+	OnNewState(fn func(tx *Tx))
 }
-
-type ReceivedRefsHandler func(refs []types.RefID)
-type TxProcessedHandler func(c Controller, tx *Tx, state *tree.DBNode) error
 
 type controller struct {
 	*ctx.Context
@@ -38,8 +34,9 @@ type controller struct {
 	address  types.Address
 	stateURI string
 
-	txStore  TxStore
-	refStore RefStore
+	controllerHub ControllerHub
+	txStore       TxStore
+	refStore      RefStore
 
 	behaviorTree *behaviorTree
 
@@ -47,9 +44,11 @@ type controller struct {
 	indices *tree.DBTree
 	leaves  map[types.ID]struct{}
 
-	mempool       Mempool
-	onTxProcessed TxProcessedHandler
-	addTxMu       sync.Mutex
+	newStateListeners   []func(tx *Tx)
+	newStateListenersMu sync.RWMutex
+
+	mempool Mempool
+	addTxMu sync.Mutex
 }
 
 func NewController(
@@ -58,7 +57,6 @@ func NewController(
 	stateDBRootPath string,
 	txStore TxStore,
 	refStore RefStore,
-	txProcessedHandler TxProcessedHandler,
 ) (Controller, error) {
 	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(stateURI)
 	states, err := tree.NewDBTree(filepath.Join(stateDBRootPath, stateURIClean))
@@ -72,16 +70,15 @@ func NewController(
 	}
 
 	c := &controller{
-		Context:       &ctx.Context{},
-		address:       address,
-		stateURI:      stateURI,
-		txStore:       txStore,
-		refStore:      refStore,
-		behaviorTree:  newBehaviorTree(),
-		states:        states,
-		indices:       indices,
-		leaves:        make(map[types.ID]struct{}),
-		onTxProcessed: txProcessedHandler,
+		Context:      &ctx.Context{},
+		address:      address,
+		stateURI:     stateURI,
+		txStore:      txStore,
+		refStore:     refStore,
+		behaviorTree: newBehaviorTree(),
+		states:       states,
+		indices:      indices,
+		leaves:       make(map[types.ID]struct{}),
 	}
 	c.mempool = NewMempool(address, c.processMempoolTx)
 	return c, nil
@@ -93,13 +90,18 @@ func (c *controller) Start() error {
 		func() error {
 			c.SetLogLabel(c.address.Pretty() + " controller")
 
+			// Add root resolver
 			c.behaviorTree.addResolver(tree.Keypath(nil), &dumbResolver{})
 
+			// Start mempool
 			c.CtxAddChild(c.mempool.Ctx(), nil)
 			err := c.mempool.Start()
 			if err != nil {
 				return err
 			}
+
+			// Listen for new refs
+			c.refStore.OnRefsSaved(c.mempool.ForceReprocess)
 
 			return nil
 		},
@@ -119,24 +121,12 @@ func (c *controller) Start() error {
 	)
 }
 
-func (c *controller) OnDownloadedRef() {
-	c.mempool.ForceReprocess()
-}
-
 func (c *controller) StateAtVersion(version *types.ID) tree.Node {
 	return c.states.StateAtVersion(version, false)
 }
 
 func (c *controller) Leaves() map[types.ID]struct{} {
 	return c.leaves
-}
-
-func (c *controller) BehaviorTree() *behaviorTree {
-	return c.behaviorTree
-}
-
-func (c *controller) SetBehaviorTree(tree *behaviorTree) {
-	c.behaviorTree = tree
 }
 
 func (c *controller) AddTx(tx *Tx) error {
@@ -318,7 +308,9 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 		}
 	}
 
-	err = c.onTxProcessed(c, tx, state)
+	c.handleNewRefs(state)
+
+	err = c.updateBehaviorTree(state)
 	if err != nil {
 		return err
 	}
@@ -349,7 +341,290 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 	if err != nil {
 		return err
 	}
+
+	c.notifyNewStateListeners(tx)
+
 	return nil
+}
+
+func (c *controller) handleNewRefs(state tree.Node) {
+	var refs []types.RefID
+	defer func() {
+		if len(refs) > 0 {
+			c.refStore.MarkRefsAsNeeded(refs)
+		}
+	}()
+
+	diff := state.Diff()
+
+	// Find all refs in the tree and notify the Host to start fetching them
+	for kp := range diff.Added {
+		keypath := tree.Keypath(kp)
+		parentKeypath, key := keypath.Pop()
+		switch {
+		case key.Equals(nelson.ValueKey):
+			contentType, err := nelson.GetContentType(state.NodeAt(parentKeypath, nil))
+			if err != nil && errors.Cause(err) != types.Err404 {
+				c.Errorf("error getting ref content type: %v", err)
+				continue
+			} else if contentType != "link" {
+				continue
+			}
+
+			linkStr, _, err := state.StringValue(keypath)
+			if err != nil {
+				c.Errorf("error getting ref link value: %v", err)
+				continue
+			}
+			linkType, linkValue := nelson.DetermineLinkType(linkStr)
+			if linkType == nelson.LinkTypeRef {
+				var refID types.RefID
+				err := refID.UnmarshalText([]byte(linkValue))
+				if err != nil {
+					c.Errorf("error unmarshaling refID: %v", err)
+					continue
+				}
+				refs = append(refs, refID)
+			}
+		}
+	}
+}
+
+func (c *controller) updateBehaviorTree(state tree.Node) error {
+	// Walk the tree and initialize validators and resolvers
+	// @@TODO: inefficient
+	newBehaviorTree := newBehaviorTree()
+	newBehaviorTree.addResolver(nil, &dumbResolver{})
+
+	diff := state.Diff()
+
+	// Remove deleted resolvers and validators
+	for kp := range diff.Removed {
+		parentKeypath, key := tree.Keypath(kp).Pop()
+		switch {
+		case key.Equals(MergeTypeKeypath):
+			c.behaviorTree.removeResolver(parentKeypath)
+		case key.Equals(ValidatorKeypath):
+			c.behaviorTree.removeValidator(parentKeypath)
+		case parentKeypath.Part(-1).Equals(tree.Keypath("Indices")):
+			//indicesKeypath, _ := parentKeypath.Pop()
+			//c.behaviorTree.removeIndexer()
+		}
+
+		for parentKeypath != nil {
+			nextParentKeypath, key := parentKeypath.Pop()
+			switch {
+			case key.Equals(MergeTypeKeypath):
+				err := c.initializeResolver(state, parentKeypath)
+				if err != nil {
+					return err
+				}
+			case key.Equals(ValidatorKeypath):
+				err := c.initializeValidator(state, parentKeypath)
+				if err != nil {
+					return err
+				}
+			}
+			parentKeypath = nextParentKeypath
+		}
+	}
+
+	// Attach added resolvers and validators
+	for kp := range diff.Added {
+		keypath := tree.Keypath(kp)
+		parentKeypath, key := keypath.Pop()
+		switch {
+		case key.Equals(MergeTypeKeypath):
+			err := c.initializeResolver(state, keypath)
+			if err != nil {
+				return err
+			}
+
+		case key.Equals(ValidatorKeypath):
+			err := c.initializeValidator(state, keypath)
+			if err != nil {
+				return err
+			}
+
+		case key.Equals(tree.Keypath("Indices")):
+			err := c.initializeIndexer(state, keypath)
+			if err != nil {
+				return err
+			}
+		}
+
+		for parentKeypath != nil {
+			nextParentKeypath, key := parentKeypath.Pop()
+			switch {
+			case key.Equals(MergeTypeKeypath):
+				err := c.initializeResolver(state, parentKeypath)
+				if err != nil {
+					return err
+				}
+			case key.Equals(ValidatorKeypath):
+				err := c.initializeValidator(state, parentKeypath)
+				if err != nil {
+					return err
+				}
+			}
+			parentKeypath = nextParentKeypath
+		}
+	}
+	return nil
+}
+
+func (c *controller) initializeResolver(state tree.Node, resolverConfigKeypath tree.Keypath) error {
+	// Resolve any refs (to code) in the resolver config object.  We copy the config so
+	// that we don't inject any refs into the state tree itself
+	config, err := state.CopyToMemory(resolverConfigKeypath, nil)
+	if err != nil {
+		return err
+	}
+
+	config, anyMissing, err := nelson.Resolve(config, c.controllerHub)
+	if err != nil {
+		return err
+	} else if anyMissing {
+		return errors.WithStack(ErrMissingCriticalRefs)
+	}
+
+	contentType, err := nelson.GetContentType(config)
+	if err != nil {
+		return err
+	} else if contentType == "" {
+		return errors.New("cannot initialize resolver without a 'Content-Type' key")
+	}
+
+	ctor, exists := resolverRegistry[contentType]
+	if !exists {
+		return errors.Errorf("unknown resolver type '%v'", contentType)
+	}
+
+	// @@TODO: if the resolver type changes, this totally breaks everything
+	var internalState map[string]interface{}
+	oldResolver, oldResolverKeypath := c.behaviorTree.nearestResolverForKeypath(resolverConfigKeypath)
+	if !oldResolverKeypath.Equals(resolverConfigKeypath) {
+		internalState = make(map[string]interface{})
+	} else {
+		internalState = oldResolver.InternalState()
+	}
+
+	resolver, err := ctor(config, internalState)
+	if err != nil {
+		return err
+	}
+
+	resolverNodeKeypath, _ := resolverConfigKeypath.Pop()
+
+	c.behaviorTree.addResolver(resolverNodeKeypath, resolver)
+	return nil
+}
+
+func debugPrint(inFormat string, args ...interface{}) {
+	fmt.Printf(inFormat, args...)
+}
+
+func (c *controller) initializeValidator(state tree.Node, validatorConfigKeypath tree.Keypath) error {
+	// Resolve any refs (to code) in the validator config object.  We copy the config so
+	// that we don't inject any refs into the state tree itself
+	config, err := state.CopyToMemory(validatorConfigKeypath, nil)
+	if err != nil {
+		return err
+	}
+
+	config, anyMissing, err := nelson.Resolve(config, c.controllerHub)
+	if err != nil {
+		return err
+	} else if anyMissing {
+		return errors.WithStack(ErrMissingCriticalRefs)
+	}
+
+	contentType, err := nelson.GetContentType(config)
+	if err != nil {
+		return err
+	} else if contentType == "" {
+		return errors.New("cannot initialize validator without a 'Content-Type' key")
+	}
+
+	ctor, exists := validatorRegistry[contentType]
+	if !exists {
+		return errors.Errorf("unknown validator type '%v'", contentType)
+	}
+
+	validator, err := ctor(config)
+	if err != nil {
+		return err
+	}
+
+	validatorNodeKeypath, _ := validatorConfigKeypath.Pop()
+
+	c.behaviorTree.addValidator(validatorNodeKeypath, validator)
+	return nil
+}
+
+func (c *controller) initializeIndexer(state tree.Node, indexerConfigKeypath tree.Keypath) error {
+	// Resolve any refs (to code) in the indexer config object.  We copy the config so
+	// that we don't inject any refs into the state tree itself
+	indexConfigs, err := state.CopyToMemory(indexerConfigKeypath, nil)
+	if err != nil {
+		return err
+	}
+
+	subkeys := indexConfigs.Subkeys()
+
+	for _, indexName := range subkeys {
+		config, anyMissing, err := nelson.Resolve(indexConfigs.NodeAt(indexName, nil), c.controllerHub)
+		if err != nil {
+			return err
+		} else if anyMissing {
+			return errors.WithStack(ErrMissingCriticalRefs)
+		}
+
+		contentType, err := nelson.GetContentType(config)
+		if err != nil {
+			return err
+		} else if contentType == "" {
+			return errors.New("cannot initialize indexer without a 'Content-Type' key")
+		}
+
+		ctor, exists := indexerRegistry[contentType]
+		if !exists {
+			return errors.Errorf("unknown indexer type '%v'", contentType)
+		}
+
+		indexer, err := ctor(config)
+		if err != nil {
+			return err
+		}
+
+		indexerNodeKeypath, _ := indexerConfigKeypath.Pop()
+
+		c.behaviorTree.addIndexer(indexerNodeKeypath, indexName, indexer)
+	}
+	return nil
+}
+
+func (c *controller) OnNewState(fn func(tx *Tx)) {
+	c.newStateListenersMu.Lock()
+	defer c.newStateListenersMu.Unlock()
+	c.newStateListeners = append(c.newStateListeners, fn)
+}
+
+func (c *controller) notifyNewStateListeners(tx *Tx) {
+	c.newStateListenersMu.RLock()
+	defer c.newStateListenersMu.RUnlock()
+
+	var wg sync.WaitGroup
+	wg.Add(len(c.newStateListeners))
+
+	for _, handler := range c.newStateListeners {
+		handler := handler
+		go func() {
+			defer wg.Done()
+			handler(tx)
+		}()
+	}
+	wg.Wait()
 }
 
 func (c *controller) HaveTx(txID types.ID) (bool, error) {
@@ -409,22 +684,3 @@ func (c *controller) QueryIndex(version *types.ID, keypath tree.Keypath, indexNa
 
 	return indexNode.NodeAt(queryParam, rng), nil
 }
-
-//func (c *controller) getAncestors(hashes map[Hash]bool) map[Hash]bool {
-//    ancestors := map[Hash]bool{}
-//
-//    var mark_ancestors func(id Hash)
-//    mark_ancestors = func(txHash Hash) {
-//        if !ancestors[txHash] {
-//            ancestors[txHash] = true
-//            for parentHash := range c.timeDAG[txHash] {
-//                mark_ancestors(parentHash)
-//            }
-//        }
-//    }
-//    for parentHash := range hashes {
-//        mark_ancestors(parentHash)
-//    }
-//
-//    return ancestors
-//}

@@ -25,7 +25,7 @@ type Host interface {
 	AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error)
 	AddPeer(ctx context.Context, transportName string, reachableAt StringSet) error
 	Transport(name string) Transport
-	Controller() Metacontroller
+	Controller() ControllerHub
 	Address() types.Address
 
 	OnFetchHistoryRequestReceived(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error
@@ -39,7 +39,7 @@ type Host interface {
 type host struct {
 	*ctx.Context
 
-	Metacontroller
+	ControllerHub
 
 	transports        map[string]Transport
 	signingKeypair    *SigningKeypair
@@ -52,9 +52,7 @@ type host struct {
 	peerStore PeerStore
 	refStore  RefStore
 
-	missingRefs   map[types.RefID]struct{}
-	chMissingRefs chan []types.RefID
-	chFetchRefs   chan struct{}
+	chRefsNeeded chan []types.RefID
 }
 
 var (
@@ -63,7 +61,7 @@ var (
 	ErrPeerIsSelf = errors.New("peer is self")
 )
 
-func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, transports []Transport, metacontroller Metacontroller, refStore RefStore, peerStore PeerStore) (Host, error) {
+func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, transports []Transport, controllerHub ControllerHub, refStore RefStore, peerStore PeerStore) (Host, error) {
 	transportsMap := make(map[string]Transport)
 	for _, tpt := range transports {
 		transportsMap[tpt.Name()] = tpt
@@ -71,16 +69,14 @@ func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypai
 	h := &host{
 		Context:           &ctx.Context{},
 		transports:        transportsMap,
-		Metacontroller:    metacontroller,
+		ControllerHub:     controllerHub,
 		signingKeypair:    signingKeypair,
 		encryptingKeypair: encryptingKeypair,
 		subscriptionsOut:  make(map[string]map[peerTuple]*subscriptionOut),
 		peerSeenTxs:       make(map[peerTuple]map[types.ID]bool),
 		peerStore:         peerStore,
 		refStore:          refStore,
-		missingRefs:       make(map[types.RefID]struct{}),
-		chMissingRefs:     make(chan []types.RefID, 100),
-		chFetchRefs:       make(chan struct{}),
+		chRefsNeeded:      make(chan []types.RefID, 100),
 	}
 	return h, nil
 }
@@ -95,15 +91,16 @@ func (h *host) Start() error {
 		func() error {
 			h.SetLogLabel(h.Address().Pretty() + " host")
 
-			// Set up the metacontroller
-			h.Metacontroller.SetReceivedRefsHandler(h.onReceivedRefs)
-
-			h.CtxAddChild(h.Metacontroller.Ctx(), nil)
-			err := h.Metacontroller.Start()
+			// Set up the controller Hub
+			h.ControllerHub.OnNewState(h.handleNewState)
+			h.CtxAddChild(h.ControllerHub.Ctx(), nil)
+			err := h.ControllerHub.Start()
 			if err != nil {
 				return err
 			}
 
+			// Set up the ref store
+			h.refStore.OnRefsNeeded(h.handleRefsNeeded)
 			h.CtxAddChild(h.refStore.Ctx(), nil)
 			err = h.refStore.Start()
 			if err != nil {
@@ -122,27 +119,6 @@ func (h *host) Start() error {
 
 			go h.fetchRefsLoop()
 
-			// go func() {
-			// 	for {
-			// 		time.Sleep(5 * time.Second)
-			// 		h.Warn("Peer store:")
-			// 		h.Warn("peers")
-			// 		for peerTuple := range h.peerStore.(*peerStore).peers {
-			// 			h.Warn("  - ", peerTuple)
-			// 		}
-			// 		h.Warn("peersWithAddress")
-			// 		for address, peerTuples := range h.peerStore.(*peerStore).peersWithAddress {
-			// 			for peerTuple := range peerTuples {
-			// 				h.Warn("  - ", address, " ", peerTuple.ReachableAt)
-			// 			}
-			// 		}
-			// 		h.Warn("maybePeers")
-			// 		for _, peerTuple := range h.peerStore.MaybePeers() {
-			// 			h.Warn("  - ", peerTuple)
-			// 		}
-			// 	}
-			// }()
-
 			return nil
 		},
 		nil,
@@ -156,8 +132,8 @@ func (h *host) Transport(name string) Transport {
 	return h.transports[name]
 }
 
-func (h *host) Controller() Metacontroller {
-	return h.Metacontroller
+func (h *host) Controller() ControllerHub {
+	return h.ControllerHub
 }
 
 func (h *host) Address() types.Address {
@@ -168,7 +144,7 @@ func (h *host) OnTxReceived(tx Tx, peer Peer) {
 	h.Infof(0, "tx %v received from %v peer %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address())
 	h.markTxSeenByPeer(peer, tx.ID)
 
-	have, err := h.Metacontroller.HaveTx(tx.StateURI, tx.ID)
+	have, err := h.ControllerHub.HaveTx(tx.StateURI, tx.ID)
 	if err != nil {
 		h.Errorf("error fetching tx %v from store: %v", tx.ID.Pretty(), err)
 		// @@TODO: does it make sense to return here?
@@ -176,14 +152,9 @@ func (h *host) OnTxReceived(tx Tx, peer Peer) {
 	}
 
 	if !have {
-		err := h.Metacontroller.AddTx(&tx)
+		err := h.ControllerHub.AddTx(&tx)
 		if err != nil {
-			h.Errorf("error adding tx to metacontroller: %v", err)
-		}
-
-		err = h.broadcastTx(context.TODO(), tx)
-		if err != nil {
-			h.Errorf("error rebroadcasting tx: %v", err)
+			h.Errorf("error adding tx to controllerHub: %v", err)
 		}
 	}
 
@@ -215,23 +186,17 @@ func (h *host) OnPrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
 		return
 	}
 
-	have, err := h.Metacontroller.HaveTx(tx.StateURI, tx.ID)
+	have, err := h.ControllerHub.HaveTx(tx.StateURI, tx.ID)
 	if err != nil {
 		h.Errorf("error fetching tx %v from store: %v", tx.ID.Pretty(), err)
 		return
 	}
 
 	if !have {
-		// Add to metacontroller
-		err := h.Metacontroller.AddTx(&tx)
+		// Add to controllerHub
+		err := h.ControllerHub.AddTx(&tx)
 		if err != nil {
-			h.Errorf("error adding tx to metacontroller: %v", err)
-		}
-
-		// Broadcast to subscribed peers
-		err = h.broadcastTx(context.TODO(), tx)
-		if err != nil {
-			h.Errorf("error rebroadcasting tx: %v", err)
+			h.Errorf("error adding tx to controllerHub: %v", err)
 		}
 	}
 
@@ -306,7 +271,7 @@ func (h *host) AddPeer(ctx context.Context, transportName string, reachableAt St
 }
 
 func (h *host) OnFetchHistoryRequestReceived(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error {
-	iter := h.Metacontroller.FetchTxs(stateURI)
+	iter := h.ControllerHub.FetchTxs(stateURI)
 	defer iter.Cancel()
 
 	for {
@@ -624,7 +589,7 @@ func (h *host) broadcastPrivateTxToRecipient(ctx context.Context, txID types.ID,
 	return nil
 }
 
-func (h *host) broadcastTx(ctx context.Context, tx Tx) error {
+func (h *host) broadcastTx(ctx context.Context, tx *Tx) error {
 	// @@TODO: should we also send all PUTs to some set of authoritative peers (like a central server)?
 
 	if len(tx.Sig) == 0 {
@@ -725,7 +690,7 @@ func (h *host) SendTx(ctx context.Context, tx Tx) error {
 	}
 
 	if len(tx.Parents) == 0 && tx.ID != GenesisTxID {
-		parents, err := h.Metacontroller.Leaves(tx.StateURI)
+		parents, err := h.ControllerHub.Leaves(tx.StateURI)
 		if err != nil {
 			return err
 		}
@@ -735,12 +700,12 @@ func (h *host) SendTx(ctx context.Context, tx Tx) error {
 		}
 	}
 
-	err := h.Metacontroller.AddTx(&tx)
+	err := h.ControllerHub.AddTx(&tx)
 	if err != nil {
 		return err
 	}
 
-	err = h.broadcastTx(h.Ctx(), tx)
+	err = h.broadcastTx(h.Ctx(), &tx)
 	if err != nil {
 		return err
 	}
@@ -754,8 +719,26 @@ func (h *host) SignTx(tx *Tx) error {
 	return err
 }
 
+func (h *host) handleNewState(tx *Tx) {
+	// @@TODO: broadcast state to state subscribers
+
+	// Broadcast tx to tx subscribers
+	err := h.broadcastTx(context.TODO(), tx)
+	if err != nil {
+		h.Errorf("error rebroadcasting tx: %v", err)
+	}
+}
+
 func (h *host) AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error) {
 	return h.refStore.StoreObject(reader)
+}
+
+func (h *host) handleRefsNeeded(refs []types.RefID) {
+	select {
+	case <-h.Ctx().Done():
+		return
+	case h.chRefsNeeded <- refs:
+	}
 }
 
 func (h *host) fetchRefsLoop() {
@@ -767,74 +750,37 @@ func (h *host) fetchRefsLoop() {
 		case <-h.Ctx().Done():
 			return
 
-		case refs := <-h.chMissingRefs:
-			for _, ref := range refs {
-				h.missingRefs[ref] = struct{}{}
-			}
-
-			h.fetchMissingRefs()
+		case refs := <-h.chRefsNeeded:
+			h.fetchMissingRefs(refs)
 
 		case <-tick.C:
-			if len(h.missingRefs) > 0 {
-				h.fetchMissingRefs()
+			refs, err := h.refStore.RefsNeeded()
+			if err != nil {
+				h.Errorf("error fetching list of needed refs: %v", err)
+				continue
+			}
+
+			if len(refs) > 0 {
+				h.fetchMissingRefs(refs)
 			}
 		}
 	}
 }
 
-func (h *host) onReceivedRefs(refs []types.RefID) {
-	if len(refs) == 0 {
-		return
-	}
-
-	select {
-	case <-h.Ctx().Done():
-		return
-	case h.chMissingRefs <- refs:
-	}
-}
-
-func (h *host) fetchMissingRefs() {
-	var fetchedAny bool
-	defer func() {
-		if fetchedAny {
-			h.Metacontroller.OnDownloadedRef()
-		}
-	}()
-
-	var succeeded sync.Map
+func (h *host) fetchMissingRefs(refs []types.RefID) {
 	var wg sync.WaitGroup
-	for refID := range h.missingRefs {
-		have, err := h.refStore.HaveObject(refID)
-		if err != nil {
-			h.Warnf("error checking refstore for ref %v: %v", refID, err)
-			continue
-		}
-		if have {
-			succeeded.Store(refID, struct{}{})
-			continue
-		}
-
+	for _, refID := range refs {
 		wg.Add(1)
 		refID := refID
 		go func() {
 			defer wg.Done()
-			success := h.fetchRef(refID)
-			if success {
-				fetchedAny = true
-				succeeded.Store(refID, struct{}{})
-			}
+			h.fetchRef(refID)
 		}()
 	}
 	wg.Wait()
-
-	succeeded.Range(func(key interface{}, _ interface{}) bool {
-		delete(h.missingRefs, key.(types.RefID))
-		return true
-	})
 }
 
-func (h *host) fetchRef(ref types.RefID) bool {
+func (h *host) fetchRef(ref types.RefID) {
 	chPeers := make(chan Peer)
 	ctx, cancel := context.WithCancel(h.Ctx())
 	defer cancel()
@@ -962,9 +908,7 @@ func (h *host) fetchRef(ref types.RefID) bool {
 				// this is a non-critical error, don't bail out
 			}
 		}
-		return true
 	}
-	return false
 }
 
 const (

@@ -35,7 +35,7 @@ type httpTransport struct {
 	*ctx.Context
 
 	address         types.Address
-	controller      Metacontroller
+	controller      ControllerHub
 	defaultStateURI string
 	ownURL          string
 	listenAddr      string
@@ -60,7 +60,7 @@ func NewHTTPTransport(
 	addr types.Address,
 	listenAddr string,
 	defaultStateURI string,
-	controller Metacontroller,
+	controller ControllerHub,
 	refStore RefStore,
 	peerStore PeerStore,
 	sigkeys *SigningKeypair,

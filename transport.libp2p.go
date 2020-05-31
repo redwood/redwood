@@ -47,10 +47,10 @@ type libp2pTransport struct {
 	subscriptionsIn   map[string]map[*libp2pSubscriptionIn]struct{}
 	subscriptionsInMu sync.RWMutex
 
-	host           Host
-	metacontroller Metacontroller
-	refStore       RefStore
-	peerStore      PeerStore
+	host          Host
+	controllerHub ControllerHub
+	refStore      RefStore
+	peerStore     PeerStore
 }
 
 type libp2pSubscriptionIn struct {
@@ -62,13 +62,13 @@ const (
 	PROTO_MAIN protocol.ID = "/redwood/main/1.0.0"
 )
 
-func NewLibp2pTransport(addr types.Address, port uint, metacontroller Metacontroller, refStore RefStore, peerStore PeerStore) (Transport, error) {
+func NewLibp2pTransport(addr types.Address, port uint, controllerHub ControllerHub, refStore RefStore, peerStore PeerStore) (Transport, error) {
 	t := &libp2pTransport{
 		Context:         &ctx.Context{},
 		port:            port,
 		address:         addr,
 		subscriptionsIn: make(map[string]map[*libp2pSubscriptionIn]struct{}),
-		metacontroller:  metacontroller,
+		controllerHub:   controllerHub,
 		refStore:        refStore,
 		peerStore:       peerStore,
 	}
@@ -428,7 +428,7 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 		t.Info(0, "announce")
 
 		// Announce the URLs we're serving
-		for _, url := range t.metacontroller.KnownStateURIs() {
+		for _, url := range t.controllerHub.KnownStateURIs() {
 			url := url
 			go func() {
 				ctxInner, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)

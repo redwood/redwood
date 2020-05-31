@@ -35,9 +35,9 @@ func MakeHost(signingKeypairHex string, port uint, defaultStateURI, cookieSecret
 	// txStore := remotestore.NewClient("0.0.0.0:4567", signingKeypair.Address(), signingKeypair.SigningPrivateKey)
 	refStore := rw.NewRefStore(refStoreRoot)
 	peerStore := rw.NewPeerStore(signingKeypair.Address())
-	metacontroller := rw.NewMetacontroller(signingKeypair.Address(), stateDBRoot, txStore, refStore)
+	controllerHub := rw.NewControllerHub(signingKeypair.Address(), stateDBRoot, txStore, refStore)
 
-	p2ptransport, err := rw.NewLibp2pTransport(signingKeypair.Address(), port, metacontroller, refStore, peerStore)
+	p2ptransport, err := rw.NewLibp2pTransport(signingKeypair.Address(), port, controllerHub, refStore, peerStore)
 	if err != nil {
 		panic(err)
 	}
@@ -48,7 +48,7 @@ func MakeHost(signingKeypairHex string, port uint, defaultStateURI, cookieSecret
 		signingKeypair.Address(),
 		fmt.Sprintf("localhost:%v", port+1),
 		defaultStateURI,
-		metacontroller,
+		controllerHub,
 		refStore,
 		peerStore,
 		signingKeypair,
@@ -63,7 +63,7 @@ func MakeHost(signingKeypairHex string, port uint, defaultStateURI, cookieSecret
 
 	transports := []rw.Transport{p2ptransport, httptransport}
 
-	h, err := rw.NewHost(signingKeypair, encryptingKeypair, transports, metacontroller, refStore, peerStore)
+	h, err := rw.NewHost(signingKeypair, encryptingKeypair, transports, controllerHub, refStore, peerStore)
 	if err != nil {
 		panic(err)
 	}
