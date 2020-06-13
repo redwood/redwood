@@ -109,10 +109,24 @@ func run(configPath string, gui bool) error {
 		return err
 	}
 
-	txStore := rw.NewBadgerTxStore(config.TxDBRoot(), signingKeypair.Address())
-	refStore := rw.NewRefStore(config.RefDataRoot())
-	peerStore := rw.NewPeerStore(signingKeypair.Address())
-	controllerHub := rw.NewControllerHub(signingKeypair.Address(), config.StateDBRoot(), txStore, refStore)
+	var (
+		txStore       = rw.NewBadgerTxStore(config.TxDBRoot(), signingKeypair.Address())
+		refStore      = rw.NewRefStore(config.RefDataRoot())
+		peerStore     = rw.NewPeerStore(signingKeypair.Address())
+		controllerHub = rw.NewControllerHub(signingKeypair.Address(), config.StateDBRoot(), txStore, refStore)
+	)
+
+	err = refStore.Start()
+	if err != nil {
+		return err
+	}
+	app.CtxAddChild(refStore.Ctx(), nil)
+
+	err = txStore.Start()
+	if err != nil {
+		return err
+	}
+	app.CtxAddChild(txStore.Ctx(), nil)
 
 	var transports []rw.Transport
 
@@ -188,6 +202,27 @@ func run(configPath string, gui bool) error {
 		}()
 	}
 
+	go func() {
+		time.Sleep(5 * time.Second)
+		app.Warnf("trying to subscribe %+v", config.Node.SubscribedStateURIs)
+		for _, stateURI := range config.Node.SubscribedStateURIs {
+			app.Warnf("trying to subscribe to %v", stateURI)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			ok, err := host.Subscribe(ctx, stateURI)
+			if err != nil {
+				app.Errorf("error subscribing to %v: %v", stateURI, err)
+				continue
+			} else if !ok {
+				app.Errorf("error subscribing to %v", stateURI)
+				continue
+			}
+			app.Successf("subscribed to %v", stateURI)
+		}
+	}()
+
 	app.CtxAddChild(host.Ctx(), nil)
 	app.CtxStart(
 		func() error { return nil },
@@ -204,11 +239,15 @@ func run(configPath string, gui bool) error {
 			for {
 				select {
 				case <-time.After(3 * time.Second):
-					stateURIs := host.Controller().KnownStateURIs()
+					stateURIs, err := host.Controllers().KnownStateURIs()
+					if err != nil {
+						continue
+					}
+
 					termUI.Sidebar.SetStateURIs(stateURIs)
 					states := make(map[string]string)
 					for _, stateURI := range stateURIs {
-						node, err := host.Controller().StateAtVersion(stateURI, nil)
+						node, err := host.Controllers().StateAtVersion(stateURI, nil)
 						if err != nil {
 							panic(err)
 						}
@@ -307,7 +346,10 @@ var replCommands = map[string]struct {
 	"stateuris": {
 		"list all known state URIs",
 		func(ctx context.Context, args []string, host rw.Host) error {
-			stateURIs := host.Controller().KnownStateURIs()
+			stateURIs, err := host.Controllers().KnownStateURIs()
+			if err != nil {
+				return err
+			}
 			if len(stateURIs) == 0 {
 				fmt.Println("no known state URIs")
 			} else {
@@ -326,7 +368,7 @@ var replCommands = map[string]struct {
 			}
 
 			stateURI := args[0]
-			state, err := host.Controller().StateAtVersion(stateURI, nil)
+			state, err := host.Controllers().StateAtVersion(stateURI, nil)
 			if err != nil {
 				return err
 			}

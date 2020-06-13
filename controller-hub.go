@@ -16,7 +16,7 @@ type ControllerHub interface {
 	Ctx() *ctx.Context
 	Start() error
 
-	AddTx(tx *Tx) error
+	AddTx(tx *Tx, force bool) error
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
 	FetchTxs(stateURI string) TxIterator
 	HaveTx(stateURI string, txID types.ID) (bool, error)
@@ -99,7 +99,7 @@ func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
 	if ctrl == nil {
 		// Set up the controller
 		var err error
-		ctrl, err = NewController(m.address, stateURI, m.dbRootPath, m.txStore, m.refStore)
+		ctrl, err = NewController(m.address, stateURI, m.dbRootPath, m, m.txStore, m.refStore)
 		if err != nil {
 			return nil, err
 		}
@@ -126,7 +126,7 @@ var (
 	ErrInvalidPrivateRootKey = errors.New("invalid private root key")
 )
 
-func (m *controllerHub) AddTx(tx *Tx) error {
+func (m *controllerHub) AddTx(tx *Tx, force bool) error {
 	if tx.IsPrivate() {
 		parts := strings.Split(tx.StateURI, "/")
 		if parts[len(parts)-1] != tx.PrivateRootKey() {
@@ -138,7 +138,7 @@ func (m *controllerHub) AddTx(tx *Tx) error {
 	if err != nil {
 		return err
 	}
-	ctrl.AddTx(tx)
+	ctrl.AddTx(tx, force)
 	return nil
 }
 

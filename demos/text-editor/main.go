@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"flag"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"time"
 
@@ -19,6 +21,10 @@ type app struct {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	flagset := flag.NewFlagSet("", flag.ContinueOnError)
 	klog.InitFlags(flagset)
 	flagset.Set("logtostderr", "true")

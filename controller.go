@@ -54,6 +54,7 @@ func NewController(
 	address types.Address,
 	stateURI string,
 	stateDBRootPath string,
+	controllerHub ControllerHub,
 	txStore TxStore,
 	refStore RefStore,
 ) (Controller, error) {
@@ -69,13 +70,14 @@ func NewController(
 	}
 
 	c := &controller{
-		Context:      &ctx.Context{},
-		address:      address,
-		stateURI:     stateURI,
-		txStore:      txStore,
-		refStore:     refStore,
-		behaviorTree: newBehaviorTree(),
-		states:       states,
+		Context:       &ctx.Context{},
+		address:       address,
+		stateURI:      stateURI,
+		controllerHub: controllerHub,
+		txStore:       txStore,
+		refStore:      refStore,
+		behaviorTree:  newBehaviorTree(),
+		states:        states,
 		indices:       indices,
 	}
 	c.mempool = NewMempool(address, c.processMempoolTx)
@@ -127,24 +129,26 @@ func (c *controller) Leaves() ([]types.ID, error) {
 	return c.txStore.Leaves(c.stateURI)
 }
 
-func (c *controller) AddTx(tx *Tx) error {
+func (c *controller) AddTx(tx *Tx, force bool) error {
 	c.addTxMu.Lock()
 	defer c.addTxMu.Unlock()
 
-	// Ignore duplicates
-	exists, err := c.txStore.TxExists(tx.StateURI, tx.ID)
-	if err != nil {
-		return err
-	} else if exists {
-		c.Infof(0, "already know tx %v, skipping", tx.ID.Pretty())
-		return nil
-	}
+	if !force {
+		// Ignore duplicates
+		exists, err := c.txStore.TxExists(tx.StateURI, tx.ID)
+		if err != nil {
+			return err
+		} else if exists {
+			c.Infof(0, "already know tx %v, skipping", tx.ID.Pretty())
+			return nil
+		}
 
-	c.Infof(0, "new tx %v (%v)", tx.ID.Pretty(), tx.Hash().String())
+		c.Infof(0, "new tx %v (%v)", tx.ID.Pretty(), tx.Hash().String())
+	}
 
 	// Store the tx (so we can ignore txs we've seen before)
 	tx.Status = TxStatusInMempool
-	err = c.txStore.AddTx(tx)
+	err := c.txStore.AddTx(tx)
 	if err != nil {
 		return err
 	}

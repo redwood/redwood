@@ -35,7 +35,7 @@ type httpTransport struct {
 	*ctx.Context
 
 	address         types.Address
-	controller      ControllerHub
+	controllerHub   ControllerHub
 	defaultStateURI string
 	ownURL          string
 	listenAddr      string
@@ -48,7 +48,7 @@ type httpTransport struct {
 
 	pendingAuthorizations map[types.ID][]byte
 
-	subscriptionsIn   map[string]map[*httpSubscriptionIn]struct{}
+	subscriptionsIn   map[string]map[*httpTxSubscriptionServer]struct{}
 	subscriptionsInMu sync.RWMutex
 
 	host      Host
@@ -56,11 +56,24 @@ type httpTransport struct {
 	peerStore PeerStore
 }
 
+type httpTxSubscriptionServer struct {
+	io.Writer
+	http.Flusher
+	address          types.Address
+	chDoneCatchingUp chan struct{}
+	chDone           chan struct{}
+}
+
+func (s *httpTxSubscriptionServer) Close() error {
+	close(s.chDone)
+	return nil
+}
+
 func NewHTTPTransport(
 	addr types.Address,
 	listenAddr string,
 	defaultStateURI string,
-	controller ControllerHub,
+	controllerHub ControllerHub,
 	refStore RefStore,
 	peerStore PeerStore,
 	sigkeys *SigningKeypair,
@@ -81,8 +94,8 @@ func NewHTTPTransport(
 	t := &httpTransport{
 		Context:               &ctx.Context{},
 		address:               addr,
-		subscriptionsIn:       make(map[string]map[*httpSubscriptionIn]struct{}),
-		controller:            controller,
+		subscriptionsIn:       make(map[string]map[*httpTxSubscriptionServer]struct{}),
+		controllerHub:         controllerHub,
 		listenAddr:            listenAddr,
 		defaultStateURI:       defaultStateURI,
 		sigkeys:               sigkeys,
@@ -149,19 +162,6 @@ func (t *httpTransport) Start() error {
 	)
 }
 
-type httpSubscriptionIn struct {
-	io.Writer
-	http.Flusher
-	address          types.Address
-	chDoneCatchingUp chan struct{}
-	chDone           chan struct{}
-}
-
-func (s *httpSubscriptionIn) Close() error {
-	close(s.chDone)
-	return nil
-}
-
 func (t *httpTransport) Name() string {
 	return "http"
 }
@@ -207,7 +207,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	{
 		// On every incoming request, advertise other peers via the Alt-Svc header
 		var others []string
-		for _, tuple := range t.peerStore.PeerTuples() {
+		for _, tuple := range t.peerStore.PeerDialInfos() {
 			others = append(others, fmt.Sprintf(`%s="%s"`, tuple.TransportName, tuple.ReachableAt))
 		}
 		w.Header().Set("Alt-Svc", strings.Join(others, ", "))
@@ -231,15 +231,15 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Address verification requests (2 kinds)
 		if challengeMsgHex := r.Header.Get("Challenge"); challengeMsgHex != "" {
 			// 1. Remote node is reaching out to us with a challenge, and we respond
-			t.serveAuthorizeSelf(w, r, address, challengeMsgHex)
+			t.serveChallengeIdentityResponse(w, r, address, challengeMsgHex)
 		} else {
 			responseHex := r.Header.Get("Response")
 			if responseHex == "" {
 				// 2a. Remote node wants a challenge, so we send it
-				t.serveAuthorizeOtherIssueChallenge(w, r, sessionID)
+				t.serveChallengeIdentity(w, r, sessionID)
 			} else {
 				// 2b. Remote node wanted a challenge, this is their response
-				t.serveAuthorizeOtherCheckResponse(w, r, sessionID, responseHex)
+				t.serveChallengeIdentityCheckResponse(w, r, sessionID, responseHex)
 			}
 		}
 
@@ -276,7 +276,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (t *httpTransport) serveAuthorizeSelf(w http.ResponseWriter, r *http.Request, address types.Address, challengeMsgHex string) {
+func (t *httpTransport) serveChallengeIdentityResponse(w http.ResponseWriter, r *http.Request, address types.Address, challengeMsgHex string) {
 	challengeMsg, err := hex.DecodeString(challengeMsgHex)
 	if err != nil {
 		http.Error(w, "Challenge header: bad challenge message", http.StatusBadRequest)
@@ -284,14 +284,16 @@ func (t *httpTransport) serveAuthorizeSelf(w http.ResponseWriter, r *http.Reques
 	}
 
 	peer := t.makePeerWithAddress(w, nil, address)
-	err = t.host.OnVerifyAddressReceived([]byte(challengeMsg), peer)
+	err = t.host.HandleChallengeIdentity([]byte(challengeMsg), peer)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
-func (t *httpTransport) serveAuthorizeOtherIssueChallenge(w http.ResponseWriter, r *http.Request, sessionID types.ID) {
+// Respond to a request from another node that wants us to issue them an identity
+// challenge.  This is used with browser nodes which we cannot reach out to directly.
+func (t *httpTransport) serveChallengeIdentity(w http.ResponseWriter, r *http.Request, sessionID types.ID) {
 	challenge, err := types.GenerateChallengeMsg()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -308,7 +310,9 @@ func (t *httpTransport) serveAuthorizeOtherIssueChallenge(w http.ResponseWriter,
 	}
 }
 
-func (t *httpTransport) serveAuthorizeOtherCheckResponse(w http.ResponseWriter, r *http.Request, sessionID types.ID, responseHex string) {
+// Check the response from another node that requested an identity challenge from us.
+// This is used with browser nodes which we cannot reach out to directly.
+func (t *httpTransport) serveChallengeIdentityCheckResponse(w http.ResponseWriter, r *http.Request, sessionID types.ID, responseHex string) {
 	challenge, exists := t.pendingAuthorizations[sessionID]
 	if !exists {
 		http.Error(w, "no pending authorization", http.StatusBadRequest)
@@ -333,6 +337,7 @@ func (t *httpTransport) serveAuthorizeOtherCheckResponse(w http.ResponseWriter, 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	delete(t.pendingAuthorizations, sessionID) // @@TODO: expiration/garbage collection for failed auths
 }
 
@@ -359,7 +364,7 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Transfer-Encoding", "chunked")
 
-	sub := &httpSubscriptionIn{w, f, address, make(chan struct{}), make(chan struct{})}
+	sub := &httpTxSubscriptionServer{w, f, address, make(chan struct{}), make(chan struct{})}
 
 	t.trackSubscription(stateURI, sub)
 
@@ -396,7 +401,7 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		err := t.host.OnFetchHistoryRequestReceived(stateURI, parents, toVersion, t.makePeerWithAddress(w, f, address))
+		err := t.host.HandleFetchHistoryRequest(stateURI, parents, toVersion, t.makePeerWithAddress(w, f, address))
 		if err != nil {
 			t.Errorf("error fetching history: %v", err)
 			// @@TODO: close subscription?
@@ -439,7 +444,7 @@ func (t *httpTransport) serveGetTx(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := t.controller.FetchTx(stateURI, txID)
+	tx, err := t.controllerHub.FetchTx(stateURI, txID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("not found: %v", err), http.StatusNotFound)
 		return
@@ -524,28 +529,29 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 	// Add the "Parents" header
 	{
-		leaves, err := t.controller.Leaves(stateURI)
+		leaves, err := t.controllerHub.Leaves(stateURI)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("%v", err), http.StatusNotFound)
 			return
 		}
-		var leaf types.ID
-		for vid := range leaves {
-			leaf = vid
-			break
-		}
-		tx, err := t.controller.FetchTx(stateURI, leaf)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("can't fetch tx %v: %+v", leaf, err.Error()), http.StatusNotFound)
-			return
-		}
-		parents := tx.Parents
+		if len(leaves) > 0 {
+			leaf := leaves[0]
 
-		var parentStrs []string
-		for _, pid := range parents {
-			parentStrs = append(parentStrs, pid.Hex())
+			tx, err := t.controllerHub.FetchTx(stateURI, leaf)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("can't fetch tx %v: %+v", leaf, err.Error()), http.StatusNotFound)
+				return
+			}
+			parents := tx.Parents
+
+			var parentStrs []string
+			for _, pid := range parents {
+				parentStrs = append(parentStrs, pid.Hex())
+			}
+			w.Header().Add("Parents", strings.Join(parentStrs, ","))
+		} else {
+			w.Header().Add("Parents", "")
 		}
-		w.Header().Add("Parents", strings.Join(parentStrs, ","))
 	}
 
 	indexName, indexArg := parseIndexParams(r)
@@ -567,7 +573,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			indexArgKeypath = tree.Keypath(indexArg)
 		}
 
-		state, err = t.controller.QueryIndex(stateURI, version, keypath, tree.Keypath(indexName), indexArgKeypath, rng)
+		state, err = t.controllerHub.QueryIndex(stateURI, version, keypath, tree.Keypath(indexName), indexArgKeypath, rng)
 		if errors.Cause(err) == types.Err404 {
 			http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
 			return
@@ -578,7 +584,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 	} else {
 		// State query
-		state, err = t.controller.StateAtVersion(stateURI, version)
+		state, err = t.controllerHub.StateAtVersion(stateURI, version)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
 			return
@@ -590,7 +596,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 		} else {
 			var exists bool
-			state, exists, err = nelson.Seek(state, keypath, t.controller)
+			state, exists, err = nelson.Seek(state, keypath, t.controllerHub)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 				return
@@ -609,7 +615,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			state, anyMissing, err = nelson.Resolve(state, t.controller)
+			state, anyMissing, err = nelson.Resolve(state, t.controllerHub)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 				return
@@ -629,7 +635,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 	contentType, err := nelson.GetContentType(state)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("error getting content type: %+v", err), http.StatusInternalServerError)
 		return
 	}
 	if contentType == "application/octet-stream" {
@@ -639,7 +645,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 	contentLength, err := nelson.GetContentLength(state)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("error getting content length: %+v", err), http.StatusInternalServerError)
 		return
 	}
 	if contentLength > 0 {
@@ -648,7 +654,7 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 	resourceLength, err := state.Length()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("error getting length: %+v", err), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Resource-Length", strconv.FormatUint(resourceLength, 10))
@@ -717,7 +723,7 @@ func (t *httpTransport) serveAck(w http.ResponseWriter, r *http.Request, address
 		return
 	}
 
-	t.host.OnAckReceived(txID, t.makePeerWithAddress(w, nil, address))
+	t.host.HandleAckReceived(txID, t.makePeerWithAddress(w, nil, address))
 }
 
 func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, address types.Address) {
@@ -729,7 +735,7 @@ func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Reques
 		panic(err)
 	}
 
-	t.host.OnPrivateTxReceived(encryptedTx, t.makePeerWithAddress(w, nil, address))
+	t.host.HandlePrivateTxReceived(encryptedTx, t.makePeerWithAddress(w, nil, address))
 }
 
 func (t *httpTransport) servePostRef(w http.ResponseWriter, r *http.Request) {
@@ -842,7 +848,7 @@ func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, addr
 	tx.From = pubkey.Address()
 	////////////////////////////////
 
-	t.host.OnTxReceived(tx, t.makePeerWithAddress(w, nil, address))
+	go t.host.HandleTxReceived(tx, t.makePeerWithAddress(w, nil, address))
 }
 
 func parseRawParam(r *http.Request) (bool, error) {
@@ -876,17 +882,17 @@ func (t *httpTransport) SetHost(h Host) {
 	t.host = h
 }
 
-func (t *httpTransport) trackSubscription(stateURI string, sub *httpSubscriptionIn) {
+func (t *httpTransport) trackSubscription(stateURI string, sub *httpTxSubscriptionServer) {
 	t.subscriptionsInMu.Lock()
 	defer t.subscriptionsInMu.Unlock()
 
 	if _, exists := t.subscriptionsIn[stateURI]; !exists {
-		t.subscriptionsIn[stateURI] = make(map[*httpSubscriptionIn]struct{})
+		t.subscriptionsIn[stateURI] = make(map[*httpTxSubscriptionServer]struct{})
 	}
 	t.subscriptionsIn[stateURI][sub] = struct{}{}
 }
 
-func (t *httpTransport) untrackSubscription(stateURI string, sub *httpSubscriptionIn) {
+func (t *httpTransport) untrackSubscription(stateURI string, sub *httpTxSubscriptionServer) {
 	t.subscriptionsInMu.Lock()
 	defer t.subscriptionsInMu.Unlock()
 
@@ -900,12 +906,20 @@ func (t *httpTransport) GetPeerByConnStrings(ctx context.Context, reachableAt St
 	if len(reachableAt) != 1 {
 		panic("weird")
 	}
+	for ra := range reachableAt {
+		if strings.HasPrefix(ra, "localhost") {
+			return nil, errors.WithStack(ErrPeerIsSelf)
+		}
+	}
 	return t.makePeer(nil, nil, reachableAt), nil
 }
 
 func (t *httpTransport) ForEachProviderOfStateURI(ctx context.Context, theURL string) (<-chan Peer, error) {
+	ch := make(chan Peer)
+
 	u, err := url.Parse("http://" + theURL)
 	if err != nil {
+		close(ch)
 		return nil, err
 	}
 
@@ -913,8 +927,10 @@ func (t *httpTransport) ForEachProviderOfStateURI(ctx context.Context, theURL st
 
 	resp, err := http.Get(u.String())
 	if err != nil {
+		close(ch)
 		return nil, err
 	} else if resp.StatusCode != 200 {
+		close(ch)
 		return nil, errors.Errorf("error GETting providers: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
@@ -922,10 +938,10 @@ func (t *httpTransport) ForEachProviderOfStateURI(ctx context.Context, theURL st
 	var providers []string
 	err = json.NewDecoder(resp.Body).Decode(&providers)
 	if err != nil {
+		close(ch)
 		return nil, err
 	}
 
-	ch := make(chan Peer)
 	go func() {
 		defer close(ch)
 		for _, providerURL := range providers {
@@ -972,7 +988,7 @@ func (t *httpTransport) PeersClaimingAddress(ctx context.Context, address types.
 	return nil, types.ErrUnimplemented
 }
 
-func (t *httpTransport) AnnounceRef(refID types.RefID) error {
+func (t *httpTransport) AnnounceRef(ctx context.Context, refID types.RefID) error {
 	return types.ErrUnimplemented
 }
 
@@ -1100,210 +1116,206 @@ func (p *httpPeer) EnsureConnected(ctx context.Context) error {
 	return nil
 }
 
-func (p *httpPeer) WriteMsg(msg Msg) error {
-	p.Mutex.Lock()
-	defer p.Mutex.Unlock()
+func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (TxSubscription, error) {
+	var client http.Client
+	req, err := http.NewRequest("GET", p.ReachableAt().Any(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("State-URI", stateURI)
+	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Subscribe", "keep-alive")
 
-	switch msg.Type {
-	case MsgType_Subscribe:
-		stateURI, ok := msg.Payload.(string)
-		if !ok {
-			return errors.WithStack(ErrProtocol)
-		}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	} else if resp.StatusCode != 200 {
+		return nil, errors.Errorf("error GETting peer: (%v) %v", resp.StatusCode, resp.Status)
+	}
 
-		var client http.Client
-		req, err := http.NewRequest("GET", p.ReachableAt().Any(), nil)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("State-URI", stateURI)
-		req.Header.Set("Cache-Control", "no-cache")
-		req.Header.Set("Accept", "text/event-stream")
-		req.Header.Set("Connection", "keep-alive")
-		req.Header.Set("Subscribe", "keep-alive")
+	return &httpTxSubscriptionClient{resp.Body}, nil
+}
 
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		} else if resp.StatusCode != 200 {
-			return errors.Errorf("error GETting peer: (%v) %v", resp.StatusCode, resp.Status)
-		}
+type httpTxSubscriptionClient struct {
+	io.ReadCloser
+}
 
-		p.state = httpPeerState_ServingSubscription
-		p.ReadCloser = resp.Body
+func (s *httpTxSubscriptionClient) Read() (*Tx, error) {
+	r := bufio.NewReader(s.ReadCloser)
+	bs, err := r.ReadBytes(byte('\n'))
+	if err != nil {
+		return nil, err
+	}
+	bs = bytes.TrimPrefix(bs, []byte("data: "))
+	bs = bytes.Trim(bs, "\n ")
 
-	case MsgType_Put:
-		if p.Writer != nil {
-			// This peer is subscribed, so we have a connection open already
-			tx, is := msg.Payload.(Tx)
-			if !is {
-				panic("protocol error")
-			}
+	var tx Tx
+	err = json.Unmarshal(bs, &tx)
+	if err != nil {
+		return nil, err
+	}
+	return &tx, nil
+}
 
-			bs, err := json.Marshal(tx)
-			if err != nil {
-				return err
-			}
+func (s *httpTxSubscriptionClient) Close() error {
+	return s.ReadCloser.Close()
+}
 
-			event := []byte("data: " + string(bs) + "\n\n")
-
-			n, err := p.Write(event)
-			if err != nil {
-				return err
-			} else if n < len(event) {
-				return errors.New("didn't write enough")
-			}
-
-			if p.Flusher != nil {
-				p.Flusher.Flush()
-			}
-
-		} else {
-			// This peer is not subscribed, so we make a PUT
-			bs, err := json.Marshal(msg)
-			if err != nil {
-				return err
-			}
-
-			client := http.Client{}
-			req, err := http.NewRequest("PUT", p.ReachableAt().Any(), bytes.NewReader(bs))
-			if err != nil {
-				return err
-			}
-
-			resp, err := client.Do(req)
-			if err != nil {
-				return err
-			} else if resp.StatusCode != 200 {
-				return errors.Errorf("error PUTting to peer: (%v) %v", resp.StatusCode, resp.Status)
-			}
-			defer resp.Body.Close()
-		}
-
-	case MsgType_Ack:
-		txID, ok := msg.Payload.(types.ID)
-		if !ok {
-			return errors.WithStack(ErrProtocol)
-		}
-
-		txIDBytes, err := txID.MarshalText()
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		client := http.Client{}
-		req, err := http.NewRequest("ACK", p.ReachableAt().Any(), bytes.NewReader(txIDBytes))
+func (p *httpPeer) Put(tx Tx) error {
+	if p.Writer != nil {
+		// This peer is subscribed, so we have a connection open already
+		bs, err := json.Marshal(tx)
 		if err != nil {
 			return err
 		}
 
-		resp, err := client.Do(req)
+		// This is encoded using HTTP's SSE format
+		event := []byte("data: " + string(bs) + "\n\n")
+
+		n, err := p.Write(event)
 		if err != nil {
 			return err
-		} else if resp.StatusCode != 200 {
-			return errors.Errorf("error ACKing to peer: (%v) %v", resp.StatusCode, resp.Status)
-		}
-		defer resp.Body.Close()
-
-	case MsgType_VerifyAddress:
-		challengeMsg, ok := msg.Payload.(types.ChallengeMsg)
-		if !ok {
-			return errors.WithStack(ErrProtocol)
+		} else if n < len(event) {
+			return errors.New("didn't write enough")
 		}
 
-		client := http.Client{}
-		req, err := http.NewRequest("AUTHORIZE", p.ReachableAt().Any(), nil)
-		if err != nil {
-			return err
+		if p.Flusher != nil {
+			p.Flusher.Flush()
 		}
-		req.Header.Set("Challenge", hex.EncodeToString(challengeMsg))
+		return nil
 
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		} else if resp.StatusCode != 200 {
-			return errors.Errorf("error verifying peer address: (%v) %v", resp.StatusCode, resp.Status)
-		}
+	} else {
+		// This peer is not subscribed, so we make a PUT
+		// bs, err := json.Marshal(tx)
+		// if err != nil {
+		// 	return err
+		// }
 
-		p.state = httpPeerState_VerifyingAddress
-		p.ReadCloser = resp.Body
+		// client := http.Client{}
+		// req, err := http.NewRequest("PUT", p.ReachableAt().Any(), bytes.NewReader(bs))
+		// if err != nil {
+		// 	return err
+		// }
 
-	case MsgType_VerifyAddressResponse:
-		verifyAddressResponse, ok := msg.Payload.(VerifyAddressResponse)
-		if !ok {
-			return errors.WithStack(ErrProtocol)
-		}
-
-		err := json.NewEncoder(p.Writer).Encode(verifyAddressResponse)
-		if err != nil {
-			http.Error(p.Writer.(http.ResponseWriter), err.Error(), http.StatusInternalServerError)
-			panic(err)
-			return err
-		}
-
-	case MsgType_Private:
-		encPut, ok := msg.Payload.(EncryptedTx)
-		if !ok {
-			return errors.WithStack(ErrProtocol)
-		}
-
-		encPutBytes, err := json.Marshal(encPut)
-		if err != nil {
-			return err
-		}
-
-		client := http.Client{}
-		req, err := http.NewRequest("PUT", p.ReachableAt().Any(), bytes.NewReader(encPutBytes))
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Private", "true")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		} else if resp.StatusCode != 200 {
-			return errors.Errorf("error sending private PUT: (%v) %v", resp.StatusCode, resp.Status)
-		}
-		defer resp.Body.Close()
-
-	default:
+		// resp, err := client.Do(req)
+		// if err != nil {
+		// 	return err
+		// } else if resp.StatusCode != 200 {
+		// 	return errors.Errorf("error PUTting to peer: (%v) %v", resp.StatusCode, resp.Status)
+		// }
+		// defer resp.Body.Close()
 		panic("unimplemented")
+	}
+}
+
+func (p *httpPeer) PutPrivate(encPut EncryptedTx) error {
+	encPutBytes, err := json.Marshal(encPut)
+	if err != nil {
+		return err
+	}
+
+	var client http.Client
+	req, err := http.NewRequest("PUT", p.ReachableAt().Any(), bytes.NewReader(encPutBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Private", "true")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return errors.Errorf("error sending private PUT: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	return nil
 }
 
-func (p *httpPeer) ReadMsg() (Msg, error) {
-	switch p.state {
-	case httpPeerState_VerifyingAddress:
-		var verifyResp VerifyAddressResponse
-		err := json.NewDecoder(p.ReadCloser).Decode(&verifyResp)
-		if err != nil {
-			return Msg{}, err
-		}
-		return Msg{Type: MsgType_VerifyAddressResponse, Payload: verifyResp}, nil
-
-	case httpPeerState_ServingSubscription:
-		var tx Tx
-		r := bufio.NewReader(p.ReadCloser)
-		bs, err := r.ReadBytes(byte('\n'))
-		if err != nil {
-			return Msg{}, err
-		}
-		bs = bytes.Trim(bs, "\n ")
-
-		err = json.Unmarshal(bs, &tx)
-		if err != nil {
-			return Msg{}, err
-		}
-
-		msg := Msg{Type: MsgType_Put, Payload: tx}
-
-		return msg, err
-
-	default:
-		panic("bad")
+func (p *httpPeer) Ack(txID types.ID) error {
+	reachableAt := p.ReachableAt().Any()
+	if reachableAt == "" {
+		return nil
 	}
+
+	txIDBytes, err := txID.MarshalText()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	var client http.Client
+	req, err := http.NewRequest("ACK", reachableAt, bytes.NewReader(txIDBytes))
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	} else if resp.StatusCode != 200 {
+		return errors.Errorf("error ACKing to peer: (%v) %v", resp.StatusCode, resp.Status)
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) error {
+	req, err := http.NewRequest("AUTHORIZE", p.ReachableAt().Any(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Challenge", hex.EncodeToString(challengeMsg))
+
+	var client http.Client
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	} else if resp.StatusCode != 200 {
+		return errors.Errorf("error verifying peer address: (%v) %v", resp.StatusCode, resp.Status)
+	}
+
+	p.ReadCloser = resp.Body
+	return nil
+}
+
+func (p *httpPeer) ReceiveChallengeIdentityResponse() (ChallengeIdentityResponse, error) {
+	var verifyResp ChallengeIdentityResponse
+	err := json.NewDecoder(p.ReadCloser).Decode(&verifyResp)
+	if err != nil {
+		return ChallengeIdentityResponse{}, err
+	}
+	return verifyResp, nil
+}
+
+func (p *httpPeer) RespondChallengeIdentity(verifyAddressResponse ChallengeIdentityResponse) error {
+	err := json.NewEncoder(p.Writer).Encode(verifyAddressResponse)
+	if err != nil {
+		http.Error(p.Writer.(http.ResponseWriter), err.Error(), http.StatusInternalServerError)
+		return err
+	}
+	return nil
+}
+
+func (p *httpPeer) FetchRef(refID types.RefID) error {
+	return types.ErrUnimplemented
+}
+
+func (p *httpPeer) SendRefHeader() error {
+	return types.ErrUnimplemented
+}
+
+func (p *httpPeer) SendRefPacket(data []byte, end bool) error {
+	return types.ErrUnimplemented
+}
+
+func (p *httpPeer) ReceiveRefHeader() (FetchRefResponseHeader, error) {
+	return FetchRefResponseHeader{}, types.ErrUnimplemented
+}
+
+func (p *httpPeer) ReceiveRefPacket() (FetchRefResponseBody, error) {
+	return FetchRefResponseBody{}, types.ErrUnimplemented
 }
 
 func (p *httpPeer) CloseConn() error {

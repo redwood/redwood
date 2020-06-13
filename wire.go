@@ -19,20 +19,20 @@ type Msg struct {
 type MsgType string
 
 const (
-	MsgType_Subscribe             MsgType = "subscribe"
-	MsgType_Unsubscribe           MsgType = "unsubscribe"
-	MsgType_Put                   MsgType = "put"
-	MsgType_Private               MsgType = "private"
-	MsgType_Ack                   MsgType = "ack"
-	MsgType_Error                 MsgType = "error"
-	MsgType_VerifyAddress         MsgType = "verify address"
-	MsgType_VerifyAddressResponse MsgType = "verify address response"
-	MsgType_FetchRef              MsgType = "fetch ref"
-	MsgType_FetchRefResponse      MsgType = "fetch ref response"
-	MsgType_AdvertisePeers        MsgType = "advertise peers"
+	MsgType_Subscribe                 MsgType = "subscribe"
+	MsgType_Unsubscribe               MsgType = "unsubscribe"
+	MsgType_Put                       MsgType = "put"
+	MsgType_Private                   MsgType = "private"
+	MsgType_Ack                       MsgType = "ack"
+	MsgType_Error                     MsgType = "error"
+	MsgType_ChallengeIdentityRequest  MsgType = "challenge identity"
+	MsgType_ChallengeIdentityResponse MsgType = "challenge identity response"
+	MsgType_FetchRef                  MsgType = "fetch ref"
+	MsgType_FetchRefResponse          MsgType = "fetch ref response"
+	MsgType_AdvertisePeers            MsgType = "advertise peers"
 )
 
-type VerifyAddressResponse struct {
+type ChallengeIdentityResponse struct {
 	Signature           []byte `json:"signature"`
 	EncryptingPublicKey []byte `json:"encryptingPublicKey"`
 }
@@ -163,7 +163,7 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		}
 		msg.Payload = ep
 
-	case MsgType_VerifyAddress:
+	case MsgType_ChallengeIdentityRequest:
 		var challenge types.ChallengeMsg
 		err := json.Unmarshal(m.PayloadBytes, &challenge)
 		if err != nil {
@@ -171,8 +171,8 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		}
 		msg.Payload = challenge
 
-	case MsgType_VerifyAddressResponse:
-		var resp VerifyAddressResponse
+	case MsgType_ChallengeIdentityResponse:
+		var resp ChallengeIdentityResponse
 		err := json.Unmarshal([]byte(m.PayloadBytes), &resp)
 		if err != nil {
 			return err
@@ -197,12 +197,12 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		msg.Payload = resp
 
 	case MsgType_AdvertisePeers:
-		var peerTuples []peerTuple
-		err := json.Unmarshal([]byte(m.PayloadBytes), &peerTuples)
+		var peerDialInfos []PeerDialInfo
+		err := json.Unmarshal([]byte(m.PayloadBytes), &peerDialInfos)
 		if err != nil {
 			return err
 		}
-		msg.Payload = peerTuples
+		msg.Payload = peerDialInfos
 
 	default:
 		return errors.New("bad msg")

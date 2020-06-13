@@ -10,8 +10,8 @@ import (
 type PeerStore interface {
 	AddReachableAddresses(transportName string, reachableAt StringSet)
 	AddVerifiedCredentials(transportName string, reachableAt StringSet, address types.Address, sigpubkey SigningPublicKey, encpubkey EncryptingPublicKey)
-	MaybePeers() []peerTuple
-	PeerTuples() []peerTuple
+	MaybePeers() []PeerDialInfo
+	PeerDialInfos() []PeerDialInfo
 	PeersWithAddress(address types.Address) []*storedPeer
 	PeersFromTransportWithAddress(transport string, address types.Address) []*storedPeer
 	PeerReachableAt(transport string, reachableAt StringSet) *storedPeer
@@ -21,12 +21,12 @@ type peerStore struct {
 	ctx.Logger
 
 	muPeers          sync.RWMutex
-	peers            map[peerTuple]*storedPeer
-	peersWithAddress map[types.Address]map[peerTuple]*storedPeer
-	maybePeers       map[peerTuple]struct{}
+	peers            map[PeerDialInfo]*storedPeer
+	peersWithAddress map[types.Address]map[PeerDialInfo]*storedPeer
+	maybePeers       map[PeerDialInfo]struct{}
 }
 
-type peerTuple struct {
+type PeerDialInfo struct {
 	TransportName string
 	ReachableAt   string
 }
@@ -34,21 +34,12 @@ type peerTuple struct {
 func NewPeerStore(addr types.Address) *peerStore {
 	s := &peerStore{
 		Logger:           ctx.NewLogger("peer store " + addr.Pretty()),
-		peers:            make(map[peerTuple]*storedPeer),
-		peersWithAddress: make(map[types.Address]map[peerTuple]*storedPeer),
-		maybePeers:       make(map[peerTuple]struct{}),
+		peers:            make(map[PeerDialInfo]*storedPeer),
+		peersWithAddress: make(map[types.Address]map[PeerDialInfo]*storedPeer),
+		maybePeers:       make(map[PeerDialInfo]struct{}),
 	}
 
 	return s
-}
-
-func peerTuples(peer Peer) []peerTuple {
-	var tuples []peerTuple
-	transportName := peer.Transport().Name()
-	for reachableAt := range peer.ReachableAt() {
-		tuples = append(tuples, peerTuple{transportName, reachableAt})
-	}
-	return tuples
 }
 
 func (s *peerStore) AddReachableAddresses(transportName string, reachableAt StringSet) {
@@ -56,7 +47,7 @@ func (s *peerStore) AddReachableAddresses(transportName string, reachableAt Stri
 	defer s.muPeers.Unlock()
 
 	for ra := range reachableAt {
-		key := peerTuple{transportName, ra}
+		key := PeerDialInfo{transportName, ra}
 		_, exists := s.peers[key]
 		if !exists {
 			s.maybePeers[key] = struct{}{}
@@ -74,7 +65,7 @@ func (s *peerStore) AddVerifiedCredentials(transportName string, reachableAt Str
 
 	var peer *storedPeer
 	for ra := range reachableAt {
-		if p, exists := s.peers[peerTuple{transportName, ra}]; exists {
+		if p, exists := s.peers[PeerDialInfo{transportName, ra}]; exists {
 			peer = p
 			break
 		}
@@ -91,11 +82,11 @@ func (s *peerStore) AddVerifiedCredentials(transportName string, reachableAt Str
 	peer.encpubkey = encpubkey
 
 	if _, exists := s.peersWithAddress[address]; !exists {
-		s.peersWithAddress[address] = make(map[peerTuple]*storedPeer)
+		s.peersWithAddress[address] = make(map[PeerDialInfo]*storedPeer)
 	}
 
 	for ra := range reachableAt {
-		tuple := peerTuple{transportName, ra}
+		tuple := PeerDialInfo{transportName, ra}
 		delete(s.maybePeers, tuple)
 		s.peers[tuple] = peer
 		s.peersWithAddress[address][tuple] = peer
@@ -108,7 +99,7 @@ func (s *peerStore) PeerReachableAt(transport string, reachableAt StringSet) *st
 	defer s.muPeers.RUnlock()
 
 	for ra := range reachableAt {
-		peer, exists := s.peers[peerTuple{transport, ra}]
+		peer, exists := s.peers[PeerDialInfo{transport, ra}]
 		if exists {
 			return peer.Copy()
 		}
@@ -116,11 +107,11 @@ func (s *peerStore) PeerReachableAt(transport string, reachableAt StringSet) *st
 	return nil
 }
 
-func (s *peerStore) MaybePeers() []peerTuple {
+func (s *peerStore) MaybePeers() []PeerDialInfo {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	tuples := make([]peerTuple, len(s.maybePeers))
+	tuples := make([]PeerDialInfo, len(s.maybePeers))
 	i := 0
 	for tuple := range s.maybePeers {
 		tuples[i] = tuple
@@ -129,11 +120,11 @@ func (s *peerStore) MaybePeers() []peerTuple {
 	return tuples
 }
 
-func (s *peerStore) PeerTuples() []peerTuple {
+func (s *peerStore) PeerDialInfos() []PeerDialInfo {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	var peers []peerTuple
+	var peers []PeerDialInfo
 	for tuple := range s.peers {
 		peers = append(peers, tuple)
 	}
@@ -191,10 +182,10 @@ func (p storedPeer) PublicKeypairs() (SigningPublicKey, EncryptingPublicKey) {
 	return p.sigpubkey, p.encpubkey
 }
 
-func (sp storedPeer) Tuples() []peerTuple {
-	var tuples []peerTuple
+func (sp storedPeer) DialInfos() []PeerDialInfo {
+	var tuples []PeerDialInfo
 	for reachableAt := range sp.reachableAt {
-		tuples = append(tuples, peerTuple{sp.transportName, reachableAt})
+		tuples = append(tuples, PeerDialInfo{sp.transportName, reachableAt})
 	}
 	return tuples
 }

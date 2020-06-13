@@ -23,17 +23,21 @@ type Host interface {
 	Subscribe(ctx context.Context, stateURI string) (bool, error)
 	SendTx(ctx context.Context, tx Tx) error
 	AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error)
+	FetchRef(ctx context.Context, ref types.RefID)
+	AnnounceRefs(ctx context.Context, refIDs []types.RefID)
 	AddPeer(ctx context.Context, transportName string, reachableAt StringSet) error
 	Transport(name string) Transport
-	Controller() ControllerHub
+	Controllers() ControllerHub
 	Address() types.Address
+	ForEachProviderOfStateURI(ctx context.Context, stateURI string) <-chan Peer
+	ForEachSubscriberToStateURI(ctx context.Context, stateURI string) <-chan Peer
 
-	OnFetchHistoryRequestReceived(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error
-	OnTxReceived(tx Tx, peer Peer)
-	OnPrivateTxReceived(encryptedTx EncryptedTx, peer Peer)
-	OnAckReceived(txID types.ID, peer Peer)
-	OnVerifyAddressReceived(challengeMsg types.ChallengeMsg, peer Peer) error
-	OnFetchRefReceived(refID types.RefID, peer Peer)
+	HandleFetchHistoryRequest(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error
+	HandleTxReceived(tx Tx, peer Peer)
+	HandlePrivateTxReceived(encryptedTx EncryptedTx, peer Peer)
+	HandleAckReceived(txID types.ID, peer Peer)
+	HandleChallengeIdentity(challengeMsg types.ChallengeMsg, peer Peer) error
+	HandleFetchRefReceived(refID types.RefID, peer Peer)
 }
 
 type host struct {
@@ -45,8 +49,8 @@ type host struct {
 	signingKeypair    *SigningKeypair
 	encryptingKeypair *EncryptingKeypair
 
-	subscriptionsOut map[string]map[peerTuple]*subscriptionOut // map[stateURI][peerTuple]
-	peerSeenTxs      map[peerTuple]map[types.ID]bool
+	subscriptionsOut map[string]map[PeerDialInfo]TxSubscription // map[stateURI][PeerDialInfo]
+	peerSeenTxs      map[PeerDialInfo]map[types.ID]bool
 	peerSeenTxsMu    sync.RWMutex
 
 	peerStore PeerStore
@@ -61,7 +65,14 @@ var (
 	ErrPeerIsSelf = errors.New("peer is self")
 )
 
-func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypair, transports []Transport, controllerHub ControllerHub, refStore RefStore, peerStore PeerStore) (Host, error) {
+func NewHost(
+	signingKeypair *SigningKeypair,
+	encryptingKeypair *EncryptingKeypair,
+	transports []Transport,
+	controllerHub ControllerHub,
+	refStore RefStore,
+	peerStore PeerStore,
+) (Host, error) {
 	transportsMap := make(map[string]Transport)
 	for _, tpt := range transports {
 		transportsMap[tpt.Name()] = tpt
@@ -72,8 +83,8 @@ func NewHost(signingKeypair *SigningKeypair, encryptingKeypair *EncryptingKeypai
 		ControllerHub:     controllerHub,
 		signingKeypair:    signingKeypair,
 		encryptingKeypair: encryptingKeypair,
-		subscriptionsOut:  make(map[string]map[peerTuple]*subscriptionOut),
-		peerSeenTxs:       make(map[peerTuple]map[types.ID]bool),
+		subscriptionsOut:  make(map[string]map[PeerDialInfo]TxSubscription),
+		peerSeenTxs:       make(map[PeerDialInfo]map[types.ID]bool),
 		peerStore:         peerStore,
 		refStore:          refStore,
 		chRefsNeeded:      make(chan []types.RefID, 100),
@@ -101,11 +112,6 @@ func (h *host) Start() error {
 
 			// Set up the ref store
 			h.refStore.OnRefsNeeded(h.handleRefsNeeded)
-			h.CtxAddChild(h.refStore.Ctx(), nil)
-			err = h.refStore.Start()
-			if err != nil {
-				return err
-			}
 
 			// Set up the transports
 			for _, transport := range h.transports {
@@ -117,7 +123,8 @@ func (h *host) Start() error {
 				}
 			}
 
-			go h.fetchRefsLoop()
+			go h.periodicallyFetchMissingRefs()
+			go h.periodicallyVerifyPeers()
 
 			return nil
 		},
@@ -132,7 +139,7 @@ func (h *host) Transport(name string) Transport {
 	return h.transports[name]
 }
 
-func (h *host) Controller() ControllerHub {
+func (h *host) Controllers() ControllerHub {
 	return h.ControllerHub
 }
 
@@ -140,7 +147,7 @@ func (h *host) Address() types.Address {
 	return h.signingKeypair.Address()
 }
 
-func (h *host) OnTxReceived(tx Tx, peer Peer) {
+func (h *host) HandleTxReceived(tx Tx, peer Peer) {
 	h.Infof(0, "tx %v received from %v peer %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address())
 	h.markTxSeenByPeer(peer, tx.ID)
 
@@ -152,19 +159,134 @@ func (h *host) OnTxReceived(tx Tx, peer Peer) {
 	}
 
 	if !have {
-		err := h.ControllerHub.AddTx(&tx)
+		err := h.ControllerHub.AddTx(&tx, false)
 		if err != nil {
 			h.Errorf("error adding tx to controllerHub: %v", err)
 		}
 	}
 
-	err = peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.ID})
+	err = peer.Ack(tx.ID)
 	if err != nil {
 		h.Errorf("error ACKing peer: %v", err)
 	}
 }
 
-func (h *host) OnPrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
+func (h *host) ForEachProviderOfStateURI(ctx context.Context, stateURI string) <-chan Peer {
+	var wg sync.WaitGroup
+	ch := make(chan Peer)
+	for _, tpt := range h.transports {
+		innerCh, err := tpt.ForEachProviderOfStateURI(ctx, stateURI)
+		if err != nil {
+			h.Warnf("transport %v could not fetch providers of state URI '%v'", tpt.Name(), stateURI)
+			continue
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-h.Ctx().Done():
+					return
+				case <-ctx.Done():
+					return
+				case peer, open := <-innerCh:
+					if !open {
+						return
+					}
+
+					ch <- peer
+				}
+			}
+		}()
+
+	}
+
+	go func() {
+		defer close(ch)
+		wg.Wait()
+	}()
+
+	return ch
+}
+
+func (h *host) ForEachSubscriberToStateURI(ctx context.Context, stateURI string) <-chan Peer {
+	var wg sync.WaitGroup
+	ch := make(chan Peer)
+	for _, tpt := range h.transports {
+		innerCh, err := tpt.ForEachSubscriberToStateURI(ctx, stateURI)
+		if err != nil {
+			h.Warnf("transport %v could not fetch subscribers of state URI '%v'", tpt.Name(), stateURI)
+			continue
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-h.Ctx().Done():
+					return
+				case <-ctx.Done():
+					return
+				case peer, open := <-innerCh:
+					if !open {
+						return
+					}
+
+					ch <- peer
+				}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(ch)
+		wg.Wait()
+	}()
+
+	return ch
+}
+
+func (h *host) ForEachProviderOfRef(ctx context.Context, refID types.RefID) <-chan Peer {
+	var wg sync.WaitGroup
+	ch := make(chan Peer)
+	for _, tpt := range h.transports {
+		innerCh, err := tpt.ForEachProviderOfRef(ctx, refID)
+		if err != nil {
+			h.Warnf("transport %v could not fetch providers of ref %v", tpt.Name(), refID)
+			continue
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-h.Ctx().Done():
+					return
+				case <-ctx.Done():
+					return
+				case peer, open := <-innerCh:
+					if !open {
+						return
+					}
+
+					ch <- peer
+				}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(ch)
+		wg.Wait()
+	}()
+
+	return ch
+}
+
+func (h *host) HandlePrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
 	h.Infof(0, "private tx %v received", encryptedTx.TxID.Pretty())
 	h.markTxSeenByPeer(peer, encryptedTx.TxID)
 
@@ -194,19 +316,19 @@ func (h *host) OnPrivateTxReceived(encryptedTx EncryptedTx, peer Peer) {
 
 	if !have {
 		// Add to controllerHub
-		err := h.ControllerHub.AddTx(&tx)
+		err := h.ControllerHub.AddTx(&tx, false)
 		if err != nil {
 			h.Errorf("error adding tx to controllerHub: %v", err)
 		}
 	}
 
-	err = peer.WriteMsg(Msg{Type: MsgType_Ack, Payload: tx.ID})
+	err = peer.Ack(tx.ID)
 	if err != nil {
 		h.Errorf("error ACKing peer: %v", err)
 	}
 }
 
-func (h *host) OnAckReceived(txID types.ID, peer Peer) {
+func (h *host) HandleAckReceived(txID types.ID, peer Peer) {
 	h.Infof(0, "ack received for %v", txID.Hex())
 	h.markTxSeenByPeer(peer, txID)
 }
@@ -215,7 +337,7 @@ func (h *host) markTxSeenByPeer(peer Peer, txID types.ID) {
 	h.peerSeenTxsMu.Lock()
 	defer h.peerSeenTxsMu.Unlock()
 
-	for _, tuple := range peerTuples(peer) {
+	for _, tuple := range peer.DialInfos() {
 		if h.peerSeenTxs[tuple] == nil {
 			h.peerSeenTxs[tuple] = make(map[types.ID]bool)
 		}
@@ -228,10 +350,11 @@ func (h *host) txSeenByPeer(peer Peer, txID types.ID) bool {
 		return false
 	}
 
+	// @@TODO: convert to LRU cache
 	h.peerSeenTxsMu.Lock()
 	defer h.peerSeenTxsMu.Unlock()
 
-	for _, tuple := range peerTuples(peer) {
+	for _, tuple := range peer.DialInfos() {
 		if h.peerSeenTxs[tuple] == nil {
 			continue
 		}
@@ -243,8 +366,8 @@ func (h *host) txSeenByPeer(peer Peer, txID types.ID) bool {
 }
 
 func (h *host) AddPeer(ctx context.Context, transportName string, reachableAt StringSet) error {
-	transport, exists := h.transports[transportName]
-	if !exists {
+	transport := h.Transport(transportName)
+	if transport == nil {
 		h.peerStore.AddReachableAddresses(transportName, reachableAt)
 		return nil
 	}
@@ -261,16 +384,53 @@ func (h *host) AddPeer(ctx context.Context, transportName string, reachableAt St
 
 	h.peerStore.AddReachableAddresses(transportName, reachableAt)
 
-	sigpubkey, _, err := h.requestPeerCredentials(ctx, peer, transport)
+	sigpubkey, _, err := h.challengePeerIdentity(ctx, peer)
 	if err != nil {
 		return err
 	}
 
-	h.Infof(0, "added peer with address %v", sigpubkey.Address())
+	h.Infof(0, "added peer %v at %v %v", sigpubkey.Address(), transportName, reachableAt.Slice())
 	return nil
 }
 
-func (h *host) OnFetchHistoryRequestReceived(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error {
+func (h *host) periodicallyVerifyPeers() {
+	for {
+		maybePeers := h.peerStore.MaybePeers()
+		var wg sync.WaitGroup
+		wg.Add(len(maybePeers))
+		for _, peerDialInfo := range maybePeers {
+			peerDialInfo := peerDialInfo
+			go func() {
+				defer wg.Done()
+
+				transport := h.Transport(peerDialInfo.TransportName)
+				if transport == nil {
+					// Unsupported transport
+					return
+				}
+
+				peer, err := transport.GetPeerByConnStrings(context.TODO(), NewStringSet([]string{peerDialInfo.ReachableAt}))
+				if errors.Cause(err) == ErrPeerIsSelf {
+					return
+				} else if err != nil {
+					h.Warn("could not get peer at %v %v: ", peerDialInfo.TransportName, peerDialInfo.ReachableAt)
+					return
+				}
+
+				_, _, err = h.challengePeerIdentity(context.TODO(), peer)
+				if err != nil {
+					h.Errorf("error verifying peer identity: %v ", err)
+					return
+				}
+			}()
+		}
+		wg.Wait()
+
+		time.Sleep(3 * time.Second)
+	}
+}
+
+func (h *host) HandleFetchHistoryRequest(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error {
 	iter := h.ControllerHub.FetchTxs(stateURI)
 	defer iter.Cancel()
 
@@ -282,7 +442,7 @@ func (h *host) OnFetchHistoryRequestReceived(stateURI string, parents []types.ID
 			return nil
 		}
 
-		err := peer.WriteMsg(Msg{Type: MsgType_Put, Payload: *tx})
+		err := peer.Put(*tx)
 		if err != nil {
 			return err
 		}
@@ -291,16 +451,65 @@ func (h *host) OnFetchHistoryRequestReceived(stateURI string, parents []types.ID
 }
 
 func (h *host) Subscribe(ctx context.Context, stateURI string) (bool, error) {
+	// var wg sync.WaitGroup
+	// var peersByAddress sync.Map
+	// ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	// defer cancel()
+
+	// ch := make(chan Peer)
+
+	// go func() {
+	// 	for peer := range h.ForEachProviderOfStateURI(ctx, stateURI) {
+	// 		peer := peer
+
+	// 		wg.Add(1)
+	// 		go func() {
+	// 			defer wg.Done()
+
+	// 			err := peer.EnsureConnected(ctx)
+	// 			if err != nil {
+	// 				return
+	// 			}
+
+	// 			sigKey, _ := peer.PublicKeypairs()
+	// 			if sigKey.Address() == (types.Address{}) {
+	// 				sigKey, _, err = h.challengePeerIdentity(ctx, peer)
+	// 				if err != nil {
+	// 					return
+	// 				}
+	// 			}
+	// 			_, exists := peersByAddress.LoadOrStore(sigKey.Address(), peer)
+	// 			if exists {
+	// 				peer.CloseConn()
+	// 				return
+	// 			}
+
+	// 			ch <- peer
+	// 		}()
+	// 	}
+	// }()
+
+	// var numPeers int
+	// for peer := range ch {
+	// }
+
 	var anySucceeded bool
 	var errs []error
+	var wg sync.WaitGroup
+	wg.Add(len(h.transports))
 	for _, transport := range h.transports {
-		err := h.subscribeWithTransport(ctx, transport, stateURI)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			anySucceeded = true
-		}
+		transport := transport
+		go func() {
+			defer wg.Done()
+			err := h.subscribeWithTransport(ctx, transport, stateURI)
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				anySucceeded = true
+			}
+		}()
 	}
+	wg.Wait()
 	var errStrings []string
 	for _, err := range errs {
 		errStrings = append(errStrings, err.Error())
@@ -320,15 +529,18 @@ func (h *host) subscribeWithTransport(ctx context.Context, transport Transport, 
 	}
 
 	var peer Peer
+	var sub TxSubscription
 
 	// @@TODO: subscribe to more than one peer?
 	for p := range ch {
-		err := p.EnsureConnected(ctx)
+		h.Warnf("PEER ~> %v", p.ReachableAt().Any())
+		s, err := p.Subscribe(ctx, stateURI)
 		if err != nil {
 			h.Errorf("error connecting to peer: %v", err)
 			continue
 		}
 		peer = p
+		sub = s
 		cancelFind()
 		break
 	}
@@ -337,47 +549,35 @@ func (h *host) subscribeWithTransport(ctx context.Context, transport Transport, 
 		return errors.WithStack(ErrNoPeersForURL)
 	}
 
-	err = peer.WriteMsg(Msg{Type: MsgType_Subscribe, Payload: stateURI})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
 	if _, exists := h.subscriptionsOut[stateURI]; !exists {
-		h.subscriptionsOut[stateURI] = make(map[peerTuple]*subscriptionOut)
+		h.subscriptionsOut[stateURI] = make(map[PeerDialInfo]TxSubscription)
 	}
-	tuples := peerTuples(peer)
-	for _, tuple := range tuples {
-		if _, exists := h.subscriptionsOut[stateURI][tuple]; exists {
+	dialInfos := peer.DialInfos()
+	for _, dialInfo := range dialInfos {
+		if _, exists := h.subscriptionsOut[stateURI][dialInfo]; exists {
 			return nil
 		}
 	}
 
-	sub := &subscriptionOut{peer, make(chan struct{})}
-	for _, tuple := range tuples {
-		h.subscriptionsOut[stateURI][tuple] = sub
+	for _, dialInfo := range dialInfos {
+		h.subscriptionsOut[stateURI][dialInfo] = sub
 	}
 
 	go func() {
-		defer peer.CloseConn()
-		for {
-			select {
-			case <-sub.chDone:
-				return
-			default:
+		defer func() {
+			for _, dialInfo := range dialInfos {
+				delete(h.subscriptionsOut[stateURI], dialInfo)
 			}
-
-			msg, err := peer.ReadMsg()
+		}()
+		defer sub.Close()
+		for {
+			tx, err := sub.Read()
 			if err != nil {
 				h.Errorf("error reading: %v", err)
 				return
 			}
 
-			if msg.Type != MsgType_Put {
-				panic("protocol error")
-			}
-
-			tx := msg.Payload.(Tx)
-			h.OnTxReceived(tx, peer)
+			h.HandleTxReceived(*tx, peer)
 
 			// @@TODO: ACK the PUT
 		}
@@ -386,8 +586,13 @@ func (h *host) subscribeWithTransport(ctx context.Context, transport Transport, 
 	return nil
 }
 
-func (h *host) requestPeerCredentials(ctx context.Context, peer Peer, transport Transport) (_ SigningPublicKey, _ EncryptingPublicKey, err error) {
+func (h *host) challengePeerIdentity(ctx context.Context, peer Peer) (_ SigningPublicKey, _ EncryptingPublicKey, err error) {
 	defer withStack(&err)
+
+	h.Warnf("challengePeerIDentity %v %v", peer.Transport(), peer.ReachableAt())
+	defer func() {
+		h.Successf("challengePeerIDentity err = %+v", err)
+	}()
 
 	err = peer.EnsureConnected(ctx)
 	if err != nil {
@@ -399,48 +604,40 @@ func (h *host) requestPeerCredentials(ctx context.Context, peer Peer, transport 
 		return nil, nil, err
 	}
 
-	err = peer.WriteMsg(Msg{Type: MsgType_VerifyAddress, Payload: types.ChallengeMsg(challengeMsg)})
+	err = peer.ChallengeIdentity(types.ChallengeMsg(challengeMsg))
 	if err != nil {
 		return nil, nil, err
 	}
 
-	msg, err := peer.ReadMsg()
+	resp, err := peer.ReceiveChallengeIdentityResponse()
 	if err != nil {
 		return nil, nil, err
-	} else if msg.Type != MsgType_VerifyAddressResponse {
-		return nil, nil, errors.WithStack(ErrProtocol)
-	}
-
-	resp, ok := msg.Payload.(VerifyAddressResponse)
-	if !ok {
-		return nil, nil, errors.WithStack(ErrProtocol)
 	}
 
 	sigpubkey, err := RecoverSigningPubkey(types.HashBytes(challengeMsg), resp.Signature)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	encpubkey := EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey)
 
 	peer.SetAddress(sigpubkey.Address())
 
-	h.peerStore.AddVerifiedCredentials(transport.Name(), peer.ReachableAt(), peer.Address(), sigpubkey, encpubkey)
+	h.peerStore.AddVerifiedCredentials(peer.Transport().Name(), peer.ReachableAt(), peer.Address(), sigpubkey, encpubkey)
 
 	return sigpubkey, encpubkey, nil
 }
 
-func (h *host) OnVerifyAddressReceived(challengeMsg types.ChallengeMsg, peer Peer) error {
+func (h *host) HandleChallengeIdentity(challengeMsg types.ChallengeMsg, peer Peer) error {
 	defer peer.CloseConn()
 
 	sig, err := h.signingKeypair.SignHash(types.HashBytes(challengeMsg))
 	if err != nil {
 		return err
 	}
-	return peer.WriteMsg(Msg{Type: MsgType_VerifyAddressResponse, Payload: VerifyAddressResponse{
+	return peer.RespondChallengeIdentity(ChallengeIdentityResponse{
 		Signature:           sig,
 		EncryptingPublicKey: h.encryptingKeypair.EncryptingPublicKey.Bytes(),
-	}})
+	})
 }
 
 type peersWithAddressResult struct {
@@ -473,7 +670,7 @@ func (h *host) peersWithAddress(ctx context.Context, address types.Address) (<-c
 					continue
 				}
 				ch <- peersWithAddressResult{peer, storedPeer.encpubkey}
-				for _, tuple := range storedPeer.Tuples() {
+				for _, tuple := range storedPeer.DialInfos() {
 					alreadySent.Store(tuple, struct{}{})
 				}
 			}
@@ -498,7 +695,7 @@ func (h *host) peersWithAddress(ctx context.Context, address types.Address) (<-c
 				var peersWg sync.WaitGroup
 			PeerLoop:
 				for peer := range chPeers {
-					for _, tuple := range peerTuples(peer) {
+					for _, tuple := range peer.DialInfos() {
 						if _, sent := alreadySent.Load(tuple); sent {
 							continue PeerLoop
 						}
@@ -516,7 +713,7 @@ func (h *host) peersWithAddress(ctx context.Context, address types.Address) (<-c
 						}
 						defer peer.CloseConn()
 
-						signingPubkey, encryptingPubkey, err := h.requestPeerCredentials(ctx, peer, transport)
+						signingPubkey, encryptingPubkey, err := h.challengePeerIdentity(ctx, peer)
 						if err != nil {
 							h.Errorf("error requesting peer credentials: %v", err)
 							return
@@ -525,7 +722,7 @@ func (h *host) peersWithAddress(ctx context.Context, address types.Address) (<-c
 							return
 						}
 
-						for _, tuple := range peerTuples(peer) {
+						for _, tuple := range peer.DialInfos() {
 							alreadySent.Store(tuple, struct{}{})
 						}
 						ch <- peersWithAddressResult{peer, encryptingPubkey}
@@ -566,13 +763,10 @@ func (h *host) broadcastPrivateTxToRecipient(ctx context.Context, txID types.ID,
 				return
 			}
 
-			err = p.Peer.WriteMsg(Msg{
-				Type: MsgType_Private,
-				Payload: EncryptedTx{
-					TxID:             txID,
-					EncryptedPayload: msgEncrypted,
-					SenderPublicKey:  h.encryptingKeypair.EncryptingPublicKey.Bytes(),
-				},
+			err = p.Peer.PutPrivate(EncryptedTx{
+				TxID:             txID,
+				EncryptedPayload: msgEncrypted,
+				SenderPublicKey:  h.encryptingKeypair.EncryptingPublicKey.Bytes(),
 			})
 			if err != nil {
 				return
@@ -621,53 +815,62 @@ func (h *host) broadcastTx(ctx context.Context, tx *Tx) error {
 		wg.Wait()
 
 	} else {
-		// @@TODO: do we need to trim the tx's patches' keypaths so that they don't include
-		// the keypath that the subscription is listening to?
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second) // @@TODO: make configurable
+		defer cancel()
+
+		ch := make(chan Peer)
+		go func() {
+			defer close(ch)
+			chSubscribers := h.ForEachSubscriberToStateURI(ctx, tx.StateURI)
+			chProviders := h.ForEachProviderOfStateURI(ctx, tx.StateURI)
+			for {
+				select {
+				case peer, open := <-chSubscribers:
+					if !open {
+						chSubscribers = nil
+						continue
+					}
+					ch <- peer
+				case peer, open := <-chProviders:
+					if !open {
+						chProviders = nil
+						continue
+					}
+					ch <- peer
+				case <-ctx.Done():
+					return
+				case <-h.Ctx().Done():
+					return
+				}
+			}
+		}()
 
 		var wg sync.WaitGroup
-		for _, transport := range h.transports {
-			wg.Add(1)
+		for peer := range ch {
+			h.Debugf("rebroadcasting %v to %v", tx.ID.Pretty(), peer.ReachableAt().Slice())
+			if h.txSeenByPeer(peer, tx.ID) {
+				h.Debugf("tx already seen by peer %v %v", peer.Transport().Name(), peer.Address())
+				continue
+			}
+			h.Debugf("tx %v NOT already seen by peer: %v %v %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address(), peer.ReachableAt().Slice())
 
-			transport := transport
+			wg.Add(1)
+			peer := peer
 			go func() {
 				defer wg.Done()
+				defer peer.CloseConn()
 
-				ctx, cancel := context.WithCancel(ctx)
-				defer cancel()
-				ch, err := transport.ForEachSubscriberToStateURI(ctx, tx.StateURI)
+				err := peer.EnsureConnected(ctx)
 				if err != nil {
-					h.Errorf("error fetching subscribers to url '%v' from transport %v", tx.StateURI, transport.Name())
+					h.Errorf("error connecting to peer: %v", err)
 					return
 				}
 
-				var peerWg sync.WaitGroup
-				for peer := range ch {
-					h.Debugf("rebroadcasting %v to %v", tx.ID.Pretty(), (map[string]struct{})(peer.ReachableAt()))
-					if h.txSeenByPeer(peer, tx.ID) {
-						h.Errorf("tx already seen by peer %v %v", peer.Transport().Name(), peer.Address())
-						continue
-					}
-					h.Debugf("tx %v NOT already seen by peer: %v %v %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address(), PrettyJSON(peer.ReachableAt()))
-
-					peerWg.Add(1)
-					peer := peer
-					go func() {
-						defer peerWg.Done()
-
-						err := peer.EnsureConnected(context.TODO())
-						if err != nil {
-							h.Errorf("error connecting to peer: %v", err)
-							return
-						}
-
-						err = peer.WriteMsg(Msg{Type: MsgType_Put, Payload: tx})
-						if err != nil {
-							h.Errorf("error writing tx to peer: %v", err)
-							return
-						}
-					}()
+				err = peer.Put(*tx)
+				if err != nil {
+					h.Errorf("error writing tx to peer: %v", err)
+					return
 				}
-				peerWg.Wait()
 			}()
 		}
 		wg.Wait()
@@ -682,6 +885,15 @@ func (h *host) SendTx(ctx context.Context, tx Tx) error {
 		tx.From = h.signingKeypair.Address()
 	}
 
+	if len(tx.Parents) == 0 && tx.ID != GenesisTxID {
+		parents, err := h.ControllerHub.Leaves(tx.StateURI)
+		if err != nil {
+			return err
+		}
+
+		tx.Parents = parents
+	}
+
 	if len(tx.Sig) == 0 {
 		err := h.SignTx(&tx)
 		if err != nil {
@@ -689,27 +901,10 @@ func (h *host) SendTx(ctx context.Context, tx Tx) error {
 		}
 	}
 
-	if len(tx.Parents) == 0 && tx.ID != GenesisTxID {
-		parents, err := h.ControllerHub.Leaves(tx.StateURI)
-		if err != nil {
-			return err
-		}
-
-		for parent := range parents {
-			tx.Parents = append(tx.Parents, parent)
-		}
-	}
-
-	err := h.ControllerHub.AddTx(&tx)
+	err := h.ControllerHub.AddTx(&tx, false)
 	if err != nil {
 		return err
 	}
-
-	err = h.broadcastTx(h.Ctx(), &tx)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -722,11 +917,18 @@ func (h *host) SignTx(tx *Tx) error {
 func (h *host) handleNewState(tx *Tx) {
 	// @@TODO: broadcast state to state subscribers
 
-	// Broadcast tx to tx subscribers
-	err := h.broadcastTx(context.TODO(), tx)
-	if err != nil {
-		h.Errorf("error rebroadcasting tx: %v", err)
-	}
+	// @@TODO: don't do this, this is stupid.  store ungossiped txs in the DB and create a
+	// PeerManager that gossips them on a SleeperTask-like trigger.
+	go func() {
+		// Broadcast tx to others
+		ctx, cancel := context.WithTimeout(h.Ctx(), 10*time.Second)
+		defer cancel()
+
+		err := h.broadcastTx(ctx, tx)
+		if err != nil {
+			h.Errorf("error rebroadcasting tx: %v", err)
+		}
+	}()
 }
 
 func (h *host) AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error) {
@@ -741,7 +943,7 @@ func (h *host) handleRefsNeeded(refs []types.RefID) {
 	}
 }
 
-func (h *host) fetchRefsLoop() {
+func (h *host) periodicallyFetchMissingRefs() {
 	tick := time.NewTicker(10 * time.Second) // @@TODO: make configurable
 	defer tick.Stop()
 
@@ -774,67 +976,30 @@ func (h *host) fetchMissingRefs(refs []types.RefID) {
 		refID := refID
 		go func() {
 			defer wg.Done()
-			h.fetchRef(refID)
+			h.FetchRef(h.Ctx(), refID)
 		}()
 	}
 	wg.Wait()
 }
 
-func (h *host) fetchRef(ref types.RefID) {
-	chPeers := make(chan Peer)
-	ctx, cancel := context.WithCancel(h.Ctx())
-	defer cancel()
-
-	for _, transport := range h.transports {
-		transport := transport
-		go func() {
-			ch, err := transport.ForEachProviderOfRef(ctx, ref)
-			if errors.Cause(err) == types.ErrUnimplemented {
-				// do nothing
-				return
-			} else if err != nil {
-				h.Errorf("error finding providers of ref %s from transport %v: %v", ref, transport.Name(), err)
-				return
-			}
-			for peer := range ch {
-				select {
-				case chPeers <- peer:
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-	}
-
-	for peer := range chPeers {
+func (h *host) FetchRef(ctx context.Context, refID types.RefID) {
+	for peer := range h.ForEachProviderOfRef(ctx, refID) {
 		err := peer.EnsureConnected(ctx)
 		if err != nil {
 			h.Errorf("error connecting to peer: %v", err)
 			continue
 		}
 
-		err = peer.WriteMsg(Msg{Type: MsgType_FetchRef, Payload: ref})
+		err = peer.FetchRef(refID)
 		if err != nil {
 			h.Errorf("error writing to peer: %v", err)
 			continue
 		}
 
-		var msg Msg
-		msg, err = peer.ReadMsg()
+		// Not currently used
+		_, err = peer.ReceiveRefHeader()
 		if err != nil {
 			h.Errorf("error reading from peer: %v", err)
-			continue
-		} else if msg.Type != MsgType_FetchRefResponse {
-			h.Errorf("protocol probs")
-			continue
-		}
-
-		resp, is := msg.Payload.(FetchRefResponse)
-		if !is {
-			h.Errorf("protocol probs")
-			continue
-		} else if resp.Header == nil {
-			h.Errorf("protocol probs")
 			continue
 		}
 
@@ -851,31 +1016,20 @@ func (h *host) fetchRef(ref types.RefID) {
 				default:
 				}
 
-				var msg Msg
-				msg, err = peer.ReadMsg()
+				pkt, err := peer.ReceiveRefPacket()
 				if err != nil {
+					h.Errorf("error receiving ref from peer: %v", err)
 					return
-				} else if msg.Type != MsgType_FetchRefResponse {
-					err = errors.New("protocol probs")
-					return
-				}
-
-				resp, is := msg.Payload.(FetchRefResponse)
-				if !is {
-					err = errors.New("protocol probs")
-					return
-				} else if resp.Body == nil {
-					err = errors.New("protocol probs")
-					return
-				} else if resp.Body.End {
+				} else if pkt.End {
 					return
 				}
 
 				var n int
-				n, err = pw.Write(resp.Body.Data)
+				n, err = pw.Write(pkt.Data)
 				if err != nil {
+					h.Errorf("error receiving ref from peer: %v", err)
 					return
-				} else if n < len(resp.Body.Data) {
+				} else if n < len(pkt.Data) {
 					err = io.ErrUnexpectedEOF
 					return
 				}
@@ -889,33 +1043,46 @@ func (h *host) fetchRef(ref types.RefID) {
 		}
 		// @@TODO: check stored refHash against the one we requested
 
-		for _, transport := range h.transports {
-			sha1RefID := types.RefID{HashAlg: types.SHA1, Hash: sha1Hash}
-			err = transport.AnnounceRef(sha1RefID)
-			if errors.Cause(err) == types.ErrUnimplemented {
-				continue
-			} else if err != nil {
-				h.Warnf("error announcing ref %v over transport %v: %v", sha1RefID, transport.Name(), err)
-				// this is a non-critical error, don't bail out
-			}
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
 
-			sha3RefID := types.RefID{HashAlg: types.SHA3, Hash: sha3Hash}
-			err = transport.AnnounceRef(sha3RefID)
-			if errors.Cause(err) == types.ErrUnimplemented {
-				continue
-			} else if err != nil {
-				h.Warnf("error announcing ref %v over transport %v: %v", sha3RefID, transport.Name(), err)
-				// this is a non-critical error, don't bail out
-			}
+		h.AnnounceRefs(ctx, []types.RefID{
+			types.RefID{HashAlg: types.SHA1, Hash: sha1Hash},
+			types.RefID{HashAlg: types.SHA3, Hash: sha3Hash},
+		})
+		return
+	}
+}
+
+func (h *host) AnnounceRefs(ctx context.Context, refIDs []types.RefID) {
+	var wg sync.WaitGroup
+	wg.Add(len(refIDs) * len(h.transports))
+
+	for _, transport := range h.transports {
+		for _, refID := range refIDs {
+			transport := transport
+			refID := refID
+
+			go func() {
+				defer wg.Done()
+
+				err := transport.AnnounceRef(ctx, refID)
+				if errors.Cause(err) == types.ErrUnimplemented {
+					return
+				} else if err != nil {
+					h.Warnf("error announcing ref %v over transport %v: %v", refID, transport.Name(), err)
+				}
+			}()
 		}
 	}
+	wg.Wait()
 }
 
 const (
 	REF_CHUNK_SIZE = 1024 // @@TODO: tunable buffer size?
 )
 
-func (h *host) OnFetchRefReceived(refID types.RefID, peer Peer) {
+func (h *host) HandleFetchRefReceived(refID types.RefID, peer Peer) {
 	defer peer.CloseConn()
 
 	objectReader, _, err := h.refStore.Object(refID)
@@ -924,7 +1091,7 @@ func (h *host) OnFetchRefReceived(refID types.RefID, peer Peer) {
 		panic(err)
 	}
 
-	err = peer.WriteMsg(Msg{Type: MsgType_FetchRefResponse, Payload: FetchRefResponse{Header: &FetchRefResponseHeader{}}})
+	err = peer.SendRefHeader()
 	if err != nil {
 		h.Errorf("[ref server] %+v", errors.WithStack(err))
 		return
@@ -942,14 +1109,14 @@ func (h *host) OnFetchRefReceived(refID types.RefID, peer Peer) {
 			return
 		}
 
-		err = peer.WriteMsg(Msg{Type: MsgType_FetchRefResponse, Payload: FetchRefResponse{Body: &FetchRefResponseBody{Data: buf}}})
+		err = peer.SendRefPacket(buf, false)
 		if err != nil {
 			h.Errorf("[ref server] %+v", errors.WithStack(err))
 			return
 		}
 	}
 
-	err = peer.WriteMsg(Msg{Type: MsgType_FetchRefResponse, Payload: FetchRefResponse{Body: &FetchRefResponseBody{End: true}}})
+	err = peer.SendRefPacket(nil, true)
 	if err != nil {
 		h.Errorf("[ref server] %+v", errors.WithStack(err))
 		return
