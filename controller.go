@@ -296,11 +296,48 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 				continue
 			}
 
+			resolverState, err := state.CopyToMemory(resolverKeypath.Push(MergeTypeKeypath), nil)
+			if err != nil && errors.Cause(err) != types.Err404 {
+				return err
+			}
+			validatorState, err := state.CopyToMemory(resolverKeypath.Push(ValidatorKeypath), nil)
+			if err != nil && errors.Cause(err) != types.Err404 {
+				return err
+			}
+
+			stateToResolve := state.NodeAt(resolverKeypath, nil)
+
+			stateToResolve.Diff().SetEnabled(false)
+			err = state.Delete(resolverKeypath.Push(MergeTypeKeypath), nil)
+			if err != nil && errors.Cause(err) != types.Err404 {
+				return err
+			}
+			err = state.Delete(resolverKeypath.Push(ValidatorKeypath), nil)
+			if err != nil && errors.Cause(err) != types.Err404 {
+				return err
+			}
+			stateToResolve.Diff().SetEnabled(true)
+
 			resolver := c.behaviorTree.resolvers[string(resolverKeypath)]
-			err = resolver.ResolveState(state.NodeAt(resolverKeypath, nil), c.refStore, tx.From, tx.ID, tx.Parents, patchesTrimmed)
+			err = resolver.ResolveState(stateToResolve, c.refStore, tx.From, tx.ID, tx.Parents, patchesTrimmed)
 			if err != nil {
 				return errors.Wrap(ErrInvalidTx, err.Error())
 			}
+
+			stateToResolve.Diff().SetEnabled(false)
+			if resolverState != nil {
+				err = stateToResolve.Set(MergeTypeKeypath, nil, resolverState)
+				if err != nil {
+					return err
+				}
+			}
+			if validatorState != nil {
+				err = stateToResolve.Set(ValidatorKeypath, nil, validatorState)
+				if err != nil {
+					return err
+				}
+			}
+			stateToResolve.Diff().SetEnabled(true)
 
 			patches = unprocessedPatches
 		}
