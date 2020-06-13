@@ -307,7 +307,12 @@ func (t *libp2pTransport) ForEachProviderOfStateURI(ctx context.Context, stateUR
 			}
 			for pinfo := range t.dht.FindProvidersAsync(ctx, urlCid, 8) {
 				if pinfo.ID == t.libp2pHost.ID() {
-					continue
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						continue
+					}
 				}
 
 				// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
