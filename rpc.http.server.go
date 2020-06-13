@@ -90,7 +90,11 @@ type (
 )
 
 func (s *httpRPCServer) KnownStateURIs(r *http.Request, args *KnownStateURIsArgs, resp *KnownStateURIsResponse) error {
-	resp.StateURIs = s.host.Controller().KnownStateURIs()
+	stateURIs, err := s.host.Controllers().KnownStateURIs()
+	if err != nil {
+		return err
+	}
+	resp.StateURIs = stateURIs
 	return nil
 }
 

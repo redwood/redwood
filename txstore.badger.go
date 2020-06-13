@@ -29,8 +29,8 @@ func (p *badgerTxStore) Start() error {
 	return p.CtxStart(
 		// on startup
 		func() error {
-			p.SetLogLabel(p.address.Pretty() + " store:badger")
-			p.Infof(0, "opening badger store at %v", p.dbFilename)
+			p.SetLogLabel(p.address.Pretty() + " txstore")
+			p.Infof(0, "opening txstore at %v", p.dbFilename)
 			opts := badger.DefaultOptions(p.dbFilename)
 			opts.Logger = nil
 			db, err := badger.Open(opts)
@@ -63,7 +63,16 @@ func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
 
 	key := makeTxKey(tx.StateURI, tx.ID)
 	err = p.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(key, []byte(bs))
+		err := txn.Set(key, []byte(bs))
+		if err != nil {
+			return err
+		}
+
+		err = txn.Set([]byte("stateuri:"+tx.StateURI), nil)
+		if err != nil {
+			return err
+		}
+		return nil
 	})
 	if err != nil {
 		p.Errorf("failed to write tx %v", tx.ID.Pretty())
@@ -178,4 +187,53 @@ func (p *badgerTxStore) allTxs(prefix string) TxIterator {
 	}()
 
 	return txIter
+}
+
+func (s *badgerTxStore) KnownStateURIs() ([]string, error) {
+	var stateURIs []string
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		iter := txn.NewIterator(opts)
+		defer iter.Close()
+
+		prefix := []byte("stateuri:")
+
+		for iter.Rewind(); iter.ValidForPrefix(prefix); iter.Next() {
+			stateURIs = append(stateURIs, string(iter.Item().Key()[len("stateuri:"):]))
+		}
+		return nil
+	})
+	return stateURIs, err
+}
+
+func (s *badgerTxStore) MarkLeaf(stateURI string, txID types.ID) error {
+	return s.db.Update(func(txn *badger.Txn) error {
+		return txn.Set(append([]byte("leaf:"+stateURI+":"), txID[:]...), nil)
+	})
+}
+
+func (s *badgerTxStore) UnmarkLeaf(stateURI string, txID types.ID) error {
+	return s.db.Update(func(txn *badger.Txn) error {
+		return txn.Delete(append([]byte("leaf:"+stateURI+":"), txID[:]...))
+	})
+}
+
+func (s *badgerTxStore) Leaves(stateURI string) ([]types.ID, error) {
+	var leaves []types.ID
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		iter := txn.NewIterator(opts)
+		defer iter.Close()
+
+		prefix := []byte("leaf:" + stateURI + ":")
+
+		for iter.Rewind(); iter.ValidForPrefix(prefix); iter.Next() {
+			txID := types.IDFromBytes(iter.Item().Key()[len("leaf:"+stateURI+":"):])
+			leaves = append(leaves, txID)
+		}
+		return nil
+	})
+	return leaves, err
 }

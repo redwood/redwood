@@ -15,6 +15,10 @@ type TxStore interface {
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
 	AllTxs() TxIterator
 	AllTxsForStateURI(stateURI string) TxIterator
+	KnownStateURIs() ([]string, error)
+	MarkLeaf(stateURI string, txID types.ID) error
+	UnmarkLeaf(stateURI string, txID types.ID) error
+	Leaves(stateURI string) ([]types.ID, error)
 }
 
 type TxIterator interface {
