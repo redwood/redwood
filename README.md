@@ -14,7 +14,7 @@ Its flexibility allows developers to use a single, simple programming model to c
 
 ## 🧬 The Braid protocol
 
-Redwood is part of the [Braid project](https://braid.news), and uses the Braid protocol to synchronize updates over regular HTTP.  [Braid is currently working through the IETF's RFC process to have its extensions to HTTP standardized](https://github.com/braid-work/braid-spec)  (see IETF draft spec here: <https://tools.ietf.org/html/draft-toomim-braid-00>)
+Redwood is part of the [Braid project](https://braid.news), and uses the Braid protocol to synchronize updates over regular HTTP.  [Braid is currently working through the IETF's RFC process to have its extensions to HTTP standardized](https://github.com/braid-work/braid-spec)  (see IETF draft spec here: <https://datatracker.ietf.org/doc/html/draft-toomim-httpbis-braid-http>)
 
 ## ✔️ Redwood's features
 
