@@ -9,7 +9,7 @@ require (
 	github.com/aristanetworks/goarista v0.0.0-20191023202215-f096da5361bb // indirect
 	github.com/brynbellomy/debugcharts v0.0.0-20180826220201-c3f57e57ea6f
 	github.com/brynbellomy/ginkgo-reporter v0.0.0-20160306174404-9bf14cb7c4ae // indirect
-	github.com/brynbellomy/git2go v0.0.0-20191127205451-32796717b4d5
+	github.com/brynbellomy/git2go v0.0.0-20200611034043-ace2967af09c
 	github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d
 	github.com/brynbellomy/go-structomancer v1.0.1 // indirect
 	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae
@@ -29,8 +29,9 @@ require (
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/gin-gonic/gin v1.4.0 // indirect
 	github.com/git-lfs/gitobj v1.4.1 // indirect
-	github.com/gizak/termui/v3 v3.1.0 // indirect
+	github.com/gizak/termui/v3 v3.1.0
 	github.com/golang/protobuf v1.3.2
+	github.com/gorilla/rpc v1.2.0
 	github.com/graphql-go/graphql v0.7.8
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/ijc25/Gotty v0.0.0-20170406111628-a8b993ba6abd
@@ -52,7 +53,7 @@ require (
 	github.com/multiformats/go-multiaddr v0.0.1
 	github.com/multiformats/go-multihash v0.0.1
 	github.com/pborman/uuid v1.2.0 // indirect
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/plan-systems/klog v0.0.0-20190618231738-14c6677fa6ea
 	github.com/plan-systems/plan-core v0.0.3
 	github.com/rivo/tview v0.0.0-20191129065140-82b05c9fb329
