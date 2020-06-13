@@ -406,7 +406,9 @@ func (tx *DBNode) StringValue(keypath Keypath) (string, bool, error) {
 
 func (tx *DBNode) Length() (uint64, error) {
 	item, err := tx.tx.Get(tx.addKeyPrefix(tx.rootKeypath))
-	if err != nil {
+	if err == badger.ErrKeyNotFound {
+		return 0, nil
+	} else if err != nil {
 		return 0, err
 	}
 
@@ -743,11 +745,11 @@ func (n *DBNode) innerNode(relKeypath Keypath) Node {
 	return nil
 }
 
-func (tx *DBNode) setNode(relKeypath Keypath, node Node) error {
+func (tx *DBNode) setNode(absKeypath Keypath, node Node) error {
 	iter := node.Iterator(nil, true, 10)
 	defer iter.Close()
 
-	baseKeypath := tx.rootKeypath.Push(relKeypath)
+	// baseKeypath := tx.rootKeypath.Push(relKeypath)
 
 	for iter.Rewind(); iter.Valid(); iter.Next() {
 		child := iter.Node()
@@ -755,7 +757,7 @@ func (tx *DBNode) setNode(relKeypath Keypath, node Node) error {
 
 		// Other Node trees set inside of the parent node
 		if innerNode := node.innerNode(childRelKeypath); innerNode != nil {
-			err := tx.setNode(relKeypath.Push(childRelKeypath), innerNode)
+			err := tx.setNode(absKeypath.Push(childRelKeypath), innerNode)
 			if err != nil {
 				return err
 			}
@@ -770,7 +772,7 @@ func (tx *DBNode) setNode(relKeypath Keypath, node Node) error {
 			if err != nil {
 				return err
 			}
-			err = tx.tx.Set(tx.addKeyPrefix(baseKeypath.Push(childRelKeypath)), encoded)
+			err = tx.tx.Set(tx.addKeyPrefix(absKeypath.Push(childRelKeypath)), encoded)
 			if err != nil {
 				return err
 			}
@@ -798,7 +800,7 @@ func (tx *DBNode) setNode(relKeypath Keypath, node Node) error {
 		if err != nil {
 			return err
 		}
-		err = tx.tx.Set(tx.addKeyPrefix(baseKeypath.Push(childRelKeypath)), encoded)
+		err = tx.tx.Set(tx.addKeyPrefix(absKeypath.Push(childRelKeypath)), encoded)
 		if err != nil {
 			return err
 		}
@@ -865,15 +867,6 @@ func (tx *DBNode) Delete(relKeypath Keypath, rng *Range) (err error) {
 		return tx.tx.Delete(rootKeypath)
 	}
 
-	// Remove the root element if there's no range
-	if rng == nil {
-		err := tx.tx.Delete(rootKeypath)
-		if err != nil {
-			return err
-		}
-		tx.diff.Remove(tx.rmKeyPrefix(rootKeypath))
-	}
-
 	// Delete child nodes
 	{
 		tx.scanChildrenForward(rootNodeType, relKeypath, rng, length, false, func(absKeypath Keypath, item *badger.Item) error {
@@ -887,7 +880,15 @@ func (tx *DBNode) Delete(relKeypath Keypath, rng *Range) (err error) {
 		})
 	}
 
-	if rng != nil {
+	if rng == nil {
+		// Remove the root element if there's no range.  This must happen after we .scanChildrenForward
+		err := tx.tx.Delete(rootKeypath)
+		if err != nil {
+			return err
+		}
+		tx.diff.Remove(tx.rmKeyPrefix(rootKeypath))
+
+	} else {
 		_, endIdx := rng.IndicesForLength(length)
 
 		// Re-number the trailing entries if the root node is a slice
