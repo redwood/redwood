@@ -49,7 +49,7 @@ func (s *httpRPCServer) Start() error {
 			go func() {
 				server := rpc.NewServer()
 				server.RegisterCodec(json2.NewCodec(), "application/json")
-				server.RegisterService(new(httpRPCServer), "RPC")
+				server.RegisterService(s, "RPC")
 				http.ListenAndServe(s.listenAddr, server)
 			}()
 
