@@ -21,7 +21,7 @@ type ControllerHub interface {
 	FetchTxs(stateURI string) TxIterator
 	HaveTx(stateURI string, txID types.ID) (bool, error)
 
-	KnownStateURIs() []string
+	KnownStateURIs() ([]string, error)
 	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
 	QueryIndex(stateURI string, version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
 	Leaves(stateURI string) ([]types.ID, error)
@@ -70,15 +70,16 @@ func (m *controllerHub) Start() error {
 		func() error {
 			m.SetLogLabel(m.address.Pretty() + " controllerHub")
 
-			m.CtxAddChild(m.txStore.Ctx(), nil)
-			err := m.txStore.Start()
+			stateURIs, err := m.txStore.KnownStateURIs()
 			if err != nil {
 				return err
 			}
 
-			err = m.replayStoredTxs()
-			if err != nil {
-				return err
+			for _, stateURI := range stateURIs {
+				_, err := m.ensureController(stateURI)
+				if err != nil {
+					return err
+				}
 			}
 
 			return nil
@@ -88,27 +89,6 @@ func (m *controllerHub) Start() error {
 		// on shutdown
 		func() {},
 	)
-}
-
-func (m *controllerHub) replayStoredTxs() error {
-	iter := m.txStore.AllTxs()
-	defer iter.Cancel()
-
-	for {
-		tx := iter.Next()
-		if iter.Error() != nil {
-			return iter.Error()
-		} else if tx == nil {
-			return nil
-		}
-
-		m.Infof(0, "found stored tx %v", tx.Hash())
-		err := m.AddTx(tx)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
@@ -138,15 +118,8 @@ func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
 	return ctrl, nil
 }
 
-func (m *controllerHub) KnownStateURIs() []string {
-	m.controllersMu.RLock()
-	defer m.controllersMu.RUnlock()
-
-	var stateURIs []string
-	for stateURI := range m.controllers {
-		stateURIs = append(stateURIs, stateURI)
-	}
-	return stateURIs
+func (m *controllerHub) KnownStateURIs() ([]string, error) {
+	return m.txStore.KnownStateURIs()
 }
 
 var (
