@@ -24,7 +24,7 @@ type ControllerHub interface {
 	KnownStateURIs() []string
 	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
 	QueryIndex(stateURI string, version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
-	Leaves(stateURI string) (map[types.ID]struct{}, error)
+	Leaves(stateURI string) ([]types.ID, error)
 
 	RefObjectReader(refID types.RefID) (io.ReadCloser, int64, error)
 
@@ -214,15 +214,8 @@ func (m *controllerHub) RefObjectReader(refID types.RefID) (io.ReadCloser, int64
 	return m.refStore.Object(refID)
 }
 
-func (m *controllerHub) Leaves(stateURI string) (map[types.ID]struct{}, error) {
-	m.controllersMu.RLock()
-	defer m.controllersMu.RUnlock()
-
-	ctrl := m.controllers[stateURI]
-	if ctrl == nil {
-		return nil, errors.Wrapf(ErrNoController, stateURI)
-	}
-	return ctrl.Leaves(), nil
+func (m *controllerHub) Leaves(stateURI string) ([]types.ID, error) {
+	return m.txStore.Leaves(stateURI)
 }
 
 func (m *controllerHub) OnNewState(fn func(tx *Tx)) {

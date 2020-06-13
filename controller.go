@@ -18,12 +18,12 @@ type Controller interface {
 	Ctx() *ctx.Context
 	Start() error
 
-	AddTx(tx *Tx) error
+	AddTx(tx *Tx, force bool) error
 	HaveTx(txID types.ID) (bool, error)
 
 	StateAtVersion(version *types.ID) tree.Node
 	QueryIndex(version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
-	Leaves() map[types.ID]struct{}
+	Leaves() ([]types.ID, error)
 
 	OnNewState(fn func(tx *Tx))
 }
@@ -42,7 +42,6 @@ type controller struct {
 
 	states  *tree.DBTree
 	indices *tree.DBTree
-	leaves  map[types.ID]struct{}
 
 	newStateListeners   []func(tx *Tx)
 	newStateListenersMu sync.RWMutex
@@ -77,8 +76,7 @@ func NewController(
 		refStore:     refStore,
 		behaviorTree: newBehaviorTree(),
 		states:       states,
-		indices:      indices,
-		leaves:       make(map[types.ID]struct{}),
+		indices:       indices,
 	}
 	c.mempool = NewMempool(address, c.processMempoolTx)
 	return c, nil
@@ -125,8 +123,8 @@ func (c *controller) StateAtVersion(version *types.ID) tree.Node {
 	return c.states.StateAtVersion(version, false)
 }
 
-func (c *controller) Leaves() map[types.ID]struct{} {
-	return c.leaves
+func (c *controller) Leaves() ([]types.ID, error) {
+	return c.txStore.Leaves(c.stateURI)
 }
 
 func (c *controller) AddTx(tx *Tx) error {
@@ -329,11 +327,17 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 
 	// Unmark parents as leaves
 	for _, parentID := range tx.Parents {
-		delete(c.leaves, parentID)
+		err := c.txStore.UnmarkLeaf(c.stateURI, parentID)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Mark this tx as a leaf
-	c.leaves[tx.ID] = struct{}{}
+	err = c.txStore.MarkLeaf(c.stateURI, tx.ID)
+	if err != nil {
+		return err
+	}
 
 	// Mark the tx valid and save it to the DB
 	tx.Status = TxStatusValid
