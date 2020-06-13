@@ -282,7 +282,9 @@ func (s *refStore) RefsNeeded() ([]types.RefID, error) {
 	err := s.metadata.View(func(txn *badger.Txn) error {
 		// @@TODO: super hacky
 		item, err := txn.Get([]byte("missing-refs"))
-		if err != nil {
+		if err == badger.ErrKeyNotFound {
+			return nil
+		} else if err != nil {
 			return err
 		}
 
@@ -325,20 +327,24 @@ func (s *refStore) MarkRefsAsNeeded(refs []types.RefID) {
 
 	err := s.metadata.Update(func(txn *badger.Txn) error {
 		// @@TODO: super hacky
-		item, err := txn.Get([]byte("missing-refs"))
-		if err != nil {
-			return err
-		}
-
-		bs, err := item.ValueCopy(nil)
-		if err != nil {
-			return err
-		}
 
 		var missingRefs map[string]interface{}
-		err = json.Unmarshal(bs, &missingRefs)
-		if err != nil {
+
+		item, err := txn.Get([]byte("missing-refs"))
+		if err != nil && err != badger.ErrKeyNotFound {
 			return err
+		} else if err == badger.ErrKeyNotFound {
+			missingRefs = make(map[string]interface{})
+		} else {
+			bs, err := item.ValueCopy(nil)
+			if err != nil {
+				return err
+			}
+
+			err = json.Unmarshal(bs, &missingRefs)
+			if err != nil {
+				return err
+			}
 		}
 
 		for _, refID := range actuallyNeeded {
@@ -350,7 +356,7 @@ func (s *refStore) MarkRefsAsNeeded(refs []types.RefID) {
 			missingRefs[string(refIDStr)] = nil
 		}
 
-		bs, err = json.Marshal(missingRefs)
+		bs, err := json.Marshal(missingRefs)
 		if err != nil {
 			return err
 		}
@@ -374,20 +380,24 @@ func (s *refStore) MarkRefsAsNeeded(refs []types.RefID) {
 func (s *refStore) unmarkRefsAsNeeded(refs []types.RefID) {
 	err := s.metadata.Update(func(txn *badger.Txn) error {
 		// @@TODO: super hacky
-		item, err := txn.Get([]byte("missing-refs"))
-		if err != nil {
-			return err
-		}
-
-		bs, err := item.ValueCopy(nil)
-		if err != nil {
-			return err
-		}
 
 		var missingRefs map[string]interface{}
-		err = json.Unmarshal(bs, &missingRefs)
-		if err != nil {
+
+		item, err := txn.Get([]byte("missing-refs"))
+		if err != nil && err != badger.ErrKeyNotFound {
 			return err
+		} else if err == badger.ErrKeyNotFound {
+			missingRefs = make(map[string]interface{})
+		} else {
+			bs, err := item.ValueCopy(nil)
+			if err != nil {
+				return err
+			}
+
+			err = json.Unmarshal(bs, &missingRefs)
+			if err != nil {
+				return err
+			}
 		}
 
 		for _, refID := range refs {
@@ -399,7 +409,7 @@ func (s *refStore) unmarkRefsAsNeeded(refs []types.RefID) {
 			delete(missingRefs, string(refIDStr))
 		}
 
-		bs, err = json.Marshal(missingRefs)
+		bs, err := json.Marshal(missingRefs)
 		if err != nil {
 			return err
 		}
