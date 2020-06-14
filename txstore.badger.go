@@ -79,6 +79,7 @@ func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
 		return err
 	}
 	p.Infof(0, "wrote tx %v", tx.ID.Pretty())
+	stateURIs, err := p.KnownStateURIs()
 	return nil
 }
 
@@ -199,7 +200,7 @@ func (s *badgerTxStore) KnownStateURIs() ([]string, error) {
 
 		prefix := []byte("stateuri:")
 
-		for iter.Rewind(); iter.ValidForPrefix(prefix); iter.Next() {
+		for iter.Seek(prefix); iter.ValidForPrefix(prefix); iter.Next() {
 			stateURIs = append(stateURIs, string(iter.Item().Key()[len("stateuri:"):]))
 		}
 		return nil
