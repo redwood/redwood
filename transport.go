@@ -17,7 +17,6 @@ type Transport interface {
 	SetHost(host Host)
 	GetPeerByConnStrings(ctx context.Context, reachableAt StringSet) (Peer, error)
 	ForEachProviderOfStateURI(ctx context.Context, stateURI string) (<-chan Peer, error)
-	ForEachSubscriberToStateURI(ctx context.Context, stateURI string) (<-chan Peer, error)
 	ForEachProviderOfRef(ctx context.Context, refID types.RefID) (<-chan Peer, error)
 	PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan Peer, error)
 	AnnounceRef(ctx context.Context, refID types.RefID) error

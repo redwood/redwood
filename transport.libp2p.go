@@ -44,9 +44,6 @@ type libp2pTransport struct {
 
 	address types.Address
 
-	subscriptionsIn   map[string]map[*libp2pTxSubscriptionServer]struct{}
-	subscriptionsInMu sync.RWMutex
-
 	host          Host
 	controllerHub ControllerHub
 	refStore      RefStore
@@ -64,13 +61,12 @@ const (
 
 func NewLibp2pTransport(addr types.Address, port uint, controllerHub ControllerHub, refStore RefStore, peerStore PeerStore) (Transport, error) {
 	t := &libp2pTransport{
-		Context:         &ctx.Context{},
-		port:            port,
-		address:         addr,
-		subscriptionsIn: make(map[string]map[*libp2pTxSubscriptionServer]struct{}),
-		controllerHub:   controllerHub,
-		refStore:        refStore,
-		peerStore:       peerStore,
+		Context:       &ctx.Context{},
+		port:          port,
+		address:       addr,
+		controllerHub: controllerHub,
+		refStore:      refStore,
+		peerStore:     peerStore,
 	}
 	return t, nil
 }
@@ -172,22 +168,17 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			return
 		}
 
-		t.subscriptionsInMu.Lock()
-		defer t.subscriptionsInMu.Unlock()
-		if _, exists := t.subscriptionsIn[stateURI]; !exists {
-			t.subscriptionsIn[stateURI] = make(map[*libp2pTxSubscriptionServer]struct{})
-		}
-		sub := &libp2pTxSubscriptionServer{stateURI, stream}
-		t.subscriptionsIn[stateURI][sub] = struct{}{}
-
 		parents := []types.ID{}
 		toVersion := types.ID{}
 
 		err := t.host.HandleFetchHistoryRequest(stateURI, parents, toVersion, peer)
 		if err != nil {
 			t.Errorf("error fetching history: %v", err)
-			// @@TODO: close subscription?
+			peer.CloseConn()
+			return
 		}
+
+		t.host.HandleIncomingSubscription(stateURI, peer)
 
 	case MsgType_Put:
 		defer peer.CloseConn()
@@ -309,10 +300,15 @@ func (t *libp2pTransport) ForEachProviderOfStateURI(ctx context.Context, stateUR
 				// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
 				// whitelist, etc.
 
-				t.Infof(0, `found peer %v for stateURI "%v"`, pinfo.ID, stateURI)
+				t.Infof(0, `found peer %v for stateURI "%v" (%+v)`, pinfo.ID, stateURI, pinfo)
+				peer := t.makeDisconnectedPeer(pinfo)
+				if len(peer.ReachableAt()) == 0 {
+					t.Warnf("peer %v has no dial addresses, discarding", pinfo.ID)
+					continue
+				}
 
 				select {
-				case ch <- t.makeDisconnectedPeer(pinfo):
+				case ch <- peer:
 				case <-ctx.Done():
 					return
 				}
@@ -350,22 +346,6 @@ func (t *libp2pTransport) ForEachProviderOfRef(ctx context.Context, refID types.
 				case ch <- t.makeDisconnectedPeer(pinfo):
 				case <-ctx.Done():
 				}
-			}
-		}
-	}()
-	return ch, nil
-}
-
-func (t *libp2pTransport) ForEachSubscriberToStateURI(ctx context.Context, stateURI string) (<-chan Peer, error) {
-	ch := make(chan Peer)
-	go func() {
-		t.subscriptionsInMu.RLock()
-		defer t.subscriptionsInMu.RUnlock()
-		defer close(ch)
-		for sub := range t.subscriptionsIn[stateURI] {
-			select {
-			case ch <- t.makeConnectedPeer(sub.stream):
-			case <-ctx.Done():
 			}
 		}
 	}()
@@ -429,13 +409,13 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 			t.Errorf("error fetching known state URIs from DB: %v", err)
 
 		} else {
-			for _, url := range stateURIs {
-				url := url
+			for _, stateURI := range stateURIs {
+				stateURI := stateURI
 				go func() {
 					ctxInner, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)
 					defer cancel()
 
-					c, err := cidForString("serve:" + url)
+					c, err := cidForString("serve:" + stateURI)
 					if err != nil {
 						t.Errorf("announce: error creating cid: %v", err)
 						return
@@ -443,7 +423,7 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 
 					err = t.dht.Provide(ctxInner, c, true)
 					if err != nil && err != kbucket.ErrLookupFailure {
-						t.Errorf(`announce: could not dht.Provide url "%v": %v`, url, err)
+						t.Errorf(`announce: could not dht.Provide stateURI "%v": %v`, stateURI, err)
 						return
 					}
 				}()
@@ -812,7 +792,7 @@ func filterUselessLibp2pAddrs(addrStrs StringSet) StringSet {
 		if strings.Index(addrStr, "/ip4/172.") == 0 {
 			continue
 			// } else if strings.Index(addrStr, "/ip4/0.0.0.0") == 0 {
-			// 	continue
+			//  continue
 		} else if strings.Index(addrStr, "/ip4/127.0.0.1") == 0 {
 			continue
 		} else if addrStr[:len("/p2p-circuit")] == "/p2p-circuit" {

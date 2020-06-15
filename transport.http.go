@@ -48,25 +48,9 @@ type httpTransport struct {
 
 	pendingAuthorizations map[types.ID][]byte
 
-	subscriptionsIn   map[string]map[*httpTxSubscriptionServer]struct{}
-	subscriptionsInMu sync.RWMutex
-
 	host      Host
 	refStore  RefStore
 	peerStore PeerStore
-}
-
-type httpTxSubscriptionServer struct {
-	io.Writer
-	http.Flusher
-	address          types.Address
-	chDoneCatchingUp chan struct{}
-	chDone           chan struct{}
-}
-
-func (s *httpTxSubscriptionServer) Close() error {
-	close(s.chDone)
-	return nil
 }
 
 func NewHTTPTransport(
@@ -94,7 +78,6 @@ func NewHTTPTransport(
 	t := &httpTransport{
 		Context:               &ctx.Context{},
 		address:               addr,
-		subscriptionsIn:       make(map[string]map[*httpTxSubscriptionServer]struct{}),
 		controllerHub:         controllerHub,
 		listenAddr:            listenAddr,
 		defaultStateURI:       defaultStateURI,
@@ -364,16 +347,19 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Transfer-Encoding", "chunked")
 
-	sub := &httpTxSubscriptionServer{w, f, address, make(chan struct{}), make(chan struct{})}
-
-	t.trackSubscription(stateURI, sub)
+	peer := &httpTxSubscriptionServer{
+		httpPeer:         t.makePeerWithAddress(w, f, address),
+		address:          address,
+		chDone:           make(chan struct{}),
+		chDoneCatchingUp: make(chan struct{}),
+	}
 
 	// Listen to the closing of the http connection via the CloseNotifier
 	notify := w.(http.CloseNotifier).CloseNotify()
 	go func() {
 		<-notify
 		t.Infof(0, "http connection closed")
-		t.untrackSubscription(stateURI, sub)
+		t.HandleIncomingSubscriptionClosed(stateURI, peer)
 	}()
 
 	f.Flush()
@@ -401,17 +387,19 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		err := t.host.HandleFetchHistoryRequest(stateURI, parents, toVersion, t.makePeerWithAddress(w, f, address))
+		err := t.host.HandleFetchHistoryRequest(stateURI, parents, toVersion, peer)
 		if err != nil {
 			t.Errorf("error fetching history: %v", err)
 			// @@TODO: close subscription?
 		}
 	}
 
-	close(sub.chDoneCatchingUp)
+	close(peer.chDoneCatchingUp)
+
+	t.host.HandleIncomingSubscription(stateURI, peer)
 
 	// Block until the subscription is canceled so that net/http doesn't close the connection
-	<-sub.chDone
+	<-peer.chDone
 }
 
 func (t *httpTransport) serveBraidJS(w http.ResponseWriter, r *http.Request) {
@@ -882,26 +870,6 @@ func (t *httpTransport) SetHost(h Host) {
 	t.host = h
 }
 
-func (t *httpTransport) trackSubscription(stateURI string, sub *httpTxSubscriptionServer) {
-	t.subscriptionsInMu.Lock()
-	defer t.subscriptionsInMu.Unlock()
-
-	if _, exists := t.subscriptionsIn[stateURI]; !exists {
-		t.subscriptionsIn[stateURI] = make(map[*httpTxSubscriptionServer]struct{})
-	}
-	t.subscriptionsIn[stateURI][sub] = struct{}{}
-}
-
-func (t *httpTransport) untrackSubscription(stateURI string, sub *httpTxSubscriptionServer) {
-	t.subscriptionsInMu.Lock()
-	defer t.subscriptionsInMu.Unlock()
-
-	if _, exists := t.subscriptionsIn[stateURI]; !exists {
-		return
-	}
-	delete(t.subscriptionsIn[stateURI], sub)
-}
-
 func (t *httpTransport) GetPeerByConnStrings(ctx context.Context, reachableAt StringSet) (Peer, error) {
 	if len(reachableAt) != 1 {
 		panic("weird")
@@ -960,28 +928,6 @@ func (t *httpTransport) ForEachProviderOfStateURI(ctx context.Context, theURL st
 
 func (t *httpTransport) ForEachProviderOfRef(ctx context.Context, refID types.RefID) (<-chan Peer, error) {
 	return nil, types.ErrUnimplemented
-}
-
-func (t *httpTransport) ForEachSubscriberToStateURI(ctx context.Context, stateURI string) (<-chan Peer, error) {
-	ch := make(chan Peer)
-	go func() {
-		t.subscriptionsInMu.RLock()
-		defer t.subscriptionsInMu.RUnlock()
-		defer close(ch)
-
-		if _, exists := t.subscriptionsIn[stateURI]; !exists {
-			return
-		}
-
-		for sub := range t.subscriptionsIn[stateURI] {
-			<-sub.chDoneCatchingUp
-			select {
-			case ch <- t.makePeer(sub.Writer, sub.Flusher, nil):
-			case <-ctx.Done():
-			}
-		}
-	}()
-	return ch, nil
 }
 
 func (t *httpTransport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan Peer, error) {
@@ -1088,10 +1034,10 @@ type httpPeer struct {
 	t *httpTransport
 
 	// stream
-	sync.Mutex
-	io.Writer
 	io.ReadCloser
+	io.Writer
 	http.Flusher
+	sync.Mutex
 
 	state httpPeerState
 }
@@ -1164,50 +1110,26 @@ func (s *httpTxSubscriptionClient) Close() error {
 }
 
 func (p *httpPeer) Put(tx Tx) error {
-	if p.Writer != nil {
-		// This peer is subscribed, so we have a connection open already
-		bs, err := json.Marshal(tx)
-		if err != nil {
-			return err
-		}
+	// This peer is not subscribed, so we make a PUT
+	// bs, err := json.Marshal(tx)
+	// if err != nil {
+	// 	return err
+	// }
 
-		// This is encoded using HTTP's SSE format
-		event := []byte("data: " + string(bs) + "\n\n")
+	// client := http.Client{}
+	// req, err := http.NewRequest("PUT", p.ReachableAt().Any(), bytes.NewReader(bs))
+	// if err != nil {
+	// 	return err
+	// }
 
-		n, err := p.Write(event)
-		if err != nil {
-			return err
-		} else if n < len(event) {
-			return errors.New("didn't write enough")
-		}
-
-		if p.Flusher != nil {
-			p.Flusher.Flush()
-		}
-		return nil
-
-	} else {
-		// This peer is not subscribed, so we make a PUT
-		// bs, err := json.Marshal(tx)
-		// if err != nil {
-		// 	return err
-		// }
-
-		// client := http.Client{}
-		// req, err := http.NewRequest("PUT", p.ReachableAt().Any(), bytes.NewReader(bs))
-		// if err != nil {
-		// 	return err
-		// }
-
-		// resp, err := client.Do(req)
-		// if err != nil {
-		// 	return err
-		// } else if resp.StatusCode != 200 {
-		// 	return errors.Errorf("error PUTting to peer: (%v) %v", resp.StatusCode, resp.Status)
-		// }
-		// defer resp.Body.Close()
-		panic("unimplemented")
-	}
+	// resp, err := client.Do(req)
+	// if err != nil {
+	// 	return err
+	// } else if resp.StatusCode != 200 {
+	// 	return errors.Errorf("error PUTting to peer: (%v) %v", resp.StatusCode, resp.Status)
+	// }
+	// defer resp.Body.Close()
+	panic("unimplemented")
 }
 
 func (p *httpPeer) PutPrivate(encPut EncryptedTx) error {
@@ -1321,6 +1243,41 @@ func (p *httpPeer) ReceiveRefPacket() (FetchRefResponseBody, error) {
 func (p *httpPeer) CloseConn() error {
 	if p.ReadCloser != nil {
 		return p.ReadCloser.Close()
+	}
+	return nil
+}
+
+type httpTxSubscriptionServer struct {
+	*httpPeer
+	address          types.Address
+	chDoneCatchingUp chan struct{}
+	chDone           chan struct{}
+}
+
+func (peer *httpTxSubscriptionServer) Close() error {
+	close(peer.chDone)
+	return nil
+}
+
+func (peer *httpTxSubscriptionServer) Put(tx Tx) error {
+	// This peer is subscribed, so we have a connection open already
+	bs, err := json.Marshal(tx)
+	if err != nil {
+		return err
+	}
+
+	// This is encoded using HTTP's SSE format
+	event := []byte("data: " + string(bs) + "\n\n")
+
+	n, err := peer.Write(event)
+	if err != nil {
+		return err
+	} else if n < len(event) {
+		return errors.New("didn't write enough")
+	}
+
+	if peer.Flusher != nil {
+		peer.Flusher.Flush()
 	}
 	return nil
 }

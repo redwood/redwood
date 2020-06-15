@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
@@ -20,7 +19,7 @@ type Host interface {
 	Start() error
 
 	// Get(ctx context.Context, url string) (interface{}, error)
-	Subscribe(ctx context.Context, stateURI string) (bool, error)
+	Subscribe(ctx context.Context, stateURI string) error
 	SendTx(ctx context.Context, tx Tx) error
 	AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error)
 	FetchRef(ctx context.Context, ref types.RefID)
@@ -29,10 +28,11 @@ type Host interface {
 	Transport(name string) Transport
 	Controllers() ControllerHub
 	Address() types.Address
+	ChallengePeerIdentity(ctx context.Context, peer Peer) (SigningPublicKey, EncryptingPublicKey, error)
 	ForEachProviderOfStateURI(ctx context.Context, stateURI string) <-chan Peer
-	ForEachSubscriberToStateURI(ctx context.Context, stateURI string) <-chan Peer
 
 	HandleFetchHistoryRequest(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error
+	HandleIncomingSubscription(stateURI string, peer Peer)
 	HandleTxReceived(tx Tx, peer Peer)
 	HandlePrivateTxReceived(encryptedTx EncryptedTx, peer Peer)
 	HandleAckReceived(txID types.ID, peer Peer)
@@ -49,9 +49,12 @@ type host struct {
 	signingKeypair    *SigningKeypair
 	encryptingKeypair *EncryptingKeypair
 
-	subscriptionsOut map[string]map[PeerDialInfo]TxSubscription // map[stateURI][PeerDialInfo]
-	peerSeenTxs      map[PeerDialInfo]map[types.ID]bool
-	peerSeenTxsMu    sync.RWMutex
+	subscriptionsOut   map[string]*txMultiSub // map[stateURI]
+	subscriptionsOutMu sync.RWMutex
+	subscriptionsIn    map[string]map[Peer]struct{} // map[stateURI]
+	subscriptionsInMu  sync.RWMutex
+	peerSeenTxs        map[PeerDialInfo]map[types.ID]bool
+	peerSeenTxsMu      sync.RWMutex
 
 	peerStore PeerStore
 	refStore  RefStore
@@ -83,7 +86,8 @@ func NewHost(
 		ControllerHub:     controllerHub,
 		signingKeypair:    signingKeypair,
 		encryptingKeypair: encryptingKeypair,
-		subscriptionsOut:  make(map[string]map[PeerDialInfo]TxSubscription),
+		subscriptionsOut:  make(map[string]*txMultiSub),
+		subscriptionsIn:   make(map[string]map[Peer]struct{}),
 		peerSeenTxs:       make(map[PeerDialInfo]map[types.ID]bool),
 		peerStore:         peerStore,
 		refStore:          refStore,
@@ -200,44 +204,6 @@ func (h *host) ForEachProviderOfStateURI(ctx context.Context, stateURI string) <
 			}
 		}()
 
-	}
-
-	go func() {
-		defer close(ch)
-		wg.Wait()
-	}()
-
-	return ch
-}
-
-func (h *host) ForEachSubscriberToStateURI(ctx context.Context, stateURI string) <-chan Peer {
-	var wg sync.WaitGroup
-	ch := make(chan Peer)
-	for _, tpt := range h.transports {
-		innerCh, err := tpt.ForEachSubscriberToStateURI(ctx, stateURI)
-		if err != nil {
-			h.Warnf("transport %v could not fetch subscribers of state URI '%v'", tpt.Name(), stateURI)
-			continue
-		}
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-h.Ctx().Done():
-					return
-				case <-ctx.Done():
-					return
-				case peer, open := <-innerCh:
-					if !open {
-						return
-					}
-
-					ch <- peer
-				}
-			}
-		}()
 	}
 
 	go func() {
@@ -384,7 +350,7 @@ func (h *host) AddPeer(ctx context.Context, transportName string, reachableAt St
 
 	h.peerStore.AddReachableAddresses(transportName, reachableAt)
 
-	sigpubkey, _, err := h.challengePeerIdentity(ctx, peer)
+	sigpubkey, _, err := h.ChallengePeerIdentity(ctx, peer)
 	if err != nil {
 		return err
 	}
@@ -417,7 +383,7 @@ func (h *host) periodicallyVerifyPeers() {
 					return
 				}
 
-				_, _, err = h.challengePeerIdentity(context.TODO(), peer)
+				_, _, err = h.ChallengePeerIdentity(context.TODO(), peer)
 				if err != nil {
 					h.Errorf("error verifying peer identity: %v ", err)
 					return
@@ -450,149 +416,43 @@ func (h *host) HandleFetchHistoryRequest(stateURI string, parents []types.ID, to
 	return nil
 }
 
-func (h *host) Subscribe(ctx context.Context, stateURI string) (bool, error) {
-	// var wg sync.WaitGroup
-	// var peersByAddress sync.Map
-	// ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	// defer cancel()
+func (h *host) HandleIncomingSubscription(stateURI string, peer Peer) {
+	h.subscriptionsInMu.Lock()
+	defer h.subscriptionsInMu.Unlock()
 
-	// ch := make(chan Peer)
-
-	// go func() {
-	// 	for peer := range h.ForEachProviderOfStateURI(ctx, stateURI) {
-	// 		peer := peer
-
-	// 		wg.Add(1)
-	// 		go func() {
-	// 			defer wg.Done()
-
-	// 			err := peer.EnsureConnected(ctx)
-	// 			if err != nil {
-	// 				return
-	// 			}
-
-	// 			sigKey, _ := peer.PublicKeypairs()
-	// 			if sigKey.Address() == (types.Address{}) {
-	// 				sigKey, _, err = h.challengePeerIdentity(ctx, peer)
-	// 				if err != nil {
-	// 					return
-	// 				}
-	// 			}
-	// 			_, exists := peersByAddress.LoadOrStore(sigKey.Address(), peer)
-	// 			if exists {
-	// 				peer.CloseConn()
-	// 				return
-	// 			}
-
-	// 			ch <- peer
-	// 		}()
-	// 	}
-	// }()
-
-	// var numPeers int
-	// for peer := range ch {
-	// }
-
-	var anySucceeded bool
-	var errs []error
-	var wg sync.WaitGroup
-	wg.Add(len(h.transports))
-	for _, transport := range h.transports {
-		transport := transport
-		go func() {
-			defer wg.Done()
-			err := h.subscribeWithTransport(ctx, transport, stateURI)
-			if err != nil {
-				errs = append(errs, err)
-			} else {
-				anySucceeded = true
-			}
-		}()
+	if _, exists := h.subscriptionsIn[stateURI]; !exists {
+		h.subscriptionsIn[stateURI] = make(map[Peer]struct{})
 	}
-	wg.Wait()
-	var errStrings []string
-	for _, err := range errs {
-		errStrings = append(errStrings, err.Error())
-	}
-	if len(errStrings) > 0 {
-		return anySucceeded, errors.New(strings.Join(errStrings, "\n"))
-	}
-	return anySucceeded, nil
+
+	h.subscriptionsIn[stateURI][peer] = struct{}{}
 }
 
-func (h *host) subscribeWithTransport(ctx context.Context, transport Transport, stateURI string) error {
-	ctxFind, cancelFind := context.WithCancel(ctx)
-	defer cancelFind()
-	ch, err := transport.ForEachProviderOfStateURI(ctxFind, stateURI)
-	if err != nil {
-		return errors.WithStack(err)
+func (h *host) Subscribe(ctx context.Context, stateURI string) error {
+	h.subscriptionsOutMu.Lock()
+	defer h.subscriptionsOutMu.Unlock()
+
+	if _, exists := h.subscriptionsOut[stateURI]; exists {
+		return errors.New("already subscribed to that state URI")
 	}
 
-	var peer Peer
-	var sub TxSubscription
-
-	// @@TODO: subscribe to more than one peer?
-	for p := range ch {
-		h.Warnf("PEER ~> %v", p.ReachableAt().Any())
-		s, err := p.Subscribe(ctx, stateURI)
-		if err != nil {
-			h.Errorf("error connecting to peer: %v", err)
-			continue
-		}
-		peer = p
-		sub = s
-		cancelFind()
-		break
-	}
-
-	if peer == nil {
-		return errors.WithStack(ErrNoPeersForURL)
-	}
-
-	if _, exists := h.subscriptionsOut[stateURI]; !exists {
-		h.subscriptionsOut[stateURI] = make(map[PeerDialInfo]TxSubscription)
-	}
-	dialInfos := peer.DialInfos()
-	for _, dialInfo := range dialInfos {
-		if _, exists := h.subscriptionsOut[stateURI][dialInfo]; exists {
-			return nil
-		}
-	}
-
-	for _, dialInfo := range dialInfos {
-		h.subscriptionsOut[stateURI][dialInfo] = sub
-	}
+	multiSub := newTxMultiSub(stateURI, 4, h, h.peerStore)
+	multiSub.Start()
+	h.subscriptionsOut[stateURI] = multiSub
 
 	go func() {
-		defer func() {
-			for _, dialInfo := range dialInfos {
-				delete(h.subscriptionsOut[stateURI], dialInfo)
-			}
-		}()
-		defer sub.Close()
-		for {
-			tx, err := sub.Read()
-			if err != nil {
-				h.Errorf("error reading: %v", err)
-				return
-			}
-
-			h.HandleTxReceived(*tx, peer)
-
-			// @@TODO: ACK the PUT
+		select {
+		case <-multiSub.chStop:
+			h.subscriptionsOutMu.Lock()
+			defer h.subscriptionsOutMu.Unlock()
+			delete(h.subscriptionsOut, stateURI)
 		}
 	}()
 
 	return nil
 }
 
-func (h *host) challengePeerIdentity(ctx context.Context, peer Peer) (_ SigningPublicKey, _ EncryptingPublicKey, err error) {
+func (h *host) ChallengePeerIdentity(ctx context.Context, peer Peer) (_ SigningPublicKey, _ EncryptingPublicKey, err error) {
 	defer withStack(&err)
-
-	h.Warnf("challengePeerIDentity %v %v", peer.Transport(), peer.ReachableAt())
-	defer func() {
-		h.Successf("challengePeerIDentity err = %+v", err)
-	}()
 
 	err = peer.EnsureConnected(ctx)
 	if err != nil {
@@ -713,7 +573,7 @@ func (h *host) peersWithAddress(ctx context.Context, address types.Address) (<-c
 						}
 						defer peer.CloseConn()
 
-						signingPubkey, encryptingPubkey, err := h.challengePeerIdentity(ctx, peer)
+						signingPubkey, encryptingPubkey, err := h.ChallengePeerIdentity(ctx, peer)
 						if err != nil {
 							h.Errorf("error requesting peer credentials: %v", err)
 							return
@@ -784,8 +644,6 @@ func (h *host) broadcastPrivateTxToRecipient(ctx context.Context, txID types.ID,
 }
 
 func (h *host) broadcastTx(ctx context.Context, tx *Tx) error {
-	// @@TODO: should we also send all PUTs to some set of authoritative peers (like a central server)?
-
 	if len(tx.Sig) == 0 {
 		return errors.WithStack(ErrUnsignedTx)
 	}
@@ -815,67 +673,104 @@ func (h *host) broadcastTx(ctx context.Context, tx *Tx) error {
 		wg.Wait()
 
 	} else {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second) // @@TODO: make configurable
-		defer cancel()
-
-		ch := make(chan Peer)
-		go func() {
-			defer close(ch)
-			chSubscribers := h.ForEachSubscriberToStateURI(ctx, tx.StateURI)
-			chProviders := h.ForEachProviderOfStateURI(ctx, tx.StateURI)
-			for {
-				select {
-				case peer, open := <-chSubscribers:
-					if !open {
-						chSubscribers = nil
-						continue
-					}
-					ch <- peer
-				case peer, open := <-chProviders:
-					if !open {
-						chProviders = nil
-						continue
-					}
-					ch <- peer
-				case <-ctx.Done():
-					return
-				case <-h.Ctx().Done():
-					return
-				}
-			}
-		}()
-
 		var wg sync.WaitGroup
-		for peer := range ch {
-			h.Debugf("rebroadcasting %v to %v", tx.ID.Pretty(), peer.ReachableAt().Slice())
-			if h.txSeenByPeer(peer, tx.ID) {
-				h.Debugf("tx already seen by peer %v %v", peer.Transport().Name(), peer.Address())
-				continue
-			}
-			h.Debugf("tx %v NOT already seen by peer: %v %v %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address(), peer.ReachableAt().Slice())
-
-			wg.Add(1)
-			peer := peer
-			go func() {
-				defer wg.Done()
-				defer peer.CloseConn()
-
-				err := peer.EnsureConnected(ctx)
-				if err != nil {
-					h.Errorf("error connecting to peer: %v", err)
-					return
-				}
-
-				err = peer.Put(*tx)
-				if err != nil {
-					h.Errorf("error writing tx to peer: %v", err)
-					return
-				}
-			}()
-		}
+		h.broadcastTxToSubscribedPeers(ctx, tx, &wg)
+		h.broadcastTxToStateURIProviders(ctx, tx, &wg)
 		wg.Wait()
 	}
 	return nil
+}
+
+func (h *host) broadcastTxToStateURIProviders(ctx context.Context, tx *Tx, wg *sync.WaitGroup) {
+	wg.Add(1)
+	defer wg.Done()
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second) // @@TODO: make configurable
+	defer cancel()
+
+	ch := make(chan Peer)
+	go func() {
+		defer close(ch)
+
+		chProviders := h.ForEachProviderOfStateURI(ctx, tx.StateURI)
+		for {
+			select {
+			case peer, open := <-chProviders:
+				if !open {
+					chProviders = nil
+					continue
+				}
+				ch <- peer
+			case <-ctx.Done():
+				return
+			case <-h.Ctx().Done():
+				return
+			}
+		}
+	}()
+
+	for peer := range ch {
+		h.Debugf("rebroadcasting %v to %v", tx.ID.Pretty(), peer.ReachableAt().Slice())
+		if h.txSeenByPeer(peer, tx.ID) {
+			h.Debugf("tx already seen by peer %v %v", peer.Transport().Name(), peer.Address())
+			continue
+		}
+		h.Debugf("tx %v NOT already seen by peer: %v %v %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address(), peer.ReachableAt().Slice())
+
+		wg.Add(1)
+		peer := peer
+		go func() {
+			defer wg.Done()
+			defer peer.CloseConn()
+
+			err := peer.EnsureConnected(ctx)
+			if err != nil {
+				h.Errorf("error connecting to peer: %v", err)
+				return
+			}
+
+			err = peer.Put(*tx)
+			if err != nil {
+				h.Errorf("error writing tx to peer: %v", err)
+				return
+			}
+		}()
+	}
+}
+
+func (h *host) broadcastTxToSubscribedPeers(ctx context.Context, tx *Tx, wg *sync.WaitGroup) {
+	wg.Add(1)
+	defer wg.Done()
+
+	h.subscriptionsInMu.RLock()
+	defer h.subscriptionsInMu.RUnlock()
+
+	for peer := range h.subscriptionsIn[tx.StateURI] {
+		h.Debugf("rebroadcasting %v to %v", tx.ID.Pretty(), peer.ReachableAt().Slice())
+		if h.txSeenByPeer(peer, tx.ID) {
+			h.Debugf("tx already seen by peer %v %v", peer.Transport().Name(), peer.Address())
+			continue
+		}
+		h.Debugf("tx %v NOT already seen by peer: %v %v %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address(), peer.ReachableAt().Slice())
+
+		wg.Add(1)
+		peer := peer
+		go func() {
+			defer wg.Done()
+
+			err := peer.EnsureConnected(ctx)
+			if err != nil {
+				h.Errorf("error connecting to peer: %v", err)
+				return
+			}
+
+			err = peer.Put(*tx)
+			if err != nil {
+				h.Errorf("error writing tx to peer: %v", err)
+				return
+			}
+		}()
+	}
 }
 
 func (h *host) SendTx(ctx context.Context, tx Tx) error {
@@ -1047,8 +942,8 @@ func (h *host) FetchRef(ctx context.Context, refID types.RefID) {
 		defer cancel()
 
 		h.AnnounceRefs(ctx, []types.RefID{
-			types.RefID{HashAlg: types.SHA1, Hash: sha1Hash},
-			types.RefID{HashAlg: types.SHA3, Hash: sha3Hash},
+			{HashAlg: types.SHA1, Hash: sha1Hash},
+			{HashAlg: types.SHA3, Hash: sha3Hash},
 		})
 		return
 	}

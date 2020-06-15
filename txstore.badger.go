@@ -79,7 +79,6 @@ func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
 		return err
 	}
 	p.Infof(0, "wrote tx %v", tx.ID.Pretty())
-	stateURIs, err := p.KnownStateURIs()
 	return nil
 }
 

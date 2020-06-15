@@ -75,9 +75,9 @@ func (s *httpRPCServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *Su
 	}
 
 	ctx, _ := context.WithTimeout(context.Background(), 15*time.Second)
-	anySucceeded, err := s.host.Subscribe(ctx, args.StateURI)
-	if !anySucceeded {
-		return errors.Wrap(err, "all transports failed to subscribe")
+	err := s.host.Subscribe(ctx, args.StateURI)
+	if err != nil {
+		return errors.Wrap(err, "error subscribing to "+args.StateURI)
 	}
 	return nil
 }
