@@ -5,8 +5,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -24,6 +27,11 @@ var app = struct {
 }{}
 
 func main() {
+	go func() {
+		http.ListenAndServe(":6060", nil)
+	}()
+	runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
+
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
@@ -112,7 +120,7 @@ func run(configPath string, gui bool) error {
 	var (
 		txStore       = rw.NewBadgerTxStore(config.TxDBRoot(), signingKeypair.Address())
 		refStore      = rw.NewRefStore(config.RefDataRoot())
-		peerStore     = rw.NewPeerStore(signingKeypair.Address())
+		peerStore     = rw.NewPeerStore()
 		controllerHub = rw.NewControllerHub(signingKeypair.Address(), config.StateDBRoot(), txStore, refStore)
 	)
 
@@ -170,7 +178,7 @@ func run(configPath string, gui bool) error {
 		transports = append(transports, httpTransport)
 	}
 
-	host, err := rw.NewHost(signingKeypair, encryptingKeypair, transports, controllerHub, refStore, peerStore)
+	host, err := rw.NewHost(signingKeypair, encryptingKeypair, transports, controllerHub, refStore, peerStore, config)
 	if err != nil {
 		return err
 	}

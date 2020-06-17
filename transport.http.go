@@ -321,6 +321,9 @@ func (t *httpTransport) serveChallengeIdentityCheckResponse(w http.ResponseWrite
 		return
 	}
 
+	// @@TODO: make the request include the encrypting pubkey as well
+	t.peerStore.AddVerifiedCredentials("http", nil, addr, sigpubkey, nil)
+
 	delete(t.pendingAuthorizations, sessionID) // @@TODO: expiration/garbage collection for failed auths
 }
 
@@ -348,18 +351,17 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Transfer-Encoding", "chunked")
 
 	peer := &httpTxSubscriptionServer{
-		httpPeer:         t.makePeerWithAddress(w, f, address),
-		address:          address,
-		chDone:           make(chan struct{}),
-		chDoneCatchingUp: make(chan struct{}),
+		httpPeer: t.makePeerWithAddress(w, f, address),
+		chDone:   make(chan struct{}),
 	}
 
 	// Listen to the closing of the http connection via the CloseNotifier
 	notify := w.(http.CloseNotifier).CloseNotify()
 	go func() {
 		<-notify
+		peer.Close()
 		t.Infof(0, "http connection closed")
-		t.HandleIncomingSubscriptionClosed(stateURI, peer)
+		t.host.HandleIncomingSubscriptionClosed(stateURI, peer)
 	}()
 
 	f.Flush()
@@ -393,8 +395,6 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 			// @@TODO: close subscription?
 		}
 	}
-
-	close(peer.chDoneCatchingUp)
 
 	t.host.HandleIncomingSubscription(stateURI, peer)
 
@@ -1007,29 +1007,34 @@ func (t *httpTransport) addressFromCookie(r *http.Request) types.Address {
 }
 
 func (t *httpTransport) makePeer(writer io.Writer, flusher http.Flusher, reachableAt StringSet) *httpPeer {
-	storedPeer := t.peerStore.PeerReachableAt("http", reachableAt)
 	peer := &httpPeer{t: t, Writer: writer, Flusher: flusher}
-	if storedPeer != nil {
-		peer.storedPeer = *storedPeer
+
+	peerDetails := t.peerStore.PeerReachableAt(t.Name(), reachableAt)
+	if peerDetails != nil {
+		peer.PeerDetails = peerDetails
 	} else {
-		peer.storedPeer.reachableAt = reachableAt
+		t.peerStore.AddReachableAddresses(t.Name(), reachableAt)
+		peer.PeerDetails = t.peerStore.PeerReachableAt(t.Name(), reachableAt)
 	}
 	return peer
 }
 
 func (t *httpTransport) makePeerWithAddress(writer io.Writer, flusher http.Flusher, address types.Address) *httpPeer {
-	storedPeer := t.peerStore.PeersFromTransportWithAddress("http", address)
 	peer := &httpPeer{t: t, Writer: writer, Flusher: flusher}
-	if len(storedPeer) > 0 {
-		peer.storedPeer = *storedPeer[0]
+
+	peerDetails := t.peerStore.PeersFromTransportWithAddress(t.Name(), address)
+	if len(peerDetails) > 0 {
+		peer.PeerDetails = peerDetails[0]
 	} else {
-		peer.storedPeer.address = address
+		t.peerStore.AddVerifiedCredentials(t.Name(), nil, address, nil, nil)
+		peers := t.peerStore.PeersFromTransportWithAddress(t.Name(), address)
+		peer.PeerDetails = peers[0]
 	}
 	return peer
 }
 
 type httpPeer struct {
-	storedPeer
+	PeerDetails
 
 	t *httpTransport
 
@@ -1038,31 +1043,19 @@ type httpPeer struct {
 	io.Writer
 	http.Flusher
 	sync.Mutex
-
-	state httpPeerState
 }
-
-type httpPeerState int
-
-const (
-	httpPeerState_Unknown = iota
-	httpPeerState_ServingSubscription
-	httpPeerState_VerifyingAddress
-)
 
 func (p *httpPeer) Transport() Transport {
 	return p.t
-}
-
-func (p *httpPeer) ReachableAt() StringSet {
-	return p.reachableAt
 }
 
 func (p *httpPeer) EnsureConnected(ctx context.Context) error {
 	return nil
 }
 
-func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (TxSubscription, error) {
+func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ TxSubscription, err error) {
+	defer func() { p.UpdateConnStats(err == nil) }()
+
 	var client http.Client
 	req, err := http.NewRequest("GET", p.ReachableAt().Any(), nil)
 	if err != nil {
@@ -1081,14 +1074,17 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (TxSubscripti
 		return nil, errors.Errorf("error GETting peer: (%v) %v", resp.StatusCode, resp.Status)
 	}
 
-	return &httpTxSubscriptionClient{resp.Body}, nil
+	return &httpTxSubscriptionClient{p, resp.Body}, nil
 }
 
 type httpTxSubscriptionClient struct {
+	*httpPeer
 	io.ReadCloser
 }
 
-func (s *httpTxSubscriptionClient) Read() (*Tx, error) {
+func (s *httpTxSubscriptionClient) Read() (_ *Tx, err error) {
+	defer func() { s.UpdateConnStats(err == nil) }()
+
 	r := bufio.NewReader(s.ReadCloser)
 	bs, err := r.ReadBytes(byte('\n'))
 	if err != nil {
@@ -1109,7 +1105,9 @@ func (s *httpTxSubscriptionClient) Close() error {
 	return s.ReadCloser.Close()
 }
 
-func (p *httpPeer) Put(tx Tx) error {
+func (p *httpPeer) Put(tx Tx) (err error) {
+	defer func() { p.UpdateConnStats(err == nil) }()
+
 	// This peer is not subscribed, so we make a PUT
 	// bs, err := json.Marshal(tx)
 	// if err != nil {
@@ -1132,7 +1130,9 @@ func (p *httpPeer) Put(tx Tx) error {
 	panic("unimplemented")
 }
 
-func (p *httpPeer) PutPrivate(encPut EncryptedTx) error {
+func (p *httpPeer) PutPrivate(encPut EncryptedTx) (err error) {
+	defer func() { p.UpdateConnStats(err == nil) }()
+
 	encPutBytes, err := json.Marshal(encPut)
 	if err != nil {
 		return err
@@ -1156,7 +1156,9 @@ func (p *httpPeer) PutPrivate(encPut EncryptedTx) error {
 	return nil
 }
 
-func (p *httpPeer) Ack(txID types.ID) error {
+func (p *httpPeer) Ack(txID types.ID) (err error) {
+	defer func() { p.UpdateConnStats(err == nil) }()
+
 	reachableAt := p.ReachableAt().Any()
 	if reachableAt == "" {
 		return nil
@@ -1183,7 +1185,9 @@ func (p *httpPeer) Ack(txID types.ID) error {
 	return nil
 }
 
-func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) error {
+func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error) {
+	defer func() { p.UpdateConnStats(err == nil) }()
+
 	req, err := http.NewRequest("AUTHORIZE", p.ReachableAt().Any(), nil)
 	if err != nil {
 		return err
@@ -1202,17 +1206,21 @@ func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) error {
 	return nil
 }
 
-func (p *httpPeer) ReceiveChallengeIdentityResponse() (ChallengeIdentityResponse, error) {
+func (p *httpPeer) ReceiveChallengeIdentityResponse() (_ ChallengeIdentityResponse, err error) {
+	defer func() { p.UpdateConnStats(err == nil) }()
+
 	var verifyResp ChallengeIdentityResponse
-	err := json.NewDecoder(p.ReadCloser).Decode(&verifyResp)
+	err = json.NewDecoder(p.ReadCloser).Decode(&verifyResp)
 	if err != nil {
 		return ChallengeIdentityResponse{}, err
 	}
 	return verifyResp, nil
 }
 
-func (p *httpPeer) RespondChallengeIdentity(verifyAddressResponse ChallengeIdentityResponse) error {
-	err := json.NewEncoder(p.Writer).Encode(verifyAddressResponse)
+func (p *httpPeer) RespondChallengeIdentity(verifyAddressResponse ChallengeIdentityResponse) (err error) {
+	defer func() { p.UpdateConnStats(err == nil) }()
+
+	err = json.NewEncoder(p.Writer).Encode(verifyAddressResponse)
 	if err != nil {
 		http.Error(p.Writer.(http.ResponseWriter), err.Error(), http.StatusInternalServerError)
 		return err
@@ -1249,9 +1257,7 @@ func (p *httpPeer) CloseConn() error {
 
 type httpTxSubscriptionServer struct {
 	*httpPeer
-	address          types.Address
-	chDoneCatchingUp chan struct{}
-	chDone           chan struct{}
+	chDone chan struct{} // Keeps the net/http server open until the subscription is closed
 }
 
 func (peer *httpTxSubscriptionServer) Close() error {
@@ -1259,7 +1265,9 @@ func (peer *httpTxSubscriptionServer) Close() error {
 	return nil
 }
 
-func (peer *httpTxSubscriptionServer) Put(tx Tx) error {
+func (peer *httpTxSubscriptionServer) Put(tx Tx) (err error) {
+	defer func() { peer.UpdateConnStats(err == nil) }()
+
 	// This peer is subscribed, so we have a connection open already
 	bs, err := json.Marshal(tx)
 	if err != nil {

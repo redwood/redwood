@@ -350,6 +350,11 @@ func (s StringSet) Remove(val string) {
 
 func (s StringSet) Any() string {
 	for x := range s {
+		if strings.Contains(x, "dns4") {
+			return x
+		}
+	}
+	for x := range s {
 		return x
 	}
 	return ""

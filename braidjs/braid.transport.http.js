@@ -133,13 +133,27 @@ module.exports = function (opts) {
         })
     }
 
+    let cookies = {}
+
     async function wrappedFetch(path, options) {
+        // We have to manually parse and set cookies because isomorphic-fetch doesn't do it for us
+        let cookieStr = Object.keys(cookies).map(cookieName => `${cookieName}=${cookies[cookieName]}`).join(';')
+
         options.headers = {
             ...makeRequestHeaders(),
             ...options.headers,
+            Cookie: cookieStr,
         }
 
         const resp = await fetch(httpHost + path, options)
+
+        // Manual cookie parsing
+        for (let str of (resp.headers.raw()['set-cookie'] || [])) {
+            let keyVal = str.substr(0, str.indexOf(';')).split('=')
+            cookies[keyVal[0]] = keyVal[1]
+        }
+
+        // Receive list of peers from the Alt-Svc header
         const altSvcHeader = resp.headers.get('Alt-Svc')
         if (altSvcHeader) {
             const peers = {}

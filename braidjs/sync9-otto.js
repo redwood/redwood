@@ -21,6 +21,7 @@ global.resolve_state = resolve_state
 
 var s9state
 var hasRun = false
+var logs = []
 function init(internalState) {
     if (Object.keys(internalState).length === 0) {
         s9state = sync9_create()
@@ -36,6 +37,7 @@ function resolve_state(state, sender, txHash, parents, patches) {
         var ps = {}
         sync9_add_version(s9state, 'init', ps, [{keys: [], val: state}], null)
         parentsObj['init'] = true
+        hasRun = true
     } else {
         parents.forEach(function(p) {
             parentsObj[p] = true

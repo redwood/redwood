@@ -602,8 +602,10 @@ module.exports = function (opts) {
         }
     }
 
-    async function get(opts) {
-        let { stateURI, keypath, raw } = opts
+    async function get({ stateURI, keypath, raw }) {
+        if (keypath.length > 0 && keypath[0] !== '/') {
+            keypath = '/' + keypath
+        }
         if (raw) {
             keypath = keypath + '?raw=1'
         }
@@ -668,13 +670,28 @@ module.exports = function (opts) {
         })
     }
 
+    let cookies = {}
+
     async function wrappedFetch(path, options) {
+        let cookieStr = Object.keys(cookies).map(cookieName => `${cookieName}=${cookies[cookieName]}`).join(';')
+
         options.headers = {
             ...makeRequestHeaders(),
             ...options.headers,
+            Cookie: cookieStr,
         }
 
+        console.log('COOKIES ~>', options.headers.Cookie)
         const resp = await fetch(httpHost + path, options)
+
+        for (let str of (resp.headers.raw()['set-cookie'] || [])) {
+            // if (pair[0].toLowerCase() === 'set-cookie') {
+            console.log('SET COOKIE ~>', str)
+            let keyVal = str.substr(0, str.indexOf(';')).split('=')
+            cookies[keyVal[0]] = keyVal[1]
+            // }
+        }
+
         const altSvcHeader = resp.headers.get('Alt-Svc')
         if (altSvcHeader) {
             const peers = {}

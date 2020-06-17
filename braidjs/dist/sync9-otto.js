@@ -7234,6 +7234,7 @@ global.init = init;
 global.resolve_state = resolve_state;
 var s9state;
 var hasRun = false;
+var logs = [];
 
 function init(internalState) {
   if (Object.keys(internalState).length === 0) {
@@ -7254,10 +7255,13 @@ function resolve_state(state, sender, txHash, parents, patches) {
       val: state
     }], null);
     parentsObj['init'] = true;
+    hasRun = true;
   } else {
+    logs.push('incoming parents = ' + JSON.stringify(parents));
     parents.forEach(function (p) {
       parentsObj[p] = true;
     });
+    logs.push('parentsObj = ' + JSON.stringify(parentsObj));
   }
 
   sync9_add_version(s9state, txHash, parentsObj, patches, null);
@@ -7266,7 +7270,8 @@ function resolve_state(state, sender, txHash, parents, patches) {
     internalState: {
       hasRun: true,
       s9state: s9state
-    }
+    },
+    logs: logs
   });
 }
 
@@ -7628,6 +7633,7 @@ function sync9_add_version(x, vid, parents, changes, is_anc) {
 
   if (x.T[vid]) return;
   x.T[vid] = Object.assign({}, parents);
+  logs.push('parents = ' + JSON.stringify(parents));
   Object.keys(parents).forEach(function (k) {
     if (x.leaves[k]) delete x.leaves[k];
   });

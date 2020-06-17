@@ -33,6 +33,7 @@ type Host interface {
 
 	HandleFetchHistoryRequest(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error
 	HandleIncomingSubscription(stateURI string, peer Peer)
+	HandleIncomingSubscriptionClosed(stateURI string, peer Peer)
 	HandleTxReceived(tx Tx, peer Peer)
 	HandlePrivateTxReceived(encryptedTx EncryptedTx, peer Peer)
 	HandleAckReceived(txID types.ID, peer Peer)
@@ -43,8 +44,9 @@ type Host interface {
 type host struct {
 	*ctx.Context
 
-	ControllerHub
+	config *Config
 
+	ControllerHub
 	transports        map[string]Transport
 	signingKeypair    *SigningKeypair
 	encryptingKeypair *EncryptingKeypair
@@ -75,6 +77,7 @@ func NewHost(
 	controllerHub ControllerHub,
 	refStore RefStore,
 	peerStore PeerStore,
+	config *Config,
 ) (Host, error) {
 	transportsMap := make(map[string]Transport)
 	for _, tpt := range transports {
@@ -92,6 +95,7 @@ func NewHost(
 		peerStore:         peerStore,
 		refStore:          refStore,
 		chRefsNeeded:      make(chan []types.RefID, 100),
+		config:            config,
 	}
 	return h, nil
 }
@@ -364,22 +368,24 @@ func (h *host) periodicallyVerifyPeers() {
 		maybePeers := h.peerStore.MaybePeers()
 		var wg sync.WaitGroup
 		wg.Add(len(maybePeers))
-		for _, peerDialInfo := range maybePeers {
-			peerDialInfo := peerDialInfo
+		for _, maybePeer := range maybePeers {
+			maybePeer := maybePeer
 			go func() {
 				defer wg.Done()
 
-				transport := h.Transport(peerDialInfo.TransportName)
+				transport := h.Transport(maybePeer.TransportName())
 				if transport == nil {
 					// Unsupported transport
 					return
 				}
 
-				peer, err := transport.GetPeerByConnStrings(context.TODO(), NewStringSet([]string{peerDialInfo.ReachableAt}))
+				peer, err := transport.GetPeerByConnStrings(context.TODO(), maybePeer.ReachableAt())
 				if errors.Cause(err) == ErrPeerIsSelf {
 					return
+				} else if errors.Cause(err) == types.ErrConnection {
+					return
 				} else if err != nil {
-					h.Warn("could not get peer at %v %v: ", peerDialInfo.TransportName, peerDialInfo.ReachableAt)
+					h.Warn("could not get peer at %v %v: ", maybePeer.TransportName(), maybePeer.ReachableAt())
 					return
 				}
 
@@ -397,6 +403,8 @@ func (h *host) periodicallyVerifyPeers() {
 }
 
 func (h *host) HandleFetchHistoryRequest(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error {
+	// @@TODO: respect the input params
+
 	iter := h.ControllerHub.FetchTxs(stateURI)
 	defer iter.Cancel()
 
@@ -427,9 +435,25 @@ func (h *host) HandleIncomingSubscription(stateURI string, peer Peer) {
 	h.subscriptionsIn[stateURI][peer] = struct{}{}
 }
 
+func (h *host) HandleIncomingSubscriptionClosed(stateURI string, peer Peer) {
+	h.subscriptionsInMu.Lock()
+	defer h.subscriptionsInMu.Unlock()
+
+	if _, exists := h.subscriptionsIn[stateURI]; exists {
+		delete(h.subscriptionsIn[stateURI], peer)
+	}
+}
+
 func (h *host) Subscribe(ctx context.Context, stateURI string) error {
 	h.subscriptionsOutMu.Lock()
 	defer h.subscriptionsOutMu.Unlock()
+
+	h.config.Update(func() error {
+		set := NewStringSet(h.config.Node.SubscribedStateURIs)
+		set.Add(stateURI)
+		h.config.Node.SubscribedStateURIs = set.Slice()
+		return nil
+	})
 
 	if _, exists := h.subscriptionsOut[stateURI]; exists {
 		return errors.New("already subscribed to that state URI")
@@ -480,9 +504,7 @@ func (h *host) ChallengePeerIdentity(ctx context.Context, peer Peer) (_ SigningP
 	}
 	encpubkey := EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey)
 
-	peer.SetAddress(sigpubkey.Address())
-
-	h.peerStore.AddVerifiedCredentials(peer.Transport().Name(), peer.ReachableAt(), peer.Address(), sigpubkey, encpubkey)
+	h.peerStore.AddVerifiedCredentials(peer.Transport().Name(), peer.ReachableAt(), sigpubkey.Address(), sigpubkey, encpubkey)
 
 	return sigpubkey, encpubkey, nil
 }
@@ -518,18 +540,19 @@ func (h *host) peersWithAddress(ctx context.Context, address types.Address) (<-c
 
 		if storedPeers := h.peerStore.PeersWithAddress(address); len(storedPeers) > 0 {
 			for _, storedPeer := range storedPeers {
-				transport, exists := h.transports[storedPeer.transportName]
+				transport, exists := h.transports[storedPeer.TransportName()]
 				if !exists {
-					h.Warnf("transport '%v' for no longer exists", storedPeer.transportName)
+					h.Warnf("transport '%v' for no longer exists", storedPeer.TransportName())
 					continue
 				}
 
-				peer, err := transport.GetPeerByConnStrings(ctx, storedPeer.reachableAt)
+				peer, err := transport.GetPeerByConnStrings(ctx, storedPeer.ReachableAt())
 				if err != nil {
 					h.Errorf("error calling transport.GetPeer: %v", err)
 					continue
 				}
-				ch <- peersWithAddressResult{peer, storedPeer.encpubkey}
+				_, encpubkey := storedPeer.PublicKeypairs()
+				ch <- peersWithAddressResult{peer, encpubkey}
 				for _, tuple := range storedPeer.DialInfos() {
 					alreadySent.Store(tuple, struct{}{})
 				}
@@ -711,7 +734,7 @@ func (h *host) broadcastTxToStateURIProviders(ctx context.Context, tx *Tx, wg *s
 
 	for peer := range ch {
 		h.Debugf("rebroadcasting %v to %v", tx.ID.Pretty(), peer.ReachableAt().Slice())
-		if h.txSeenByPeer(peer, tx.ID) {
+		if h.txSeenByPeer(peer, tx.ID) || tx.From == peer.Address() { // @@TODO: do we always want to avoid broadcasting when `from == peer.address`?
 			h.Debugf("tx already seen by peer %v %v", peer.Transport().Name(), peer.Address())
 			continue
 		}
@@ -761,12 +784,14 @@ func (h *host) broadcastTxToSubscribedPeers(ctx context.Context, tx *Tx, wg *syn
 			err := peer.EnsureConnected(ctx)
 			if err != nil {
 				h.Errorf("error connecting to peer: %v", err)
+				h.HandleIncomingSubscriptionClosed(tx.StateURI, peer)
 				return
 			}
 
 			err = peer.Put(*tx)
 			if err != nil {
 				h.Errorf("error writing tx to peer: %v", err)
+				h.HandleIncomingSubscriptionClosed(tx.StateURI, peer)
 				return
 			}
 		}()

@@ -23,12 +23,9 @@ type Transport interface {
 }
 
 type Peer interface {
+	PeerDetails
+
 	Transport() Transport
-	ReachableAt() StringSet
-	Address() types.Address
-	SetAddress(addr types.Address)
-	PublicKeypairs() (SigningPublicKey, EncryptingPublicKey)
-	DialInfos() []PeerDialInfo
 	EnsureConnected(ctx context.Context) error
 	CloseConn() error
 

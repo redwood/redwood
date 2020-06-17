@@ -34,7 +34,7 @@ func MakeHost(signingKeypairHex string, port uint, defaultStateURI, cookieSecret
 	txStore := rw.NewBadgerTxStore(txDBRoot, signingKeypair.Address())
 	// txStore := remotestore.NewClient("0.0.0.0:4567", signingKeypair.Address(), signingKeypair.SigningPrivateKey)
 	refStore := rw.NewRefStore(refStoreRoot)
-	peerStore := rw.NewPeerStore(signingKeypair.Address())
+	peerStore := rw.NewPeerStore()
 	controllerHub := rw.NewControllerHub(signingKeypair.Address(), stateDBRoot, txStore, refStore)
 
 	p2ptransport, err := rw.NewLibp2pTransport(signingKeypair.Address(), port, controllerHub, refStore, peerStore)

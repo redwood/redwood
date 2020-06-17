@@ -8,12 +8,14 @@ import (
 	"rogchap.com/v8go"
 	//"github.com/saibing/go-v8"
 
+	"github.com/brynbellomy/redwood/ctx"
 	"github.com/brynbellomy/redwood/nelson"
 	"github.com/brynbellomy/redwood/tree"
 	"github.com/brynbellomy/redwood/types"
 )
 
 type jsResolver struct {
+	ctx.Logger
 	vm            *v8go.Context
 	internalState map[string]interface{}
 }
@@ -43,9 +45,9 @@ func NewJSResolver(config tree.Node, internalState map[string]interface{}) (_ Re
 		return nil, errors.WithStack(err)
 	}
 
-	ctx, _ := v8go.NewContext(nil)
+	v8ctx, _ := v8go.NewContext(nil)
 
-	_, err = ctx.RunScript("var global = {}; var newStateJSON; "+string(srcStr), "")
+	_, err = v8ctx.RunScript("var global = {}; var newStateJSON; "+string(srcStr), "")
 	if err != nil {
 		return nil, err
 	}
@@ -56,12 +58,12 @@ func NewJSResolver(config tree.Node, internalState map[string]interface{}) (_ Re
 	}
 
 	internalStateScript := "global.init(" + string(internalStateBytes) + ")"
-	_, err = ctx.RunScript(internalStateScript, "")
+	_, err = v8ctx.RunScript(internalStateScript, "")
 	if err != nil {
 		return nil, err
 	}
 
-	return &jsResolver{vm: ctx, internalState: internalState}, nil
+	return &jsResolver{Logger: ctx.NewLogger("resolver:js"), vm: v8ctx, internalState: internalState}, nil
 }
 
 func (r *jsResolver) InternalState() map[string]interface{} {
@@ -114,8 +116,6 @@ func (r *jsResolver) ResolveState(state tree.Node, refStore RefStore, sender typ
 	}
 
 	r.internalState = output["internalState"].(map[string]interface{})
-
 	state.Set(nil, nil, output["state"])
-
 	return nil
 }

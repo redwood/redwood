@@ -2,6 +2,7 @@ package redwood
 
 import (
 	"context"
+	"time"
 
 	"github.com/brynbellomy/redwood/types"
 )
@@ -43,6 +44,7 @@ func (s *txMultiSub) Start() {
 	)
 
 	for {
+		time.Sleep(1 * time.Second)
 		peer, err := s.peerPool.GetPeer()
 		if err != nil {
 			log.Errorf("error getting peer from pool: %v", err)
@@ -52,14 +54,14 @@ func (s *txMultiSub) Start() {
 
 		err = peer.EnsureConnected(context.TODO())
 		if err != nil {
-			log.Errorf("error getting peer from pool: %v", err)
+			log.Errorf("error connecting to peer: %v", err)
 			s.peerPool.ReturnPeer(peer, false)
 			continue
 		}
 
 		peerSub, err := peer.Subscribe(context.TODO(), s.stateURI)
 		if err != nil {
-			s.host.Errorf("error connecting to peer: %v", err)
+			s.host.Errorf("error connecting to %v peer: %v", peer.TransportName(), err)
 			s.peerPool.ReturnPeer(peer, false)
 			continue
 		}
