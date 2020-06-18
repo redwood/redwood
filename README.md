@@ -14,7 +14,7 @@ Its flexibility allows developers to use a single, simple programming model to c
 
 ## 🧬 The Braid protocol
 
-Redwood is part of the [Braid project](https://braid.news), and uses the Braid protocol to synchronize updates over regular HTTP.  [Braid is currently working through the IETF's RFC process to have its extensions to HTTP standardized](https://github.com/braid-work/braid-spec)  (see IETF draft spec here: <https://tools.ietf.org/html/draft-toomim-braid-00>)
+Redwood is part of the [Braid project](https://braid.news), and uses the Braid protocol to synchronize updates over regular HTTP.  [Braid is currently working through the IETF's RFC process to have its extensions to HTTP standardized](https://github.com/braid-work/braid-spec)  (see IETF draft spec here: <https://datatracker.ietf.org/doc/html/draft-toomim-httpbis-braid-http>)
 
 ## ✔️ Redwood's features
 
@@ -25,12 +25,14 @@ Keep an eye on our [Github project board](https://github.com/brynbellomy/redwood
 ### Features
 
 - **Accounts/identity and access control:** Redwood uses ECDSA asymmetric cryptography to assign a decentralized identity (also known as a DID, but in this project usually referred to as an "address") to every peer.  Access control is easy to configure, and can be applied to any subtree.
+    - Yubikey support (and support for other types of hardware keys) is in the works.
 - **Transaction model:** Every update to the database is a transaction, signed by its sender, that can contain one or more patches.  Patches use a simple Javascript-like language to describe updates to the state tree.
 - **Private transactions and subtrees:** Users can send private, encrypted transactions to single peers or groups.  The recipients will all share a private subtree that's invisible to the rest of the swarm.
 - **Merge resolution:** Redwood expects downtime, loss of connectivity, and simultaneous conflicting edits.  To address these obstacles, it allows the developer to configure the state tree with a variety of merge resolvers.  The main one in use at the moment is called Sync9.  Different keypaths can have different resolvers.  Custom resolvers can be written in:
     - Go
     - Javascript (executed using Chrome's V8 engine)
     - Lua
+    - WASM (forthcoming)
 - **Asset storage:** Assets like HTML and Javascript files can be stored in the state tree as well.  The state tree _is_ your application.  See the included demos for examples.
 - **Transports:** Redwood implements several transports, including [libp2p](https://libp2p.io), [Braid-over-HTTP](https://braid.news), and [WebRTC](https://webrtc.org/).
     - The Go nodes communicate with one another over libp2p or HTTP (configurable)
