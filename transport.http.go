@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
-	"os"
 	"path"
 	"regexp"
 	"strconv"
@@ -22,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
 	"golang.org/x/net/publicsuffix"
 
@@ -403,11 +403,7 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 }
 
 func (t *httpTransport) serveBraidJS(w http.ResponseWriter, r *http.Request) {
-	var filename string
-	if fileExists("./braid.js") {
-		filename = "./braid.js"
-	}
-	f, err := os.Open(filename)
+	f, err := pkger.Open("/braidjs/dist/braid.js")
 	if err != nil {
 		http.Error(w, "can't find braidjs", http.StatusNotFound)
 		return
