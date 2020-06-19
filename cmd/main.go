@@ -35,7 +35,7 @@ func main() {
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
-	configRoot, err := rw.ConfigRoot()
+	configRoot, err := rw.DefaultConfigRoot()
 	if err != nil {
 		app.Error(err)
 		os.Exit(1)
@@ -142,6 +142,7 @@ func run(configPath string, gui bool) error {
 		libp2pTransport, err := rw.NewLibp2pTransport(
 			signingKeypair.Address(),
 			config.P2PTransport.ListenPort,
+			config.P2PTransport.KeyFile,
 			controllerHub,
 			refStore,
 			peerStore,

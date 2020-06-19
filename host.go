@@ -733,12 +733,10 @@ func (h *host) broadcastTxToStateURIProviders(ctx context.Context, tx *Tx, wg *s
 	}()
 
 	for peer := range ch {
-		h.Debugf("rebroadcasting %v to %v", tx.ID.Pretty(), peer.ReachableAt().Slice())
 		if h.txSeenByPeer(peer, tx.ID) || tx.From == peer.Address() { // @@TODO: do we always want to avoid broadcasting when `from == peer.address`?
-			h.Debugf("tx already seen by peer %v %v", peer.Transport().Name(), peer.Address())
 			continue
 		}
-		h.Debugf("tx %v NOT already seen by peer: %v %v %v", tx.ID.Pretty(), peer.Transport().Name(), peer.Address(), peer.ReachableAt().Slice())
+		h.Debugf("rebroadcasting %v to %v", tx.ID.Pretty(), peer.ReachableAt().Slice())
 
 		wg.Add(1)
 		peer := peer

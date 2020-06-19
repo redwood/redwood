@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -53,11 +52,24 @@ const (
 	PROTO_MAIN protocol.ID = "/redwood/main/1.0.0"
 )
 
-func NewLibp2pTransport(addr types.Address, port uint, controllerHub ControllerHub, refStore RefStore, peerStore PeerStore) (Transport, error) {
+func NewLibp2pTransport(
+	addr types.Address,
+	port uint,
+	keyfilePath string,
+	controllerHub ControllerHub,
+	refStore RefStore,
+	peerStore PeerStore,
+) (Transport, error) {
+	p2pKey, err := obtainP2PKey(keyfilePath)
+	if err != nil {
+		return nil, err
+	}
+
 	t := &libp2pTransport{
 		Context:       &ctx.Context{},
 		port:          port,
 		address:       addr,
+		p2pKey:        p2pKey,
 		controllerHub: controllerHub,
 		refStore:      refStore,
 		peerStore:     peerStore,
@@ -72,12 +84,7 @@ func (t *libp2pTransport) Start() error {
 			t.SetLogLabel(t.address.Pretty() + " transport")
 			t.Infof(0, "opening libp2p on port %v", t.port)
 
-			p2pKey, err := obtainP2PKey(t.address)
-			if err != nil {
-				return err
-			}
-			t.p2pKey = p2pKey
-			peerID, err := peer.IDFromPublicKey(p2pKey.GetPublic())
+			peerID, err := peer.IDFromPublicKey(t.p2pKey.GetPublic())
 			if err != nil {
 				return err
 			}
@@ -298,10 +305,8 @@ func (t *libp2pTransport) ForEachProviderOfStateURI(ctx context.Context, stateUR
 				// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
 				// whitelist, etc.
 
-				// t.Infof(0, `found peer %v for stateURI "%v" (%+v)`, pinfo.ID, stateURI, pinfo)
 				peer := t.makeDisconnectedPeer(pinfo)
-				if len(peer.ReachableAt()) == 0 {
-					// t.Warnf("peer %v has no dial addresses, discarding", pinfo.ID)
+				if peer == nil || len(peer.ReachableAt()) == 0 {
 					continue
 				}
 
@@ -340,8 +345,13 @@ func (t *libp2pTransport) ForEachProviderOfRef(ctx context.Context, refID types.
 
 				t.Infof(0, `found peer %v for ref "%v"`, pinfo.ID, refID.String())
 
+				peer := t.makeDisconnectedPeer(pinfo)
+				if peer == nil || len(peer.ReachableAt()) == 0 {
+					continue
+				}
+
 				select {
-				case ch <- t.makeDisconnectedPeer(pinfo):
+				case ch <- peer:
 				case <-ctx.Done():
 				}
 			}
@@ -367,12 +377,17 @@ func (t *libp2pTransport) PeersClaimingAddress(ctx context.Context, address type
 				continue
 			}
 
+			peer := t.makeDisconnectedPeer(pinfo)
+			if peer == nil || len(peer.ReachableAt()) == 0 {
+				continue
+			}
+
 			select {
 			case <-ctx.Done():
 				return
 			case <-t.Ctx().Done():
 				return
-			case ch <- t.makeDisconnectedPeer(pinfo):
+			case ch <- peer:
 			}
 		}
 	}()
@@ -499,6 +514,10 @@ func (t *libp2pTransport) periodicallyUpdatePeerStore() {
 			}
 			func() {
 				peer := t.makeDisconnectedPeer(pinfo)
+				if peer == nil {
+					return
+				}
+
 				err := peer.EnsureConnected(context.TODO())
 				if err != nil {
 					// t.Errorf("error connecting to peer: %+v", err)
@@ -534,10 +553,10 @@ func (t *libp2pTransport) AnnounceRef(ctx context.Context, refID types.RefID) er
 
 func (t *libp2pTransport) makeConnectedPeer(stream netp2p.Stream) *libp2pPeer {
 	pinfo := t.libp2pHost.Peerstore().PeerInfo(stream.Conn().RemotePeer())
-	reachableAt := multiaddrsFromPeerInfo(pinfo)
+	peer := &libp2pPeer{t: t, pinfo: pinfo, stream: stream}
+	reachableAt := filterUselessLibp2pAddrs(multiaddrsFromPeerInfo(pinfo))
 
 	peerDetails := t.peerStore.PeerReachableAt("libp2p", reachableAt)
-	peer := &libp2pPeer{t: t, pinfo: pinfo, stream: stream}
 	if peerDetails != nil {
 		peer.PeerDetails = peerDetails
 	} else {
@@ -549,7 +568,10 @@ func (t *libp2pTransport) makeConnectedPeer(stream netp2p.Stream) *libp2pPeer {
 
 func (t *libp2pTransport) makeDisconnectedPeer(pinfo peerstore.PeerInfo) *libp2pPeer {
 	peer := &libp2pPeer{t: t, pinfo: pinfo, stream: nil}
-	reachableAt := multiaddrsFromPeerInfo(pinfo)
+	reachableAt := filterUselessLibp2pAddrs(multiaddrsFromPeerInfo(pinfo))
+	if len(reachableAt) == 0 {
+		return nil
+	}
 
 	peerDetails := t.peerStore.PeerReachableAt("libp2p", reachableAt)
 	if peerDetails != nil {
@@ -745,23 +767,15 @@ func (p *libp2pPeer) CloseConn() error {
 	return nil
 }
 
-func obtainP2PKey(addr types.Address) (cryptop2p.PrivKey, error) {
-	configPath, err := RedwoodConfigDirPath()
-	if err != nil {
-		return nil, err
-	}
-
-	keyfile := fmt.Sprintf("redwood.%v.key", addr.Pretty())
-	keyfile = filepath.Join(configPath, keyfile)
-
-	f, err := os.Open(keyfile)
+func obtainP2PKey(keyfilePath string) (cryptop2p.PrivKey, error) {
+	f, err := os.Open(keyfilePath)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 
 	} else if err == nil {
 		defer f.Close()
 
-		data, err := ioutil.ReadFile(keyfile)
+		data, err := ioutil.ReadFile(keyfilePath)
 		if err != nil {
 			return nil, err
 		}
@@ -778,7 +792,7 @@ func obtainP2PKey(addr types.Address) (cryptop2p.PrivKey, error) {
 		return nil, err
 	}
 
-	err = ioutil.WriteFile(keyfile, bs, 0400)
+	err = ioutil.WriteFile(keyfilePath, bs, 0400)
 	if err != nil {
 		return nil, err
 	}
@@ -814,8 +828,8 @@ func filterUselessLibp2pAddrs(addrStrs StringSet) StringSet {
 			continue
 			// } else if strings.Index(addrStr, "/ip4/0.0.0.0") == 0 {
 			//  continue
-		} else if strings.Index(addrStr, "/ip4/127.0.0.1") == 0 {
-			continue
+			// } else if strings.Index(addrStr, "/ip4/127.0.0.1") == 0 {
+			// 	continue
 		} else if addrStr[:len("/p2p-circuit")] == "/p2p-circuit" {
 			continue
 		}

@@ -35,7 +35,7 @@ func NewPermissionsValidator(config tree.Node) (Validator, error) {
 	return &permissionsValidator{permissions: lowercasePerms}, nil
 }
 
-var senderRegexp = regexp.MustCompile("\\${sender}")
+var senderRegexp = regexp.MustCompile(`\$\(sender\)`)
 
 func (v *permissionsValidator) ValidateTx(state tree.Node, tx *Tx) error {
 	perms, exists := v.permissions[strings.ToLower(tx.From.Hex())]

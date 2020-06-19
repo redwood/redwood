@@ -1094,7 +1094,7 @@ func (tx *DBNode) DebugPrint(printFn func(inFormat string, args ...interface{}),
 			panic(err)
 		}
 
-		printFn(indent+"    %s: %v %v %v %v", node.Keypath(), nodeType, valueType, length, val)
+		printFn(indent+"    %s: %v %v %v %v (%v / %v)", node.Keypath(), nodeType, valueType, length, val, valBytes, string(valBytes))
 	}
 	printFn(indent + "}")
 }
@@ -1496,10 +1496,10 @@ func encodeNode(nodeType NodeType, valueType ValueType, length uint64, value int
 			return encoded, nil
 
 		default:
-			return nil, errors.WithStack(ErrNodeEncoding)
+			return nil, errors.Wrapf(ErrNodeEncoding, "(%v, %v, %v, %v)", nodeType, valueType, length, value)
 		}
 	default:
-		return nil, errors.WithStack(ErrNodeEncoding)
+		return nil, errors.Wrapf(ErrNodeEncoding, "(%v, %v, %v, %v)", nodeType, valueType, length, value)
 	}
 }
 
@@ -1536,7 +1536,7 @@ func encodeGoValue(nodeValue interface{}) ([]byte, error) {
 
 func decodeNode(val []byte) (NodeType, ValueType, uint64, []byte, error) {
 	if len(val) == 0 {
-		return NodeTypeInvalid, ValueTypeInvalid, 0, nil, errors.WithStack(ErrNodeEncoding)
+		return NodeTypeInvalid, ValueTypeInvalid, 0, nil, errors.Wrapf(ErrNodeEncoding, "len(val) == 0")
 	}
 	switch val[0] {
 	case 'm':
@@ -1560,10 +1560,10 @@ func decodeNode(val []byte) (NodeType, ValueType, uint64, []byte, error) {
 		case '0':
 			return NodeTypeValue, ValueTypeNil, 0, nil, nil
 		default:
-			return NodeTypeInvalid, ValueTypeInvalid, 0, nil, errors.WithStack(ErrNodeEncoding)
+			return NodeTypeInvalid, ValueTypeInvalid, 0, nil, errors.Wrapf(ErrNodeEncoding, "(val: %v / %v)", val, string(val))
 		}
 	default:
-		return NodeTypeInvalid, ValueTypeInvalid, 0, nil, errors.WithStack(ErrNodeEncoding)
+		return NodeTypeInvalid, ValueTypeInvalid, 0, nil, errors.Wrapf(ErrNodeEncoding, "(val: %v / %v)", val, string(val))
 	}
 }
 

@@ -11,6 +11,7 @@ module.exports = {
     hashTx,
     serializeTx,
     randomID,
+    privateTxRootForRecipients,
     stringToHex,
     randomString,
     hexToUint8Array,
@@ -94,6 +95,12 @@ function serializeTx(tx) {
     txHex += stringToHex(tx.stateURI)
     tx.patches.forEach(patch => txHex += stringToHex(patch))
     return txHex
+}
+
+function privateTxRootForRecipients(recipients) {
+    return 'private-' + ethers.utils.keccak256(
+        Buffer.concat( recipients.sort().map(r => Buffer.from(r, 'hex')) )
+    ).toString('hex')
 }
 
 function randomID() {

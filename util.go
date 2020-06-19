@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -288,22 +287,6 @@ func filterEmptyStrings(s []string) []string {
 		filtered = append(filtered, s[i])
 	}
 	return filtered
-}
-
-func RedwoodConfigDirPath() (string, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-
-	redwoodConfigDir := filepath.Join(configDir, "redwood")
-
-	err = os.MkdirAll(redwoodConfigDir, 0700)
-	if err != nil {
-		return "", err
-	}
-
-	return redwoodConfigDir, nil
 }
 
 func fileExists(filename string) bool {

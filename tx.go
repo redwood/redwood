@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/brynbellomy/redwood/tree"
@@ -112,6 +113,10 @@ func (tx *Tx) Copy() *Tx {
 }
 
 func PrivateRootKeyForRecipients(recipients []types.Address) string {
+	sort.Slice(recipients, func(i, j int) bool {
+		return bytes.Compare(recipients[i][:], recipients[j][:]) < 0
+	})
+
 	var bs []byte
 	for _, r := range recipients {
 		bs = append(bs, r[:]...)

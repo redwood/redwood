@@ -74,20 +74,46 @@ Each demo comes with a debugging view that allows you to inspect the current sta
 
 ### Demo #1: chat room
 
-You can run the chat demo with the following commands (note: Go 1.13+ is required).
+**Prerequisites**
+
+- Go 1.13
+- Node.js 10+
+- Ensure that you've run `npm i` inside the `braidjs` directory (located in the repository root)
+
+**Running the demo**
+
+First, build the Redwood binary and place it in your `$PATH`:
 
 ```sh
-$ cd demos/chat
-$ go run main.go
+cd cmd
+go build --tags static -o /usr/local/bin/redwood .
 ```
 
-This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/chat/talk0>
-- <https://localhost:21242/chat/talk0>
+Then, start the first Redwood node:
 
-**(Note: due to the self-signed TLS certificates, your browser will complain that you're "not safe")**
+```sh
+cd ../demos/chat
+redwood --config ./node1.redwoodrc 
+```
 
-You now have four nodes (two in Go, two in the browser) that can talk with one another.
+Then, open another terminal and start the second Redwood node:
+
+```sh
+redwood --config ./node2.redwoodrc 
+```
+
+Lastly, open another terminal and run the `setup.js` script:
+
+```sh
+node setup.js
+```
+
+Now, you can open two browser tabs to:
+- <http://localhost:8080>
+- <http://localhost:9090>
+
+You now have four nodes (two in Go, two in the browser) that can talk with one another.  Try killing the Go nodes and continuing to send messages in the browser.  You'll notice that the browsers can still communicate (over WebRTC).
+
 
 ---
 
@@ -97,14 +123,12 @@ You can run the text editor demo with the following commands (note: Go 1.13+ is 
 
 ```sh
 $ cd demos/text-editor
-$ go run main.go
+$ go run --tags static main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/editor>
-- <https://localhost:21242/editor>
-
-**(Note: due to the self-signed TLS certificates, your browser will complain that you're "not safe")**
+- <http://localhost:21232>
+- <http://localhost:21242>
 
 As with the chat room demo, you now have four nodes (two in Go, two in the browser) that can talk with one another.
 
@@ -112,29 +136,29 @@ As with the chat room demo, you now have four nodes (two in Go, two in the brows
 
 ### Demo #3: Git integration
 
-Before running the Git demo, you'll need to build the Git remote helper and install it into your `$PATH`:
+Before running the Git demo, you'll need to build the Git remote helper and install it into your `$PATH` (feel free to choose a different location, as long as it's in `$PATH`):
 
 ```sh
 $ cd git-remote-helper
-$ go build --tags static -o /usr/bin/git-remote-redwood main.go
+$ go build --tags static -o /usr/bin/git-remote-redwood .
 ```
 
 Once the helper is installed, you can run the git demo with the following commands (note: Go 1.13+ is required).
 
 ```sh
 $ cd demos/git-integration
-$ go run main.go
+$ go run --tags static main.go
 ```
 
 This will spin up two nodes in the same process.  Once they're up, open browser tabs to:
-- <https://localhost:21232/gitdemo>
-- <https://localhost:21242/gitdemo>
+- <http://localhost:21232/demo>
+- <http://localhost:21242/demo>
 
-Now, let's clone the demo repo:
+Now, let's clone the demo repo.  Notice in the command below that the address of the local node is specified before the `@` character, and the State-URI is specified after.  If the Redwood node you were cloning from were actually hosted at `somegitprovider.org/gitdemo` rather than our small local environment, this portion of the URL could be omitted.
 
 ```sh
-$ git clone redwood://localhost:21231/git /tmp/redwood-git
-$ cd /tmp/redwood-git
+$ cd /tmp
+$ git clone redwood://localhost:21231@somegitprovider.org/gitdemo
 ```
 
 You'll notice that the file tree is identical to the one shown in your browser.  Also, notice that you can navigate to these files directly in the web browser -- the contents of the Git repo are served directly by Redwood (there are ways to handle staging/dev setups, but they're not covered by the demo).
@@ -143,7 +167,7 @@ Let's try pushing some commits.
 
 - Try editing README.md, committing, and pushing.  You'll see that the browser updates the contents of the file instantly.
 - Try copying a new JPEG image over `redwood.jpg`.  Commit and push.  The image will instantly update in the browser.
+- Try editing `script.js` so that the function defined in that file returns `i + 100`.  Commit and push.  The script's behavior will immediately update to reflect your change, and will start counting up by 100.
 
-If you push updates to `index.html` or `script.js`, you'll need to refresh the demo page in the browser to see your changes (but they will still have occurred instantly).
-
+If you push updates to `index.html`, you'll need to refresh the demo page in the browser to see your changes (but they will still have occurred instantly).
 

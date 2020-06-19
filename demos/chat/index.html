@@ -65,11 +65,6 @@
             <div id='my-address'></div>
             <br/>
             <div>
-                Log into a new address with a seed phrase:<br/>
-                <input id='input-mnemonic'/>&nbsp;
-                <button id='btn-login'>Go</button>
-                <br/>
-
                 Set your username:<br/>
                 <input id='input-username'/>&nbsp;
                 <button id='btn-set-username'>Set</button>
@@ -125,13 +120,6 @@
     }
     refreshIdentityUI()
 
-    var inputMnemonic = document.getElementById('input-mnemonic')
-    document.getElementById('btn-login').addEventListener('click', () => {
-        identity = Braid.identity.fromMnemonic(inputMnemonic.value)
-        refreshIdentityUI()
-    })
-
-
     //
     // Braid/sync9 setup
     //
@@ -150,8 +138,8 @@
             refreshDebugUI()
 
             // Update the chat UI
-            if (newState.talk0 && newState.talk0.messages) {
-                messages = newState.talk0.messages.value
+            if (newState && newState.messages) {
+                messages = newState.messages.value
             }
             refreshChatUI()
         }
@@ -167,7 +155,7 @@
     })
 
     braidClient.authorize().then(() => {
-        braidClient.subscribe('localhost:21231/chat', '/', [ Braid.utils.genesisTxID ], queue.defaultTxHandler)
+        braidClient.subscribe('chat.com/room-2837', '/', [ Braid.utils.genesisTxID ], queue.defaultTxHandler)
     })
 
 
@@ -183,11 +171,11 @@
             var msg = messages[i]
             var refAvailable
             if (msg.attachment) {
-                refAvailable = await available('/talk0/messages[' + i + ']/attachment?state_uri=localhost:21231/chat')
+                refAvailable = await available('/messages[' + i + ']/attachment?state_uri=chat.com/room-2837')
                 allRefsAvailable = allRefsAvailable && refAvailable
             }
             var sender = currentState && currentState.users && currentState.users[msg.sender]
-                ? currentState.users[msg.sender].name
+                ? currentState.users[msg.sender.toLowerCase()].name
                 : msg.sender.substr(0, 6)
             html += '<div class="message" style="background-color: ' + strToColor(msg.sender) + '">'
             html += '    <div><b>' + (sender || '') + ':</b> </div>'
@@ -195,7 +183,7 @@
             html += '        <div>' + msg.text + '</div>'
             if (msg.attachment) {
             if (refAvailable) {
-            html += '        <img src="/talk0/messages[' + i + ']/attachment?state_uri=localhost:21231/chat" />'
+            html += '        <img src="/messages[' + i + ']/attachment?state_uri=chat.com/room-2837" />'
             } else {
             refsStillLoading = true
             html += '        <div>(loading...)</div>'
@@ -310,9 +298,9 @@
         var tx = {
             id: Braid.utils.randomID(),
             parents: Object.keys(s9.leaves),
-            stateURI: 'localhost:21231/chat',
+            stateURI: 'chat.com/room-2837',
             patches: [
-                '.talk0.messages.value[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify([{
+                '.messages.value[' + messages.length + ':' + messages.length + '] = ' + JSON.stringify([{
                     attachment: attachment,
                     sender: identity.address.toLowerCase(),
                     text: inputText.value,
@@ -342,7 +330,7 @@
         var tx = {
             id: Braid.utils.randomID(),
             parents: Object.keys(s9.leaves),
-            stateURI: 'localhost:21231/chat',
+            stateURI: 'chat.com/room-2837',
             patches: [
                 '.users.' + identity.address.toLowerCase() + ' = ' + JSON.stringify({
                     name: inputUsername.value,

@@ -56,7 +56,7 @@ type HTTPRPCConfig struct {
 }
 
 var DefaultConfig = func() Config {
-	configRoot, err := ConfigRoot()
+	configRoot, err := DefaultConfigRoot()
 	if err != nil {
 		panic(err)
 	}
@@ -65,7 +65,7 @@ var DefaultConfig = func() Config {
 		panic(err)
 	}
 
-	dataRoot, err := dataRoot()
+	dataRoot, err := defaultDataRoot()
 	if err != nil {
 		panic(err)
 	}
@@ -109,7 +109,7 @@ var DefaultConfig = func() Config {
 	}
 }()
 
-func ConfigRoot() (root string, _ error) {
+func DefaultConfigRoot() (root string, _ error) {
 	configRoot, err := os.UserConfigDir()
 	if err != nil {
 		configRoot, err = os.Getwd()
@@ -121,10 +121,10 @@ func ConfigRoot() (root string, _ error) {
 	return configRoot, nil
 }
 
-func dataRoot() (string, error) {
+func defaultDataRoot() (string, error) {
 	switch runtime.GOOS {
 	case "windows", "darwin", "plan9":
-		configRoot, err := ConfigRoot()
+		configRoot, err := DefaultConfigRoot()
 		if err != nil {
 			return "", err
 		}
@@ -142,7 +142,7 @@ func dataRoot() (string, error) {
 func ReadConfigAtPath(configPath string) (*Config, error) {
 	if configPath == "" {
 		var err error
-		configPath, err = ConfigRoot()
+		configPath, err = DefaultConfigRoot()
 		if err != nil {
 			return nil, err
 		}
