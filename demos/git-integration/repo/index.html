@@ -117,7 +117,7 @@
 
     var braidClient = Braid.createPeer({
         identity: identity,
-        httpHost: 'http://localhost:21232',
+        httpHost: '',
         webrtc: true,
         onFoundPeersCallback: (peers) => {
             knownPeers = peers
@@ -170,7 +170,7 @@
 
         function renderDir(dir, keypath, currentIndent) {
             for (let filename of Object.keys(dir)) {
-                let pathParts = [].concat(['files'], keypath, [filename])
+                let pathParts = [].concat(keypath, [filename])
                 newHTML +=  `<div style="margin-left: ${currentIndent * 20}px">- <a href="/demo/${pathParts.join('/')}?state_uri=somegitprovider.org/gitdemo">${filename}</a></div>`
                 if (!isFile(dir[filename])) {
                     renderDir(dir[filename], [].concat(keypath, [filename]), currentIndent + 1)

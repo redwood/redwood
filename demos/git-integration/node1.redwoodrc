@@ -7,7 +7,7 @@ Node:
         DialAddresses:
           - /ip4/127.0.0.1/tcp/21241/p2p/16Uiu2HAmQi6fqAoBxjqSB6xZ8fsiN6YpDhn4W3crVVnQaGctBhsT
     SubscribedStateURIs:
-      - docs.redwood.dev/document-3192
+      - somegitprovider.org/gitdemo
     MaxPeersPerSubscription: 4
     DataRoot: ./node1_data
     DevMode: true
@@ -20,7 +20,7 @@ HTTPTransport:
     Enabled: true
     ListenHost: :8080
     CookieSecret: !!binary 72VgcebmbP16Usia9aAqq8LLr+7KBgE90A+aaqrZ3ug=
-    DefaultStateURI: docs.redwood.dev/document-3192
+    DefaultStateURI: somegitprovider.org/gitdemo
 HTTPRPC:
     Enabled: false
     ListenHost: :8081

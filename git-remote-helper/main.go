@@ -470,10 +470,10 @@ func pushRef(destRefName string, commitId *git.Oid, client redwood.HTTPClient) e
 	}
 
 	tx := &redwood.Tx{
-		ID:      types.RandomID(),
-		URL:     StateURI,
-		From:    sigkeys.Address(),
-		Parents: []types.ID{parentID},
+		ID:       types.RandomID(),
+		StateURI: StateURI,
+		From:     sigkeys.Address(),
+		Parents:  []types.ID{parentID},
 		Patches: []redwood.Patch{{
 			Keypath: branchKeypath.Push(tree.Keypath("HEAD")),
 			Val:     commitId.String(),
@@ -627,7 +627,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient
 
 		tx := &redwood.Tx{
 			ID:         commitID,
-			URL:        StateURI,
+			StateURI:   StateURI,
 			From:       sigkeys.Address(),
 			Parents:    parents,
 			Checkpoint: true,
