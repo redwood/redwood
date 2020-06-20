@@ -12,7 +12,7 @@ module.exports = function (opts) {
             const headers = {
                 'State-URI': stateURI,
                 'Accept':    'application/json',
-                'Subscribe': 'keep-alive',
+                'Subscribe': 'transactions',
             }
             if (parents && parents.length > 0) {
                 headers['Parents'] = parents.join(',')
@@ -26,7 +26,41 @@ module.exports = function (opts) {
                 onTxReceived('http transport: fetch failed')
                 return
             }
-            const reader = resp.body.getReader()
+            readSubscription(resp.body.getReader(), onTxReceived)
+
+        } catch (err) {
+            onTxReceived('http transport: ' + err)
+            return
+        }
+    }
+
+    async function subscribeStates(stateURI, keypath, onStateReceived) {
+        try {
+            const headers = {
+                'State-URI': stateURI,
+                'Keypath':   keypath,
+                'Accept':    'application/json',
+                'Subscribe': 'states',
+            }
+
+            const resp = await wrappedFetch('/', {
+                method: 'GET',
+                headers,
+            })
+            if (!resp.ok) {
+                onStateReceived('http transport: fetch failed')
+                return
+            }
+            readSubscription(resp.body.getReader(), onStateReceived)
+
+        } catch (err) {
+            onStateReceived('http transport: ' + err)
+            return
+        }
+    }
+
+    async function readSubscription(reader, callback) {
+        try {
             const decoder = new TextDecoder('utf-8')
             let buffer = ''
 
@@ -48,10 +82,10 @@ module.exports = function (opts) {
                             payload = JSON.parse(payloadStr)
                         } catch (err) {
                             console.error('Error parsing JSON:', payloadStr)
-                            onTxReceived('http transport: ' + err)
+                            callback('http transport: ' + err)
                             return
                         }
-                        onTxReceived(null, payload)
+                        callback(null, payload)
                     }
                     buffer = buffer.substring(idx+1)
                 }
@@ -60,7 +94,7 @@ module.exports = function (opts) {
             read()
 
         } catch (err) {
-            onTxReceived('http transport: ' + err)
+            callback('http transport: ' + err)
             return
         }
     }
@@ -213,6 +247,7 @@ module.exports = function (opts) {
         transportName:   () => 'http',
         altSvcAddresses: () => [],
         subscribe,
+        subscribeStates,
         get,
         put,
         storeRef,

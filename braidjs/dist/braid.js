@@ -161,292 +161,271 @@ function createPeer(opts) {
     return _subscribe.apply(this, arguments);
   }
 
-  function get(_x5) {
+  function subscribeStates(_x5, _x6, _x7) {
+    return _subscribeStates.apply(this, arguments);
+  }
+
+  function _subscribeStates() {
+    _subscribeStates = _asyncToGenerator(
+    /*#__PURE__*/
+    regeneratorRuntime.mark(function _callee3(stateURI, keypath, onStateReceived) {
+      var _iteratorNormalCompletion2, _didIteratorError2, _iteratorError2, _iterator2, _step2, tpt;
+
+      return regeneratorRuntime.wrap(function _callee3$(_context3) {
+        while (1) {
+          switch (_context3.prev = _context3.next) {
+            case 0:
+              _iteratorNormalCompletion2 = true;
+              _didIteratorError2 = false;
+              _iteratorError2 = undefined;
+              _context3.prev = 3;
+
+              for (_iterator2 = transports[Symbol.iterator](); !(_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done); _iteratorNormalCompletion2 = true) {
+                tpt = _step2.value;
+
+                if (tpt.subscribeStates) {
+                  tpt.subscribeStates(stateURI, keypath, onStateReceived);
+                }
+              }
+
+              _context3.next = 11;
+              break;
+
+            case 7:
+              _context3.prev = 7;
+              _context3.t0 = _context3["catch"](3);
+              _didIteratorError2 = true;
+              _iteratorError2 = _context3.t0;
+
+            case 11:
+              _context3.prev = 11;
+              _context3.prev = 12;
+
+              if (!_iteratorNormalCompletion2 && _iterator2["return"] != null) {
+                _iterator2["return"]();
+              }
+
+            case 14:
+              _context3.prev = 14;
+
+              if (!_didIteratorError2) {
+                _context3.next = 17;
+                break;
+              }
+
+              throw _iteratorError2;
+
+            case 17:
+              return _context3.finish(14);
+
+            case 18:
+              return _context3.finish(11);
+
+            case 19:
+            case "end":
+              return _context3.stop();
+          }
+        }
+      }, _callee3, null, [[3, 7, 11, 19], [12,, 14, 18]]);
+    }));
+    return _subscribeStates.apply(this, arguments);
+  }
+
+  function get(_x8) {
     return _get.apply(this, arguments);
   }
 
   function _get() {
     _get = _asyncToGenerator(
     /*#__PURE__*/
-    regeneratorRuntime.mark(function _callee3(_ref) {
-      var stateURI, keypath, raw, _iteratorNormalCompletion2, _didIteratorError2, _iteratorError2, _iterator2, _step2, tpt;
+    regeneratorRuntime.mark(function _callee4(_ref) {
+      var stateURI, keypath, raw, _iteratorNormalCompletion3, _didIteratorError3, _iteratorError3, _iterator3, _step3, tpt;
 
-      return regeneratorRuntime.wrap(function _callee3$(_context3) {
+      return regeneratorRuntime.wrap(function _callee4$(_context4) {
         while (1) {
-          switch (_context3.prev = _context3.next) {
+          switch (_context4.prev = _context4.next) {
             case 0:
               stateURI = _ref.stateURI, keypath = _ref.keypath, raw = _ref.raw;
-              _iteratorNormalCompletion2 = true;
-              _didIteratorError2 = false;
-              _iteratorError2 = undefined;
-              _context3.prev = 4;
-              _iterator2 = transports[Symbol.iterator]();
+              _iteratorNormalCompletion3 = true;
+              _didIteratorError3 = false;
+              _iteratorError3 = undefined;
+              _context4.prev = 4;
+              _iterator3 = transports[Symbol.iterator]();
 
             case 6:
-              if (_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done) {
-                _context3.next = 13;
+              if (_iteratorNormalCompletion3 = (_step3 = _iterator3.next()).done) {
+                _context4.next = 13;
                 break;
               }
 
-              tpt = _step2.value;
+              tpt = _step3.value;
 
               if (!tpt.get) {
-                _context3.next = 10;
+                _context4.next = 10;
                 break;
               }
 
-              return _context3.abrupt("return", tpt.get({
+              return _context4.abrupt("return", tpt.get({
                 stateURI: stateURI,
                 keypath: keypath,
                 raw: raw
               }));
 
             case 10:
-              _iteratorNormalCompletion2 = true;
-              _context3.next = 6;
+              _iteratorNormalCompletion3 = true;
+              _context4.next = 6;
               break;
 
             case 13:
-              _context3.next = 19;
+              _context4.next = 19;
               break;
 
             case 15:
-              _context3.prev = 15;
-              _context3.t0 = _context3["catch"](4);
-              _didIteratorError2 = true;
-              _iteratorError2 = _context3.t0;
+              _context4.prev = 15;
+              _context4.t0 = _context4["catch"](4);
+              _didIteratorError3 = true;
+              _iteratorError3 = _context4.t0;
 
             case 19:
-              _context3.prev = 19;
-              _context3.prev = 20;
+              _context4.prev = 19;
+              _context4.prev = 20;
 
-              if (!_iteratorNormalCompletion2 && _iterator2["return"] != null) {
-                _iterator2["return"]();
+              if (!_iteratorNormalCompletion3 && _iterator3["return"] != null) {
+                _iterator3["return"]();
               }
 
             case 22:
-              _context3.prev = 22;
+              _context4.prev = 22;
 
-              if (!_didIteratorError2) {
-                _context3.next = 25;
+              if (!_didIteratorError3) {
+                _context4.next = 25;
                 break;
               }
 
-              throw _iteratorError2;
+              throw _iteratorError3;
 
             case 25:
-              return _context3.finish(22);
+              return _context4.finish(22);
 
             case 26:
-              return _context3.finish(19);
+              return _context4.finish(19);
 
             case 27:
             case "end":
-              return _context3.stop();
+              return _context4.stop();
           }
         }
-      }, _callee3, null, [[4, 15, 19, 27], [20,, 22, 26]]);
+      }, _callee4, null, [[4, 15, 19, 27], [20,, 22, 26]]);
     }));
     return _get.apply(this, arguments);
   }
 
-  function put(_x6) {
+  function put(_x9) {
     return _put.apply(this, arguments);
   }
 
   function _put() {
     _put = _asyncToGenerator(
     /*#__PURE__*/
-    regeneratorRuntime.mark(function _callee4(tx) {
-      var _iteratorNormalCompletion3, _didIteratorError3, _iteratorError3, _iterator3, _step3, tpt;
+    regeneratorRuntime.mark(function _callee5(tx) {
+      var _iteratorNormalCompletion4, _didIteratorError4, _iteratorError4, _iterator4, _step4, tpt;
 
-      return regeneratorRuntime.wrap(function _callee4$(_context4) {
+      return regeneratorRuntime.wrap(function _callee5$(_context5) {
         while (1) {
-          switch (_context4.prev = _context4.next) {
+          switch (_context5.prev = _context5.next) {
             case 0:
               tx.from = identity.address;
               tx.sig = identity.signTx(tx);
-              _iteratorNormalCompletion3 = true;
-              _didIteratorError3 = false;
-              _iteratorError3 = undefined;
-              _context4.prev = 5;
-              _iterator3 = transports[Symbol.iterator]();
+              _iteratorNormalCompletion4 = true;
+              _didIteratorError4 = false;
+              _iteratorError4 = undefined;
+              _context5.prev = 5;
+              _iterator4 = transports[Symbol.iterator]();
 
             case 7:
-              if (_iteratorNormalCompletion3 = (_step3 = _iterator3.next()).done) {
-                _context4.next = 21;
+              if (_iteratorNormalCompletion4 = (_step4 = _iterator4.next()).done) {
+                _context5.next = 21;
                 break;
               }
 
-              tpt = _step3.value;
+              tpt = _step4.value;
 
               if (!tpt.put) {
-                _context4.next = 18;
+                _context5.next = 18;
                 break;
               }
 
-              _context4.prev = 10;
-              _context4.next = 13;
+              _context5.prev = 10;
+              _context5.next = 13;
               return tpt.put(tx);
 
             case 13:
-              _context4.next = 18;
+              _context5.next = 18;
               break;
 
             case 15:
-              _context4.prev = 15;
-              _context4.t0 = _context4["catch"](10);
-              console.error('error PUTting to peer ~>', _context4.t0);
+              _context5.prev = 15;
+              _context5.t0 = _context5["catch"](10);
+              console.error('error PUTting to peer ~>', _context5.t0);
 
             case 18:
-              _iteratorNormalCompletion3 = true;
-              _context4.next = 7;
+              _iteratorNormalCompletion4 = true;
+              _context5.next = 7;
               break;
 
             case 21:
-              _context4.next = 27;
+              _context5.next = 27;
               break;
 
             case 23:
-              _context4.prev = 23;
-              _context4.t1 = _context4["catch"](5);
-              _didIteratorError3 = true;
-              _iteratorError3 = _context4.t1;
+              _context5.prev = 23;
+              _context5.t1 = _context5["catch"](5);
+              _didIteratorError4 = true;
+              _iteratorError4 = _context5.t1;
 
             case 27:
-              _context4.prev = 27;
-              _context4.prev = 28;
+              _context5.prev = 27;
+              _context5.prev = 28;
 
-              if (!_iteratorNormalCompletion3 && _iterator3["return"] != null) {
-                _iterator3["return"]();
+              if (!_iteratorNormalCompletion4 && _iterator4["return"] != null) {
+                _iterator4["return"]();
               }
 
             case 30:
-              _context4.prev = 30;
+              _context5.prev = 30;
 
-              if (!_didIteratorError3) {
-                _context4.next = 33;
+              if (!_didIteratorError4) {
+                _context5.next = 33;
                 break;
               }
 
-              throw _iteratorError3;
+              throw _iteratorError4;
 
             case 33:
-              return _context4.finish(30);
+              return _context5.finish(30);
 
             case 34:
-              return _context4.finish(27);
+              return _context5.finish(27);
 
             case 35:
             case "end":
-              return _context4.stop();
+              return _context5.stop();
           }
         }
-      }, _callee4, null, [[5, 23, 27, 35], [10, 15], [28,, 30, 34]]);
+      }, _callee5, null, [[5, 23, 27, 35], [10, 15], [28,, 30, 34]]);
     }));
     return _put.apply(this, arguments);
   }
 
-  function storeRef(_x7) {
+  function storeRef(_x10) {
     return _storeRef.apply(this, arguments);
   }
 
   function _storeRef() {
     _storeRef = _asyncToGenerator(
     /*#__PURE__*/
-    regeneratorRuntime.mark(function _callee5(file) {
-      var hash, _iteratorNormalCompletion4, _didIteratorError4, _iteratorError4, _iterator4, _step4, tpt;
-
-      return regeneratorRuntime.wrap(function _callee5$(_context5) {
-        while (1) {
-          switch (_context5.prev = _context5.next) {
-            case 0:
-              _iteratorNormalCompletion4 = true;
-              _didIteratorError4 = false;
-              _iteratorError4 = undefined;
-              _context5.prev = 3;
-              _iterator4 = transports[Symbol.iterator]();
-
-            case 5:
-              if (_iteratorNormalCompletion4 = (_step4 = _iterator4.next()).done) {
-                _context5.next = 14;
-                break;
-              }
-
-              tpt = _step4.value;
-
-              if (!tpt.storeRef) {
-                _context5.next = 11;
-                break;
-              }
-
-              _context5.next = 10;
-              return tpt.storeRef(file);
-
-            case 10:
-              hash = _context5.sent;
-
-            case 11:
-              _iteratorNormalCompletion4 = true;
-              _context5.next = 5;
-              break;
-
-            case 14:
-              _context5.next = 20;
-              break;
-
-            case 16:
-              _context5.prev = 16;
-              _context5.t0 = _context5["catch"](3);
-              _didIteratorError4 = true;
-              _iteratorError4 = _context5.t0;
-
-            case 20:
-              _context5.prev = 20;
-              _context5.prev = 21;
-
-              if (!_iteratorNormalCompletion4 && _iterator4["return"] != null) {
-                _iterator4["return"]();
-              }
-
-            case 23:
-              _context5.prev = 23;
-
-              if (!_didIteratorError4) {
-                _context5.next = 26;
-                break;
-              }
-
-              throw _iteratorError4;
-
-            case 26:
-              return _context5.finish(23);
-
-            case 27:
-              return _context5.finish(20);
-
-            case 28:
-              return _context5.abrupt("return", hash);
-
-            case 29:
-            case "end":
-              return _context5.stop();
-          }
-        }
-      }, _callee5, null, [[3, 16, 20, 28], [21,, 23, 27]]);
-    }));
-    return _storeRef.apply(this, arguments);
-  }
-
-  function authorize() {
-    return _authorize.apply(this, arguments);
-  }
-
-  function _authorize() {
-    _authorize = _asyncToGenerator(
-    /*#__PURE__*/
-    regeneratorRuntime.mark(function _callee6() {
-      var _iteratorNormalCompletion5, _didIteratorError5, _iteratorError5, _iterator5, _step5, tpt;
+    regeneratorRuntime.mark(function _callee6(file) {
+      var hash, _iteratorNormalCompletion5, _didIteratorError5, _iteratorError5, _iterator5, _step5, tpt;
 
       return regeneratorRuntime.wrap(function _callee6$(_context6) {
         while (1) {
@@ -460,65 +439,156 @@ function createPeer(opts) {
 
             case 5:
               if (_iteratorNormalCompletion5 = (_step5 = _iterator5.next()).done) {
-                _context6.next = 13;
+                _context6.next = 14;
                 break;
               }
 
               tpt = _step5.value;
 
-              if (!tpt.authorize) {
-                _context6.next = 10;
+              if (!tpt.storeRef) {
+                _context6.next = 11;
                 break;
               }
 
               _context6.next = 10;
-              return tpt.authorize(identity);
+              return tpt.storeRef(file);
 
             case 10:
+              hash = _context6.sent;
+
+            case 11:
               _iteratorNormalCompletion5 = true;
               _context6.next = 5;
               break;
 
-            case 13:
-              _context6.next = 19;
+            case 14:
+              _context6.next = 20;
               break;
 
-            case 15:
-              _context6.prev = 15;
+            case 16:
+              _context6.prev = 16;
               _context6.t0 = _context6["catch"](3);
               _didIteratorError5 = true;
               _iteratorError5 = _context6.t0;
 
-            case 19:
-              _context6.prev = 19;
+            case 20:
               _context6.prev = 20;
+              _context6.prev = 21;
 
               if (!_iteratorNormalCompletion5 && _iterator5["return"] != null) {
                 _iterator5["return"]();
               }
 
-            case 22:
-              _context6.prev = 22;
+            case 23:
+              _context6.prev = 23;
 
               if (!_didIteratorError5) {
-                _context6.next = 25;
+                _context6.next = 26;
                 break;
               }
 
               throw _iteratorError5;
 
-            case 25:
-              return _context6.finish(22);
-
             case 26:
-              return _context6.finish(19);
+              return _context6.finish(23);
 
             case 27:
+              return _context6.finish(20);
+
+            case 28:
+              return _context6.abrupt("return", hash);
+
+            case 29:
             case "end":
               return _context6.stop();
           }
         }
-      }, _callee6, null, [[3, 15, 19, 27], [20,, 22, 26]]);
+      }, _callee6, null, [[3, 16, 20, 28], [21,, 23, 27]]);
+    }));
+    return _storeRef.apply(this, arguments);
+  }
+
+  function authorize() {
+    return _authorize.apply(this, arguments);
+  }
+
+  function _authorize() {
+    _authorize = _asyncToGenerator(
+    /*#__PURE__*/
+    regeneratorRuntime.mark(function _callee7() {
+      var _iteratorNormalCompletion6, _didIteratorError6, _iteratorError6, _iterator6, _step6, tpt;
+
+      return regeneratorRuntime.wrap(function _callee7$(_context7) {
+        while (1) {
+          switch (_context7.prev = _context7.next) {
+            case 0:
+              _iteratorNormalCompletion6 = true;
+              _didIteratorError6 = false;
+              _iteratorError6 = undefined;
+              _context7.prev = 3;
+              _iterator6 = transports[Symbol.iterator]();
+
+            case 5:
+              if (_iteratorNormalCompletion6 = (_step6 = _iterator6.next()).done) {
+                _context7.next = 13;
+                break;
+              }
+
+              tpt = _step6.value;
+
+              if (!tpt.authorize) {
+                _context7.next = 10;
+                break;
+              }
+
+              _context7.next = 10;
+              return tpt.authorize(identity);
+
+            case 10:
+              _iteratorNormalCompletion6 = true;
+              _context7.next = 5;
+              break;
+
+            case 13:
+              _context7.next = 19;
+              break;
+
+            case 15:
+              _context7.prev = 15;
+              _context7.t0 = _context7["catch"](3);
+              _didIteratorError6 = true;
+              _iteratorError6 = _context7.t0;
+
+            case 19:
+              _context7.prev = 19;
+              _context7.prev = 20;
+
+              if (!_iteratorNormalCompletion6 && _iterator6["return"] != null) {
+                _iterator6["return"]();
+              }
+
+            case 22:
+              _context7.prev = 22;
+
+              if (!_didIteratorError6) {
+                _context7.next = 25;
+                break;
+              }
+
+              throw _iteratorError6;
+
+            case 25:
+              return _context7.finish(22);
+
+            case 26:
+              return _context7.finish(19);
+
+            case 27:
+            case "end":
+              return _context7.stop();
+          }
+        }
+      }, _callee7, null, [[3, 15, 19, 27], [20,, 22, 26]]);
     }));
     return _authorize.apply(this, arguments);
   }
@@ -526,6 +596,7 @@ function createPeer(opts) {
   return {
     get: get,
     subscribe: subscribe,
+    subscribeStates: subscribeStates,
     put: put,
     storeRef: storeRef,
     authorize: authorize,
@@ -549,7 +620,7 @@ module.exports = function (opts) {
             const headers = {
                 'State-URI': stateURI,
                 'Accept':    'application/json',
-                'Subscribe': 'keep-alive',
+                'Subscribe': 'transactions',
             }
             if (parents && parents.length > 0) {
                 headers['Parents'] = parents.join(',')
@@ -563,7 +634,41 @@ module.exports = function (opts) {
                 onTxReceived('http transport: fetch failed')
                 return
             }
-            const reader = resp.body.getReader()
+            readSubscription(resp.body.getReader(), onTxReceived)
+
+        } catch (err) {
+            onTxReceived('http transport: ' + err)
+            return
+        }
+    }
+
+    async function subscribeStates(stateURI, keypath, onStateReceived) {
+        try {
+            const headers = {
+                'State-URI': stateURI,
+                'Keypath':   keypath,
+                'Accept':    'application/json',
+                'Subscribe': 'states',
+            }
+
+            const resp = await wrappedFetch('/', {
+                method: 'GET',
+                headers,
+            })
+            if (!resp.ok) {
+                onStateReceived('http transport: fetch failed')
+                return
+            }
+            readSubscription(resp.body.getReader(), onStateReceived)
+
+        } catch (err) {
+            onStateReceived('http transport: ' + err)
+            return
+        }
+    }
+
+    async function readSubscription(reader, callback) {
+        try {
             const decoder = new TextDecoder('utf-8')
             let buffer = ''
 
@@ -585,10 +690,10 @@ module.exports = function (opts) {
                             payload = JSON.parse(payloadStr)
                         } catch (err) {
                             console.error('Error parsing JSON:', payloadStr)
-                            onTxReceived('http transport: ' + err)
+                            callback('http transport: ' + err)
                             return
                         }
-                        onTxReceived(null, payload)
+                        callback(null, payload)
                     }
                     buffer = buffer.substring(idx+1)
                 }
@@ -597,7 +702,7 @@ module.exports = function (opts) {
             read()
 
         } catch (err) {
-            onTxReceived('http transport: ' + err)
+            callback('http transport: ' + err)
             return
         }
     }
@@ -750,6 +855,7 @@ module.exports = function (opts) {
         transportName:   () => 'http',
         altSvcAddresses: () => [],
         subscribe,
+        subscribeStates,
         get,
         put,
         storeRef,
@@ -13636,6 +13742,7 @@ module.exports = {
     hashTx,
     serializeTx,
     randomID,
+    privateTxRootForRecipients,
     stringToHex,
     randomString,
     hexToUint8Array,
@@ -13719,6 +13826,12 @@ function serializeTx(tx) {
     txHex += stringToHex(tx.stateURI)
     tx.patches.forEach(patch => txHex += stringToHex(patch))
     return txHex
+}
+
+function privateTxRootForRecipients(recipients) {
+    return 'private-' + ethers.utils.keccak256(
+        Buffer.concat( recipients.sort().map(r => Buffer.from(r, 'hex')) )
+    ).toString('hex')
 }
 
 function randomID() {

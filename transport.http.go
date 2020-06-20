@@ -355,13 +355,22 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 		chDone:   make(chan struct{}),
 	}
 
+	subscriptionType := r.Header.Get("Subscribe")
+	keypath := r.Header.Get("Keypath")
+
 	// Listen to the closing of the http connection via the CloseNotifier
 	notify := w.(http.CloseNotifier).CloseNotify()
 	go func() {
 		<-notify
 		peer.Close()
 		t.Infof(0, "http connection closed")
-		t.host.HandleIncomingSubscriptionClosed(stateURI, peer)
+
+		switch subscriptionType {
+		case "transactions":
+			t.host.HandleIncomingTxSubscriptionClosed(stateURI, peer)
+		case "states":
+			t.host.HandleIncomingStateSubscriptionClosed(stateURI, tree.Keypath(keypath), peer)
+		}
 	}()
 
 	f.Flush()
@@ -396,7 +405,17 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	t.host.HandleIncomingSubscription(stateURI, peer)
+	switch subscriptionType {
+	case "transactions":
+		t.host.HandleIncomingTxSubscription(stateURI, peer)
+
+	case "states":
+		t.host.HandleIncomingStateSubscription(stateURI, tree.Keypath(keypath), peer)
+
+	default:
+		http.Error(w, "unknown subscription type", http.StatusBadRequest)
+		return
+	}
 
 	// Block until the subscription is canceled so that net/http doesn't close the connection
 	<-peer.chDone
@@ -1152,6 +1171,10 @@ func (p *httpPeer) PutPrivate(encPut EncryptedTx) (err error) {
 	return nil
 }
 
+func (p *httpPeer) PutState(state tree.Node) error {
+	panic("unimplemented")
+}
+
 func (p *httpPeer) Ack(txID types.ID) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
@@ -1266,6 +1289,31 @@ func (peer *httpTxSubscriptionServer) Put(tx Tx) (err error) {
 
 	// This peer is subscribed, so we have a connection open already
 	bs, err := json.Marshal(tx)
+	if err != nil {
+		return err
+	}
+
+	// This is encoded using HTTP's SSE format
+	event := []byte("data: " + string(bs) + "\n\n")
+
+	n, err := peer.Write(event)
+	if err != nil {
+		return err
+	} else if n < len(event) {
+		return errors.New("didn't write enough")
+	}
+
+	if peer.Flusher != nil {
+		peer.Flusher.Flush()
+	}
+	return nil
+}
+
+func (peer *httpTxSubscriptionServer) PutState(state tree.Node) (err error) {
+	defer func() { peer.UpdateConnStats(err == nil) }()
+
+	// This peer is subscribed, so we have a connection open already
+	bs, err := json.Marshal(state)
 	if err != nil {
 		return err
 	}

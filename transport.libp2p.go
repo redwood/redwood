@@ -27,6 +27,7 @@ import (
 	multihash "github.com/multiformats/go-multihash"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/tree"
 	"github.com/brynbellomy/redwood/types"
 )
 
@@ -179,7 +180,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			return
 		}
 
-		t.host.HandleIncomingSubscription(stateURI, peer)
+		t.host.HandleIncomingTxSubscription(stateURI, peer)
 
 	case MsgType_Put:
 		defer peer.CloseConn()
@@ -665,6 +666,11 @@ func (p *libp2pPeer) Put(tx Tx) error {
 
 func (p *libp2pPeer) PutPrivate(tx EncryptedTx) error {
 	return p.writeMsg(Msg{Type: MsgType_Private, Payload: tx})
+}
+
+func (p *libp2pPeer) PutState(state tree.Node) error {
+	panic("unimplemented")
+	return nil
 }
 
 func (p *libp2pPeer) Ack(txID types.ID) error {

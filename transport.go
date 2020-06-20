@@ -6,6 +6,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/tree"
 	"github.com/brynbellomy/redwood/types"
 )
 
@@ -34,6 +35,9 @@ type Peer interface {
 	Put(tx Tx) error
 	PutPrivate(tx EncryptedTx) error
 	Ack(txID types.ID) error
+
+	// State subscriptions
+	PutState(state tree.Node) error
 
 	// Identity/authentication
 	ChallengeIdentity(challengeMsg types.ChallengeMsg) error

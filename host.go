@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/tree"
 	"github.com/brynbellomy/redwood/types"
 )
 
@@ -32,8 +33,10 @@ type Host interface {
 	ForEachProviderOfStateURI(ctx context.Context, stateURI string) <-chan Peer
 
 	HandleFetchHistoryRequest(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error
-	HandleIncomingSubscription(stateURI string, peer Peer)
-	HandleIncomingSubscriptionClosed(stateURI string, peer Peer)
+	HandleIncomingTxSubscription(stateURI string, peer Peer)
+	HandleIncomingTxSubscriptionClosed(stateURI string, peer Peer)
+	HandleIncomingStateSubscription(stateURI string, keypath tree.Keypath, peer Peer)
+	HandleIncomingStateSubscriptionClosed(stateURI string, keypath tree.Keypath, peer Peer)
 	HandleTxReceived(tx Tx, peer Peer)
 	HandlePrivateTxReceived(encryptedTx EncryptedTx, peer Peer)
 	HandleAckReceived(txID types.ID, peer Peer)
@@ -51,12 +54,14 @@ type host struct {
 	signingKeypair    *SigningKeypair
 	encryptingKeypair *EncryptingKeypair
 
-	subscriptionsOut   map[string]*txMultiSub // map[stateURI]
-	subscriptionsOutMu sync.RWMutex
-	subscriptionsIn    map[string]map[Peer]struct{} // map[stateURI]
-	subscriptionsInMu  sync.RWMutex
-	peerSeenTxs        map[PeerDialInfo]map[types.ID]bool
-	peerSeenTxsMu      sync.RWMutex
+	txSubscriptionsOut     map[string]*txMultiSub // map[stateURI]
+	txSubscriptionsOutMu   sync.RWMutex
+	txSubscriptionsIn      map[string]map[Peer]struct{} // map[stateURI]
+	txSubscriptionsInMu    sync.RWMutex
+	stateSubscriptionsIn   map[string]map[string]map[Peer]struct{} // map[stateURI]map[keypath]
+	stateSubscriptionsInMu sync.RWMutex
+	peerSeenTxs            map[PeerDialInfo]map[types.ID]bool
+	peerSeenTxsMu          sync.RWMutex
 
 	peerStore PeerStore
 	refStore  RefStore
@@ -84,18 +89,19 @@ func NewHost(
 		transportsMap[tpt.Name()] = tpt
 	}
 	h := &host{
-		Context:           &ctx.Context{},
-		transports:        transportsMap,
-		ControllerHub:     controllerHub,
-		signingKeypair:    signingKeypair,
-		encryptingKeypair: encryptingKeypair,
-		subscriptionsOut:  make(map[string]*txMultiSub),
-		subscriptionsIn:   make(map[string]map[Peer]struct{}),
-		peerSeenTxs:       make(map[PeerDialInfo]map[types.ID]bool),
-		peerStore:         peerStore,
-		refStore:          refStore,
-		chRefsNeeded:      make(chan []types.RefID, 100),
-		config:            config,
+		Context:              &ctx.Context{},
+		transports:           transportsMap,
+		ControllerHub:        controllerHub,
+		signingKeypair:       signingKeypair,
+		encryptingKeypair:    encryptingKeypair,
+		txSubscriptionsOut:   make(map[string]*txMultiSub),
+		txSubscriptionsIn:    make(map[string]map[Peer]struct{}),
+		stateSubscriptionsIn: make(map[string]map[string]map[Peer]struct{}),
+		peerSeenTxs:          make(map[PeerDialInfo]map[types.ID]bool),
+		peerStore:            peerStore,
+		refStore:             refStore,
+		chRefsNeeded:         make(chan []types.RefID, 100),
+		config:               config,
 	}
 	return h, nil
 }
@@ -424,29 +430,58 @@ func (h *host) HandleFetchHistoryRequest(stateURI string, parents []types.ID, to
 	return nil
 }
 
-func (h *host) HandleIncomingSubscription(stateURI string, peer Peer) {
-	h.subscriptionsInMu.Lock()
-	defer h.subscriptionsInMu.Unlock()
+func (h *host) HandleIncomingTxSubscription(stateURI string, peer Peer) {
+	h.txSubscriptionsInMu.Lock()
+	defer h.txSubscriptionsInMu.Unlock()
 
-	if _, exists := h.subscriptionsIn[stateURI]; !exists {
-		h.subscriptionsIn[stateURI] = make(map[Peer]struct{})
+	if _, exists := h.txSubscriptionsIn[stateURI]; !exists {
+		h.txSubscriptionsIn[stateURI] = make(map[Peer]struct{})
 	}
 
-	h.subscriptionsIn[stateURI][peer] = struct{}{}
+	h.txSubscriptionsIn[stateURI][peer] = struct{}{}
 }
 
-func (h *host) HandleIncomingSubscriptionClosed(stateURI string, peer Peer) {
-	h.subscriptionsInMu.Lock()
-	defer h.subscriptionsInMu.Unlock()
+func (h *host) HandleIncomingTxSubscriptionClosed(stateURI string, peer Peer) {
+	h.txSubscriptionsInMu.Lock()
+	defer h.txSubscriptionsInMu.Unlock()
 
-	if _, exists := h.subscriptionsIn[stateURI]; exists {
-		delete(h.subscriptionsIn[stateURI], peer)
+	if _, exists := h.txSubscriptionsIn[stateURI]; exists {
+		delete(h.txSubscriptionsIn[stateURI], peer)
+	}
+}
+
+func (h *host) HandleIncomingStateSubscription(stateURI string, keypath tree.Keypath, peer Peer) {
+	h.stateSubscriptionsInMu.Lock()
+	defer h.stateSubscriptionsInMu.Unlock()
+
+	if keypath.Equals(tree.KeypathSeparator) {
+		keypath = nil
+	}
+
+	if _, exists := h.stateSubscriptionsIn[stateURI]; !exists {
+		h.stateSubscriptionsIn[stateURI] = make(map[string]map[Peer]struct{})
+	}
+	if _, exists := h.stateSubscriptionsIn[stateURI][string(keypath)]; !exists {
+		h.stateSubscriptionsIn[stateURI][string(keypath)] = make(map[Peer]struct{})
+	}
+
+	h.stateSubscriptionsIn[stateURI][string(keypath)][peer] = struct{}{}
+}
+
+func (h *host) HandleIncomingStateSubscriptionClosed(stateURI string, keypath tree.Keypath, peer Peer) {
+	h.stateSubscriptionsInMu.Lock()
+	defer h.stateSubscriptionsInMu.Unlock()
+
+	if _, exists := h.stateSubscriptionsIn[stateURI]; exists {
+		if _, exists := h.stateSubscriptionsIn[stateURI][string(keypath)]; exists {
+			delete(h.stateSubscriptionsIn[stateURI][string(keypath)], peer)
+		}
 	}
 }
 
 func (h *host) Subscribe(ctx context.Context, stateURI string) error {
-	h.subscriptionsOutMu.Lock()
-	defer h.subscriptionsOutMu.Unlock()
+	h.txSubscriptionsOutMu.Lock()
+	defer h.txSubscriptionsOutMu.Unlock()
 
 	h.config.Update(func() error {
 		set := NewStringSet(h.config.Node.SubscribedStateURIs)
@@ -455,20 +490,20 @@ func (h *host) Subscribe(ctx context.Context, stateURI string) error {
 		return nil
 	})
 
-	if _, exists := h.subscriptionsOut[stateURI]; exists {
+	if _, exists := h.txSubscriptionsOut[stateURI]; exists {
 		return errors.New("already subscribed to that state URI")
 	}
 
 	multiSub := newTxMultiSub(stateURI, 4, h, h.peerStore)
 	multiSub.Start()
-	h.subscriptionsOut[stateURI] = multiSub
+	h.txSubscriptionsOut[stateURI] = multiSub
 
 	go func() {
 		select {
 		case <-multiSub.chStop:
-			h.subscriptionsOutMu.Lock()
-			defer h.subscriptionsOutMu.Unlock()
-			delete(h.subscriptionsOut, stateURI)
+			h.txSubscriptionsOutMu.Lock()
+			defer h.txSubscriptionsOutMu.Unlock()
+			delete(h.txSubscriptionsOut, stateURI)
 		}
 	}()
 
@@ -666,7 +701,7 @@ func (h *host) broadcastPrivateTxToRecipient(ctx context.Context, txID types.ID,
 	return nil
 }
 
-func (h *host) broadcastTx(ctx context.Context, tx *Tx) error {
+func (h *host) broadcastTx(ctx context.Context, tx *Tx, wg *sync.WaitGroup) error {
 	if len(tx.Sig) == 0 {
 		return errors.WithStack(ErrUnsignedTx)
 	}
@@ -677,7 +712,6 @@ func (h *host) broadcastTx(ctx context.Context, tx *Tx) error {
 			return errors.WithStack(err)
 		}
 
-		var wg sync.WaitGroup
 		for _, recipientAddr := range tx.Recipients {
 			if recipientAddr == h.Address() {
 				continue
@@ -696,10 +730,8 @@ func (h *host) broadcastTx(ctx context.Context, tx *Tx) error {
 		wg.Wait()
 
 	} else {
-		var wg sync.WaitGroup
-		h.broadcastTxToSubscribedPeers(ctx, tx, &wg)
-		h.broadcastTxToStateURIProviders(ctx, tx, &wg)
-		wg.Wait()
+		h.broadcastTxToSubscribedPeers(ctx, tx, wg)
+		h.broadcastTxToStateURIProviders(ctx, tx, wg)
 	}
 	return nil
 }
@@ -763,10 +795,10 @@ func (h *host) broadcastTxToSubscribedPeers(ctx context.Context, tx *Tx, wg *syn
 	wg.Add(1)
 	defer wg.Done()
 
-	h.subscriptionsInMu.RLock()
-	defer h.subscriptionsInMu.RUnlock()
+	h.txSubscriptionsInMu.RLock()
+	defer h.txSubscriptionsInMu.RUnlock()
 
-	for peer := range h.subscriptionsIn[tx.StateURI] {
+	for peer := range h.txSubscriptionsIn[tx.StateURI] {
 		h.Debugf("rebroadcasting %v to %v", tx.ID.Pretty(), peer.ReachableAt().Slice())
 		if h.txSeenByPeer(peer, tx.ID) {
 			h.Debugf("tx already seen by peer %v %v", peer.Transport().Name(), peer.Address())
@@ -782,14 +814,14 @@ func (h *host) broadcastTxToSubscribedPeers(ctx context.Context, tx *Tx, wg *syn
 			err := peer.EnsureConnected(ctx)
 			if err != nil {
 				h.Errorf("error connecting to peer: %v", err)
-				h.HandleIncomingSubscriptionClosed(tx.StateURI, peer)
+				h.HandleIncomingTxSubscriptionClosed(tx.StateURI, peer)
 				return
 			}
 
 			err = peer.Put(*tx)
 			if err != nil {
 				h.Errorf("error writing tx to peer: %v", err)
-				h.HandleIncomingSubscriptionClosed(tx.StateURI, peer)
+				h.HandleIncomingTxSubscriptionClosed(tx.StateURI, peer)
 				return
 			}
 		}()
@@ -833,20 +865,57 @@ func (h *host) SignTx(tx *Tx) error {
 }
 
 func (h *host) handleNewState(tx *Tx) {
-	// @@TODO: broadcast state to state subscribers
+	var wg sync.WaitGroup
 
 	// @@TODO: don't do this, this is stupid.  store ungossiped txs in the DB and create a
 	// PeerManager that gossips them on a SleeperTask-like trigger.
 	go func() {
-		// Broadcast tx to others
+		// Broadcast state and tx to others
 		ctx, cancel := context.WithTimeout(h.Ctx(), 10*time.Second)
 		defer cancel()
 
-		err := h.broadcastTx(ctx, tx)
+		h.broadcastStateToSubscribedPeers(ctx, tx.StateURI, &wg)
+
+		err := h.broadcastTx(ctx, tx, &wg)
 		if err != nil {
 			h.Errorf("error rebroadcasting tx: %v", err)
 		}
 	}()
+}
+
+func (h *host) broadcastStateToSubscribedPeers(ctx context.Context, stateURI string, wg *sync.WaitGroup) {
+	h.stateSubscriptionsInMu.RLock()
+	defer h.stateSubscriptionsInMu.RUnlock()
+
+	state, err := h.ControllerHub.StateAtVersion(stateURI, nil)
+	if err != nil {
+		h.Errorf("error fetching state for broadcast: %v", err)
+		return
+	}
+
+	for keypathStr := range h.stateSubscriptionsIn[stateURI] {
+		for peer := range h.stateSubscriptionsIn[stateURI][keypathStr] {
+			wg.Add(1)
+			peer := peer
+			go func() {
+				defer wg.Done()
+
+				err := peer.EnsureConnected(ctx)
+				if err != nil {
+					h.Errorf("error connecting to peer: %v", err)
+					h.HandleIncomingStateSubscriptionClosed(stateURI, tree.Keypath(keypathStr), peer)
+					return
+				}
+
+				err = peer.PutState(state.NodeAt(tree.Keypath(keypathStr), nil))
+				if err != nil {
+					h.Errorf("error writing tx to peer: %v", err)
+					h.HandleIncomingStateSubscriptionClosed(stateURI, tree.Keypath(keypathStr), peer)
+					return
+				}
+			}()
+		}
+	}
 }
 
 func (h *host) AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error) {

@@ -56,6 +56,14 @@ function createPeer(opts) {
         }
     }
 
+    async function subscribeStates(stateURI, keypath, onStateReceived) {
+        for (let tpt of transports) {
+            if (tpt.subscribeStates) {
+                tpt.subscribeStates(stateURI, keypath, onStateReceived)
+            }
+        }
+    }
+
     async function get({ stateURI, keypath, raw }) {
         for (let tpt of transports) {
             if (tpt.get) {
@@ -101,6 +109,7 @@ function createPeer(opts) {
     return {
         get,
         subscribe,
+        subscribeStates,
         put,
         storeRef,
         authorize,
