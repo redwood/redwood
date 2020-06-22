@@ -17,7 +17,7 @@
 * Strip HTML tags from ToC title before displaying it in title bar in JS (backup to stripping done in Ruby code) (thanks @atic)
 
 To enable the new clipboard icon, you need to add `code_clipboard: true` to the frontmatter of source/index.html.md.
-See [this line](https://github.com/slatedocs/slate/blame/master/source/index.html.md#L19) for an example of usage.
+See [this line](https://github.com/slatedocs/slate/blame/main/source/index.html.md#L19) for an example of usage.
 
 ## Version 2.6.1
 
