@@ -2,7 +2,7 @@
 
 ## Version 2.7.0
 
-* June 21, 2020*
+*June 21, 2020*
 
 * __[security]__ Bumped rack in Gemfile.lock from 2.2.2 to 2.2.3
 * Bumped bundled jQuery from 3.2.1 to 3.5.1
