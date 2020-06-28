@@ -118,7 +118,7 @@ func run(configPath string, gui bool) error {
 	}
 
 	var (
-		txStore       = rw.NewBadgerTxStore(config.TxDBRoot(), signingKeypair.Address())
+		txStore       = rw.NewBadgerTxStore(config.TxDBRoot())
 		refStore      = rw.NewRefStore(config.RefDataRoot())
 		peerStore     = rw.NewPeerStore()
 		controllerHub = rw.NewControllerHub(signingKeypair.Address(), config.StateDBRoot(), txStore, refStore)
@@ -143,6 +143,7 @@ func run(configPath string, gui bool) error {
 			signingKeypair.Address(),
 			config.P2PTransport.ListenPort,
 			config.P2PTransport.KeyFile,
+			encryptingKeypair,
 			controllerHub,
 			refStore,
 			peerStore,
@@ -161,13 +162,13 @@ func run(configPath string, gui bool) error {
 		copy(cookieSecret[:], []byte(config.HTTPTransport.CookieSecret))
 
 		httpTransport, err := rw.NewHTTPTransport(
-			signingKeypair.Address(),
 			config.HTTPTransport.ListenHost,
 			config.HTTPTransport.DefaultStateURI,
 			controllerHub,
 			refStore,
 			peerStore,
 			signingKeypair,
+			encryptingKeypair,
 			cookieSecret,
 			tlsCertFilename,
 			tlsKeyFilename,
@@ -203,10 +204,8 @@ func run(configPath string, gui bool) error {
 		bootstrapPeer := bootstrapPeer
 		go func() {
 			app.Info(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
-			ctx, _ := context.WithTimeout(context.Background(), 15*time.Second)
-			err := host.AddPeer(ctx, bootstrapPeer.Transport, rw.NewStringSet(bootstrapPeer.DialAddresses))
-			if err != nil {
-				app.Errorf("error connecting to bootstrap peer: %v", err)
+			for _, dialAddr := range bootstrapPeer.DialAddresses {
+				host.AddPeer(rw.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr})
 			}
 		}()
 	}
@@ -214,7 +213,7 @@ func run(configPath string, gui bool) error {
 	go func() {
 		time.Sleep(5 * time.Second)
 		app.Warnf("trying to subscribe %+v", config.Node.SubscribedStateURIs)
-		for _, stateURI := range config.Node.SubscribedStateURIs {
+		for stateURI := range config.Node.SubscribedStateURIs {
 			app.Warnf("trying to subscribe to %v", stateURI)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -238,7 +237,7 @@ func run(configPath string, gui bool) error {
 	)
 	defer app.CtxStop("shutdown", nil)
 
-	klog.Info(0, rw.PrettyJSON(config))
+	klog.Info(rw.PrettyJSON(config))
 
 	if gui {
 		go func() {

@@ -1,0 +1,108 @@
+<html>
+<head>
+    <style>
+        * {
+            font-family: 'Consolas', 'Ubuntu Mono', 'Monaco', 'Courier New', Courier, sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        #container {
+            padding: 0 10px;
+            width: 33%;
+            display: flex;
+            flex-direction: column;
+            max-height: 100vh;
+        }
+        textarea {
+            width: 100%;
+            flex-grow: 1;
+            min-height: 300px;
+        }
+        video {
+            width: 640px;
+            width: 480px;
+        }
+    </style>
+</head>
+<body>
+    <div style='display: flex'>
+        <div id='container'>
+            <h1>streaming</h1>
+
+            <button id="start">Start</button>
+            <button id="stop">Stop</button>
+
+            <video id="preview" autoplay muted />
+            <video id="recording" controls />
+        </div>
+    </div>
+</body>
+
+<script src='/braid.js'></script>
+<script>
+    (async function() {
+        //
+        // Braid/sync9 setup
+        //
+        var braidClient = Braid.createPeer({
+            identity: Braid.identity.random(),
+            httpHost: 'http://localhost:8080',
+            onFoundPeersCallback: (peers) => {},
+        })
+
+        await braidClient.authorize()
+
+        let shouldStop = false
+        let stopped = false
+        const startButton = document.getElementById('start')
+        const stopButton = document.getElementById('stop')
+        const preview = document.getElementById("preview")
+        const recording = document.getElementById("recording")
+
+        let stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+
+        preview.muted = true
+        preview.srcObject = stream
+        preview.captureStream = preview.captureStream || preview.mozCaptureStream
+
+        const recordedChunks = []
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs="vp8,opus"' })
+
+        let parentTxID = Braid.utils.genesisTxID
+        let startTime
+
+        mediaRecorder.addEventListener('dataavailable', (evt) => {
+            if (evt.data.size > 0) {
+                let tx = {
+                    stateURI: 'redwood.tv/stream-10283',
+                    id: Braid.utils.randomID(),
+                    parents: [ parentTxID ],
+                    attachment: new Blob([evt.data], { type: 'video/webm' }),
+                    patches: [
+                        `.timestamp = ${new Date().getTime() - startTime}`
+                    ],
+                }
+                braidClient.put(tx)
+                parentTxID = tx.id
+            }
+
+            if (shouldStop === true && stopped === false) {
+                mediaRecorder.stop()
+                stopped = true
+            }
+        })
+
+        startButton.addEventListener('click', () => {
+            mediaRecorder.start(500)
+            startTime = new Date().getTime()
+        })
+
+        stopButton.addEventListener('click', () => {
+            shouldStop = true
+        })
+    })()
+
+</script>
+</html>

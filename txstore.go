@@ -13,8 +13,7 @@ type TxStore interface {
 	RemoveTx(stateURI string, txID types.ID) error
 	TxExists(stateURI string, txID types.ID) (bool, error)
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
-	AllTxs() TxIterator
-	AllTxsForStateURI(stateURI string) TxIterator
+	AllTxsForStateURI(stateURI string, fromTxID types.ID) TxIterator
 	KnownStateURIs() ([]string, error)
 	MarkLeaf(stateURI string, txID types.ID) error
 	UnmarkLeaf(stateURI string, txID types.ID) error

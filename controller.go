@@ -25,7 +25,11 @@ type Controller interface {
 	QueryIndex(version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
 	Leaves() ([]types.ID, error)
 
-	OnNewState(fn func(tx *Tx))
+	IsPrivate() (bool, error)
+	IsMember(addr types.Address) (bool, error)
+	Members() []types.Address
+
+	OnNewState(fn func(tx *Tx, state tree.Node, leaves []types.ID))
 }
 
 type controller struct {
@@ -43,12 +47,18 @@ type controller struct {
 	states  *tree.DBTree
 	indices *tree.DBTree
 
-	newStateListeners   []func(tx *Tx)
+	newStateListeners   []func(tx *Tx, state tree.Node, leaves []types.ID)
 	newStateListenersMu sync.RWMutex
 
 	mempool Mempool
 	addTxMu sync.Mutex
 }
+
+var (
+	MergeTypeKeypath = tree.Keypath("Merge-Type")
+	ValidatorKeypath = tree.Keypath("Validator")
+	MembersKeypath   = tree.Keypath("Members")
+)
 
 func NewController(
 	address types.Address,
@@ -80,7 +90,7 @@ func NewController(
 		states:        states,
 		indices:       indices,
 	}
-	c.mempool = NewMempool(address, c.processMempoolTx)
+	c.mempool = NewMempool(c.processMempoolTx)
 	return c, nil
 }
 
@@ -129,6 +139,58 @@ func (c *controller) Leaves() ([]types.ID, error) {
 	return c.txStore.Leaves(c.stateURI)
 }
 
+func (c *controller) IsPrivate() (bool, error) {
+	state := c.StateAtVersion(nil)
+	defer state.Close()
+
+	nodeType, _, length, err := state.NodeInfo(MembersKeypath)
+	if errors.Cause(err) == types.Err404 {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return nodeType == tree.NodeTypeMap && length > 0, nil
+}
+
+func (c *controller) IsMember(addr types.Address) (bool, error) {
+	state := c.StateAtVersion(nil)
+	defer state.Close()
+
+	is, ok, err := state.BoolValue(MembersKeypath.Pushs(addr.Hex()))
+	if err != nil {
+		return false, err
+	} else if !ok {
+		return false, nil
+	}
+	return is, nil
+}
+
+func (c *controller) Members() []types.Address {
+	var addrs []types.Address
+
+	state := c.StateAtVersion(nil)
+	defer state.Close()
+
+	iter := state.ChildIterator(MembersKeypath, true, 10)
+	defer iter.Close()
+
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		addrHex, ok, err := iter.Node().StringValue(nil)
+		if err != nil {
+			continue
+		} else if !ok {
+			continue
+		}
+
+		addr, err := types.AddressFromHex(addrHex)
+		if err != nil {
+			continue
+		}
+		addrs = append(addrs, addr)
+	}
+	return addrs
+}
+
 func (c *controller) AddTx(tx *Tx, force bool) error {
 	c.addTxMu.Lock()
 	defer c.addTxMu.Unlock()
@@ -157,7 +219,7 @@ func (c *controller) AddTx(tx *Tx, force bool) error {
 	return nil
 }
 
-func (c *controller) Mempool() map[types.Hash]*Tx {
+func (c *controller) Mempool() *txSortedSet {
 	return c.mempool.Get()
 }
 
@@ -387,7 +449,12 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 		return err
 	}
 
-	c.notifyNewStateListeners(tx)
+	leaves, err := c.txStore.Leaves(c.stateURI)
+	if err != nil {
+		return err
+	}
+
+	c.notifyNewStateListeners(tx, state, leaves)
 
 	return nil
 }
@@ -649,13 +716,13 @@ func (c *controller) initializeIndexer(state tree.Node, indexerConfigKeypath tre
 	return nil
 }
 
-func (c *controller) OnNewState(fn func(tx *Tx)) {
+func (c *controller) OnNewState(fn func(tx *Tx, state tree.Node, leaves []types.ID)) {
 	c.newStateListenersMu.Lock()
 	defer c.newStateListenersMu.Unlock()
 	c.newStateListeners = append(c.newStateListeners, fn)
 }
 
-func (c *controller) notifyNewStateListeners(tx *Tx) {
+func (c *controller) notifyNewStateListeners(tx *Tx, state tree.Node, leaves []types.ID) {
 	c.newStateListenersMu.RLock()
 	defer c.newStateListenersMu.RUnlock()
 
@@ -666,7 +733,7 @@ func (c *controller) notifyNewStateListeners(tx *Tx) {
 		handler := handler
 		go func() {
 			defer wg.Done()
-			handler(tx)
+			handler(tx, state, leaves)
 		}()
 	}
 	wg.Wait()

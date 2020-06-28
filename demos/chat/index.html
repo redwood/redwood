@@ -127,9 +127,8 @@
 
     var queue = Braid.utils.createTxQueue(
         (from, vid, parents, patches) => Braid.sync9.resolve_state(s9, from, vid, parents, patches),
-        async (tx, newState) => {
+        (tx, leaves, newState) => {
             // Update the debug state UI
-            // currentState = await (await fetch('/')).json()
             currentState = newState
             if (!knownTxs[tx.id]) {
                 txs.push(tx)

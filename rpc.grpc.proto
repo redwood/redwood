@@ -1,0 +1,144 @@
+syntax = "proto3";
+
+package trustedrpc;
+
+option go_package = "pb";
+
+service TrustedRPC {
+    //
+    // Fundamental primitives
+    //
+    rpc SetHDMnemonic(SetHDMnemonicReq) returns (SetHDMnemonicResp);
+    rpc SubscribeToStates(SubscribeToStatesReq) returns (stream StatePacket);
+    rpc UnsubscribeFromStates(UnsubscribeFromStatesReq) returns (UnsubscribeFromStatesResp);
+    rpc SubscribeToTxs(SubscribeToTxsReq) returns (TxPacket);
+    rpc UnsubscribeFromTxs(UnsubscribeFromTxsReq) returns (UnsubscribeFromTxsResp);
+    rpc GetState(GetStateReq) returns (StatePacket);
+    rpc SendTx(SendTxReq) returns (SendTxResp);
+    rpc AddRef(stream RefPacket) returns (AddRefResp);
+    rpc FetchRef(FetchRefReq) returns (stream RefPacket);
+    rpc AddPeer(AddPeerReq) returns (AddPeerResp);
+    rpc DropPeer(DropPeerReq) returns (DropPeerResp);
+}
+
+message SetHDMnemonicReq {
+    string mnemonic = 1;
+}
+
+message SetHDMnemonicResp {}
+
+message SubscribeToStatesReq {
+    string stateURI = 1;
+    string keypath = 2;
+}
+
+message StatePacket {
+    repeated KeypathValue state = 1;
+    repeated bytes leaves = 2;
+}
+
+message KeypathValue {
+    string keypath = 1;
+    bytes value = 2;
+}
+
+message UnsubscribeFromStatesReq {
+    string stateURI = 1;
+    string keypath = 2;
+}
+
+message UnsubscribeFromStatesResp {}
+
+message SubscribeToTxsReq {
+    string stateURI = 1;
+}
+
+message TxPacket {
+    string stateURI = 1;
+    bytes id = 2;
+    repeated bytes parents = 3;
+    repeated bytes children = 4;
+    bytes from = 5;
+    bytes sig = 6;
+    repeated string patches = 7;
+    repeated bytes recipients = 8;
+    optional bytes attachment = 9;
+    TxStatus status = 10;
+    bytes hash = 11;
+
+    enum TxStatus {
+        UNKNOWN = 0;
+        IN_MEMPOOL = 1;
+        INVALID = 2;
+        VALID = 3;
+    }
+}
+
+message UnsubscribeFromTxsReq {
+    string stateURI = 1;
+    string keypath = 2;
+}
+
+message UnsubscribeFromTxsResp {}
+
+message GetStateReq {
+    string stateURI = 1;
+    string keypath = 2;
+    bytes version = 3;
+}
+
+message SendTxReq {
+    string stateURI = 1;
+    optional bytes id = 2;
+    repeated bytes parents = 3;
+    repeated string patches = 4;
+    optional bytes attachment = 5;
+}
+
+message SendTxResp {
+    string stateURI = 1;
+    bytes id = 2;
+}
+
+message RefPacket {
+    bytes data = 1;
+    bool end = 2;
+}
+
+message AddRefResp {
+    bytes sha1Hash = 1;
+    bytes sha3Hash = 2;
+}
+
+message FetchRefReq {
+    oneof hash {
+        bytes sha1 = 1;
+        bytes sha3 = 2;
+    }
+}
+
+enum Transport {
+    LIBP2P = 0;
+    HTTPS = 1;
+}
+
+message AddPeerReq {
+    Transport transport = 1;
+    repeated dialAddrs = 2;
+}
+
+message AddPeerResp {}
+
+message DropPeerReq {
+    message PeerDialInfo {
+        Transport transport = 1;
+        repeated dialAddrs = 2;
+    }
+
+    oneof identifier {
+        PeerDialInfo peerDialInfo = 1;
+        bytes address = 2;
+    }
+}
+
+message DropPeerResp {}

@@ -1,0 +1,108 @@
+<html>
+<head>
+    <style>
+        * {
+            font-family: 'Consolas', 'Ubuntu Mono', 'Monaco', 'Courier New', Courier, sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        #container {
+            padding: 0 10px;
+            width: 33%;
+            display: flex;
+            flex-direction: column;
+            max-height: 100vh;
+        }
+        textarea {
+            width: 100%;
+            flex-grow: 1;
+            min-height: 300px;
+        }
+        video {
+            width: 640px;
+            height: 480px;
+        }
+    </style>
+</head>
+<body>
+    <div style='display: flex'>
+        <div id='container'>
+            <h1>streaming</h1>
+
+            <video id="video" />
+        </div>
+    </div>
+</body>
+
+<script src='/braid.js'></script>
+<script>
+    (async function() {
+        //
+        // Braid/sync9 setup
+        //
+        var braidClient = Braid.createPeer({
+            identity: Braid.identity.random(),
+            httpHost: 'http://localhost:8080',
+            onFoundPeersCallback: (peers) => {},
+        })
+
+        await braidClient.authorize()
+
+        const videoElem = document.getElementById('video')
+        const mediaSource = new MediaSource()
+
+        videoElem.src = URL.createObjectURL(mediaSource)
+        videoElem.addEventListener('error', (err) => console.error('error on <video> element', err))
+
+        mediaSource.addEventListener('sourceopen', () => {
+            const srcBuffer = mediaSource.addSourceBuffer('video/webm;codecs="vp8,opus"')
+            srcBuffer.mode = 'sequence'
+            srcBuffer.addEventListener('error', (evt) => console.error('error on source buffer', evt))
+
+            let queue = []
+
+            srcBuffer.addEventListener('updateend', function() {
+                if (queue.length > 0 && !srcBuffer.updating) {
+                    let { buffer, timestamp } = queue.shift()
+                    srcBuffer.appendBuffer(buffer)
+                    videoElem.currentTime = timestamp
+                }
+                if (videoElem.paused) {
+                    videoElem.play()
+                }
+            })
+
+            braidClient.subscribe('redwood.tv/stream-10283', '/', [ Braid.utils.genesisTxID ], (err, next) => {
+                if (err) {
+                    console.error(err)
+                    return
+                }
+                let { tx, leaves } = next
+                if (tx.attachment) {
+                    let timestamp = JSON.parse(tx.patches[0].split('=')[1].trim())
+
+                    if (srcBuffer.updating || queue.length > 0) {
+                        queue.push({ buffer: base64ToArrayBuffer(tx.attachment), timestamp })
+                    } else {
+                        srcBuffer.appendBuffer(base64ToArrayBuffer(tx.attachment))
+                        videoElem.currentTime = timestamp
+                    }
+                }
+            })
+        })
+    })()
+
+    function base64ToArrayBuffer(base64) {
+        let binary_string = window.atob(base64)
+        let len = binary_string.length
+        let bytes = new Uint8Array(len)
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binary_string.charCodeAt(i)
+        }
+        return bytes.buffer
+    }
+
+</script>
+</html>

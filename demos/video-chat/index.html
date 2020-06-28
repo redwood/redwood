@@ -1,0 +1,192 @@
+<html>
+<head>
+    <style>
+        * {
+            font-family: 'Consolas', 'Ubuntu Mono', 'Monaco', 'Courier New', Courier, sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        #container {
+            padding: 0 10px;
+            width: 33%;
+            display: flex;
+            flex-direction: column;
+            max-height: 100vh;
+        }
+        textarea {
+            width: 100%;
+            flex-grow: 1;
+            min-height: 300px;
+        }
+        #video-container {
+            display: flex;
+            align-items: start;
+            flex-wrap: wrap;
+            width: 66%;
+        }
+        video {
+            max-width: 480px;
+            flex-shrink: 1;
+            flex-grow: 1;
+        }
+    </style>
+</head>
+<body>
+    <div style='display: flex'>
+        <div id='container'>
+            <h1>streaming</h1>
+
+            <button id="start">Start</button>
+            <button id="stop">Stop</button>
+
+            <video id="preview" autoplay muted></video>
+            <video id="recording" controls></video>
+
+        </div>
+        <div id="video-container"></div>
+    </div>
+</body>
+
+<script src='/braid.js'></script>
+<script>
+    const startButton = document.getElementById('start')
+    const stopButton = document.getElementById('stop')
+    const preview = document.getElementById('preview')
+    const recording = document.getElementById('recording')
+    const videoContainerElem = document.getElementById('video-container')
+
+    let braidClient = Braid.createPeer({
+        identity: Braid.identity.random(),
+        httpHost: 'http://localhost:8080',
+        onFoundPeersCallback: (peers) => {},
+    })
+
+    let currentLeaves
+    let videoElems = {}
+
+    ;(async function() {
+        await braidClient.authorize()
+
+        initOutgoingVideo()
+        initIncomingVideo()
+    })()
+
+    async function initOutgoingVideo() {
+        let stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+
+        preview.muted = true
+        preview.srcObject = stream
+        preview.captureStream = preview.captureStream || preview.mozCaptureStream
+
+        let startTime
+        let shouldStop = false
+        let stopped = false
+        let mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs="vp8,opus"' })
+        mediaRecorder.addEventListener('dataavailable', (evt) => {
+            if (evt.data.size > 0) {
+                let txID = Braid.utils.randomID()
+                let tx = {
+                    stateURI: 'redwood.tv/stream-10283',
+                    id: txID,
+                    parents: currentLeaves,
+                    attachment: new Blob([evt.data], { type: 'video/webm' }),
+                    patches: [
+                        `.timestamp = ${new Date().getTime() - startTime}`
+                    ],
+                }
+                braidClient.put(tx)
+                parentTxID = tx.id
+            }
+
+            if (shouldStop === true && stopped === false) {
+                mediaRecorder.stop()
+                stopped = true
+            }
+        })
+
+        startButton.addEventListener('click', () => {
+            mediaRecorder.start(500)
+            startTime = new Date().getTime()
+        })
+
+        stopButton.addEventListener('click', () => {
+            shouldStop = true
+        })
+    }
+
+    function initIncomingVideo() {
+        braidClient.subscribe('redwood.tv/stream-10283', '/', [ Braid.utils.genesisTxID ], async (err, tx, leaves) => {
+            if (err) {
+                console.error(err)
+                return
+            }
+            console.log('tx ~>', tx)
+            currentLeaves = leaves
+
+            if (tx.attachment) {
+                // Skip any frames that are ours.  We already have a preview window.
+                if (tx.from.toLowerCase() === braidClient.identity.address.toLowerCase()) {
+                    return
+                }
+
+                videoElems[tx.from] = videoElems[tx.from] || await initNewIncomingVideoElem()
+                let { videoElem, srcBuffer, queue } = videoElems[tx.from]
+
+                let timestamp = JSON.parse(tx.patches[0].split('=')[1].trim())
+                if (srcBuffer.updating || queue.length > 0) {
+                    queue.push({ buffer: base64ToArrayBuffer(tx.attachment), timestamp })
+                } else {
+                    srcBuffer.appendBuffer(base64ToArrayBuffer(tx.attachment))
+                    videoElem.currentTime = timestamp
+                }
+            }
+        })
+    }
+
+    function initNewIncomingVideoElem() {
+        const videoElem = document.createElement('video')
+        const mediaSource = new MediaSource()
+
+        videoElem.src = URL.createObjectURL(mediaSource)
+        videoElem.addEventListener('error', (err) => console.error('error on <video> element', err))
+
+        videoContainerElem.appendChild(videoElem)
+
+        let queue = []
+        let srcBuffer
+        return new Promise((resolve, reject) => {
+            mediaSource.addEventListener('sourceopen', () => {
+                srcBuffer = mediaSource.addSourceBuffer('video/webm;codecs="vp8,opus"')
+                srcBuffer.mode = 'sequence'
+                srcBuffer.addEventListener('error', (evt) => console.error('error on source buffer', evt))
+
+                srcBuffer.addEventListener('updateend', function() {
+                    if (queue.length > 0 && !srcBuffer.updating) {
+                        let { buffer, timestamp } = queue.shift()
+                        srcBuffer.appendBuffer(buffer)
+                        videoElem.currentTime = timestamp
+                    }
+                    if (videoElem.paused) {
+                        videoElem.play()
+                    }
+                })
+
+                resolve({ videoElem, queue, srcBuffer })
+            })
+        })
+    }
+
+    function base64ToArrayBuffer(base64) {
+        let binary_string = window.atob(base64)
+        let len = binary_string.length
+        let bytes = new Uint8Array(len)
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binary_string.charCodeAt(i)
+        }
+        return bytes.buffer
+    }
+
+</script>
+</html>

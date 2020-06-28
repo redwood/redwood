@@ -28,9 +28,8 @@ const (
 )
 
 func newPeerPool(
-	concurrentConns uint,
-	host Host,
-	peerStore PeerStore,
+	concurrentConns uint64,
+	// host Host,
 	fnGetPeers func(ctx context.Context) (<-chan Peer, error),
 ) *peerPool {
 	chProviders := make(chan Peer)
@@ -78,12 +77,13 @@ func newPeerPool(
 
 					address := maybePeer.Address()
 					if address == (types.Address{}) {
-						_, _, err := host.ChallengePeerIdentity(context.TODO(), maybePeer)
-						if err != nil {
-							log.Warnf("error verifying peer: %v", err)
-							continue FindPeerLoop
-						}
-						address = maybePeer.Address()
+						// _, _, err := host.ChallengePeerIdentity(context.TODO(), maybePeer)
+						// if err != nil {
+						// 	log.Warnf("error verifying peer: %v", err)
+						// 	continue FindPeerLoop
+						// }
+						// address = maybePeer.Address()
+						continue FindPeerLoop
 					}
 
 					p.peerStatesMu.Lock()
@@ -97,7 +97,7 @@ func newPeerPool(
 					peer = maybePeer
 				}
 
-				log.Debugf("[peer pool] found peer %v", peer.ReachableAt().Slice())
+				log.Debugf("[peer pool] found peer %v", peer.DialInfo())
 				break
 			}
 
@@ -111,7 +111,7 @@ func newPeerPool(
 
 	// This goroutine fills the peer pool with the initial peers.
 	go func() {
-		for i := uint(0); i < concurrentConns; i++ {
+		for i := uint64(0); i < concurrentConns; i++ {
 			select {
 			case <-p.chStop:
 				return

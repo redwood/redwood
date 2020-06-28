@@ -7,15 +7,15 @@ module.exports = function (opts) {
     let knownPeers = {}
     pollForPeers()
 
-    async function subscribe(stateURI, keypath, parents, onTxReceived) {
+    async function subscribe(stateURI, keypath, fromTxID, onTxReceived) {
         try {
             const headers = {
                 'State-URI': stateURI,
                 'Accept':    'application/json',
                 'Subscribe': 'transactions',
             }
-            if (parents && parents.length > 0) {
-                headers['Parents'] = parents.join(',')
+            if (fromTxID) {
+                headers['From-Tx'] = fromTxID
             }
 
             const resp = await wrappedFetch(keypath, {
@@ -26,7 +26,12 @@ module.exports = function (opts) {
                 onTxReceived('http transport: fetch failed')
                 return
             }
-            readSubscription(resp.body.getReader(), onTxReceived)
+            readSubscription(resp.body.getReader(), (err, { tx, leaves }) => {
+                onTxReceived(err, tx, leaves)
+                if (tx) {
+                    ack(tx.id)
+                }
+            })
 
         } catch (err) {
             onTxReceived('http transport: ' + err)
@@ -86,6 +91,7 @@ module.exports = function (opts) {
                             return
                         }
                         callback(null, payload)
+
                     }
                     buffer = buffer.substring(idx+1)
                 }
@@ -115,9 +121,23 @@ module.exports = function (opts) {
     }
 
     function put(tx) {
+        let body
+        if (tx.attachment) {
+            if (typeof window !== 'undefined') {
+                body = new FormData()
+            } else {
+                let FormData = require('form-data')
+                body = new FormData()
+            }
+            body.append('attachment', tx.attachment)
+            body.append('patches', tx.patches.join('\n'))
+
+        } else {
+            body = tx.patches.join('\n')
+        }
         return wrappedFetch('/', {
             method: 'PUT',
-            body: tx.patches.join('\n'),
+            body: body,
             headers: {
                 'State-URI': tx.stateURI,
                 'Version': tx.id,
@@ -125,6 +145,13 @@ module.exports = function (opts) {
                 'Signature': tx.sig,
                 'Patch-Type': 'braid',
             },
+        })
+    }
+
+    async function ack(txID) {
+        return wrappedFetch('/', {
+            method: 'ACK',
+            body: txID,
         })
     }
 
@@ -188,6 +215,10 @@ module.exports = function (opts) {
 
 
         const resp = await fetch(httpHost + path, options)
+        if (!resp.ok) {
+            let text = await res.text()
+            throw Error(text)
+        }
 
         if (typeof window === 'undefined') {
             // Manual cookie parsing

@@ -31,7 +31,7 @@ func MakeHost(signingKeypairHex string, port uint, defaultStateURI, cookieSecret
 		panic(err)
 	}
 
-	txStore := rw.NewBadgerTxStore(txDBRoot, signingKeypair.Address())
+	txStore := rw.NewBadgerTxStore(txDBRoot)
 	// txStore := remotestore.NewClient("0.0.0.0:4567", signingKeypair.Address(), signingKeypair.SigningPrivateKey)
 	refStore := rw.NewRefStore(refStoreRoot)
 	peerStore := rw.NewPeerStore()
@@ -45,7 +45,6 @@ func MakeHost(signingKeypairHex string, port uint, defaultStateURI, cookieSecret
 	var cookieSecret [32]byte
 	copy(cookieSecret[:], []byte(cookieSecretStr))
 	httptransport, err := rw.NewHTTPTransport(
-		signingKeypair.Address(),
 		fmt.Sprintf("localhost:%v", port+1),
 		defaultStateURI,
 		controllerHub,
