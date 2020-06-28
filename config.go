@@ -25,7 +25,7 @@ type Config struct {
 type NodeConfig struct {
 	HDMnemonicPhrase        string          `yaml:"HDMnemonicPhrase"`
 	BootstrapPeers          []BootstrapPeer `yaml:"BootstrapPeers"`
-	SubscribedStateURIs     []string        `yaml:"SubscribedStateURIs"`
+	SubscribedStateURIs     StringSet       `yaml:"SubscribedStateURIs"`
 	MaxPeersPerSubscription uint64          `yaml:"MaxPeersPerSubscription"`
 	DataRoot                string          `yaml:"DataRoot"`
 	DevMode                 bool            `yaml:"DevMode"`
@@ -85,7 +85,7 @@ var DefaultConfig = func() Config {
 		Node: &NodeConfig{
 			HDMnemonicPhrase:        hdMnemonicPhrase,
 			BootstrapPeers:          []BootstrapPeer{},
-			SubscribedStateURIs:     []string{},
+			SubscribedStateURIs:     nil,
 			MaxPeersPerSubscription: 4,
 			DataRoot:                dataRoot,
 			DevMode:                 false,

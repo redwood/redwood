@@ -1,0 +1,26 @@
+Node:
+    HDMnemonicPhrase: daughter clean this library bring bench camera oil steak carbon
+        steel general giraffe goddess federal mandate wear fiction park choose stadium
+        quit situate punch
+    BootstrapPeers:
+      - Transport: libp2p
+        DialAddresses:
+          - /ip4/127.0.0.1/tcp/21231/p2p/16Uiu2HAmLLpZ2tCFYPgSw1jS26HLueidnfnhfJJaRbDyavSFxnpj
+    SubscribedStateURIs:
+      - redwood.tv/stream-10283
+    MaxPeersPerSubscription: 4
+    DataRoot: ./node2_data
+    DevMode: true
+P2PTransport:
+    Enabled: true
+    KeyFile: ./node2.p2pkey
+    ListenAddr: 0.0.0.0
+    ListenPort: 21241
+HTTPTransport:
+    Enabled: true
+    ListenHost: :8080
+    CookieSecret: !!binary 72VgcebmbP16Usia9aAqq8LLr+7KBgE90A+aaqrZ3ug=
+    DefaultStateURI: redwood.tv/stream-10283
+HTTPRPC:
+    Enabled: false
+    ListenHost: :8081

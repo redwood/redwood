@@ -98,7 +98,7 @@ function createPeer(opts) {
   function _subscribe() {
     _subscribe = _asyncToGenerator(
     /*#__PURE__*/
-    regeneratorRuntime.mark(function _callee2(stateURI, keypath, parents, onTxReceived) {
+    regeneratorRuntime.mark(function _callee2(stateURI, keypath, fromTxID, onTxReceived) {
       var _iteratorNormalCompletion, _didIteratorError, _iteratorError, _iterator, _step, tpt;
 
       return regeneratorRuntime.wrap(function _callee2$(_context2) {
@@ -114,7 +114,7 @@ function createPeer(opts) {
                 tpt = _step.value;
 
                 if (tpt.subscribe) {
-                  tpt.subscribe(stateURI, keypath, parents, onTxReceived);
+                  tpt.subscribe(stateURI, keypath, fromTxID, onTxReceived);
                 }
               }
 
@@ -594,6 +594,7 @@ function createPeer(opts) {
   }
 
   return {
+    identity: identity,
     get: get,
     subscribe: subscribe,
     subscribeStates: subscribeStates,
@@ -615,15 +616,15 @@ module.exports = function (opts) {
     let knownPeers = {}
     pollForPeers()
 
-    async function subscribe(stateURI, keypath, parents, onTxReceived) {
+    async function subscribe(stateURI, keypath, fromTxID, onTxReceived) {
         try {
             const headers = {
                 'State-URI': stateURI,
                 'Accept':    'application/json',
                 'Subscribe': 'transactions',
             }
-            if (parents && parents.length > 0) {
-                headers['Parents'] = parents.join(',')
+            if (fromTxID) {
+                headers['From-Tx'] = fromTxID
             }
 
             const resp = await wrappedFetch(keypath, {
@@ -634,7 +635,12 @@ module.exports = function (opts) {
                 onTxReceived('http transport: fetch failed')
                 return
             }
-            readSubscription(resp.body.getReader(), onTxReceived)
+            readSubscription(resp.body.getReader(), (err, { tx, leaves }) => {
+                onTxReceived(err, tx, leaves)
+                if (tx) {
+                    ack(tx.id)
+                }
+            })
 
         } catch (err) {
             onTxReceived('http transport: ' + err)
@@ -694,6 +700,7 @@ module.exports = function (opts) {
                             return
                         }
                         callback(null, payload)
+
                     }
                     buffer = buffer.substring(idx+1)
                 }
@@ -723,9 +730,23 @@ module.exports = function (opts) {
     }
 
     function put(tx) {
+        let body
+        if (tx.attachment) {
+            if (typeof window !== 'undefined') {
+                body = new FormData()
+            } else {
+                let FormData = require('form-data')
+                body = new FormData()
+            }
+            body.append('attachment', tx.attachment)
+            body.append('patches', tx.patches.join('\n'))
+
+        } else {
+            body = tx.patches.join('\n')
+        }
         return wrappedFetch('/', {
             method: 'PUT',
-            body: tx.patches.join('\n'),
+            body: body,
             headers: {
                 'State-URI': tx.stateURI,
                 'Version': tx.id,
@@ -733,6 +754,13 @@ module.exports = function (opts) {
                 'Signature': tx.sig,
                 'Patch-Type': 'braid',
             },
+        })
+    }
+
+    async function ack(txID) {
+        return wrappedFetch('/', {
+            method: 'ACK',
+            body: txID,
         })
     }
 
@@ -796,6 +824,10 @@ module.exports = function (opts) {
 
 
         const resp = await fetch(httpHost + path, options)
+        if (!resp.ok) {
+            let text = await res.text()
+            throw Error(text)
+        }
 
         if (typeof window === 'undefined') {
             // Manual cookie parsing
@@ -13741,6 +13773,7 @@ module.exports = {
     createTxQueue,
     hashTx,
     serializeTx,
+    keccak256: ethers.utils.keccak256,
     randomID,
     privateTxRootForRecipients,
     stringToHex,
@@ -13759,8 +13792,8 @@ function createTxQueue(resolverFn, txProcessedCallback) {
     let queue = []
     let haveTxs = {}
 
-    function addTx(tx) {
-        queue.push(tx)
+    function addTx(tx, leaves) {
+        queue.push({ tx, leaves })
         processQueue()
     }
 
@@ -13768,7 +13801,7 @@ function createTxQueue(resolverFn, txProcessedCallback) {
         while (true) {
             let processedIdxs = []
             for (let i = 0; i < queue.length; i++) {
-                let tx = queue[i]
+                let { tx, leaves } = queue[i]
                 let missingAParent = false
                 if (tx.parents && tx.parents.length > 0) {
                     for (let p of tx.parents) {
@@ -13780,7 +13813,7 @@ function createTxQueue(resolverFn, txProcessedCallback) {
                 }
                 if (!missingAParent) {
                     processedIdxs.unshift(i)
-                    processTx(tx)
+                    processTx(tx, leaves)
                 }
             }
 
@@ -13798,17 +13831,17 @@ function createTxQueue(resolverFn, txProcessedCallback) {
         }
     }
 
-    function processTx(tx) {
+    function processTx(tx, leaves) {
         const newState = resolverFn(tx.from, tx.id, tx.parents, tx.patches)
         haveTxs[tx.id] = true
-        txProcessedCallback(tx, newState)
+        txProcessedCallback(tx, leaves, newState)
     }
 
     return {
         addTx,
-        defaultTxHandler: (err, tx) => {
+        defaultTxHandler: (err, tx, leaves) => {
             if (err) throw new Error(err)
-            addTx(tx)
+            addTx(tx, leaves)
         },
     }
 }

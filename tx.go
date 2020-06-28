@@ -7,6 +7,10 @@ import (
 	"sort"
 	"strings"
 
+	proto "github.com/golang/protobuf/proto"
+	any "github.com/golang/protobuf/ptypes/any"
+
+	"github.com/brynbellomy/redwood/pb"
 	"github.com/brynbellomy/redwood/tree"
 	"github.com/brynbellomy/redwood/types"
 )
@@ -23,12 +27,14 @@ const (
 type Tx struct {
 	ID         types.ID        `json:"id"`
 	Parents    []types.ID      `json:"parents"`
+	Children   []types.ID      `json:"children"`
 	From       types.Address   `json:"from"`
 	Sig        types.Signature `json:"sig,omitempty"`
 	StateURI   string          `json:"stateURI"`
 	Patches    []Patch         `json:"patches"`
 	Recipients []types.Address `json:"recipients,omitempty"`
 	Checkpoint bool            `json:"checkpoint"` // @@TODO: probably not ideal
+	Attachment []byte          `json:"attachment,omitempty"`
 
 	Status TxStatus   `json:"status"`
 	hash   types.Hash `json:"-"`
@@ -82,6 +88,14 @@ func (tx *Tx) Copy() *Tx {
 		}
 	}
 
+	var children []types.ID
+	if len(tx.Children) > 0 {
+		children = make([]types.ID, len(tx.Children))
+		for i, id := range tx.Children {
+			children[i] = id
+		}
+	}
+
 	var patches []Patch
 	if len(tx.Patches) > 0 {
 		patches = make([]Patch, len(tx.Patches))
@@ -98,15 +112,20 @@ func (tx *Tx) Copy() *Tx {
 		}
 	}
 
+	attachment := make([]byte, len(tx.Attachment))
+	copy(attachment, tx.Attachment)
+
 	return &Tx{
 		ID:         tx.ID,
 		Parents:    parents,
+		Children:   children,
 		From:       tx.From,
 		Sig:        tx.Sig.Copy(),
 		StateURI:   tx.StateURI,
 		Patches:    patches,
 		Recipients: recipients,
 		Checkpoint: tx.Checkpoint,
+		Attachment: attachment,
 		Status:     tx.Status,
 		hash:       tx.hash,
 	}
@@ -126,6 +145,105 @@ func PrivateRootKeyForRecipients(recipients []types.Address) string {
 
 func (tx Tx) PrivateRootKey() string {
 	return PrivateRootKeyForRecipients(tx.Recipients)
+}
+
+func (tx Tx) MarshalProto() ([]byte, error) {
+	parents := make([][]byte, len(tx.Parents))
+	for i, parent := range tx.Parents {
+		parents[i] = parent.Bytes()
+	}
+
+	children := make([][]byte, len(tx.Children))
+	for i, child := range tx.Children {
+		children[i] = child.Bytes()
+	}
+
+	patches := make([]*pb.Patch, len(tx.Patches))
+	for i, patch := range tx.Patches {
+		var rng *pb.Range
+		if patch.Range != nil {
+			rng = &pb.Range{Start: patch.Range.Start, End: patch.Range.End}
+		}
+
+		valueBytes, err := json.Marshal(patch.Val)
+		if err != nil {
+			return nil, err
+		}
+
+		patches[i] = &pb.Patch{
+			Keypath: []byte(patch.Keypath),
+			Range:   rng,
+			Value:   &any.Any{Value: valueBytes},
+		}
+	}
+
+	recipients := make([][]byte, len(tx.Recipients))
+	for i, recipient := range tx.Recipients {
+		recipients[i] = recipient[:]
+	}
+
+	return proto.Marshal(&pb.Tx{
+		Id:         tx.ID[:],
+		Parents:    parents,
+		Children:   children,
+		From:       tx.From[:],
+		Sig:        tx.Sig,
+		StateURI:   tx.StateURI,
+		Patches:    patches,
+		Recipients: recipients,
+		Checkpoint: tx.Checkpoint,
+		Attachment: tx.Attachment,
+		Status:     string(tx.Status),
+	})
+}
+
+func (tx *Tx) UnmarshalProto(bs []byte) error {
+	var pbtx pb.Tx
+	err := proto.Unmarshal(bs, &pbtx)
+	if err != nil {
+		return err
+	}
+
+	tx.ID = types.IDFromBytes(pbtx.Id)
+
+	tx.Parents = make([]types.ID, len(pbtx.Parents))
+	for i, parent := range pbtx.Parents {
+		tx.Parents[i] = types.IDFromBytes(parent)
+	}
+
+	tx.Children = make([]types.ID, len(pbtx.Children))
+	for i, child := range pbtx.Children {
+		tx.Children[i] = types.IDFromBytes(child)
+	}
+
+	tx.From = types.AddressFromBytes(pbtx.From)
+	tx.Sig = pbtx.Sig
+	tx.StateURI = pbtx.StateURI
+
+	tx.Patches = make([]Patch, len(pbtx.Patches))
+	for i, patch := range pbtx.Patches {
+		tx.Patches[i].Keypath = tree.Keypath(patch.Keypath)
+		if patch.Range != nil {
+			tx.Patches[i].Range = &tree.Range{
+				Start: patch.Range.Start,
+				End:   patch.Range.End,
+			}
+		}
+		err := json.Unmarshal(patch.Value.Value, &tx.Patches[i].Val)
+		if err != nil {
+			return err
+		}
+	}
+
+	tx.Recipients = make([]types.Address, len(pbtx.Recipients))
+	for i, recipient := range pbtx.Recipients {
+		tx.Recipients[i] = types.AddressFromBytes(recipient)
+	}
+
+	tx.Checkpoint = pbtx.Checkpoint
+	tx.Attachment = pbtx.Attachment
+	tx.Status = TxStatus(pbtx.Status)
+	return nil
 }
 
 type Patch struct {
@@ -152,7 +270,7 @@ func (p Patch) String() string {
 	s := strings.Join(keypathParts, "")
 
 	if p.Range != nil {
-		s += fmt.Sprintf("[%v:%v]", p.Range[0], p.Range[1])
+		s += fmt.Sprintf("[%v:%v]", p.Range.Start, p.Range.End)
 	}
 
 	val, err := json.Marshal(p.Val)

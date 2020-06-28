@@ -16,9 +16,9 @@ type Transport interface {
 	Name() string
 
 	SetHost(host Host)
-	GetPeerByConnStrings(ctx context.Context, reachableAt StringSet) (Peer, error)
-	ForEachProviderOfStateURI(ctx context.Context, stateURI string) (<-chan Peer, error)
-	ForEachProviderOfRef(ctx context.Context, refID types.RefID) (<-chan Peer, error)
+	NewPeerConn(ctx context.Context, dialAddr string) (Peer, error)
+	ProvidersOfStateURI(ctx context.Context, stateURI string) (<-chan Peer, error)
+	ProvidersOfRef(ctx context.Context, refID types.RefID) (<-chan Peer, error)
 	PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan Peer, error)
 	AnnounceRef(ctx context.Context, refID types.RefID) error
 }
@@ -31,13 +31,13 @@ type Peer interface {
 	CloseConn() error
 
 	// Transactions
-	Subscribe(ctx context.Context, stateURI string) (TxSubscription, error)
-	Put(tx Tx) error
-	PutPrivate(tx EncryptedTx) error
-	Ack(txID types.ID) error
+	Subscribe(ctx context.Context, stateURI string) (TxSubscriptionClient, error)
+	Put(tx Tx, leaves []types.ID) error
+	PutPrivate(tx Tx, leaves []types.ID) error
+	Ack(stateURI string, txID types.ID) error
 
 	// State subscriptions
-	PutState(state tree.Node) error
+	PutState(state tree.Node, leaves []types.ID) error
 
 	// Identity/authentication
 	ChallengeIdentity(challengeMsg types.ChallengeMsg) error
@@ -52,8 +52,31 @@ type Peer interface {
 	ReceiveRefPacket() (FetchRefResponseBody, error)
 }
 
-type TxSubscription interface {
-	Read() (*Tx, error)
+type ChallengeIdentityResponse struct {
+	Signature           []byte `json:"signature"`
+	EncryptingPublicKey []byte `json:"encryptingPublicKey"`
+}
+
+type FetchRefResponse struct {
+	Header *FetchRefResponseHeader `json:"header,omitempty"`
+	Body   *FetchRefResponseBody   `json:"body,omitempty"`
+}
+
+type FetchRefResponseHeader struct{}
+
+type FetchRefResponseBody struct {
+	Data []byte `json:"data"`
+	End  bool   `json:"end"`
+}
+
+type EncryptedTx struct {
+	TxID             types.ID `json:"txID"`
+	EncryptedPayload []byte   `json:"encryptedPayload"`
+	SenderPublicKey  []byte   `json:"senderPublicKey"`
+}
+
+type TxSubscriptionClient interface {
+	Read() (*Tx, []types.ID, error)
 	Close() error
 }
 

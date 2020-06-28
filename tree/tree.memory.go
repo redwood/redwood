@@ -321,6 +321,23 @@ func (n *MemoryNode) FloatValue(keypath Keypath) (float64, bool, error) {
 	return 0, false, nil
 }
 
+func (n *MemoryNode) BoolValue(keypath Keypath) (bool, bool, error) {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.BoolValue(relKeypath)
+	}
+
+	absKeypath := n.keypath.Push(keypath)
+
+	v, exists := n.values[string(absKeypath)]
+	if !exists {
+		return false, false, nil
+	}
+	if asBool, isBool := v.(bool); isBool {
+		return asBool, true, nil
+	}
+	return false, false, nil
+}
+
 func (n *MemoryNode) StringValue(keypath Keypath) (string, bool, error) {
 	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
 		return node.StringValue(relKeypath)

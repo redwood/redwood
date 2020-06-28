@@ -10,6 +10,7 @@ module.exports = {
     createTxQueue,
     hashTx,
     serializeTx,
+    keccak256: ethers.utils.keccak256,
     randomID,
     privateTxRootForRecipients,
     stringToHex,
@@ -28,8 +29,8 @@ function createTxQueue(resolverFn, txProcessedCallback) {
     let queue = []
     let haveTxs = {}
 
-    function addTx(tx) {
-        queue.push(tx)
+    function addTx(tx, leaves) {
+        queue.push({ tx, leaves })
         processQueue()
     }
 
@@ -37,7 +38,7 @@ function createTxQueue(resolverFn, txProcessedCallback) {
         while (true) {
             let processedIdxs = []
             for (let i = 0; i < queue.length; i++) {
-                let tx = queue[i]
+                let { tx, leaves } = queue[i]
                 let missingAParent = false
                 if (tx.parents && tx.parents.length > 0) {
                     for (let p of tx.parents) {
@@ -49,7 +50,7 @@ function createTxQueue(resolverFn, txProcessedCallback) {
                 }
                 if (!missingAParent) {
                     processedIdxs.unshift(i)
-                    processTx(tx)
+                    processTx(tx, leaves)
                 }
             }
 
@@ -67,17 +68,17 @@ function createTxQueue(resolverFn, txProcessedCallback) {
         }
     }
 
-    function processTx(tx) {
+    function processTx(tx, leaves) {
         const newState = resolverFn(tx.from, tx.id, tx.parents, tx.patches)
         haveTxs[tx.id] = true
-        txProcessedCallback(tx, newState)
+        txProcessedCallback(tx, leaves, newState)
     }
 
     return {
         addTx,
-        defaultTxHandler: (err, tx) => {
+        defaultTxHandler: (err, tx, leaves) => {
             if (err) throw new Error(err)
-            addTx(tx)
+            addTx(tx, leaves)
         },
     }
 }

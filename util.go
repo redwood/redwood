@@ -11,6 +11,9 @@ import (
 
 	// "github.com/json-iterator/go"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v3"
+
+	"github.com/brynbellomy/redwood/types"
 )
 
 //var json = jsoniter.ConfigFastest
@@ -323,12 +326,14 @@ func NewStringSet(vals []string) StringSet {
 	return set
 }
 
-func (s StringSet) Add(val string) {
+func (s StringSet) Add(val string) StringSet {
 	s[val] = struct{}{}
+	return s
 }
 
-func (s StringSet) Remove(val string) {
+func (s StringSet) Remove(val string) StringSet {
 	delete(s, val)
+	return s
 }
 
 func (s StringSet) Any() string {
@@ -343,6 +348,11 @@ func (s StringSet) Any() string {
 	return ""
 }
 
+func (s StringSet) Contains(str string) bool {
+	_, ok := s[str]
+	return ok
+}
+
 func (s StringSet) Slice() []string {
 	var slice []string
 	for x := range s {
@@ -353,6 +363,62 @@ func (s StringSet) Slice() []string {
 
 func (s StringSet) Copy() StringSet {
 	set := map[string]struct{}{}
+	for val := range s {
+		set[val] = struct{}{}
+	}
+	return set
+}
+
+func (s StringSet) MarshalYAML() (interface{}, error) {
+	return s.Slice(), nil
+}
+
+func (s *StringSet) UnmarshalYAML(node *yaml.Node) error {
+	var slice []string
+	if err := node.Decode(&slice); err != nil {
+		return err
+	}
+	*s = NewStringSet(slice)
+	return nil
+}
+
+type IDSet map[types.ID]struct{}
+
+func NewIDSet(vals []types.ID) IDSet {
+	set := map[types.ID]struct{}{}
+	for _, val := range vals {
+		set[val] = struct{}{}
+	}
+	return set
+}
+
+func (s IDSet) Add(val types.ID) IDSet {
+	s[val] = struct{}{}
+	return s
+}
+
+func (s IDSet) Remove(val types.ID) IDSet {
+	delete(s, val)
+	return s
+}
+
+func (s IDSet) Any() types.ID {
+	for x := range s {
+		return x
+	}
+	return types.ID{}
+}
+
+func (s IDSet) Slice() []types.ID {
+	var slice []types.ID
+	for x := range s {
+		slice = append(slice, x)
+	}
+	return slice
+}
+
+func (s IDSet) Copy() IDSet {
+	set := map[types.ID]struct{}{}
 	for val := range s {
 		set[val] = struct{}{}
 	}
@@ -399,4 +465,63 @@ func GuessContentTypeFromFilename(filename string) string {
 		}
 	}
 	return "application/octet-stream"
+}
+
+type WorkQueue interface {
+	Enqueue()
+	Stop()
+}
+
+type workQueue struct {
+	callback func()
+	chWork   chan struct{}
+	chStop   chan struct{}
+	chDone   chan struct{}
+}
+
+func NewWorkQueue(size int, callback func()) WorkQueue {
+	q := &workQueue{
+		callback: callback,
+		chWork:   make(chan struct{}, size),
+		chStop:   make(chan struct{}),
+		chDone:   make(chan struct{}),
+	}
+
+	go q.workerLoop()
+
+	return q
+}
+
+func (q *workQueue) Stop() {
+	close(q.chWork)
+	<-q.chDone
+}
+
+func (q *workQueue) Enqueue() {
+	select {
+	case q.chWork <- struct{}{}:
+	default:
+	}
+}
+
+func (q *workQueue) workerLoop() {
+	defer func() {
+		if len(q.chWork) > 0 {
+			q.callback()
+		}
+		close(q.chDone)
+	}()
+
+	for {
+		select {
+		case _, open := <-q.chWork:
+			if !open {
+				return
+			}
+			q.callback()
+
+		case <-q.chStop:
+			return
+		}
+	}
 }

@@ -1,8 +1,6 @@
 package redwood
 
 import (
-	"encoding/json"
-
 	"github.com/dgraph-io/badger/v2"
 	"github.com/pkg/errors"
 
@@ -14,14 +12,12 @@ type badgerTxStore struct {
 	*ctx.Context
 	db         *badger.DB
 	dbFilename string
-	address    types.Address
 }
 
-func NewBadgerTxStore(dbFilename string, address types.Address) TxStore {
+func NewBadgerTxStore(dbFilename string) TxStore {
 	return &badgerTxStore{
 		Context:    &ctx.Context{},
 		dbFilename: dbFilename,
-		address:    address,
 	}
 }
 
@@ -29,7 +25,7 @@ func (p *badgerTxStore) Start() error {
 	return p.CtxStart(
 		// on startup
 		func() error {
-			p.SetLogLabel(p.address.Pretty() + " txstore")
+			p.SetLogLabel("txstore")
 			p.Infof(0, "opening txstore at %v", p.dbFilename)
 			opts := badger.DefaultOptions(p.dbFilename)
 			opts.Logger = nil
@@ -54,20 +50,51 @@ func makeTxKey(stateURI string, txID types.ID) []byte {
 }
 
 func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
-	defer annotate(&err, "AddTx")
+	defer annotate(&err, "badgerTxStore#AddTx")
 
-	bs, err := json.Marshal(tx)
+	bs, err := tx.MarshalProto()
 	if err != nil {
 		return err
 	}
 
 	key := makeTxKey(tx.StateURI, tx.ID)
 	err = p.db.Update(func(txn *badger.Txn) error {
+		// Add the tx to the DB
 		err := txn.Set(key, []byte(bs))
 		if err != nil {
 			return err
 		}
 
+		// Add the new tx to the `.Children` slice on each of its parents
+		if tx.Status == TxStatusValid {
+			for _, parentID := range tx.Parents {
+				item, err := txn.Get(makeTxKey(tx.StateURI, parentID))
+				if err != nil {
+					return errors.Wrapf(err, "can't find parent %v of tx %v", parentID, tx.ID)
+				}
+				var parentTx Tx
+				err = item.Value(func(val []byte) error {
+					return parentTx.UnmarshalProto(val)
+				})
+				if err != nil {
+					return err
+				}
+
+				parentTx.Children = NewIDSet(parentTx.Children).Add(tx.ID).Slice()
+
+				parentBytes, err := parentTx.MarshalProto()
+				if err != nil {
+					return err
+				}
+
+				err = txn.Set(makeTxKey(tx.StateURI, parentID), parentBytes)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		// We need to keep track of all of the state URIs we know about
 		err = txn.Set([]byte("stateuri:"+tx.StateURI), nil)
 		if err != nil {
 			return err
@@ -75,7 +102,7 @@ func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
 		return nil
 	})
 	if err != nil {
-		p.Errorf("failed to write tx %v", tx.ID.Pretty())
+		p.Errorf("failed to write tx %v: %v", tx.ID.Pretty(), err)
 		return err
 	}
 	p.Infof(0, "wrote tx %v", tx.ID.Pretty())
@@ -109,11 +136,9 @@ func (p *badgerTxStore) TxExists(stateURI string, txID types.ID) (bool, error) {
 }
 
 func (p *badgerTxStore) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
-	key := makeTxKey(stateURI, txID)
-
 	var bs []byte
 	err := p.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(key)
+		item, err := txn.Get(makeTxKey(stateURI, txID))
 		if err == badger.ErrKeyNotFound {
 			return errors.WithStack(types.Err404)
 		} else if err != nil {
@@ -130,19 +155,15 @@ func (p *badgerTxStore) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 	}
 
 	var tx Tx
-	err = json.Unmarshal(bs, &tx)
+	err = tx.UnmarshalProto(bs)
 	return &tx, err
 }
 
-func (p *badgerTxStore) AllTxs() TxIterator {
-	return p.allTxs("tx:")
-}
+func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID types.ID) TxIterator {
+	if fromTxID == (types.ID{}) {
+		fromTxID = GenesisTxID
+	}
 
-func (p *badgerTxStore) AllTxsForStateURI(stateURI string) TxIterator {
-	return p.allTxs("tx:" + stateURI + ":")
-}
-
-func (p *badgerTxStore) allTxs(prefix string) TxIterator {
 	txIter := &txIterator{
 		ch:       make(chan *Tx),
 		chCancel: make(chan struct{}),
@@ -151,29 +172,33 @@ func (p *badgerTxStore) allTxs(prefix string) TxIterator {
 	go func() {
 		defer close(txIter.ch)
 
+		stack := []types.ID{fromTxID}
+		sent := make(map[types.ID]struct{})
+
 		txIter.err = p.db.View(func(txn *badger.Txn) error {
-			opts := badger.DefaultIteratorOptions
-			opts.PrefetchSize = 10
-			badgerIter := txn.NewIterator(opts)
-			defer badgerIter.Close()
+		OuterLoop:
+			for len(stack) > 0 {
+				txID := stack[0]
+				stack = stack[1:]
 
-			prefix := []byte(prefix)
-			for badgerIter.Seek(prefix); badgerIter.ValidForPrefix(prefix); badgerIter.Next() {
-				item := badgerIter.Item()
-
-				var bs []byte
-				err := item.Value(func(val []byte) error {
-					bs = append([]byte{}, val...)
-					return nil
-				})
+				item, err := txn.Get(makeTxKey(stateURI, txID))
 				if err != nil {
 					return err
 				}
 
 				var tx Tx
-				err = json.Unmarshal(bs, &tx)
+				err = item.Value(func(val []byte) error {
+					return tx.UnmarshalProto(val)
+				})
 				if err != nil {
 					return err
+				}
+
+				for _, parentID := range tx.Parents {
+					if _, wasSent := sent[parentID]; !wasSent {
+						stack = append(stack, tx.ID)
+						continue OuterLoop
+					}
 				}
 
 				select {
@@ -181,6 +206,9 @@ func (p *badgerTxStore) allTxs(prefix string) TxIterator {
 					return nil
 				case txIter.ch <- &tx:
 				}
+
+				sent[tx.ID] = struct{}{}
+				stack = append(stack, tx.Children...)
 			}
 			return nil
 		})

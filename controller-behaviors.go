@@ -25,26 +25,20 @@ type ResolverConstructor func(config tree.Node, internalState map[string]interfa
 type ValidatorConstructor func(config tree.Node) (Validator, error)
 type IndexerConstructor func(config tree.Node) (Indexer, error)
 
-var resolverRegistry map[string]ResolverConstructor
-var validatorRegistry map[string]ValidatorConstructor
-var indexerRegistry map[string]IndexerConstructor
-
-func init() {
-	validatorRegistry = map[string]ValidatorConstructor{
-		"validator/permissions": NewPermissionsValidator,
-		// "stack":       NewStackValidator,
-	}
-	resolverRegistry = map[string]ResolverConstructor{
-		"resolver/dumb": NewDumbResolver,
-		"resolver/lua":  NewLuaResolver,
-		"resolver/js":   NewJSResolver,
-		"resolver/git":  NewGitResolver,
-		//"resolver/stack": NewStackResolver,
-	}
-	indexerRegistry = map[string]IndexerConstructor{
-		"indexer/keypath": NewKeypathIndexer,
-		"indexer/js":      NewJSIndexer,
-	}
+var resolverRegistry = map[string]ResolverConstructor{
+	"resolver/dumb": NewDumbResolver,
+	"resolver/lua":  NewLuaResolver,
+	"resolver/js":   NewJSResolver,
+	"resolver/git":  NewGitResolver,
+	//"resolver/stack": NewStackResolver,
+}
+var validatorRegistry = map[string]ValidatorConstructor{
+	"validator/permissions": NewPermissionsValidator,
+	// "stack":       NewStackValidator,
+}
+var indexerRegistry = map[string]IndexerConstructor{
+	"indexer/keypath": NewKeypathIndexer,
+	"indexer/js":      NewJSIndexer,
 }
 
 type behaviorTree struct {

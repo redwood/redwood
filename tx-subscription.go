@@ -8,42 +8,45 @@ import (
 )
 
 type txMultiSub struct {
-	stateURI  string
-	maxConns  uint
-	host      Host
-	peerStore PeerStore
-	conns     map[types.Address]Peer
-	chStop    chan struct{}
-	peerPool  *peerPool
+	stateURI string
+	maxConns uint64
+	host     Host
+	conns    map[types.Address]Peer
+	chStop   chan struct{}
+	peerPool *peerPool
 }
 
 func newTxMultiSub(
 	stateURI string,
-	maxConns uint,
+	maxConns uint64,
 	host Host,
-	peerStore PeerStore,
 ) *txMultiSub {
 	return &txMultiSub{
-		stateURI:  stateURI,
-		maxConns:  maxConns,
-		host:      host,
-		peerStore: peerStore,
-		conns:     make(map[types.Address]Peer),
-		chStop:    make(chan struct{}),
+		stateURI: stateURI,
+		maxConns: maxConns,
+		host:     host,
+		conns:    make(map[types.Address]Peer),
+		chStop:   make(chan struct{}),
 	}
 }
 
 func (s *txMultiSub) Start() {
 	s.peerPool = newPeerPool(
 		s.maxConns,
-		s.host,
-		s.peerStore,
+		// s.host,
 		func(ctx context.Context) (<-chan Peer, error) {
-			return s.host.ForEachProviderOfStateURI(ctx, s.stateURI), nil
+			return s.host.ProvidersOfStateURI(ctx, s.stateURI), nil
 		},
 	)
+	defer s.peerPool.Close()
 
 	for {
+		select {
+		case <-s.chStop:
+			return
+		default:
+		}
+
 		time.Sleep(1 * time.Second)
 		peer, err := s.peerPool.GetPeer()
 		if err != nil {
@@ -61,7 +64,7 @@ func (s *txMultiSub) Start() {
 
 		peerSub, err := peer.Subscribe(context.TODO(), s.stateURI)
 		if err != nil {
-			s.host.Errorf("error connecting to %v peer: %v", peer.TransportName(), err)
+			s.host.Errorf("error connecting to %v peer: %v", peer.Transport().Name(), err)
 			s.peerPool.ReturnPeer(peer, false)
 			continue
 		}
@@ -77,7 +80,7 @@ func (s *txMultiSub) Start() {
 				default:
 				}
 
-				tx, err := peerSub.Read()
+				tx, _, err := peerSub.Read()
 				if err != nil {
 					s.host.Errorf("error reading: %v", err)
 					return
@@ -90,6 +93,5 @@ func (s *txMultiSub) Start() {
 }
 
 func (s *txMultiSub) Stop() {
-	s.peerPool.Close()
 	close(s.chStop)
 }

@@ -48,10 +48,10 @@ function createPeer(opts) {
         return knownPeers
     }
 
-    async function subscribe(stateURI, keypath, parents, onTxReceived) {
+    async function subscribe(stateURI, keypath, fromTxID, onTxReceived) {
         for (let tpt of transports) {
             if (tpt.subscribe) {
-                tpt.subscribe(stateURI, keypath, parents, onTxReceived)
+                tpt.subscribe(stateURI, keypath, fromTxID, onTxReceived)
             }
         }
     }
@@ -107,6 +107,7 @@ function createPeer(opts) {
     }
 
     return {
+        identity,
         get,
         subscribe,
         subscribeStates,

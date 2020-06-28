@@ -213,7 +213,7 @@ func (c *httpClient) Get(stateURI string, version *types.ID, keypath tree.Keypat
 		req.Header.Set("Version", version.Hex())
 	}
 	if rng != nil {
-		req.Header.Set("Range", fmt.Sprintf("json=%d:%d", rng[0], rng[1]))
+		req.Header.Set("Range", fmt.Sprintf("json=%d:%d", rng.Start, rng.End))
 	}
 
 	resp, err := client.Do(req)

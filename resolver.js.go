@@ -81,7 +81,7 @@ func (r *jsResolver) ResolveState(state tree.Node, refStore RefStore, sender typ
 		}
 
 		if patch.Range != nil {
-			convertedPatch["range"] = []interface{}{patch.Range[0], patch.Range[1]}
+			convertedPatch["range"] = []interface{}{patch.Range.Start, patch.Range.End}
 		}
 		convertedPatches[i] = convertedPatch
 	}

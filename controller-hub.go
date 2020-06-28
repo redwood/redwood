@@ -18,7 +18,7 @@ type ControllerHub interface {
 
 	AddTx(tx *Tx, force bool) error
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
-	FetchTxs(stateURI string) TxIterator
+	FetchTxs(stateURI string, fromTxID types.ID) TxIterator
 	HaveTx(stateURI string, txID types.ID) (bool, error)
 
 	KnownStateURIs() ([]string, error)
@@ -26,9 +26,13 @@ type ControllerHub interface {
 	QueryIndex(stateURI string, version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
 	Leaves(stateURI string) ([]types.ID, error)
 
+	IsPrivate(stateURI string) (bool, error)
+	IsMember(stateURI string, addr types.Address) (bool, error)
+	Members(stateURI string) ([]types.Address, error)
+
 	RefObjectReader(refID types.RefID) (io.ReadCloser, int64, error)
 
-	OnNewState(fn func(tx *Tx))
+	OnNewState(fn func(tx *Tx, state tree.Node, leaves []types.ID))
 }
 
 type controllerHub struct {
@@ -42,15 +46,12 @@ type controllerHub struct {
 	refStore      RefStore
 	dbRootPath    string
 
-	newStateListeners   []func(tx *Tx)
+	newStateListeners   []func(tx *Tx, state tree.Node, leaves []types.ID)
 	newStateListenersMu sync.RWMutex
 }
 
 var (
 	ErrNoController = errors.New("no controller for that stateURI")
-
-	MergeTypeKeypath = tree.Keypath("Merge-Type")
-	ValidatorKeypath = tree.Keypath("Validator")
 )
 
 func NewControllerHub(address types.Address, dbRootPath string, txStore TxStore, refStore RefStore) ControllerHub {
@@ -138,12 +139,11 @@ func (m *controllerHub) AddTx(tx *Tx, force bool) error {
 	if err != nil {
 		return err
 	}
-	ctrl.AddTx(tx, force)
-	return nil
+	return ctrl.AddTx(tx, force)
 }
 
-func (m *controllerHub) FetchTxs(stateURI string) TxIterator {
-	return m.txStore.AllTxsForStateURI(stateURI)
+func (m *controllerHub) FetchTxs(stateURI string, fromTxID types.ID) TxIterator {
+	return m.txStore.AllTxsForStateURI(stateURI, fromTxID)
 }
 
 func (m *controllerHub) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
@@ -191,13 +191,46 @@ func (m *controllerHub) Leaves(stateURI string) ([]types.ID, error) {
 	return m.txStore.Leaves(stateURI)
 }
 
-func (m *controllerHub) OnNewState(fn func(tx *Tx)) {
+func (m *controllerHub) IsPrivate(stateURI string) (bool, error) {
+	m.controllersMu.RLock()
+	defer m.controllersMu.RUnlock()
+
+	ctrl := m.controllers[stateURI]
+	if ctrl == nil {
+		return false, errors.Wrapf(ErrNoController, stateURI)
+	}
+	return ctrl.IsPrivate()
+}
+
+func (m *controllerHub) IsMember(stateURI string, addr types.Address) (bool, error) {
+	m.controllersMu.RLock()
+	defer m.controllersMu.RUnlock()
+
+	ctrl := m.controllers[stateURI]
+	if ctrl == nil {
+		return false, errors.Wrapf(ErrNoController, stateURI)
+	}
+	return ctrl.IsMember(addr)
+}
+
+func (m *controllerHub) Members(stateURI string) ([]types.Address, error) {
+	m.controllersMu.RLock()
+	defer m.controllersMu.RUnlock()
+
+	ctrl := m.controllers[stateURI]
+	if ctrl == nil {
+		return nil, errors.Wrapf(ErrNoController, stateURI)
+	}
+	return ctrl.Members(), nil
+}
+
+func (m *controllerHub) OnNewState(fn func(tx *Tx, state tree.Node, leaves []types.ID)) {
 	m.newStateListenersMu.Lock()
 	defer m.newStateListenersMu.Unlock()
 	m.newStateListeners = append(m.newStateListeners, fn)
 }
 
-func (m *controllerHub) notifyNewStateListeners(tx *Tx) {
+func (m *controllerHub) notifyNewStateListeners(tx *Tx, state tree.Node, leaves []types.ID) {
 	m.newStateListenersMu.RLock()
 	defer m.newStateListenersMu.RUnlock()
 
@@ -208,7 +241,7 @@ func (m *controllerHub) notifyNewStateListeners(tx *Tx) {
 		handler := handler
 		go func() {
 			defer wg.Done()
-			handler(tx)
+			handler(tx, state, leaves)
 		}()
 	}
 	wg.Wait()

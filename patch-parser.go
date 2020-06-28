@@ -142,7 +142,7 @@ func parseRange(s []byte) (*tree.Range, int, error) {
 			if err != nil {
 				return nil, 0, errors.WithStack(ErrBadPatch)
 			}
-			rng[1] = end
+			rng.End = end
 			return rng, i + 1, nil
 
 		} else if s[i] == ':' {
@@ -155,7 +155,7 @@ func parseRange(s []byte) (*tree.Range, int, error) {
 				return nil, 0, errors.WithStack(ErrBadPatch)
 			}
 			buf = []byte{}
-			rng[0] = start
+			rng.Start = start
 			haveStart = true
 		} else {
 			buf = append(buf, s[i])

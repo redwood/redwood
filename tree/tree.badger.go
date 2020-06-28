@@ -388,6 +388,22 @@ func (tx *DBNode) FloatValue(keypath Keypath) (float64, bool, error) {
 	return 0, false, nil
 }
 
+func (tx *DBNode) BoolValue(keypath Keypath) (bool, bool, error) {
+	// @@TODO: maybe optimize the case where the keypath holds a complex object
+	// that .Value takes a while to decode by first checking the value's type?
+	val, exists, err := tx.Value(keypath, nil)
+	if err != nil {
+		return false, false, err
+	} else if !exists {
+		return false, false, nil
+	}
+	b, isBool := val.(bool)
+	if isBool {
+		return b, true, nil
+	}
+	return false, false, nil
+}
+
 func (tx *DBNode) StringValue(keypath Keypath) (string, bool, error) {
 	// @@TODO: maybe optimize the case where the keypath holds a complex object
 	// that .Value takes a while to decode by first checking the value's type?
@@ -1142,8 +1158,8 @@ func (t *DBTree) DebugPrint(keypathPrefix Keypath, rng *Range) ([]Keypath, []int
 		startKeypath := keypathPrefix
 		var endKeypath Keypath
 		if rng != nil {
-			startKeypath = keypathPrefix.PushIndex(uint64(rng[0]))
-			endKeypath = keypathPrefix.PushIndex(uint64(rng[1]))
+			startKeypath = keypathPrefix.PushIndex(uint64(rng.Start))
+			endKeypath = keypathPrefix.PushIndex(uint64(rng.End))
 		}
 
 		for iter.Seek(startKeypath); iter.ValidForPrefix(keypathPrefix); iter.Next() {
