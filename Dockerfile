@@ -2,7 +2,9 @@ FROM ruby:2.6-slim
 
 WORKDIR /srv/slate
 
+VOLUME /srv/slate/build
 VOLUME /srv/slate/source
+
 EXPOSE 4567
 
 COPY . /srv/slate
@@ -15,6 +17,8 @@ RUN apt-get update \
     && bundle install \
     && apt-get remove -y build-essential \
     && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && chmod +x /srv/slate/slate.sh
 
-CMD ["bundle", "exec", "middleman", "server", "--watcher-force-polling"]
+ENTRYPOINT ["/srv/slate/slate.sh"]
+CMD ["build"]
