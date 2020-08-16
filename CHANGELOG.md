@@ -1,5 +1,14 @@
 # Changelog
 
+## Version 2.7.1
+
+*August 13, 2020*
+
+* __[security]__ Bumped middleman from 4.3.7 to 4.3.8
+
+_Note_: Slate uses redcarpet, not kramdown, for rendering markdown to HTML, and so was unaffected by the security vulnerability in middleman.
+If you have changed slate to use kramdown, and with GFM, you may need to install the `kramdown-parser-gfm` gem.
+
 ## Version 2.7.0
 
 *June 21, 2020*
