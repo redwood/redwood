@@ -168,6 +168,8 @@ func (h *host) Address() types.Address {
 	return h.signingKeypair.Address()
 }
 
+// Returns peers discovered through any transport that have already been authenticated.
+// It's not guaranteed that they actually provide
 func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan Peer {
 	var wg sync.WaitGroup
 	ch := make(chan Peer)

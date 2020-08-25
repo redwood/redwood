@@ -355,6 +355,23 @@ func (n *MemoryNode) StringValue(keypath Keypath) (string, bool, error) {
 	return "", false, nil
 }
 
+func (n *MemoryNode) BytesValue(keypath Keypath) ([]byte, bool, error) {
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.BytesValue(relKeypath)
+	}
+
+	absKeypath := n.keypath.Push(keypath)
+
+	v, exists := n.values[string(absKeypath)]
+	if !exists {
+		return nil, false, nil
+	}
+	if asBytes, isBytes := v.([]byte); isBytes {
+		return asBytes, true, nil
+	}
+	return nil, false, nil
+}
+
 // Value returns the native Go value at the given keypath and range.
 func (n *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, error) {
 	if node, relKeypath := n.ParentNodeFor(keypath); n != node {

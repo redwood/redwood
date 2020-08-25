@@ -28,6 +28,7 @@ type Node interface {
 	FloatValue(keypath Keypath) (float64, bool, error)
 	BoolValue(keypath Keypath) (bool, bool, error)
 	StringValue(keypath Keypath) (string, bool, error)
+	BytesValue(keypath Keypath) ([]byte, bool, error)
 	Length() (uint64, error)
 	NodeInfo(keypath Keypath) (NodeType, ValueType, uint64, error)
 	Exists(keypath Keypath) (bool, error)

@@ -420,6 +420,22 @@ func (tx *DBNode) StringValue(keypath Keypath) (string, bool, error) {
 	return s, true, nil
 }
 
+func (tx *DBNode) BytesValue(keypath Keypath) ([]byte, bool, error) {
+	// @@TODO: maybe optimize the case where the keypath holds a complex object
+	// that .Value takes a while to decode by first checking the value's type?
+	val, exists, err := tx.Value(keypath, nil)
+	if err != nil {
+		return nil, false, err
+	} else if !exists {
+		return nil, false, nil
+	}
+	bs, isBytes := val.([]byte)
+	if !isBytes {
+		return nil, false, nil
+	}
+	return bs, true, nil
+}
+
 func (tx *DBNode) Length() (uint64, error) {
 	item, err := tx.tx.Get(tx.addKeyPrefix(tx.rootKeypath))
 	if err == badger.ErrKeyNotFound {

@@ -128,6 +128,7 @@ func (t *httpTransport) Start() error {
 						Addr:    t.listenAddr,
 						Handler: t,
 					}
+					t.Warnf("http starting %+v", srv)
 					err := srv.ListenAndServe()
 					if err != nil {
 						fmt.Printf("%+v\n", err.Error())
