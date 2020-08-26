@@ -49,6 +49,9 @@ type Context struct {
 	onStopping         func()
 }
 
+// Ctx is an abstraction for a context that can be stopped and waited on.
+//
+// Ctx is a bridge between a Context expressed directly as *struct or as an interface offering abstraction.
 func (c *Context) Ctx() *Context {
 	return c
 }
@@ -84,7 +87,7 @@ func (c *Context) CtxStart(
 
 	// Even if onStopping == nil, we still need this call since the resulting c.stopComplete.Add(1) ensures
 	// that this context's CtxStop() has actually somethong to wait on.
-	Go(c, func(inCtx Ctx) {
+	c.CtxGo(func(inCtx Ctx) {
 
 		// This whole onStopping is a convenience as well as a self-documenting thing,  When looking at code,
 		// some can make sense of a function passed as an "onStopping" proc more easily than some generic call that
@@ -209,14 +212,17 @@ func (c *Context) CtxStopChildren(inReason string) {
 	}
 }
 
-// CtxGo is lesser more convenient variant of Go().
+// CtxGo runs task() in its own goroutine while preventing c from stopping until task() has exited.
+//
+// The purpose of this is to remove code you would historically maintain to wait on a task.
+// The presumption here is that task will exit via some trigger *other* than c.CtxWait()
 func (c *Context) CtxGo(
-	inProcess func(),
+	task func(parent Ctx),
 ) {
 	c.stopComplete.Add(1)
-	go func(c *Context) {
-		inProcess()
-		c.stopComplete.Done()
+	go func(parent *Context) {
+		task(parent)
+		parent.stopComplete.Done()
 	}(c)
 }
 
@@ -413,22 +419,4 @@ func (c *Context) AttachInterruptHandler() {
 	}()
 
 	c.Infof(0, "for graceful shutdown, \x1b[1m^c\x1b[0m or \x1b[1mkill -s SIGINT %d\x1b[0m", os.Getpid())
-}
-
-// Go starts inProcess() in its own go routine while preventing inHostCtx from stopping until inProcess has completed.
-//
-//  In effect, CtxGo(inHostCtx, inProcess) replaces:
-//
-//      go inProcess(inHostCtx)
-//
-// The presumption here is that inProcess will exit from some trigger *other* than inHost.CtxWait()
-func Go(
-	inHost Ctx,
-	inProcess func(inHost Ctx),
-) {
-	inHost.BaseContext().stopComplete.Add(1)
-	go func(inHost Ctx) {
-		inProcess(inHost)
-		inHost.BaseContext().stopComplete.Done()
-	}(inHost)
 }
