@@ -6,4 +6,9 @@ func (err *ctxErr) Error() string {
 	return err.msg
 }
 
-var ErrCtxNotRunning = &ctxErr{"context not running"}
+// Errors
+var (
+    // ctx.Context
+    ErrCtxNotRunning = &ctxErr{"context not running"}
+)
+

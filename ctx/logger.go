@@ -6,6 +6,7 @@ import (
 	"github.com/brynbellomy/klog"
 )
 
+// Logger anstracts basic logging functions.
 type Logger interface {
 	SetLogLabel(inLabel string)
 	GetLogLabel() string
@@ -32,6 +33,7 @@ type logger struct {
 	logLabel  string
 }
 
+// NewLogger creates and inits a new Logger with the given label.
 func NewLogger(label string) Logger {
 	l := &logger{}
 	if label != "" {
