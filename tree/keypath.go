@@ -7,6 +7,7 @@ import (
 type Keypath []byte
 
 var KeypathSeparator = Keypath("/")
+const pathSepChar = byte('/')
 
 func (k Keypath) Equals(other Keypath) bool {
 	return bytes.Equal(k, other)
@@ -81,6 +82,44 @@ func (k Keypath) FirstNParts(n int) Keypath {
 	}
 
 	return k[:endIdx]
+}
+
+// LastNParts returns the N right-most Keypath components (or nil if there less than the requested number of components).
+// Any trailing path sep chars are effectively ignored.
+//
+// "1/22/333".LastNParts(1)  =>  "333"
+//
+// "1/22/333".LastNParts(2)  =>  "22/333"
+//
+// "1/22/333/".LastNParts(2)  =>  "22/333"
+//
+// "1/22/333/".LastNParts(4)  =>  nil
+func (k Keypath) LastNParts(n int) Keypath {
+	if n <= 0 {
+		return nil
+    }
+    
+    klen := len(k)
+    for ; klen > 0; klen-- {
+        if k[klen-1] != '/' {
+            break
+        }
+    }
+
+	for idx := klen - 1; idx >= 0; idx-- {
+		if k[idx] == pathSepChar {
+			n--;
+            if n == 0 {
+                return k[idx+1:klen]
+            }
+		}
+    }
+    
+    if n == 1 {
+        return k[:klen]
+    }
+
+    return nil
 }
 
 func (k Keypath) StartsWith(prefixParts Keypath) bool {
