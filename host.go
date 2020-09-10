@@ -700,6 +700,12 @@ func (h *host) HandleChallengeIdentity(challengeMsg types.ChallengeMsg, peer Pee
 }
 
 func (h *host) handleNewState(tx *Tx, state tree.Node, leaves []types.ID) {
+	state, err := state.CopyToMemory(nil, nil)
+	if err != nil {
+		h.Errorf("handleNewState: couldn't copy state to memory: %v", err)
+		state = tree.NewMemoryNode() // give subscribers an empty state
+	}
+
 	// @@TODO: don't do this, this is stupid.  store ungossiped txs in the DB and create a
 	// PeerManager that gossips them on a SleeperTask-like trigger.
 	go func() {
