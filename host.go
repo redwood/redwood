@@ -18,7 +18,8 @@ type Host interface {
 	Ctx() *ctx.Context
 	Start() error
 
-	Subscribe(ctx context.Context, stateURI string) error
+	Subscribe(ctx context.Context, stateURI string) (TxSubscription, error)
+	SubscribeStates(ctx context.Context, stateURI string) (StateSubscription, error)
 	Unsubscribe(stateURI string) error
 	SendTx(ctx context.Context, tx Tx) error
 	AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error)
@@ -51,6 +52,9 @@ type host struct {
 
 	signingKeypair    *SigningKeypair
 	encryptingKeypair *EncryptingKeypair
+
+	subscriptionOutputs   map[string]map[subscriptionOutput]struct{}
+	subscriptionOutputsMu sync.RWMutex
 
 	txSubscriptionsOut     map[string]*txMultiSub // map[stateURI]
 	txSubscriptionsOutMu   sync.RWMutex
@@ -96,6 +100,7 @@ func NewHost(
 		controllerHub:        controllerHub,
 		signingKeypair:       signingKeypair,
 		encryptingKeypair:    encryptingKeypair,
+		subscriptionOutputs:  make(map[string]map[subscriptionOutput]struct{}),
 		txSubscriptionsOut:   make(map[string]*txMultiSub),
 		txSubscriptionsIn:    make(map[string]map[Peer]struct{}),
 		stateSubscriptionsIn: make(map[string]map[string]map[Peer]struct{}),
@@ -496,7 +501,7 @@ func (h *host) HandleIncomingStateSubscriptionClosed(stateURI string, keypath tr
 	}
 }
 
-func (h *host) Subscribe(ctx context.Context, stateURI string) error {
+func (h *host) subscribe(ctx context.Context, stateURI string) error {
 	h.txSubscriptionsOutMu.Lock()
 	defer h.txSubscriptionsOutMu.Unlock()
 
@@ -508,26 +513,126 @@ func (h *host) Subscribe(ctx context.Context, stateURI string) error {
 		return err
 	}
 
-	if _, exists := h.txSubscriptionsOut[stateURI]; exists {
-		return errors.New("already subscribed to that state URI")
+	if _, exists := h.txSubscriptionsOut[stateURI]; !exists {
+		multiSub := newTxMultiSub(stateURI, h.config.Node.MaxPeersPerSubscription, h)
+		multiSub.Start()
+		h.txSubscriptionsOut[stateURI] = multiSub
+
+		go func() {
+			select {
+			case <-h.Ctx().Done():
+			case <-multiSub.chStop:
+			}
+
+			h.txSubscriptionsOutMu.Lock()
+			defer h.txSubscriptionsOutMu.Unlock()
+			delete(h.txSubscriptionsOut, stateURI)
+		}()
+	}
+	return nil
+}
+
+type subscriptionOutput struct {
+	stateURI string
+	chTx     chan TxSubscriptionMsg
+	chState  chan StateSubscriptionMsg
+	chStop   chan struct{}
+}
+
+func (so subscriptionOutput) Txs() <-chan TxSubscriptionMsg {
+	return so.chTx
+}
+
+func (so subscriptionOutput) States() <-chan StateSubscriptionMsg {
+	return so.chState
+}
+
+func (so subscriptionOutput) Close() {
+	close(so.chStop)
+}
+
+type TxSubscription interface {
+	Txs() <-chan TxSubscriptionMsg
+	Close()
+}
+
+type TxSubscriptionMsg struct {
+	Tx     *Tx
+	Leaves []types.ID
+}
+
+func (h *host) Subscribe(ctx context.Context, stateURI string) (TxSubscription, error) {
+	err := h.subscribe(ctx, stateURI)
+	if err != nil {
+		return nil, err
 	}
 
-	multiSub := newTxMultiSub(stateURI, h.config.Node.MaxPeersPerSubscription, h)
-	multiSub.Start()
-	h.txSubscriptionsOut[stateURI] = multiSub
+	h.subscriptionOutputsMu.Lock()
+	defer h.subscriptionOutputsMu.Unlock()
+
+	if _, exists := h.subscriptionOutputs[stateURI]; !exists {
+		h.subscriptionOutputs[stateURI] = make(map[subscriptionOutput]struct{})
+	}
+
+	so := subscriptionOutput{stateURI: stateURI, chTx: make(chan TxSubscriptionMsg), chStop: make(chan struct{})}
+	h.subscriptionOutputs[stateURI][so] = struct{}{}
 
 	go func() {
+		defer close(so.chTx)
+
 		select {
 		case <-h.Ctx().Done():
-		case <-multiSub.chStop:
+		case <-so.chStop:
 		}
 
-		h.txSubscriptionsOutMu.Lock()
-		defer h.txSubscriptionsOutMu.Unlock()
-		delete(h.txSubscriptionsOut, stateURI)
+		h.subscriptionOutputsMu.Lock()
+		defer h.subscriptionOutputsMu.Unlock()
+		delete(h.subscriptionOutputs[stateURI], so)
 	}()
 
-	return nil
+	return so, nil
+}
+
+type StateSubscription interface {
+	States() <-chan StateSubscriptionMsg
+	Close()
+}
+
+type StateSubscriptionMsg struct {
+	State  tree.Node
+	Leaves []types.ID
+}
+
+func (h *host) SubscribeStates(ctx context.Context, stateURI string) (StateSubscription, error) {
+	err := h.subscribe(ctx, stateURI)
+	if err != nil {
+		return nil, err
+	}
+
+	h.subscriptionOutputsMu.Lock()
+	defer h.subscriptionOutputsMu.Unlock()
+
+	if _, exists := h.subscriptionOutputs[stateURI]; !exists {
+		h.subscriptionOutputs[stateURI] = make(map[subscriptionOutput]struct{})
+	}
+
+	so := subscriptionOutput{stateURI: stateURI, chState: make(chan StateSubscriptionMsg), chStop: make(chan struct{})}
+	h.subscriptionOutputs[stateURI][so] = struct{}{}
+
+	go func() {
+		defer close(so.chState)
+
+		select {
+		case <-h.Ctx().Done():
+		case <-so.chStop:
+		}
+
+		h.subscriptionOutputsMu.Lock()
+		defer h.subscriptionOutputsMu.Unlock()
+		delete(h.subscriptionOutputs[stateURI], so)
+	}()
+
+	return so, nil
 }
 
 func (h *host) Unsubscribe(stateURI string) error {
@@ -604,10 +709,11 @@ func (h *host) handleNewState(tx *Tx, state tree.Node, leaves []types.ID) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			err := h.Subscribe(ctx, tx.StateURI)
+			sub, err := h.Subscribe(ctx, tx.StateURI)
 			if err != nil {
 				h.Errorf("error subscribing to state URI %v: %v", tx.StateURI, err)
 			}
+			sub.Close() // We don't need the in-process subscription
 		}
 
 		// Broadcast state and tx to others
@@ -617,11 +723,35 @@ func (h *host) handleNewState(tx *Tx, state tree.Node, leaves []types.ID) {
 		var wg sync.WaitGroup
 		var alreadySentPeers sync.Map
 
-		wg.Add(3)
+		wg.Add(4)
 		go h.broadcastTxToSubscribedPeers(ctx, tx, leaves, &alreadySentPeers, &wg)
 		go h.broadcastTxToStateURIProviders(ctx, tx, leaves, &alreadySentPeers, &wg)
 		go h.broadcastStateToSubscribedPeers(ctx, tx, state, leaves, &wg)
+		go h.broadcastToInProcessSubscribers(ctx, tx, state, leaves, &wg)
 	}()
+}
+
+func (h *host) broadcastToInProcessSubscribers(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	h.subscriptionOutputsMu.RLock()
+	defer h.subscriptionOutputsMu.RUnlock()
+
+	for so := range h.subscriptionOutputs[tx.StateURI] {
+		wg.Add(1)
+
+		so := so
+		go func() {
+			defer wg.Done()
+
+			select {
+			case so.chTx <- TxSubscriptionMsg{Tx: tx, Leaves: leaves}:
+			case so.chState <- StateSubscriptionMsg{State: state, Leaves: leaves}:
+			case <-ctx.Done():
+			case <-h.Ctx().Done():
+			}
+		}()
+	}
 }
 
 func (h *host) broadcastStateToSubscribedPeers(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID, wg *sync.WaitGroup) {

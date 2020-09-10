@@ -46,6 +46,9 @@ func ParsePatch(s []byte) (Patch, error) {
 		case ' ', '=':
 			for s[i] != '=' {
 				i++
+				if i == len(s) {
+					return Patch{}, ErrBadPatch
+				}
 			}
 			i++
 			err := json.Unmarshal([]byte(s[i:]), &patch.Val)

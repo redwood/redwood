@@ -75,10 +75,11 @@ func (s *httpRPCServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *Su
 	}
 
 	ctx, _ := context.WithTimeout(context.Background(), 15*time.Second)
-	err := s.host.Subscribe(ctx, args.StateURI)
+	sub, err := s.host.Subscribe(ctx, args.StateURI)
 	if err != nil {
 		return errors.Wrap(err, "error subscribing to "+args.StateURI)
 	}
+	sub.Close()
 	return nil
 }
 
