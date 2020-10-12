@@ -257,7 +257,7 @@ func (s *badgerTxStore) Leaves(stateURI string) ([]types.ID, error) {
 
 		prefix := []byte("leaf:" + stateURI + ":")
 
-		for iter.Rewind(); iter.ValidForPrefix(prefix); iter.Next() {
+		for iter.Seek(prefix); iter.ValidForPrefix(prefix); iter.Next() {
 			txID := types.IDFromBytes(iter.Item().Key()[len("leaf:"+stateURI+":"):])
 			leaves = append(leaves, txID)
 		}

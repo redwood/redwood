@@ -480,6 +480,29 @@ func (h *host) HandleIncomingStateSubscription(stateURI string, keypath tree.Key
 		keypath = nil
 	}
 
+	state, err := h.Controllers().StateAtVersion(stateURI, nil)
+	if err != nil {
+		h.Errorf("error writing initial state to peer: %v", err)
+		return
+	}
+	leaves, err := h.Controllers().Leaves(stateURI)
+	if err != nil {
+		h.Errorf("error writing initial state to peer: %v", err)
+		return
+	}
+
+	err = peer.EnsureConnected(context.Background())
+	if err != nil {
+		h.Errorf("error writing initial state to peer: %v", err)
+		return
+	}
+	h.Debugf("PUTTING STATE TO PEER")
+	err = peer.PutState(state, leaves)
+	if err != nil {
+		h.Errorf("error writing tx to peer: %v", err)
+		return
+	}
+
 	if _, exists := h.stateSubscriptionsIn[stateURI]; !exists {
 		h.stateSubscriptionsIn[stateURI] = make(map[string]map[Peer]struct{})
 	}
@@ -515,7 +538,7 @@ func (h *host) subscribe(ctx context.Context, stateURI string) error {
 
 	if _, exists := h.txSubscriptionsOut[stateURI]; !exists {
 		multiSub := newTxMultiSub(stateURI, h.config.Node.MaxPeersPerSubscription, h)
-		multiSub.Start()
+		go multiSub.Start()
 		h.txSubscriptionsOut[stateURI] = multiSub
 
 		go func() {
@@ -700,6 +723,8 @@ func (h *host) HandleChallengeIdentity(challengeMsg types.ChallengeMsg, peer Pee
 }
 
 func (h *host) handleNewState(tx *Tx, state tree.Node, leaves []types.ID) {
+	h.Warnf("new state ~> %v %v", tx.StateURI, leaves)
+
 	state, err := state.CopyToMemory(nil, nil)
 	if err != nil {
 		h.Errorf("handleNewState: couldn't copy state to memory: %v", err)

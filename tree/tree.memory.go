@@ -929,6 +929,8 @@ func (n *MemoryNode) UnmarshalJSON(bs []byte) error {
 }
 
 func (n *MemoryNode) MarshalJSON() ([]byte, error) {
+	n.DebugPrint(debugPrint, true, 0)
+
 	v, _, err := n.Value(nil, nil)
 	if err != nil {
 		return nil, err

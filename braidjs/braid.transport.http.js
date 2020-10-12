@@ -212,11 +212,12 @@ module.exports = function (opts) {
                 ...options.headers,
             }
         }
+        // options.credentials = 'include'
 
 
         const resp = await fetch(httpHost + path, options)
         if (!resp.ok) {
-            let text = await res.text()
+            let text = await resp.text()
             throw Error(text)
         }
 

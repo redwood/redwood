@@ -23,6 +23,7 @@ import (
 
 	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
+	// "github.com/rs/cors"
 	"golang.org/x/net/publicsuffix"
 
 	"github.com/brynbellomy/redwood/ctx"
@@ -124,8 +125,17 @@ func (t *httpTransport) Start() error {
 						panic("http transport failed to start")
 					}
 				} else {
+					// c := cors.New(cors.Options{
+					// 	AllowedOrigins:   []string{"http://localhost:3000"},
+					// 	AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "AUTHORIZE", "SUBSCRIBE", "OPTIONS", "HEAD"},
+					// 	AllowedHeaders:   []string{"Accept", "Accept-Encoding", "Accept-Language", "Alt-Svc", "Connection", "Cookie", "Origin", "Referer", "Response", "Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site", "Subscribe", "State-URI", "Keypath", "User-Agent"},
+					// 	ExposedHeaders:   []string{"Accept", "Accept-Encoding", "Accept-Language", "Alt-Svc", "Connection", "Cookie", "Origin", "Referer", "Response", "Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site", "Subscribe", "State-URI", "Keypath", "User-Agent"},
+					// 	AllowCredentials: true,
+					// })
+
 					srv := &http.Server{
-						Addr:    t.listenAddr,
+						Addr: t.listenAddr,
+						// Handler: c.Handler(t),
 						Handler: t,
 					}
 					t.Warnf("http starting %+v", srv)
@@ -174,10 +184,6 @@ func forEachAltSvcHeaderPeer(header string, fn func(transportName, dialAddr stri
 func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	if t.devMode {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-	}
-
 	sessionID, err := t.ensureSessionIDCookie(w, r)
 	if err != nil {
 		t.Errorf("error reading sessionID cookie: %v", err)
@@ -209,9 +215,10 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// This is mainly used to poll for new peers
 
 	case "OPTIONS":
-		w.Header().Set("Access-Control-Allow-Headers", "State-URI")
+		// w.Header().Set("Access-Control-Allow-Headers", "State-URI")
 
 	case "AUTHORIZE":
+
 		// Address verification requests (2 kinds)
 		if challengeMsgHex := r.Header.Get("Challenge"); challengeMsgHex != "" {
 			// 1. Remote node is reaching out to us with a challenge, and we respond
@@ -390,6 +397,8 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
+
+	t.Debugf("SUBSCRIPTION TYPE ~> %v", subscriptionType)
 
 	switch subscriptionType {
 	case "transactions":

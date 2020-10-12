@@ -454,6 +454,8 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 		return err
 	}
 
+	state = c.states.StateAtVersion(nil, false)
+	defer state.Close()
 	c.notifyNewStateListeners(tx, state, leaves)
 
 	return nil

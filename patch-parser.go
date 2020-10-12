@@ -1,6 +1,7 @@
 package redwood
 
 import (
+	"bytes"
 	"encoding/json"
 	"strconv"
 
@@ -13,6 +14,8 @@ var ErrBadPatch = errors.New("bad patch string")
 
 func ParsePatch(s []byte) (Patch, error) {
 	patch := Patch{}
+
+	s = bytes.TrimSpace(s)
 
 	for i := 0; i < len(s); {
 		switch s[i] {

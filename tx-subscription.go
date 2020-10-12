@@ -33,7 +33,6 @@ func newTxMultiSub(
 func (s *txMultiSub) Start() {
 	s.peerPool = newPeerPool(
 		s.maxConns,
-		// s.host,
 		func(ctx context.Context) (<-chan Peer, error) {
 			return s.host.ProvidersOfStateURI(ctx, s.stateURI), nil
 		},
