@@ -59,13 +59,13 @@ function App() {
                 txs:      true,
                 states:   true,
                 fromTxID: Braid.utils.genesisTxID,
-                callback: (err, { tx, state } = {}) => {
-                    console.log('chat ~>', err, {tx, state})
+                callback: (err, { tx, state, leaves } = {}) => {
+                    console.log('chat ~>', err, {tx, state, leaves})
                     if (err) {
                         console.error(err)
                         return
                     }
-                    dispatch({ type: 'NEW_STATE_CHAT', payload: { tx, state } })
+                    dispatch({ type: 'NEW_STATE_CHAT', payload: { tx, state, leaves } })
                 },
             })
 
@@ -76,13 +76,13 @@ function App() {
                 txs:      true,
                 states:   true,
                 fromTxID: Braid.utils.genesisTxID,
-                callback: (err, { tx, state } = {}) => {
-                    console.log('editor ~>', err, {tx, state})
+                callback: (err, { tx, state, leaves } = {}) => {
+                    console.log('editor ~>', err, {tx, state, leaves})
                     if (err) {
                         console.error(err)
                         return
                     }
-                    dispatch({ type: 'NEW_STATE_EDITOR', payload: { tx, state } })
+                    dispatch({ type: 'NEW_STATE_EDITOR', payload: { tx, state, leaves } })
                 },
             })
         })
