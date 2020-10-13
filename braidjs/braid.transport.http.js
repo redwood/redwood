@@ -7,12 +7,22 @@ module.exports = function (opts) {
     let knownPeers = {}
     pollForPeers()
 
-    async function subscribe(stateURI, keypath, fromTxID, onTxReceived) {
+    let alreadyRespondedTo = {}
+
+    async function subscribe({ stateURI, keypath, fromTxID, states, txs, callback }) {
         try {
+            let subscribeHeader = []
+            if (states) {
+                subscribeHeader.push('states')
+            }
+            if (txs) {
+                subscribeHeader.push('transactions')
+            }
+
             const headers = {
                 'State-URI': stateURI,
                 'Accept':    'application/json',
-                'Subscribe': 'transactions',
+                'Subscribe': subscribeHeader.join(','),
             }
             if (fromTxID) {
                 headers['From-Tx'] = fromTxID
@@ -23,43 +33,23 @@ module.exports = function (opts) {
                 headers,
             })
             if (!resp.ok) {
-                onTxReceived('http transport: fetch failed')
+                callback('http transport: fetch failed')
                 return
             }
-            readSubscription(resp.body.getReader(), (err, { tx, leaves }) => {
-                onTxReceived(err, tx, leaves)
+            readSubscription(resp.body.getReader(), (err, { tx, state, leaves }) => {
                 if (tx) {
                     ack(tx.id)
+                    if (!alreadyRespondedTo[tx.id]) {
+                        alreadyRespondedTo[tx.id] = true
+                        callback(err, { tx, state, leaves })
+                    }
+                } else {
+                    callback(err, { tx, state, leaves })
                 }
             })
 
         } catch (err) {
-            onTxReceived('http transport: ' + err)
-            return
-        }
-    }
-
-    async function subscribeStates(stateURI, keypath, onStateReceived) {
-        try {
-            const headers = {
-                'State-URI': stateURI,
-                'Keypath':   keypath,
-                'Accept':    'application/json',
-                'Subscribe': 'states',
-            }
-
-            const resp = await wrappedFetch('/', {
-                method: 'GET',
-                headers,
-            })
-            if (!resp.ok) {
-                onStateReceived('http transport: fetch failed')
-                return
-            }
-            readSubscription(resp.body.getReader(), onStateReceived)
-
-        } catch (err) {
-            onStateReceived('http transport: ' + err)
+            callback('http transport: ' + err)
             return
         }
     }
@@ -135,6 +125,7 @@ module.exports = function (opts) {
         } else {
             body = tx.patches.join('\n')
         }
+
         return wrappedFetch('/', {
             method: 'PUT',
             body: body,
@@ -279,7 +270,6 @@ module.exports = function (opts) {
         transportName:   () => 'http',
         altSvcAddresses: () => [],
         subscribe,
-        subscribeStates,
         get,
         put,
         storeRef,

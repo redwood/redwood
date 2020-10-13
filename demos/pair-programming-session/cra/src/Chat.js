@@ -22,14 +22,16 @@ function Chat(props) {
 
     const messages = (((props.state || {}).messages || {}).value || [])
 
-    let json = JSON.stringify(props.state, null, 4)
     return (
-        <div>
+        <section id="section-chat">
+            <h2>Chat</h2>
             <div>
-                <div>
+                <div id="container-chat-messages">
                     {messages.map(msg => (
-                        <div>
-                            <div style={{fontWeight: 'bold'}}>{msg.sender}:</div>
+                        <div className="chat-message" style={{ marginBottom: 16 }}>
+                            <div style={{ fontWeight: 'bold', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                {msg.sender}:
+                            </div>
                             <div>{msg.text}</div>
                         </div>
                     ))}
@@ -37,7 +39,7 @@ function Chat(props) {
                 <input type="text" onChange={(evt) => setMessageText(evt.target.value)} value={messageText} />
                 <button onClick={onClickSend}>Send</button>
             </div>
-        </div>
+        </section>
     )
 }
 

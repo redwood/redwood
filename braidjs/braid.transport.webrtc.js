@@ -29,7 +29,7 @@ module.exports = function (opts) {
         conn.on('data', (data) => {
             const tx = JSON.parse(data)
             if (onTxReceived) {
-                onTxReceived(null, tx)
+                onTxReceived(null, { tx })
             }
         })
         conn.on('close', () => {
@@ -38,13 +38,13 @@ module.exports = function (opts) {
         })
     }
 
-    function subscribe(stateURI, keypath, parents, _onTxReceived) {
+    function subscribe({ stateURI, keypath, fromTxID, states, txs, callback }) {
         onTxReceived = _onTxReceived
         for (let peerID of Object.keys(conns)) {
             conns[peerID].on('data', (data) => {
                 const tx = JSON.parse(data)
                 console.log('webrtc: received from peer', peerID, '~>', tx)
-                onTxReceived(null, tx)
+                onTxReceived(null, { tx })
             })
         }
     }

@@ -219,7 +219,7 @@ func run(configPath string, gui bool) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			sub, err := host.Subscribe(ctx, stateURI)
+			sub, err := host.Subscribe(ctx, stateURI, 0, nil)
 			if err != nil {
 				app.Errorf("error subscribing to %v: %v", stateURI, err)
 				continue

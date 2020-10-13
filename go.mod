@@ -43,6 +43,7 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/tyler-smith/go-bip39 v1.0.0
 	github.com/urfave/cli v1.20.0
+	github.com/yhat/wsutil v0.0.0-20170731153501-1d66fa95c997 // indirect
 	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4
 	golang.org/x/net v0.0.0-20190912160710-24e19bdeb0f2

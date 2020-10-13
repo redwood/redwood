@@ -143,7 +143,7 @@ func (p *peerPool) GetPeer() (Peer, error) {
 func (p *peerPool) ReturnPeer(peer Peer, strike bool) {
 	if strike {
 		// Close the faulty connection
-		peer.CloseConn()
+		peer.Close()
 
 		p.peerStatesMu.Lock()
 		p.peerStates[peer.Address()] = peerState_Strike

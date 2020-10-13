@@ -28,16 +28,13 @@ type Peer interface {
 
 	Transport() Transport
 	EnsureConnected(ctx context.Context) error
-	CloseConn() error
+	Close() error
 
 	// Transactions
-	Subscribe(ctx context.Context, stateURI string) (TxSubscriptionClient, error)
-	Put(tx Tx, leaves []types.ID) error
-	PutPrivate(tx Tx, leaves []types.ID) error
+	Subscribe(ctx context.Context, stateURI string) (ReadableSubscription, error)
+	Put(tx *Tx, state tree.Node, leaves []types.ID) error
+	PutPrivate(tx *Tx, state tree.Node, leaves []types.ID) error
 	Ack(stateURI string, txID types.ID) error
-
-	// State subscriptions
-	PutState(state tree.Node, leaves []types.ID) error
 
 	// Identity/authentication
 	ChallengeIdentity(challengeMsg types.ChallengeMsg) error
@@ -73,11 +70,6 @@ type EncryptedTx struct {
 	TxID             types.ID `json:"txID"`
 	EncryptedPayload []byte   `json:"encryptedPayload"`
 	SenderPublicKey  []byte   `json:"senderPublicKey"`
-}
-
-type TxSubscriptionClient interface {
-	Read() (*Tx, []types.ID, error)
-	Close() error
 }
 
 type FetchHistoryHandler func(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error

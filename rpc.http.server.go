@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood/ctx"
+	"github.com/brynbellomy/redwood/tree"
 	"github.com/brynbellomy/redwood/types"
 )
 
@@ -26,11 +27,7 @@ type httpRPCServer struct {
 	host       Host
 }
 
-func NewHTTPRPCServer(
-	addr types.Address,
-	listenAddr string,
-	host Host,
-) HTTPRPCServer {
+func NewHTTPRPCServer(addr types.Address, listenAddr string, host Host) HTTPRPCServer {
 	return &httpRPCServer{
 		Context:    &ctx.Context{},
 		address:    addr,
@@ -65,6 +62,9 @@ func (s *httpRPCServer) Start() error {
 type (
 	SubscribeArgs struct {
 		StateURI string
+		Txs      bool
+		States   bool
+		Keypath  string
 	}
 	SubscribeResponse struct{}
 )
@@ -75,7 +75,16 @@ func (s *httpRPCServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *Su
 	}
 
 	ctx, _ := context.WithTimeout(context.Background(), 15*time.Second)
-	sub, err := s.host.Subscribe(ctx, args.StateURI)
+
+	var subscriptionType SubscriptionType
+	if args.Txs {
+		subscriptionType |= SubscriptionType_Txs
+	}
+	if args.States {
+		subscriptionType |= SubscriptionType_States
+	}
+
+	sub, err := s.host.Subscribe(ctx, args.StateURI, subscriptionType, tree.Keypath(args.Keypath))
 	if err != nil {
 		return errors.Wrap(err, "error subscribing to "+args.StateURI)
 	}

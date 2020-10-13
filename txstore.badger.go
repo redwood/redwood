@@ -176,10 +176,13 @@ func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID types.ID) Tx
 		sent := make(map[types.ID]struct{})
 
 		txIter.err = p.db.View(func(txn *badger.Txn) error {
-		OuterLoop:
 			for len(stack) > 0 {
 				txID := stack[0]
 				stack = stack[1:]
+
+				if _, wasSent := sent[txID]; wasSent {
+					continue
+				}
 
 				item, err := txn.Get(makeTxKey(stateURI, txID))
 				if err != nil {
@@ -194,12 +197,12 @@ func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID types.ID) Tx
 					return err
 				}
 
-				for _, parentID := range tx.Parents {
-					if _, wasSent := sent[parentID]; !wasSent {
-						stack = append(stack, tx.ID)
-						continue OuterLoop
-					}
-				}
+				// for _, parentID := range tx.Parents {
+				// 	if _, wasSent := sent[parentID]; !wasSent {
+				// 		stack = append(stack, tx.ID)
+				// 		continue OuterLoop
+				// 	}
+				// }
 
 				select {
 				case <-txIter.chCancel:
@@ -207,7 +210,7 @@ func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID types.ID) Tx
 				case txIter.ch <- &tx:
 				}
 
-				sent[tx.ID] = struct{}{}
+				sent[txID] = struct{}{}
 				stack = append(stack, tx.Children...)
 			}
 			return nil
