@@ -1,40 +1,64 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { braidClient } from './App'
+import { braidClient } from './index'
 import { keyboardCharMap, keyboardNameMap } from './keyboard-map'
-
 let Braid = window.Braid
 
-function Editor(props) {
+function Editor() {
+    let [state, setState] = useState({ tree: { text: { value: '' } } })
     let [editorText, setEditorText] = useState('')
-    let [mostRecentStartEnd, setMostRecentStartEnd] = useState([0, 0])
+    let [mostRecentSelection, setMostRecentSelection] = useState([0, 0])
     let editorRef = useRef(null)
+    console.log('state', state)
+
+    let { tx, leaves, tree } = state
+    let { text: { value: text } } = tree
+
+    useEffect(() => {
+        braidClient.subscribe({
+            stateURI: 'p2pair.local/editor',
+            keypath:  '/',
+            txs:      true,
+            states:   true,
+            fromTxID: Braid.utils.genesisTxID,
+            callback: (err, { tx: newTx, state: newTree, leaves: newLeaves } = {}) => {
+                console.log('editor ~>', err, {newTx, newTree, newLeaves})
+                if (err) return console.error(err)
+                setState({
+                    tx:     newTx,
+                    tree:   { ...tree, ...newTree },
+                    leaves: newLeaves || [],
+                })
+            },
+        })
+    }, [])
+
 
     // Set editor text once on first render
-    useEffect(() => setEditorText(props.state.text.value), [])
+    useEffect(() => setEditorText(text), [])
 
     // Set editor text when the text prop changes
     useEffect(() => {
-        setEditorText(props.state.text.value)
-        if (!props.tx) {
+        setEditorText(text)
+        if (!tx) {
             return
         } else if (!editorRef.current) {
             return
         }
 
         let n = 0
-        for (let patch of props.tx.patches) {
+        for (let patch of tx.patches) {
             let parsed = Braid.sync9.parse_change(patch)
             if (parsed.range && parsed.range[0] <= editorRef.current.selectionStart) {
                 n += parsed.val.length - (parsed.range[1] - parsed.range[0])
             }
         }
-        let selectionStart = mostRecentStartEnd[0] + n
-        let selectionEnd   = mostRecentStartEnd[1] + n
-        setMostRecentStartEnd([selectionStart, selectionEnd])
-    }, [props.state.text.value])
+        let selectionStart = mostRecentSelection[0] + n
+        let selectionEnd   = mostRecentSelection[1] + n
+        setMostRecentSelection([selectionStart, selectionEnd])
+    }, [text])
 
     useEffect(() => {
-        editorRef.current.setSelectionRange(...mostRecentStartEnd)
+        editorRef.current.setSelectionRange(...mostRecentSelection)
     })
 
     function onKeyDown(evt) {
@@ -50,25 +74,24 @@ function Editor(props) {
         }
         let selectionStart = (evt.target.selectionStart || 0)
         let selectionEnd   = (evt.target.selectionEnd   || 0)
-        let tx = {
+        braidClient.put({
             id: window.Braid.utils.randomID(),
-            parents: props.leaves,
+            parents: leaves,
             stateURI: 'p2pair.local/editor',
             patches: [
                 '.text.value[' + selectionStart + ':' + selectionEnd + '] = ' + JSON.stringify(char),
             ],
-        }
-        braidClient.put(tx)
+        })
 
         let editorText = evt.target.value.substring(0, evt.target.selectionStart) + char + evt.target.value.substring(evt.target.selectionEnd)
         setEditorText(editorText)
-        setMostRecentStartEnd([selectionStart + 1, selectionStart + 1])
+        setMostRecentSelection([selectionStart + 1, selectionStart + 1])
     }
 
     function onChange(evt) {}
 
     function onSelect(evt) {
-        setMostRecentStartEnd([evt.target.selectionStart, evt.target.selectionEnd])
+        setMostRecentSelection([evt.target.selectionStart, evt.target.selectionEnd])
     }
 
     return (

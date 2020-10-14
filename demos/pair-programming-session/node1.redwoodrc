@@ -6,6 +6,8 @@ Node:
     SubscribedStateURIs:
       - p2pair.local/editor
       - p2pair.local/chat
+      - p2pair.local/video
+      - p2pair.local/ui
     MaxPeersPerSubscription: 4
     DataRoot: ./node1_data
     DevMode: true
@@ -18,7 +20,7 @@ HTTPTransport:
     Enabled: true
     ListenHost: :8080
     CookieSecret: !!binary 72VgcebmbP16Usia9aAqq8LLr+7KBgE90A+aaqrZ3ug=
-    DefaultStateURI: p2pair.local/ui
+    DefaultStateURI: p2pair.local/video
 HTTPRPC:
     Enabled: false
     ListenHost: :8081

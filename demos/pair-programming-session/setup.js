@@ -1,12 +1,13 @@
 const Braid = require('../../braidjs/braid-src.js')
 const fs = require('fs')
-// const watch = require('node-watch')
+const yaml = require('js-yaml')
 
 //
 // Braid setup
 //
+const mnemonic = yaml.safeLoad(fs.readFileSync('./node1.redwoodrc', 'utf8')).Node.HDMnemonicPhrase
 let braidClient = Braid.createPeer({
-    identity: Braid.identity.random(),
+    identity: Braid.identity.fromMnemonic(mnemonic),
     httpHost: 'http://localhost:8080',
     onFoundPeersCallback: (peers) => {},
 })
@@ -16,7 +17,7 @@ async function main() {
     await genesisUI()
     await genesisChat()
     await genesisCodeEditor()
-    // await genesisVideo()
+    await genesisVideo()
 }
 
 async function genesisUI() {
@@ -143,87 +144,30 @@ async function genesisCodeEditor() {
     await braidClient.put(tx)
 }
 
-// async function genesisVideo() {
-//     // Send genesis tx
-//     let tx = {
-//         stateURI: 'p2pair.local/stream',
-//         id: Braid.utils.randomID(),
-//         parents: [ prevTxID ],
-//         patches: [
-//             ' = ' + Braid.utils.JSON.stringify({
-//                 'index.html': {
-//                     'Content-Type': 'text/html',
-//                     'value': {
-//                         'Content-Type': 'link',
-//                         'value': `ref:sha3:${indexHTMLSha}`,
-//                     }
-//                 },
-//                 'Validator': {
-//                     'Content-Type': 'validator/permissions',
-//                     'value': {
-//                         '*': {
-//                             '^.*$': {
-//                                 'write': true,
-//                             },
-//                         },
-//                     },
-//                 },
-//                 'Merge-Type': {
-//                     'Content-Type': 'resolver/dumb',
-//                     'value': {},
-//                 },
-//             }),
-//         ],
-//     }
-
-//     await braidClient.put(tx)
-
-//     let parentTxID = Braid.utils.genesisTxID
-
-//     const upload = _.debounce(async (evt, filename) => {
-//         let file = fs.createReadStream(filename)
-//         let { sha3: fileSHA } = await braidClient.storeRef(file)
-
-//         try {
-//             let indexM3U8 = fs.createReadStream(path.join(__dirname, 'broadcasts', 'live', 'asdf', 'index.m3u8'))
-//             let { sha3: indexM3U8SHA } = await braidClient.storeRef(indexM3U8)
-
-//             let txID = Braid.utils.randomID()
-//             await braidClient.put({
-//                 stateURI: 'redwood.tv/stream-10283',
-//                 id: txID,
-//                 parents: [ parentTxID ],
-//                 patches: [
-//                     '["index.m3u8"] = ' + Braid.utils.JSON.stringify({
-//                         'Content-Type': 'link',
-//                         'value': `ref:sha3:${indexM3U8SHA}`,
-//                     }),
-//                     `["${path.basename(filename)}"] = ` + Braid.utils.JSON.stringify({
-//                         'Content-Type': 'link',
-//                         'value': `ref:sha3:${fileSHA}`,
-//                     }),
-//                 ],
-//             })
-//             parentTxID = txID
-
-//         } catch (err) {
-//             let txID = Braid.utils.randomID()
-//             await braidClient.put({
-//                 stateURI: 'redwood.tv/stream-10283',
-//                 id: txID,
-//                 parents: [ parentTxID ],
-//                 patches: [
-//                     `["${path.basename(filename)}"] = ` + Braid.utils.JSON.stringify({
-//                         'Content-Type': 'link',
-//                         'value': `ref:sha3:${fileSHA}`,
-//                     }),
-//                 ],
-//             })
-//             parentTxID = txID
-//         }
-//     }, 500)
-
-//     watch('./broadcasts/live/asdf', {}, upload)
-// }
+async function genesisVideo() {
+    // Send genesis tx
+    await braidClient.put({
+        stateURI: 'p2pair.local/video',
+        id: Braid.utils.genesisTxID,
+        parents: [],
+        patches: [
+            ' = ' + Braid.utils.JSON.stringify({
+                'streams': {},
+                'Validator': {
+                    'Content-Type': 'validator/permissions',
+                    'value': {
+                        '*': {
+                            '^.*$': { 'write': true },
+                        },
+                    },
+                },
+                'Merge-Type': {
+                    'Content-Type': 'resolver/dumb',
+                    'value': {},
+                },
+            }),
+        ],
+    })
+}
 
 main()

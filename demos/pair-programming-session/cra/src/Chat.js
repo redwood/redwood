@@ -1,26 +1,47 @@
-import React, { useState } from 'react'
-import { braidClient } from './App'
+import React, { useState, useEffect } from 'react'
+import { braidClient } from './index'
+let Braid = window.Braid
 
 function Chat(props) {
     let [messageText, setMessageText] = useState('')
+    let [state, setState] = useState({ tree: { messages: { value: [] } } })
+
+    let { leaves, tree } = state
+    let { messages: { value: messages } } = tree
+
+    useEffect(() => {
+        braidClient.subscribe({
+            stateURI: 'p2pair.local/chat',
+            keypath:  '/',
+            txs:      true,
+            states:   true,
+            fromTxID: Braid.utils.genesisTxID,
+            callback: (err, { tx: newTx, state: newTree, leaves: newLeaves } = {}) => {
+                console.log('chat ~>', err, {newTx, newTree, newLeaves})
+                if (err) return console.error(err)
+                setState({
+                    tree:   { ...tree, ...newTree },
+                    leaves: newLeaves || [],
+                })
+            },
+        })
+    }, [])
+
 
     function onClickSend() {
-        const tx = {
-            id: window.Braid.utils.randomID(),
-            parents: props.leaves,
+        braidClient.put({
+            id: Braid.utils.randomID(),
+            parents: leaves,
             stateURI: 'p2pair.local/chat',
             patches: [
-                '.messages.value[' + (props.state.messages.value.length || 0) + ':' + (props.state.messages.value.length || 0) + '] = ' + window.Braid.utils.JSON.stringify([{
+                '.messages.value[' + (messages.length || 0) + ':' + (messages.length || 0) + '] = ' + Braid.utils.JSON.stringify([{
                     // attachment: attachment,
                     sender: braidClient.identity.address.toLowerCase(),
                     text: messageText,
                 }]),
             ],
-        }
-        braidClient.put(tx)
+        })
     }
-
-    const messages = (((props.state || {}).messages || {}).value || [])
 
     return (
         <section id="section-chat">
