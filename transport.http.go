@@ -906,6 +906,8 @@ func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, addr
 		Checkpoint: checkpoint,
 	}
 
+	t.Debugf("TX ~> %v", PrettyJSON(tx))
+
 	// @@TODO: remove .From entirely
 	pubkey, err := RecoverSigningPubkey(tx.Hash(), sig)
 	if err != nil {

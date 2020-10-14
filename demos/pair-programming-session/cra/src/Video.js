@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { braidClient } from './index'
 import videojs from 'video.js'
+import 'video.js/dist/video-js.css';
 let Braid = window.Braid
 
 function VideoPlayer() {

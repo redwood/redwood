@@ -25,12 +25,37 @@ const Braid = require('../../braidjs/braid-src.js')
     // Set up our file watcher / uploader
     let parentTxID = Braid.utils.genesisTxID
 
+    let uploaded = {}
+
     const upload = _.debounce(async (evt, filename) => {
         let file = fs.createReadStream(filename)
         let { sha3: fileSHA } = await braidClient.storeRef(file)
 
+        let files = fs.readdirSync(path.join(__dirname, 'recordings', 'live', 'stream'))
+        let toUpload = {}
+        for (let filename of files) {
+            if (uploaded[filename]) {
+                continue
+            }
+            let file = fs.createReadStream(path.join(__dirname, 'recordings', 'live', 'stream', filename))
+            let { sha3: fileSHA } = await braidClient.storeRef(file)
+            if (filename !== 'index0.ts') {
+                uploaded[filename] = true
+            }
+            toUpload[filename] = fileSHA
+        }
+
+        let patches = Object.keys(toUpload).map(filename => {
+            return `.streams.${braidClient.identity.address}["${path.basename(filename)}"] = ` + Braid.utils.JSON.stringify({
+                'Content-Type': 'link',
+                'value': `ref:sha3:${fileSHA}`,
+            })
+        })
+
+        console.log('PATCHES', patches)
+
         try {
-            let indexM3U8 = fs.createReadStream(path.join(__dirname, 'recordings', 'live', 'asdf', 'index.m3u8'))
+            let indexM3U8 = fs.createReadStream(path.join(__dirname, 'recordings', 'live', 'stream', 'index.m3u8'))
             let { sha3: indexM3U8SHA } = await braidClient.storeRef(indexM3U8)
 
             let txID = Braid.utils.randomID()
@@ -44,10 +69,7 @@ const Braid = require('../../braidjs/braid-src.js')
                         'Content-Type': 'link',
                         'value': `ref:sha3:${indexM3U8SHA}`,
                     }),
-                    `.streams.${braidClient.identity.address}["${path.basename(filename)}"] = ` + Braid.utils.JSON.stringify({
-                        'Content-Type': 'link',
-                        'value': `ref:sha3:${fileSHA}`,
-                    }),
+                    ...patches,
                 ],
             })
             parentTxID = txID
@@ -55,19 +77,24 @@ const Braid = require('../../braidjs/braid-src.js')
         } catch (err) {
             console.error(err)
 
-            let txID = Braid.utils.randomID()
-            await braidClient.put({
-                stateURI: 'p2pair.local/video',
-                id: txID,
-                parents: [ parentTxID ],
-                patches: [
-                    `.streams.${braidClient.identity.address}["${path.basename(filename)}"] = ` + Braid.utils.JSON.stringify({
-                        'Content-Type': 'link',
-                        'value': `ref:sha3:${fileSHA}`,
-                    }),
-                ],
-            })
-            parentTxID = txID
+            try {
+                let txID = Braid.utils.randomID()
+                await braidClient.put({
+                    stateURI: 'p2pair.local/video',
+                    id: txID,
+                    parents: [ parentTxID ],
+                    patches: [
+                        `.streams.${braidClient.identity.address}["${path.basename(filename)}"] = ` + Braid.utils.JSON.stringify({
+                            'Content-Type': 'link',
+                            'value': `ref:sha3:${fileSHA}`,
+                        }),
+                        ...patches,
+                    ],
+                })
+                parentTxID = txID
+            } catch (err) {
+                console.errror('FUCK YOU', err)
+            }
         }
     }, 500)
 
@@ -75,7 +102,7 @@ const Braid = require('../../braidjs/braid-src.js')
     const mediaServer = new NodeMediaServer({
         rtmp: {
             port: 1935,
-            chunk_size: 60000,
+            chunk_size: 20000,
             gop_cache: true,
             ping: 60,
             ping_timeout: 30,
@@ -91,7 +118,7 @@ const Braid = require('../../braidjs/braid-src.js')
                 {
                     app: 'live',
                     hls: true,
-                    hlsFlags: '[hls_time=2:hls_list_size=3:hls_flags=delete_segments]',
+                    hlsFlags: '[hls_time=2:hls_list_size=0]',
                     dash: true,
                     dashFlags: '[f=dash:window_size=3:extra_window_size=5]',
                     mp4: true,
@@ -113,6 +140,6 @@ const Braid = require('../../braidjs/braid-src.js')
         return parts[parts.length - 1]
     }
 
-    watch('./recordings/live/asdf', {}, upload)
+    watch('./recordings/live/stream', {}, upload)
     mediaServer.run()
 })()
