@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
+import MonacoEditor from 'react-monaco-editor'
 import { braidClient } from './index'
 import { keyboardCharMap, keyboardNameMap } from './keyboard-map'
 let Braid = window.Braid
+require('monaco-editor/esm/vs/editor/editor.api')
 
 function Editor() {
     let [state, setState] = useState({ tree: { text: { value: '' } } })
@@ -34,7 +36,10 @@ function Editor() {
 
 
     // Set editor text once on first render
-    useEffect(() => setEditorText(text), [])
+    useEffect(() => {
+        setEditorText(text)
+        console.log('yarrr ~>', editorRef.current)
+    }, [])
 
     // Set editor text when the text prop changes
     useEffect(() => {
@@ -58,7 +63,7 @@ function Editor() {
     }, [text])
 
     useEffect(() => {
-        editorRef.current.setSelectionRange(...mostRecentSelection)
+        // editorRef.current.setSelectionRange(...mostRecentSelection)
     })
 
     function onKeyDown(evt) {
@@ -96,14 +101,15 @@ function Editor() {
 
     return (
         <section id="section-editor">
-            <h2>Code editor</h2>
-            <textarea
+            <MonacoEditor
                 ref={editorRef}
-                onKeyDown={onKeyDown}
-                onSelect={onSelect}
-                onChange={onChange}
+                width="800"
+                height="600"
+                language="javascript"
+                theme="vs-dark"
                 value={editorText}
-                style={{ width: '80vw', height: '90vh' }}
+                options={{ language: 'javascript' }}
+                onChange={onChange}
             />
         </section>
     )

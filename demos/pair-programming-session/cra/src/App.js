@@ -1,5 +1,4 @@
 import React, { useReducer, useEffect } from 'react'
-import logo from './logo.svg'
 import Chat from './Chat'
 import Editor from './Editor'
 import Video from './Video'
@@ -16,7 +15,7 @@ function App() {
                 </div>
             </div>
             <div style={{ display: 'flex' }}>
-                <div style={{ width: '100%' }}>
+                <div style={{ width: '100%', height: '20vh' }}>
                     <Video />
                 </div>
             </div>

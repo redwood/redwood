@@ -27,74 +27,41 @@ const Braid = require('../../braidjs/braid-src.js')
 
     let uploaded = {}
 
-    const upload = _.debounce(async (evt, filename) => {
-        let file = fs.createReadStream(filename)
-        let { sha3: fileSHA } = await braidClient.storeRef(file)
-
-        let files = fs.readdirSync(path.join(__dirname, 'recordings', 'live', 'stream'))
-        let toUpload = {}
-        for (let filename of files) {
-            if (uploaded[filename]) {
-                continue
-            }
-            let file = fs.createReadStream(path.join(__dirname, 'recordings', 'live', 'stream', filename))
-            let { sha3: fileSHA } = await braidClient.storeRef(file)
-            if (filename !== 'index0.ts') {
-                uploaded[filename] = true
-            }
-            toUpload[filename] = fileSHA
-        }
-
-        let patches = Object.keys(toUpload).map(filename => {
-            return `.streams.${braidClient.identity.address}["${path.basename(filename)}"] = ` + Braid.utils.JSON.stringify({
-                'Content-Type': 'link',
-                'value': `ref:sha3:${fileSHA}`,
+    const upload = _.debounce(async () => {
+        let patches =
+            (await Promise.all(
+                fs.readdirSync(path.join(__dirname, 'recordings', 'live', 'stream')).map(file => {
+                    return path.join(__dirname, 'recordings', 'live', 'stream', file)
+                }).filter(fullpath => {
+                    return !uploaded[fullpath] || fs.statSync(fullpath).size !== uploaded[fullpath].size
+                }).map(fullpath => {
+                    let file = fs.createReadStream(fullpath)
+                    return Promise.all([ fullpath, braidClient.storeRef(file).then(hashes => hashes.sha3) ])
+                })
+            )).map(([ fullpath, sha3 ]) => {
+                uploaded[fullpath] = { size: fs.statSync(fullpath).size, sha3 }
+                console.log(fullpath, sha3, uploaded[fullpath].size)
+                return `.streams.${braidClient.identity.address}["${path.basename(fullpath)}"] = ` + Braid.utils.JSON.stringify({
+                    'Content-Type': 'link',
+                    'value': `ref:sha3:${sha3}`,
+                })
             })
-        })
 
         console.log('PATCHES', patches)
 
         try {
-            let indexM3U8 = fs.createReadStream(path.join(__dirname, 'recordings', 'live', 'stream', 'index.m3u8'))
-            let { sha3: indexM3U8SHA } = await braidClient.storeRef(indexM3U8)
-
             let txID = Braid.utils.randomID()
             console.log('trying to send tx')
             await braidClient.put({
                 stateURI: 'p2pair.local/video',
                 id: txID,
                 parents: [ parentTxID ],
-                patches: [
-                    `.streams.${braidClient.identity.address}["index.m3u8"] = ` + Braid.utils.JSON.stringify({
-                        'Content-Type': 'link',
-                        'value': `ref:sha3:${indexM3U8SHA}`,
-                    }),
-                    ...patches,
-                ],
+                patches: patches,
             })
             parentTxID = txID
 
         } catch (err) {
-            console.error(err)
-
-            try {
-                let txID = Braid.utils.randomID()
-                await braidClient.put({
-                    stateURI: 'p2pair.local/video',
-                    id: txID,
-                    parents: [ parentTxID ],
-                    patches: [
-                        `.streams.${braidClient.identity.address}["${path.basename(filename)}"] = ` + Braid.utils.JSON.stringify({
-                            'Content-Type': 'link',
-                            'value': `ref:sha3:${fileSHA}`,
-                        }),
-                        ...patches,
-                    ],
-                })
-                parentTxID = txID
-            } catch (err) {
-                console.errror('FUCK YOU', err)
-            }
+            console.log('error ~>', err)
         }
     }, 500)
 

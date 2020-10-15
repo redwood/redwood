@@ -23,7 +23,7 @@ function VideoPlayer() {
     }, [])
 
     return (
-        <div>
+        <div style={{ height: '20vh' }}>
             {state.streams && Object.keys(state.streams).map(userAddr => (
                 <Video source={`/streams/${userAddr}/index.m3u8?state_uri=p2pair.local/video`} key={userAddr} />
             ))}
@@ -43,9 +43,9 @@ function Video({ source }) {
     }, [source])
 
     return (
-        <div data-vjs-player>
-            <video ref={playerRef} className="video-js vjs-16-9" playsInline />
-        </div>
+            <video style={{ height: '20vh' }} ref={playerRef} className="video-js vjs-16-9" playsInline>
+                <source src={source} type="application/x-mpegURL" />
+            </video>
     )
 }
 

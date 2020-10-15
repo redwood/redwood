@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react'
+import { makeStyles } from '@material-ui/core/styles'
+import { Card, TextField, Button } from '@material-ui/core'
 import { braidClient } from './index'
 let Braid = window.Braid
 
-function Chat(props) {
+function Chat() {
     let [messageText, setMessageText] = useState('')
     let [state, setState] = useState({ tree: { messages: { value: [] } } })
 
     let { leaves, tree } = state
     let { messages: { value: messages } } = tree
+    let classes = useStyles()
 
     useEffect(() => {
         braidClient.subscribe({
@@ -44,24 +47,39 @@ function Chat(props) {
     }
 
     return (
-        <section id="section-chat">
-            <h2>Chat</h2>
-            <div>
-                <div id="container-chat-messages">
-                    {messages.map(msg => (
-                        <div className="chat-message" style={{ marginBottom: 16 }}>
-                            <div style={{ fontWeight: 'bold', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                                {msg.sender}:
-                            </div>
-                            <div>{msg.text}</div>
+        <section className={classes.container}>
+            <div id="container-chat-messages">
+                {messages.map(msg => (
+                    <div className={classes.messageCard}>
+                        <div style={{ fontWeight: 'bold', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                            {msg.sender}:
                         </div>
-                    ))}
-                </div>
-                <input type="text" onChange={(evt) => setMessageText(evt.target.value)} value={messageText} />
-                <button onClick={onClickSend}>Send</button>
+                        <div>{msg.text}</div>
+                    </div>
+                ))}
+            </div>
+            <div className={classes.spacer} />
+            <div>
+                <TextField onChange={(evt) => setMessageText(evt.target.value)} value={messageText} />
+                <Button variant="contained" color="primary" onClick={onClickSend}>Send</Button>
             </div>
         </section>
     )
 }
+
+var useStyles = makeStyles({
+    container: {
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+    },
+    messageCard: {
+        marginBottom: 16,
+        padding: 16,
+    },
+    spacer: {
+        flexGrow: 1,
+    },
+})
 
 export default Chat
