@@ -16,15 +16,16 @@ import (
 )
 
 type termUI struct {
-	TabPane   *tabPane
-	LogPane   *logPane
-	StatePane *statePane
-	Input     *input
-	Sidebar   *sidebar
-	Layout    *layout
-	chDone    chan struct{}
-	stopOnce  sync.Once
-	focusMode focusMode
+	TabPane     *tabPane
+	LogPane     *logPane
+	StatePane   *statePane
+	NetworkPane *networkPane
+	Input       *input
+	Sidebar     *sidebar
+	Layout      *layout
+	chDone      chan struct{}
+	stopOnce    sync.Once
+	focusMode   focusMode
 }
 
 var uiState = struct {
@@ -71,6 +72,7 @@ type tab int
 const (
 	tabLogs tab = iota
 	tabStates
+	tabNetwork
 )
 
 type focusMode int
@@ -85,16 +87,18 @@ func NewTermUI() *termUI {
 	tabPane := newTabPane()
 	logPane := newLogPane(30000)
 	statePane := newStatePane()
+	networkPane := newNetworkPane()
 	input := newInput()
 	sidebar := newSidebar()
 	return &termUI{
-		TabPane:   tabPane,
-		LogPane:   logPane,
-		StatePane: statePane,
-		Input:     input,
-		Sidebar:   sidebar,
-		Layout:    newLayout(tabPane, logPane, statePane, input, sidebar),
-		chDone:    make(chan struct{}),
+		TabPane:     tabPane,
+		LogPane:     logPane,
+		StatePane:   statePane,
+		NetworkPane: networkPane,
+		Input:       input,
+		Sidebar:     sidebar,
+		Layout:      newLayout(tabPane, logPane, statePane, networkPane, input, sidebar),
+		chDone:      make(chan struct{}),
 	}
 }
 
@@ -170,23 +174,25 @@ type layout struct {
 	*component
 	*ui.Grid
 
-	tabPane   *tabPane
-	logPane   *logPane
-	statePane *statePane
-	input     *input
-	sidebar   *sidebar
+	tabPane     *tabPane
+	logPane     *logPane
+	statePane   *statePane
+	networkPane *networkPane
+	input       *input
+	sidebar     *sidebar
 }
 
-func newLayout(tabPane *tabPane, logPane *logPane, statePane *statePane, input *input, sidebar *sidebar) *layout {
+func newLayout(tabPane *tabPane, logPane *logPane, statePane *statePane, networkPane *networkPane, input *input, sidebar *sidebar) *layout {
 	grid := ui.NewGrid()
 	l := &layout{
-		component: nil,
-		Grid:      grid,
-		tabPane:   tabPane,
-		logPane:   logPane,
-		statePane: statePane,
-		input:     input,
-		sidebar:   sidebar,
+		component:   nil,
+		Grid:        grid,
+		tabPane:     tabPane,
+		logPane:     logPane,
+		statePane:   statePane,
+		networkPane: networkPane,
+		input:       input,
+		sidebar:     sidebar,
 	}
 	l.component = newComponent(l)
 	return l
@@ -218,6 +224,8 @@ func (l *layout) HandleInput(evt ui.Event) bool {
 			return l.logPane.HandleInput(evt)
 		} else if uiState.activeTab == tabStates {
 			return l.statePane.HandleInput(evt)
+		} else if uiState.activeTab == tabNetwork {
+			return l.networkPane.HandleInput(evt)
 		}
 	} else if uiState.focusMode == focusInput {
 		return l.input.HandleInput(evt)
@@ -264,6 +272,8 @@ func (l *layout) Update() {
 		mainContent = l.logPane
 	case tabStates:
 		mainContent = l.statePane
+	case tabNetwork:
+		mainContent = l.networkPane
 	}
 
 	l.Grid.Items = l.Grid.Items[:0]
@@ -277,6 +287,7 @@ func (l *layout) Update() {
 	l.tabPane.Update()
 	l.logPane.Update()
 	l.statePane.Update()
+	l.networkPane.Update()
 	l.input.Update()
 	l.sidebar.Update()
 }
@@ -445,6 +456,9 @@ func (p *tabPane) HandleInput(evt ui.Event) bool {
 			return true
 		case "<F2>":
 			uiState.activeTab = tabStates
+			return true
+		case "<F3>":
+			uiState.activeTab = tabNetwork
 			return true
 		}
 	}
@@ -716,6 +730,82 @@ func (p *logPane) Update() {
 }
 
 func (p *logPane) HandleInput(evt ui.Event) bool {
+	p.Lock()
+	defer p.Unlock()
+	defer func() {
+		if uiState.logPanePreviousKey == "g" {
+			uiState.logPanePreviousKey = ""
+		} else {
+			uiState.logPanePreviousKey = evt.ID
+		}
+	}()
+	switch evt.ID {
+	case "j", "<Down>":
+		p.ScrollDown()
+		return true
+	case "k", "<Up>":
+		p.ScrollUp()
+		return true
+	case "<C-d>":
+		p.ScrollHalfPageDown()
+		return true
+	case "<C-u>":
+		p.ScrollHalfPageUp()
+		return true
+	case "<C-f>":
+		p.ScrollPageDown()
+		return true
+	case "<C-b>":
+		p.ScrollPageUp()
+		return true
+	case "g":
+		if uiState.logPanePreviousKey == "g" {
+			p.ScrollTop()
+			return true
+		}
+	case "<Home>":
+		p.ScrollTop()
+		return true
+	case "G", "<End>":
+		p.ScrollBottom()
+		return true
+	}
+	return false
+}
+
+type networkPane struct {
+	*widgets.List
+	*component
+}
+
+func newNetworkPane() *networkPane {
+	list := widgets.NewList()
+	lp := &networkPane{
+		component: newComponent(list),
+		List:      list,
+	}
+	lp.List.SelectedRowStyle = ui.NewStyle(lp.List.SelectedRowStyle.Fg, lp.List.SelectedRowStyle.Bg, ui.ModifierReverse)
+	return lp
+}
+
+func (p *networkPane) Update() {
+	p.Lock()
+	defer p.Unlock()
+
+	p.List.Rows = []string{
+		"libp2p alskdjlsakdfj",
+		"libp2p bsakjdfsjdf",
+		"http sfkjdslkjfslkdjf",
+	}
+
+	if uiState.focusMode == focusMain {
+		p.List.BorderStyle = ui.NewStyle(ui.ColorRed, ui.ColorClear, ui.ModifierBold)
+	} else {
+		p.List.BorderStyle = ui.NewStyle(ui.ColorClear, ui.ColorClear, ui.ModifierClear)
+	}
+}
+
+func (p *networkPane) HandleInput(evt ui.Event) bool {
 	p.Lock()
 	defer p.Unlock()
 	defer func() {
