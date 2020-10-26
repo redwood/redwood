@@ -47,11 +47,8 @@ const Braid = require('../../braidjs/braid-src.js')
                 })
             })
 
-        console.log('PATCHES', patches)
-
         try {
             let txID = Braid.utils.randomID()
-            console.log('trying to send tx')
             await braidClient.put({
                 stateURI: 'p2pair.local/video',
                 id: txID,

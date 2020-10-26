@@ -4,10 +4,10 @@ Node:
         glad
     BootstrapPeers: []
     SubscribedStateURIs:
+      - p2pair.local/ui
       - p2pair.local/editor
       - p2pair.local/chat
       - p2pair.local/video
-      - p2pair.local/ui
     MaxPeersPerSubscription: 4
     DataRoot: ./node1_data
     DevMode: true

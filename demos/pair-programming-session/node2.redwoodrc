@@ -1,26 +1,25 @@
 Node:
-    HDMnemonicPhrase: daughter clean this library bring bench camera oil steak carbon
-        steel general giraffe goddess federal mandate wear fiction park choose stadium
-        quit situate punch
-    BootstrapPeers:
-      - Transport: libp2p
-        DialAddresses:
-          - /ip4/127.0.0.1/tcp/21231/p2p/16Uiu2HAmLLpZ2tCFYPgSw1jS26HLueidnfnhfJJaRbDyavSFxnpj
+    HDMnemonicPhrase: cluster hat rifle wing joke end deputy congress width tone stairs
+        collect lecture tunnel pen crystal match pyramid smooth wrist custom seven
+        middle draft
+    BootstrapPeers: []
     SubscribedStateURIs:
-      - redwood.tv/stream-10283
+      - p2pair.local/chat
+      - p2pair.local/editor
+      - p2pair.local/video
     MaxPeersPerSubscription: 4
     DataRoot: ./node2_data
     DevMode: true
 P2PTransport:
     Enabled: true
-    KeyFile: ./node2.p2pkey
+    KeyFile: /home/bryn/.config/redwood/p2p_key
     ListenAddr: 0.0.0.0
-    ListenPort: 21241
+    ListenPort: 21231
 HTTPTransport:
     Enabled: true
     ListenHost: :8080
     CookieSecret: !!binary 72VgcebmbP16Usia9aAqq8LLr+7KBgE90A+aaqrZ3ug=
-    DefaultStateURI: redwood.tv/stream-10283
+    DefaultStateURI: p2pair.local/ui
 HTTPRPC:
     Enabled: false
     ListenHost: :8081

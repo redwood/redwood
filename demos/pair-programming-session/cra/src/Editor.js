@@ -3,7 +3,7 @@ import MonacoEditor from 'react-monaco-editor'
 import { braidClient } from './index'
 import { keyboardCharMap, keyboardNameMap } from './keyboard-map'
 let Braid = window.Braid
-require('monaco-editor/esm/vs/editor/editor.api')
+// require('monaco-editor/esm/vs/editor/editor.api')
 
 function Editor() {
     let [state, setState] = useState({ tree: { text: { value: '' } } })
@@ -105,10 +105,9 @@ function Editor() {
                 ref={editorRef}
                 width="800"
                 height="600"
-                language="javascript"
                 theme="vs-dark"
                 value={editorText}
-                options={{ language: 'javascript' }}
+                options={{}}
                 onChange={onChange}
             />
         </section>

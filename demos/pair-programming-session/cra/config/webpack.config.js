@@ -26,7 +26,7 @@ const ForkTsCheckerWebpackPlugin = require('react-dev-utils/ForkTsCheckerWebpack
 const typescriptFormatter = require('react-dev-utils/typescriptFormatter');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin')
 const ProgressBarWebpackPlugin = require('progress-bar-webpack-plugin')
-const ReactManifest = path.join(__dirname, 'dist-bundle/dll/react_manifest.json')
+const DllManifest = path.join(__dirname, '../build/static/js/dll/manifest.json')
 
 const postcssNormalize = require('postcss-normalize');
 
@@ -156,7 +156,7 @@ module.exports = function(webpackEnv) {
       ['hot-dev-client', isEnvDevelopment && require.resolve('react-dev-utils/webpackHotDevClient')],
       // Finally, this is your app's code:
       ['app', paths.appIndexJs],
-      ['editor.worker', 'monaco-editor/esm/vs/editor/editor.worker.js'],
+      // ['editor.worker', 'monaco-editor/esm/vs/editor/editor.worker.js'],
       // ['json.worker', 'monaco-editor/esm/vs/language/json/json.worker'],
       // ['css.worker', 'monaco-editor/esm/vs/language/css/css.worker'],
       // ['html.worker', 'monaco-editor/esm/vs/language/html/html.worker'],
@@ -519,6 +519,8 @@ module.exports = function(webpackEnv) {
       ],
     },
     plugins: [
+      new ProgressBarWebpackPlugin(),
+      // new webpack.DllReferencePlugin({ manifest: DllManifest }),
       // Generates an `index.html` file with the <script> injected.
       new HtmlWebpackPlugin(
         Object.assign(
@@ -660,11 +662,9 @@ module.exports = function(webpackEnv) {
           // The formatter is invoked directly in WebpackDevServerUtils during development
           formatter: isEnvProduction ? typescriptFormatter : undefined,
         }),
-        new MonacoWebpackPlugin({
-          languages: ['javascript', 'go'],
-        }),
-        new ProgressBarWebpackPlugin(),
-        new webpack.DllReferencePlugin({ manifest: ReactManifest }),
+        // new MonacoWebpackPlugin({
+        //   languages: ['javascript', 'go'],
+        // }),
     ].filter(Boolean),
     // Some libraries import Node modules but don't use them in the browser.
     // Tell webpack to provide empty mocks for them so importing them works.
