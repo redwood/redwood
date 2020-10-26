@@ -19,6 +19,8 @@ import (
 //var json = jsoniter.ConfigFastest
 //var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
+var log = ctx.NewLogger("hi")
+
 func annotate(err *error, msg string, args ...interface{}) {
 	if *err != nil {
 		*err = errors.Wrapf(*err, msg, args...)

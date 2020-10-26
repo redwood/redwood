@@ -29,7 +29,7 @@ var resolverRegistry = map[string]ResolverConstructor{
 	"resolver/dumb": NewDumbResolver,
 	"resolver/lua":  NewLuaResolver,
 	"resolver/js":   NewJSResolver,
-	"resolver/git":  NewGitResolver,
+	// "resolver/git":  NewGitResolver,
 	//"resolver/stack": NewStackResolver,
 }
 var validatorRegistry = map[string]ValidatorConstructor{
