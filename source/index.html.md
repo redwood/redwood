@@ -45,7 +45,7 @@ api = kittn.authorize('meowmeowmeow')
 
 ```shell
 # With shell, you can just pass the correct header with each request
-curl "api_endpoint_here"
+curl "api_endpoint_here" \
   -H "Authorization: meowmeowmeow"
 ```
 
@@ -86,7 +86,7 @@ api.kittens.get()
 ```
 
 ```shell
-curl "http://example.com/api/kittens"
+curl "http://example.com/api/kittens" \
   -H "Authorization: meowmeowmeow"
 ```
 
@@ -152,7 +152,7 @@ api.kittens.get(2)
 ```
 
 ```shell
-curl "http://example.com/api/kittens/2"
+curl "http://example.com/api/kittens/2" \
   -H "Authorization: meowmeowmeow"
 ```
 
@@ -206,8 +206,8 @@ api.kittens.delete(2)
 ```
 
 ```shell
-curl "http://example.com/api/kittens/2"
-  -X DELETE
+curl "http://example.com/api/kittens/2" \
+  -X DELETE \
   -H "Authorization: meowmeowmeow"
 ```
 
