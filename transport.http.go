@@ -1352,13 +1352,13 @@ type httpReadableSubscription struct {
 	private bool
 }
 
-func (s *httpReadableSubscription) Read() (_ *Tx, _ []types.ID, err error) {
+func (s *httpReadableSubscription) Read() (_ SubscriptionMsg, err error) {
 	defer func() { s.peer.UpdateConnStats(err == nil) }()
 
 	r := bufio.NewReader(s.stream)
 	bs, err := r.ReadBytes(byte('\n'))
 	if err != nil {
-		return nil, nil, err
+		return SubscriptionMsg{}, err
 	}
 	bs = bytes.TrimPrefix(bs, []byte("data: "))
 	bs = bytes.Trim(bs, "\n ")
@@ -1366,31 +1366,32 @@ func (s *httpReadableSubscription) Read() (_ *Tx, _ []types.ID, err error) {
 	var msg SubscriptionMsg
 	err = json.Unmarshal(bs, &msg)
 	if err != nil {
-		return nil, nil, err
+		return SubscriptionMsg{}, err
 	}
 
 	if s.private {
 		if msg.EncryptedTx == nil {
-			return nil, nil, errors.New("no encrypted tx sent by http peer")
+			return SubscriptionMsg{}, errors.New("no encrypted tx sent by http peer")
 		}
 
 		bs, err = s.peer.t.enckeys.OpenMessageFrom(EncryptingPublicKeyFromBytes(msg.EncryptedTx.SenderPublicKey), msg.EncryptedTx.EncryptedPayload)
 		if err != nil {
-			return nil, nil, err
+			return SubscriptionMsg{}, err
 		}
 
 		var tx Tx
 		err = json.Unmarshal(bs, &tx)
 		if err != nil {
-			return nil, nil, err
+			return SubscriptionMsg{}, err
 		}
-		return &tx, msg.Leaves, nil
+		msg.Tx = &tx
+		return msg, nil
 
 	} else {
 		if msg.Tx == nil {
-			return nil, nil, errors.New("no tx sent by http peer")
+			return SubscriptionMsg{}, errors.New("no tx sent by http peer")
 		}
-		return msg.Tx, msg.Leaves, nil
+		return msg, nil
 	}
 }
 

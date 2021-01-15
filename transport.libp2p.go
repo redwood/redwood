@@ -843,39 +843,42 @@ type libp2pReadableSubscription struct {
 	stateURI string
 }
 
-func (sub *libp2pReadableSubscription) Read() (*Tx, []types.ID, error) {
+func (sub *libp2pReadableSubscription) Read() (SubscriptionMsg, error) {
 	msg, err := sub.peer.readMsg()
 	if err != nil {
-		return nil, nil, errors.Errorf("error reading from subscription: %v", err)
+		return SubscriptionMsg{}, errors.Errorf("error reading from subscription: %v", err)
 	}
 
 	switch msg.Type {
 	case MsgType_Put:
-		tx := msg.Payload.(*Tx)
-		return tx, nil, nil
+		tx := msg.Payload.(Tx)
+		return SubscriptionMsg{Tx: &tx}, nil
 
 	case MsgType_Private:
 		encryptedTx, ok := msg.Payload.(EncryptedTx)
 		if !ok {
-			return nil, nil, errors.Errorf("Private message: bad payload: (%T) %v", msg.Payload, msg.Payload)
+			return SubscriptionMsg{}, errors.Errorf("Private message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 		}
 		bs, err := sub.peer.t.enckeys.OpenMessageFrom(
 			EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
 			encryptedTx.EncryptedPayload,
 		)
 		if err != nil {
-			return nil, nil, errors.Errorf("error decrypting tx: %v", err)
+			return SubscriptionMsg{}, errors.Errorf("error decrypting tx: %v", err)
 		}
 
 		var tx Tx
 		err = json.Unmarshal(bs, &tx)
 		if err != nil {
-			return nil, nil, errors.Errorf("error decoding tx: %v", err)
+			return SubscriptionMsg{}, errors.Errorf("error decoding tx: %v", err)
 		} else if encryptedTx.TxID != tx.ID {
-			return nil, nil, errors.Errorf("private tx id does not match")
+			return SubscriptionMsg{}, errors.Errorf("private tx id does not match")
 		}
+		return SubscriptionMsg{Tx: &tx, EncryptedTx: &encryptedTx}, nil
+
+	default:
+		return SubscriptionMsg{}, errors.New("protocol error, expecting MsgType_Put or MsgType_Private")
 	}
-	return nil, nil, errors.New("protocol error, expecting MsgType_Put or MsgType_Private")
 }
 
 func (sub *libp2pReadableSubscription) Close() error {

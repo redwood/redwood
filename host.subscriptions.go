@@ -11,7 +11,7 @@ import (
 
 type (
 	ReadableSubscription interface {
-		Read() (*Tx, []types.ID, error)
+		Read() (SubscriptionMsg, error)
 		Close() error
 	}
 
@@ -88,12 +88,12 @@ func (sub inProcessSubscription) WritePrivate(ctx context.Context, tx *Tx, state
 	return nil
 }
 
-func (sub inProcessSubscription) Read() (*Tx, []types.ID, error) {
+func (sub inProcessSubscription) Read() (SubscriptionMsg, error) {
 	select {
 	case msg := <-sub.ch:
-		return msg.Tx, msg.Leaves, nil
+		return msg, nil
 	case <-sub.chStop:
-		return nil, nil, errors.New("shutting down")
+		return SubscriptionMsg{}, errors.New("shutting down")
 	}
 }
 
@@ -170,13 +170,16 @@ func (s *multiReaderSubscription) Start() {
 				default:
 				}
 
-				tx, _, err := peerSub.Read()
+				msg, err := peerSub.Read()
 				if err != nil {
 					s.host.Errorf("error reading: %v", err)
 					return
+				} else if msg.Tx == nil {
+					s.host.Error("error: peer sent empty subscription message")
+					return
 				}
 
-				s.host.HandleTxReceived(*tx, peer)
+				s.host.HandleTxReceived(*msg.Tx, peer)
 			}
 		}()
 	}
