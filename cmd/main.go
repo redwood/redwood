@@ -35,7 +35,7 @@ func main() {
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
-	configRoot, err := rw.DefaultConfigRoot()
+	configRoot, err := rw.DefaultConfigRoot("redwood")
 	if err != nil {
 		app.Error(err)
 		os.Exit(1)
@@ -51,12 +51,17 @@ func main() {
 			Name:  "gui",
 			Usage: "enable CLI GUI",
 		},
+		cli.BoolFlag{
+			Name:  "dev",
+			Usage: "enable dev mode",
+		},
 	}
 
 	cliApp.Action = func(c *cli.Context) error {
 		configPath := c.String("config")
 		gui := c.Bool("gui")
-		return run(configPath, gui)
+		dev := c.Bool("dev")
+		return run(configPath, gui, dev)
 	}
 
 	err = cliApp.Run(os.Args)
@@ -66,7 +71,7 @@ func main() {
 	}
 }
 
-func run(configPath string, gui bool) error {
+func run(configPath string, gui bool, dev bool) error {
 	var termUI *termUI
 	if gui {
 		termUI = NewTermUI()
@@ -97,9 +102,13 @@ func run(configPath string, gui bool) error {
 	klog.Flush()
 	defer klog.Flush()
 
-	config, err := rw.ReadConfigAtPath(configPath)
+	config, err := rw.ReadConfigAtPath("redwood", configPath)
 	if err != nil {
 		return err
+	}
+
+	if dev {
+		config.Node.DevMode = true
 	}
 
 	err = ensureDataDirs(config)
@@ -276,17 +285,17 @@ func run(configPath string, gui bool) error {
 }
 
 func ensureDataDirs(config *rw.Config) error {
-	err := os.MkdirAll(config.RefDataRoot(), 0700)
+	err := os.MkdirAll(config.RefDataRoot(), 0777|os.ModeDir)
 	if err != nil {
 		return err
 	}
 
-	err = os.MkdirAll(config.TxDBRoot(), 0700)
+	err = os.MkdirAll(config.TxDBRoot(), 0777|os.ModeDir)
 	if err != nil {
 		return err
 	}
 
-	err = os.MkdirAll(config.StateDBRoot(), 0700)
+	err = os.MkdirAll(config.StateDBRoot(), 0777|os.ModeDir)
 	if err != nil {
 		return err
 	}

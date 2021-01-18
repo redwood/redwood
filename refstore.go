@@ -82,7 +82,7 @@ func (s *refStore) Start() error {
 }
 
 func (s *refStore) ensureRootPath() error {
-	return os.MkdirAll(filepath.Join(s.rootPath, "blobs"), 0700)
+	return os.MkdirAll(filepath.Join(s.rootPath, "blobs"), 0777|os.ModeDir)
 }
 
 func (s *refStore) HaveObject(refID types.RefID) (bool, error) {

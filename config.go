@@ -55,17 +55,17 @@ type HTTPRPCConfig struct {
 	ListenHost string `yaml:"ListenHost"`
 }
 
-var DefaultConfig = func() Config {
-	configRoot, err := DefaultConfigRoot()
+func DefaultConfig(appName string) Config {
+	configRoot, err := DefaultConfigRoot(appName)
 	if err != nil {
 		panic(err)
 	}
-	err = os.MkdirAll(configRoot, 0700)
+	err = os.MkdirAll(configRoot, 0777|os.ModeDir)
 	if err != nil {
 		panic(err)
 	}
 
-	dataRoot, err := defaultDataRoot()
+	dataRoot, err := DefaultDataRoot(appName)
 	if err != nil {
 		panic(err)
 	}
@@ -107,9 +107,9 @@ var DefaultConfig = func() Config {
 			ListenHost: ":8081",
 		},
 	}
-}()
+}
 
-func DefaultConfigRoot() (root string, _ error) {
+func DefaultConfigRoot(appName string) (root string, _ error) {
 	configRoot, err := os.UserConfigDir()
 	if err != nil {
 		configRoot, err = os.Getwd()
@@ -117,14 +117,22 @@ func DefaultConfigRoot() (root string, _ error) {
 			return "", err
 		}
 	}
-	configRoot = filepath.Join(configRoot, "redwood")
+	configRoot = filepath.Join(configRoot, appName)
 	return configRoot, nil
 }
 
-func defaultDataRoot() (string, error) {
+func DefaultConfigPath(appName string) (root string, _ error) {
+	configRoot, err := DefaultConfigRoot(appName)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configRoot, ".redwoodrc"), nil
+}
+
+func DefaultDataRoot(appName string) (string, error) {
 	switch runtime.GOOS {
 	case "windows", "darwin", "plan9":
-		configRoot, err := DefaultConfigRoot()
+		configRoot, err := DefaultConfigRoot(appName)
 		if err != nil {
 			return "", err
 		}
@@ -135,14 +143,14 @@ func defaultDataRoot() (string, error) {
 		if err != nil {
 			panic(err)
 		}
-		return filepath.Join(homeDir, ".local", "share", "redwood"), nil
+		return filepath.Join(homeDir, ".local", "share", appName), nil
 	}
 }
 
-func ReadConfigAtPath(configPath string) (*Config, error) {
+func ReadConfigAtPath(appName, configPath string) (*Config, error) {
 	if configPath == "" {
 		var err error
-		configPath, err = DefaultConfigRoot()
+		configPath, err = DefaultConfigRoot(appName)
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +158,7 @@ func ReadConfigAtPath(configPath string) (*Config, error) {
 	}
 
 	// Copy the default config
-	cfg := DefaultConfig
+	cfg := DefaultConfig(appName)
 
 	bs, err := ioutil.ReadFile(configPath)
 	// If the file can't be found, we ignore the error.  Otherwise, return it.
