@@ -93,6 +93,18 @@ func (s *httpRPCServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *Su
 }
 
 type (
+	NodeAddressArgs     struct{}
+	NodeAddressResponse struct {
+		Address types.Address
+	}
+)
+
+func (s *httpRPCServer) NodeAddress(r *http.Request, args *NodeAddressArgs, resp *NodeAddressResponse) error {
+	resp.Address = s.address
+	return nil
+}
+
+type (
 	KnownStateURIsArgs     struct{}
 	KnownStateURIsResponse struct {
 		StateURIs []string
