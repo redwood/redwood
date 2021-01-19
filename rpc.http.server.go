@@ -47,7 +47,7 @@ func (s *httpRPCServer) Start() error {
 				server := rpc.NewServer()
 				server.RegisterCodec(json2.NewCodec(), "application/json")
 				server.RegisterService(s, "RPC")
-				http.ListenAndServe(s.listenAddr, server)
+				http.ListenAndServe(s.listenAddr, UnrestrictedCors(server))
 			}()
 
 			return nil

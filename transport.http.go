@@ -23,7 +23,7 @@ import (
 
 	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
-	// "github.com/rs/cors"
+
 	"golang.org/x/net/publicsuffix"
 
 	"github.com/brynbellomy/redwood/ctx"
@@ -125,18 +125,9 @@ func (t *httpTransport) Start() error {
 						panic("http transport failed to start")
 					}
 				} else {
-					// c := cors.New(cors.Options{
-					// 	AllowedOrigins:   []string{"http://localhost:3000"},
-					// 	AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "AUTHORIZE", "SUBSCRIBE", "OPTIONS", "HEAD"},
-					// 	AllowedHeaders:   []string{"Accept", "Accept-Encoding", "Accept-Language", "Alt-Svc", "Connection", "Cookie", "Origin", "Referer", "Response", "Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site", "Subscribe", "State-URI", "Keypath", "User-Agent"},
-					// 	ExposedHeaders:   []string{"Accept", "Accept-Encoding", "Accept-Language", "Alt-Svc", "Connection", "Cookie", "Origin", "Referer", "Response", "Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site", "Subscribe", "State-URI", "Keypath", "User-Agent"},
-					// 	AllowCredentials: true,
-					// })
-
 					srv := &http.Server{
-						Addr: t.listenAddr,
-						// Handler: c.Handler(t),
-						Handler: t,
+						Addr:    t.listenAddr,
+						Handler: UnrestrictedCors(t),
 					}
 					err := srv.ListenAndServe()
 					if err != nil {
@@ -354,7 +345,6 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Transfer-Encoding", "chunked")
 
 	keypath := r.Header.Get("Keypath")

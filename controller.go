@@ -384,7 +384,7 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 			resolver := c.behaviorTree.resolvers[string(resolverKeypath)]
 			err = resolver.ResolveState(stateToResolve, c.refStore, tx.From, tx.ID, tx.Parents, patchesTrimmed)
 			if err != nil {
-				return errors.Wrap(ErrInvalidTx, err.Error())
+				return errors.Wrapf(ErrInvalidTx, "%+v", err)
 			}
 
 			stateToResolve.Diff().SetEnabled(false)
