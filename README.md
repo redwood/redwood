@@ -26,6 +26,8 @@ Demos:
 - [Realtime collaborative document editor](https://github.com/brynbellomy/redwood/tree/master/demos/text-editor)
 - [Chat room](https://github.com/brynbellomy/redwood/tree/master/demos/chat)
 - [Git integration](https://github.com/brynbellomy/redwood/tree/master/demos/git-integration)
+- [Desktop chat app](https://github.com/brynbellomy/redwood/tree/master/demos/desktop-chat-app) (WIP, early development)
+- [Video chat app](https://github.com/brynbellomy/redwood/tree/master/demos/video-chat-app) (WIP, early development)
 
 ## ✔️ Redwood's features
 

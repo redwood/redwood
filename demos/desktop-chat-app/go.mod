@@ -2,7 +2,7 @@ module github.com/brynbellomy/redwood-webview
 
 go 1.15
 
-replace github.com/brynbellomy/redwood => ../forest
+replace github.com/brynbellomy/redwood => ../../
 
 require (
 	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae
