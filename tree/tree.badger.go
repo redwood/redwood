@@ -527,11 +527,11 @@ func (tx *DBNode) setRangeString(absKeypath Keypath, rng *Range, encodedVal []by
 	if len(encodedVal) == 0 {
 		encodedVal = []byte("vs")
 	}
-	_, valueType, length, data, err := decodeNode(encodedVal)
+	nodeType, valueType, length, data, err := decodeNode(encodedVal)
 	if err != nil {
 		return err
 	} else if valueType != ValueTypeString {
-		return errors.WithStack(ErrRangeOverNonSlice)
+		return errors.Wrapf(ErrRangeOverNonSlice, "(keypath: %v, %v, %v)", absKeypath, nodeType, valueType)
 	} else if !rng.ValidForLength(length) {
 		return errors.WithStack(ErrInvalidRange)
 	}
@@ -551,11 +551,11 @@ func (tx *DBNode) setRangeString(absKeypath Keypath, rng *Range, encodedVal []by
 func (tx *DBNode) setRangeSlice(absKeypath Keypath, rng *Range, encodedVal []byte, spliceVal []interface{}) (err error) {
 	defer annotate(&err, "setRangeSlice")
 
-	nodeType, _, oldLen, _, err := decodeNode(encodedVal)
+	nodeType, valueType, oldLen, _, err := decodeNode(encodedVal)
 	if err != nil {
 		return err
 	} else if nodeType != NodeTypeSlice {
-		return ErrRangeOverNonSlice
+		return errors.Wrapf(ErrRangeOverNonSlice, "(keypath: %v, %v, %v)", absKeypath, nodeType, valueType)
 	} else if !rng.ValidForLength(oldLen) {
 		return ErrInvalidRange
 	}
@@ -876,7 +876,7 @@ func (tx *DBNode) Delete(relKeypath Keypath, rng *Range) (err error) {
 	if rootNodeType == NodeTypeValue {
 		if rng != nil {
 			if valueType != ValueTypeString {
-				return ErrRangeOverNonSlice
+				return errors.Wrapf(ErrRangeOverNonSlice, "(keypath: %v, %v, %v)", rootKeypath, rootNodeType, valueType)
 			} else if !rng.ValidForLength(length) {
 				return ErrInvalidRange
 			}
@@ -1623,7 +1623,7 @@ func decodeGoValue(nodeType NodeType, valueType ValueType, length uint64, rng *R
 		switch valueType {
 		case ValueTypeBool:
 			if rng != nil {
-				return nil, errors.WithStack(ErrRangeOverNonSlice)
+				return nil, errors.Wrapf(ErrRangeOverNonSlice, "(%v, %v)", nodeType, valueType)
 			}
 			if data[0] == byte(1) {
 				return true, nil
@@ -1633,13 +1633,13 @@ func decodeGoValue(nodeType NodeType, valueType ValueType, length uint64, rng *R
 
 		case ValueTypeUint:
 			if rng != nil {
-				return nil, errors.WithStack(ErrRangeOverNonSlice)
+				return nil, errors.Wrapf(ErrRangeOverNonSlice, "(%v, %v)", nodeType, valueType)
 			}
 			return binary.LittleEndian.Uint64(data), nil
 
 		case ValueTypeInt:
 			if rng != nil {
-				return nil, errors.WithStack(ErrRangeOverNonSlice)
+				return nil, errors.Wrapf(ErrRangeOverNonSlice, "(%v, %v)", nodeType, valueType)
 			}
 			var i int64
 			buf := bytes.NewReader(data)
@@ -1651,7 +1651,7 @@ func decodeGoValue(nodeType NodeType, valueType ValueType, length uint64, rng *R
 
 		case ValueTypeFloat:
 			if rng != nil {
-				return nil, errors.WithStack(ErrRangeOverNonSlice)
+				return nil, errors.Wrapf(ErrRangeOverNonSlice, "(%v, %v)", nodeType, valueType)
 			}
 			var f float64
 			buf := bytes.NewReader(data)

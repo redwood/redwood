@@ -403,13 +403,13 @@ func (n *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 			return nil, false, nil
 		} else if rng != nil {
 			// @@TODO: support strings/bytes
-			return nil, false, ErrRangeOverNonSlice
+			return nil, false, errors.Wrapf(ErrRangeOverNonSlice, "(keypath: %v, node type: %v)", absKeypath, n.nodeTypes[string(absKeypath)])
 		}
 		return val, exists, nil
 
 	case NodeTypeMap:
 		if rng != nil {
-			return nil, false, ErrRangeOverNonSlice
+			return nil, false, errors.Wrapf(ErrRangeOverNonSlice, "(keypath: %v, node type: %v)", absKeypath, n.nodeTypes[string(absKeypath)])
 		}
 
 		m := make(map[string]interface{}, n.contentLengths[string(absKeypath)])
@@ -608,11 +608,11 @@ func (n *MemoryNode) Delete(keypath Keypath, rng *Range) error {
 				return nil
 
 			} else {
-				return ErrRangeOverNonSlice
+				return errors.Wrapf(ErrRangeOverNonSlice, "(keypath: %v, node type: %v)", absKeypath, n.nodeTypes[string(absKeypath)])
 			}
 
 		default:
-			return ErrRangeOverNonSlice
+			return errors.Wrapf(ErrRangeOverNonSlice, "(keypath: %v, node type: %v)", absKeypath, n.nodeTypes[string(absKeypath)])
 		}
 	}
 
@@ -1015,7 +1015,7 @@ func (s *MemoryNode) addKeypaths(keypaths []Keypath) {
 func (s *MemoryNode) scanKeypathsWithPrefix(prefix Keypath, rng *Range, fn func(Keypath, int) error) error {
 	if rng != nil {
 		if s.nodeTypes[string(prefix)] != NodeTypeSlice {
-			return ErrRangeOverNonSlice
+			return errors.Wrapf(ErrRangeOverNonSlice, "(keypath: %v, node type: %v)", prefix, s.nodeTypes[string(prefix)])
 		}
 
 		startIdx, endIdx := rng.IndicesForLength(uint64(s.contentLengths[string(prefix)]))
