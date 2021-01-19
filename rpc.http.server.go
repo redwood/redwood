@@ -40,7 +40,7 @@ func (s *httpRPCServer) Start() error {
 	return s.CtxStart(
 		// on startup
 		func() error {
-			s.SetLogLabel(s.address.Pretty() + " rpc")
+			s.SetLogLabel("rpc")
 			s.Infof(0, "rpc server listening on %v", s.listenAddr)
 
 			go func() {

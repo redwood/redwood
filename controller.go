@@ -35,7 +35,6 @@ type Controller interface {
 type controller struct {
 	*ctx.Context
 
-	address  types.Address
 	stateURI string
 
 	controllerHub ControllerHub
@@ -61,7 +60,6 @@ var (
 )
 
 func NewController(
-	address types.Address,
 	stateURI string,
 	stateDBRootPath string,
 	controllerHub ControllerHub,
@@ -81,7 +79,6 @@ func NewController(
 
 	c := &controller{
 		Context:       &ctx.Context{},
-		address:       address,
 		stateURI:      stateURI,
 		controllerHub: controllerHub,
 		txStore:       txStore,
@@ -98,7 +95,7 @@ func (c *controller) Start() error {
 	return c.CtxStart(
 		// on startup,
 		func() error {
-			c.SetLogLabel(c.address.Pretty() + " controller")
+			c.SetLogLabel("controller")
 
 			// Add root resolver
 			c.behaviorTree.addResolver(tree.Keypath(nil), &dumbResolver{})

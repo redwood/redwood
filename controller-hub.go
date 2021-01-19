@@ -100,7 +100,7 @@ func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
 	if ctrl == nil {
 		// Set up the controller
 		var err error
-		ctrl, err = NewController(m.address, stateURI, m.dbRootPath, m, m.txStore, m.refStore)
+		ctrl, err = NewController(stateURI, m.dbRootPath, m, m.txStore, m.refStore)
 		if err != nil {
 			return nil, err
 		}
