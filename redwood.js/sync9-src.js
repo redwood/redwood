@@ -1,13 +1,12 @@
-require('@babel/polyfill')
-const utils = require('./utils')
+import * as utils from './utils'
 
 
-module.exports = {
-    create: sync9_create,
-    resolve_state: resolve_state,
-    parse_change: sync9_parse_change,
-    read: sync9_read,
-    add_version: sync9_add_version,
+export {
+    sync9_create as create,
+    resolve_state as resolve_state,
+    sync9_parse_change as parse_change,
+    sync9_read as read,
+    sync9_add_version as add_version,
 }
 
 // var p1 = `. = {"permissions":{"*":{"^.*$":{"read":true,"write":false}},"96216849c49358b10257cb55b28ea603c874b05e":{"^.*$":{"read":true,"write":true}}},"providers":["localhost:21231","localhost:21241"]}`

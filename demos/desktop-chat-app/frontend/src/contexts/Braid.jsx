@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useState, useEffect } from 'react'
 import rpcFetch from '../utils/rpcFetch'
-import * as Braid from '../braidjs/braid-src'
+import Redwood from '../redwood.js'
 
 export const Context = createContext({
     nodeAddress: '',
@@ -12,7 +12,7 @@ export const Context = createContext({
 })
 
 function Provider({ children }) {
-    const [braidClient, setBraidClient] = useState(null)
+    const [redwoodClient, setRedwoodClient] = useState(null)
     const [registry, setRegistry] = useState({})
     const [appState, setAppState] = useState({})
     const [leaves, setLeaves] = useState({})
@@ -26,34 +26,34 @@ function Provider({ children }) {
             let addr = await rpcFetch('RPC.NodeAddress', {})
             setNodeAddress(addr)
 
-            let braidClient = Braid.createPeer({
-                identity: Braid.identity.random(),
+            let redwoodClient = Redwood.createPeer({
+                identity: Redwood.identity.random(),
                 httpHost: 'http://localhost:8080',
                 webrtc: false,
                 onFoundPeersCallback: (peers) => {
                     setKnownPeers(peers)
                 },
             })
-            await braidClient.authorize()
-            await braidClient.subscribeStates('chat.redwood.dev/registry', '/', async (err, { state: newRegistry }) => {
+            await redwoodClient.authorize()
+            await redwoodClient.subscribe({ stateURI: 'chat.redwood.dev/registry', keypath: '/', states: true, callback: async (err, { state: newRegistry }) => {
                 if (err) {
                     console.error(err)
                     return
                 }
                 setRegistry(newRegistry)
-            })
-            setBraidClient(braidClient)
+            }})
+            setRedwoodClient(redwoodClient)
         })()
     }, [])
 
     useEffect(() => {
-        if (!braidClient || !registry.rooms) {
+        if (!redwoodClient || !registry.rooms) {
             return
         }
         for (let stateURI of registry.rooms) {
             (function (stateURI) {
                 if (!subscribedStateURIs[stateURI]) {
-                    braidClient.subscribeStates(stateURI, '/', async (err, update) => {
+                    redwoodClient.subscribe({ stateURI, keypath: '/', states: true, callback: async (err, update) => {
                         console.log(stateURI, update)
                         if (err) {
                             setError(err)
@@ -64,11 +64,11 @@ function Provider({ children }) {
                         setSubscribedStateURIs(prevState => ({ ...prevState, [stateURI]: true }))
                         setAppState(prevState => ({ ...prevState, [stateURI]: newState }))
                         setLeaves(prevState => ({ ...prevState, [stateURI]: newLeaves }))
-                    })
+                    }})
                 }
             })(stateURI)
         }
-    }, [braidClient, registry, subscribedStateURIs])
+    }, [redwoodClient, registry, subscribedStateURIs])
 
     return (
       <Context.Provider value={{

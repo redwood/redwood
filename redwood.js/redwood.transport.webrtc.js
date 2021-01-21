@@ -1,6 +1,6 @@
+import Peer from 'peerjs'
 
-
-module.exports = function (opts) {
+export default function (opts) {
     let { onFoundPeers, onLostPeers } = opts
 
     onFoundPeers = onFoundPeers || function () {}

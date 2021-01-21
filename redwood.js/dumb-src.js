@@ -1,7 +1,7 @@
-const parse_change = require('./sync9-src').parse_change
+import { parse_change } from './sync9-src'
 
-module.exports = {
-    resolve_state: resolve_state,
+export {
+    resolve_state,
 }
 
 function init(internalState) {}

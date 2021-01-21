@@ -1,15 +1,11 @@
-if (typeof window !== 'undefined') {
-    require('@babel/polyfill')
-}
+import * as identity from './identity'
+import * as sync9 from './sync9-src'
+import * as dumb from './dumb-src'
+import * as utils from './utils'
+import httpTransport from './redwood.transport.http'
+// import * as webrtcTransport from './redwood.transport.webrtc'
 
-const identity = require('./identity')
-const sync9 = require('./sync9-src')
-const dumb = require('./dumb-src')
-const utils = require('./utils')
-const httpTransport = require('./braid.transport.http')
-const webrtcTransport = require('./braid.transport.webrtc')
-
-var Braid = {
+export default {
     createPeer,
 
     // submodules
@@ -19,20 +15,13 @@ var Braid = {
     utils,
 }
 
-if (typeof window !== 'undefined') {
-    window.Braid = Braid
-    module.exports = Braid
-} else {
-    module.exports = Braid
-}
-
 function createPeer(opts) {
     const { httpHost, identity, webrtc, onFoundPeersCallback } = opts
 
     const transports = [ httpTransport({ onFoundPeers, httpHost, peerID: identity.peerID }) ]
-    if (webrtc === true) {
-        transports.push(webrtcTransport({ onFoundPeers, peerID: identity.peerID }))
-    }
+    // if (webrtc === true) {
+    //     transports.push(webrtcTransport({ onFoundPeers, peerID: identity.peerID }))
+    // }
 
     let knownPeers = {}
     function onFoundPeers(peers) {
@@ -49,18 +38,18 @@ function createPeer(opts) {
         return knownPeers
     }
 
-    async function subscribe(stateURI, keypath, parents, onTxReceived) {
+    async function authorize() {
         for (let tpt of transports) {
-            if (tpt.subscribe) {
-                tpt.subscribe(stateURI, keypath, parents, onTxReceived)
+            if (tpt.authorize) {
+                await tpt.authorize(identity)
             }
         }
     }
 
-    async function subscribeStates(stateURI, keypath, onStateReceived) {
+    async function subscribe({ stateURI, keypath, fromTxID, states, txs, callback }) {
         for (let tpt of transports) {
-            if (tpt.subscribeStates) {
-                tpt.subscribeStates(stateURI, keypath, onStateReceived)
+            if (tpt.subscribe) {
+                tpt.subscribe({ stateURI, keypath, fromTxID, states, txs, callback })
             }
         }
     }
@@ -99,18 +88,10 @@ function createPeer(opts) {
         return hash
     }
 
-    async function authorize() {
-        for (let tpt of transports) {
-            if (tpt.authorize) {
-                await tpt.authorize(identity)
-            }
-        }
-    }
-
     return {
+        identity,
         get,
         subscribe,
-        subscribeStates,
         put,
         storeRef,
         authorize,

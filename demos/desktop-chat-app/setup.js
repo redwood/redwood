@@ -1,26 +1,19 @@
 const fs = require('fs')
-const Braid = require('./frontend/src/braidjs/braid-src.js')
-
-let braidIdentity = Braid.identity.random()
-let braidClient = Braid.createPeer({
-    identity: braidIdentity,
-    httpHost: 'http://localhost:8080',
-    onFoundPeersCallback: (peers) => {}
-})
+const FormData = require('form-data')
+const stableStringify = require('json-stable-stringify')
+require('isomorphic-fetch')
 
 async function main() {
-    await braidClient.authorize()
-
-    let sync9JS = fs.createReadStream('./frontend/src/braidjs/dist/sync9-otto.js')
-    let { sha3: sync9JSSha3 } = await braidClient.storeRef(sync9JS)
-    console.log('sync9 sha:', sync9JSSha3)
+    let sync9JS = fs.createReadStream('./sync9.js')
+    let { sha3 } = await storeRef(sync9JS)
+    console.log('sync9 sha3:', sha3)
 
     let tx = {
         stateURI: 'chat.redwood.dev/registry',
-        id: Braid.utils.genesisTxID,
+        id: '67656e6573697300000000000000000000000000000000000000000000000000',
         parents: [],
         patches: [
-            ' = ' + Braid.utils.JSON.stringify({
+            ' = ' + stableStringify({
                 'Merge-Type': {
                     'Content-Type': 'resolver/dumb',
                     'value': {}
@@ -46,6 +39,21 @@ async function main() {
     process.exit(0)
 }
 
+async function storeRef(file) {
+    let formData
+    formData = new FormData()
+    formData.append('ref', file)
+
+    const resp = await fetch('http://localhost:8080', {
+        method:  'PUT',
+        headers: { 'Ref': 'true' },
+        body:    formData,
+    })
+
+    return (await resp.json())
+}
+
+
 async function rpcFetch(method, params) {
     let resp = await (await fetch('http://localhost:8081', {
         method: 'POST',
@@ -65,5 +73,6 @@ async function rpcFetch(method, params) {
     }
     return resp.result
 }
+
 
 main()

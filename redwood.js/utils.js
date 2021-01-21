@@ -1,16 +1,19 @@
-const ethers = require('ethers')
-const stringify = require('json-stable-stringify')
+import * as ethers from 'ethers'
+import stringify from 'json-stable-stringify'
 
 let genesisTxID = '67656e6573697300000000000000000000000000000000000000000000000000'
 
+let JSON = { stringify }
+console.log('ethers', ethers)
+let keccak256 = ethers.utils.keccak256
 
-module.exports = {
+export {
     genesisTxID,
 
     createTxQueue,
     hashTx,
     serializeTx,
-    keccak256: ethers.utils.keccak256,
+    keccak256,
     randomID,
     privateTxRootForRecipients,
     stringToHex,
@@ -18,9 +21,7 @@ module.exports = {
     hexToUint8Array,
     uint8ArrayToHex,
     deepmerge,
-    JSON: {
-        stringify,
-    },
+    JSON,
 }
 
 

@@ -1,7 +1,7 @@
-const ethers = require('ethers')
-const utils = require('./utils')
+import * as ethers from 'ethers'
+import * as utils from './utils'
 
-module.exports = {
+export {
     fromMnemonic,
     fromPrivateKey,
     random,
@@ -31,12 +31,12 @@ function _constructIdentity(wallet) {
         address: address,
         signTx: (tx) => {
             const txHash = utils.hashTx(tx)
-            const signed = wallet.signingKey.signDigest(txHash)
+            const signed = wallet._signingKey().signDigest(txHash)
             return signed.r.slice(2) + signed.s.slice(2) + '0' + signed.recoveryParam
         },
         signBytes: (bytes) => {
             const hash = ethers.utils.keccak256(bytes) //.toString('hex')
-            const signed = wallet.signingKey.signDigest(hash)
+            const signed = wallet._signingKey().signDigest(hash)
             return signed.r.slice(2) + signed.s.slice(2) + '0' + signed.recoveryParam
         },
     }

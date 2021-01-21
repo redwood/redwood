@@ -16,6 +16,7 @@
     "react": "^17.0.1",
     "react-dom": "^17.0.1",
     "react-scripts": "4.0.1",
+    "redwood-p2p-client": "^0.0.1",
     "styled-components": "^5.2.1",
     "web-vitals": "^0.2.4"
   },
@@ -24,12 +25,6 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
   },
   "browserslist": {
     "production": [

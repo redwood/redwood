@@ -1,5 +1,5 @@
 import rpcFetch from '../utils/rpcFetch'
-import * as Braid from '../braidjs/braid-src'
+import Redwood from '../redwood.js'
 
 const sync9JSSha3 = '0c87e1035db28f334cd7484b47d9e7cc285e026d4f876d24ddad78c47ac40a14'
 
@@ -7,10 +7,10 @@ export async function createNewChat(newChatName, registry) {
     let stateURI = `chat.redwood.dev/${newChatName}`
     let tx = {
         stateURI: stateURI,
-        id: Braid.utils.genesisTxID,
+        id: Redwood.utils.genesisTxID,
         parents: [],
         patches: [
-            ' = ' + Braid.utils.JSON.stringify({
+            ' = ' + Redwood.utils.JSON.stringify({
                 'Merge-Type': {
                     'Content-Type': 'resolver/js',
                     'value': {
@@ -37,7 +37,7 @@ export async function createNewChat(newChatName, registry) {
 
     tx = {
         stateURI: 'chat.redwood.dev/registry',
-        id: Braid.utils.randomID(),
+        id: Redwood.utils.randomID(),
         patches: [
             `.rooms[${registry.rooms.length}:${registry.rooms.length}] = ["${stateURI}"]`,
         ],
@@ -48,10 +48,10 @@ export async function createNewChat(newChatName, registry) {
 export async function sendMessage(stateURI, nodeAddress, appState, messageText) {
     let { messages } = appState[stateURI]
     let tx = {
-        id: Braid.utils.randomID(),
+        id: Redwood.utils.randomID(),
         stateURI: stateURI,
         patches: [
-            '.messages[' + messages.length + ':' + messages.length + '] = ' + Braid.utils.JSON.stringify([{
+            '.messages[' + messages.length + ':' + messages.length + '] = ' + Redwood.utils.JSON.stringify([{
                 sender: nodeAddress.toLowerCase(),
                 text: messageText,
             }]),

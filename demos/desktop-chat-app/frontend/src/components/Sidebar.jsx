@@ -53,19 +53,12 @@ function Sidebar({ selectedStateURI, setSelectedStateURI, className }) {
     }
 
     let stateURIs = Object.keys(appState)
-    if (stateURIs.length === 0) {
-        return (
-            <div>
-                No chats yet.
-            </div>
-        )
-    }
 
     return (
         <SSidebar className={className}>
             <SidebarTitle>Chats</SidebarTitle>
 
-            {stateURIs.map(stateURI => (
+            {(stateURIs || []).map(stateURI => (
                 <SidebarItem key={stateURI} active={stateURI === selectedStateURI} onClick={() => onClickChat(stateURI)}>
                     <ChatName>{stateURI.slice('chat.redwood.dev/'.length)}</ChatName>
                 </SidebarItem>

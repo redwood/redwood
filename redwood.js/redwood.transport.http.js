@@ -1,21 +1,30 @@
-require('es6-promise').polyfill()
-require('isomorphic-fetch')
+import 'isomorphic-fetch'
 
-module.exports = function (opts) {
+export default function (opts) {
     const { httpHost, onFoundPeers, peerID } = opts
 
     let knownPeers = {}
     pollForPeers()
 
-    async function subscribe(stateURI, keypath, parents, onTxReceived) {
+    let alreadyRespondedTo = {}
+
+    async function subscribe({ stateURI, keypath, fromTxID, states, txs, callback }) {
         try {
+            let subscribeHeader = []
+            if (states) {
+                subscribeHeader.push('states')
+            }
+            if (txs) {
+                subscribeHeader.push('transactions')
+            }
+
             const headers = {
                 'State-URI': stateURI,
                 'Accept':    'application/json',
-                'Subscribe': 'transactions',
+                'Subscribe': subscribeHeader.join(','),
             }
-            if (parents && parents.length > 0) {
-                headers['Parents'] = parents.join(',')
+            if (fromTxID) {
+                headers['From-Tx'] = fromTxID
             }
 
             const resp = await wrappedFetch(keypath, {
@@ -23,38 +32,23 @@ module.exports = function (opts) {
                 headers,
             })
             if (!resp.ok) {
-                onTxReceived('http transport: fetch failed')
+                callback('http transport: fetch failed')
                 return
             }
-            readSubscription(resp.body.getReader(), onTxReceived)
-
-        } catch (err) {
-            onTxReceived('http transport: ' + err)
-            return
-        }
-    }
-
-    async function subscribeStates(stateURI, keypath, onStateReceived) {
-        try {
-            const headers = {
-                'State-URI': stateURI,
-                'Keypath':   keypath,
-                'Accept':    'application/json',
-                'Subscribe': 'states',
-            }
-
-            const resp = await wrappedFetch('/', {
-                method: 'GET',
-                headers,
+            readSubscription(resp.body.getReader(), (err, { tx, state, leaves }) => {
+                if (tx) {
+                    ack(tx.id)
+                    if (!alreadyRespondedTo[tx.id]) {
+                        alreadyRespondedTo[tx.id] = true
+                        callback(err, { tx, state, leaves })
+                    }
+                } else {
+                    callback(err, { tx, state, leaves })
+                }
             })
-            if (!resp.ok) {
-                onStateReceived('http transport: fetch failed')
-                return
-            }
-            readSubscription(resp.body.getReader(), onStateReceived)
 
         } catch (err) {
-            onStateReceived('http transport: ' + err)
+            callback('http transport: ' + err)
             return
         }
     }
@@ -86,6 +80,7 @@ module.exports = function (opts) {
                             return
                         }
                         callback(null, payload)
+
                     }
                     buffer = buffer.substring(idx+1)
                 }
@@ -115,9 +110,24 @@ module.exports = function (opts) {
     }
 
     function put(tx) {
+        let body
+        if (tx.attachment) {
+            if (typeof window !== 'undefined') {
+                body = new FormData()
+            } else {
+                let FormData = require('form-data')
+                body = new FormData()
+            }
+            body.append('attachment', tx.attachment)
+            body.append('patches', tx.patches.join('\n'))
+
+        } else {
+            body = tx.patches.join('\n')
+        }
+
         return wrappedFetch('/', {
             method: 'PUT',
-            body: tx.patches.join('\n'),
+            body: body,
             headers: {
                 'State-URI': tx.stateURI,
                 'Version': tx.id,
@@ -125,6 +135,13 @@ module.exports = function (opts) {
                 'Signature': tx.sig,
                 'Patch-Type': 'braid',
             },
+        })
+    }
+
+    async function ack(txID) {
+        return wrappedFetch('/', {
+            method: 'ACK',
+            body: txID,
         })
     }
 
@@ -157,7 +174,7 @@ module.exports = function (opts) {
 
         const challengeHex = await resp.text()
         const challenge = Buffer.from(challengeHex, 'hex')
-        const sigHex = await identity.signBytes(challenge)
+        const sigHex = identity.signBytes(challenge)
 
         const resp2 = await wrappedFetch(`/`, {
             method: 'AUTHORIZE',
@@ -186,25 +203,18 @@ module.exports = function (opts) {
             }
         }
         options.credentials = 'include'
-        // options.credentials = 'same-origin'
-
 
         const resp = await fetch(httpHost + path, options)
+        if (!resp.ok) {
+            let text = await resp.text()
+            throw Error(text)
+        }
 
         if (typeof window === 'undefined') {
             // Manual cookie parsing
             for (let str of (resp.headers.raw()['set-cookie'] || [])) {
                 let keyVal = str.substr(0, str.indexOf(';')).split('=')
                 cookies[keyVal[0]] = keyVal[1]
-            }
-        } else {
-            // console.log('document.cookie', document.cookie)
-            if (document.cookie.length > 0) {
-                let c = (document.cookie || '').split(';').map(x => x.trim())
-                for (let str of c) {
-                    let keyVal = str.split('=')
-                    cookies[keyVal[0]] = keyVal[1]
-                }
             }
         }
 
@@ -258,7 +268,6 @@ module.exports = function (opts) {
         transportName:   () => 'http',
         altSvcAddresses: () => [],
         subscribe,
-        subscribeStates,
         get,
         put,
         storeRef,

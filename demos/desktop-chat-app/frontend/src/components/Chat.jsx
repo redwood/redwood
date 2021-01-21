@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import styled from 'styled-components'
 import useBraid from '../hooks/useBraid'
 import rpcFetch from '../utils/rpcFetch'
-import * as Braid from '../braidjs/braid-src'
 import Sidebar from './Sidebar'
 import * as api from '../api'
 
@@ -22,7 +21,7 @@ function Chat({ stateURI, className }) {
         return <div className={className}></div>
     }
 
-    let messages = appState[stateURI].messages || []
+    let messages = (appState[stateURI] || {}).messages || []
 
     return (
         <div className={className}>
