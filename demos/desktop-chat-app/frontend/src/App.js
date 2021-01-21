@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import styled from 'styled-components'
+
 import Sidebar from './components/Sidebar'
+import RedSidebar from './components/RedSidebar'
 import Chat from './components/Chat'
 import StateTreeDebugView from './components/StateTreeDebugView'
 
@@ -18,6 +20,7 @@ const SSidebar = styled(Sidebar)`
 
 const SChat = styled(Chat)`
     flex-grow: 1;
+    padding-left: 16px;
 `
 
 const SStateTreeDebugView = styled(StateTreeDebugView)`
@@ -29,9 +32,9 @@ function App() {
 
     return (
         <Layout>
-            <SSidebar selectedStateURI={selectedStateURI} setSelectedStateURI={setSelectedStateURI} />
+            <RedSidebar selectedStateURI={selectedStateURI} setSelectedStateURI={setSelectedStateURI} />
             <SChat stateURI={selectedStateURI} />
-            <SStateTreeDebugView/>
+            {/* <SStateTreeDebugView/> */}
         </Layout>
     )
 }

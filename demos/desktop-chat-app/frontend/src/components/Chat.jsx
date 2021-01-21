@@ -17,6 +17,8 @@ function Chat({ stateURI, className }) {
         await api.sendMessage(stateURI, nodeAddress.Address, appState, messageText)
     }
 
+    console.log(stateURI)
+
     if (!stateURI) {
         return <div className={className}></div>
     }
