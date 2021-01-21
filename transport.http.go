@@ -326,13 +326,13 @@ func (t *httpTransport) serveChallengeIdentityCheckResponse(w http.ResponseWrite
 }
 
 func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request, address types.Address) {
-	t.Infof(0, "incoming subscription (address: %v)", address)
-
 	// @@TODO: ensure we actually have this stateURI
 	stateURI := r.Header.Get("State-URI")
 	if stateURI == "" {
 		stateURI = t.defaultStateURI
 	}
+
+	t.Infof(0, "incoming subscription (address: %v, state uri: %v)", address, stateURI)
 
 	// Make sure that the writer supports flushing.
 	f, ok := w.(http.Flusher)

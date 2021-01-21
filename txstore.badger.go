@@ -105,7 +105,7 @@ func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
 		p.Errorf("failed to write tx %v: %v", tx.ID.Pretty(), err)
 		return err
 	}
-	p.Infof(0, "wrote tx %v", tx.ID.Pretty())
+	p.Infof(0, "wrote tx %v (status: %v)", tx.ID.Pretty(), tx.Status)
 	return nil
 }
 
