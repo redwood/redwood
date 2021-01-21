@@ -9,7 +9,7 @@ import (
 func UnrestrictedCors(handler http.Handler) http.Handler {
 	return cors.New(cors.Options{
 		AllowOriginFunc:  func(string) bool { return true },
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "AUTHORIZE", "SUBSCRIBE", "OPTIONS", "HEAD"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "AUTHORIZE", "SUBSCRIBE", "ACK", "OPTIONS", "HEAD"},
 		AllowedHeaders:   []string{"*"},
 		ExposedHeaders:   []string{"*"},
 		AllowCredentials: true,
