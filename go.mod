@@ -10,7 +10,6 @@ require (
 	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae
 	github.com/btcsuite/btcd v0.0.0-20190213025234-306aecffea32
 	github.com/btcsuite/btcutil v0.0.0-20190207003914-4c204d697803
-	github.com/dgraph-io/badger/v2 v2.0.1
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/elastic/gosigar v0.10.5 // indirect
 	github.com/ethereum/go-ethereum v1.9.6
@@ -22,16 +21,6 @@ require (
 	github.com/ijc25/Gotty v0.0.0-20170406111628-a8b993ba6abd
 	github.com/ipfs/go-cid v0.0.1
 	github.com/ipfs/go-datastore v0.0.2
-	github.com/libp2p/go-libp2p v0.0.1
-	github.com/libp2p/go-libp2p-crypto v0.0.1
-	github.com/libp2p/go-libp2p-host v0.0.1
-	github.com/libp2p/go-libp2p-kad-dht v0.0.3
-	github.com/libp2p/go-libp2p-kbucket v0.1.0
-	github.com/libp2p/go-libp2p-metrics v0.0.1
-	github.com/libp2p/go-libp2p-net v0.0.1
-	github.com/libp2p/go-libp2p-peer v0.0.1
-	github.com/libp2p/go-libp2p-peerstore v0.0.1
-	github.com/libp2p/go-libp2p-protocol v0.0.1
 	github.com/markbates/pkger v0.17.0
 	github.com/mattn/go-isatty v0.0.7 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
