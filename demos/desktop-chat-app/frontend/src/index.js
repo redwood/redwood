@@ -1,15 +1,23 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
+import { ThemeProvider } from 'styled-components'
 import App from './App'
 import reportWebVitals from './reportWebVitals'
-import BraidProvider from './contexts/Braid'
+import RedwoodProvider from './contexts/Redwood'
+import ModalsProvider from './contexts/Modals'
+
 import './index.css'
+import theme from './theme'
 
 ReactDOM.render(
     <React.StrictMode>
-        <BraidProvider>
-            <App />
-        </BraidProvider>
+        <ThemeProvider theme={theme}>
+            <RedwoodProvider>
+                <ModalsProvider>
+                    <App />
+                </ModalsProvider>
+            </RedwoodProvider>
+        </ThemeProvider>
     </React.StrictMode>,
     document.getElementById('root')
 )

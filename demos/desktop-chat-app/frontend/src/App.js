@@ -33,8 +33,9 @@ function App() {
     return (
         <Layout>
             <RedSidebar selectedStateURI={selectedStateURI} setSelectedStateURI={setSelectedStateURI} />
+            {/*<SSidebar selectedStateURI={selectedStateURI} setSelectedStateURI={setSelectedStateURI} />*/}
             <SChat stateURI={selectedStateURI} />
-            {/* <SStateTreeDebugView/> */}
+            <SStateTreeDebugView/>
         </Layout>
     )
 }

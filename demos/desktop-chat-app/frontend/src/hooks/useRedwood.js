@@ -1,9 +1,9 @@
 import { useEffect, useState, useMemo, useContext } from 'react'
-import { Context } from '../contexts/Braid'
+import { Context } from '../contexts/Redwood'
 
-function useContracts() {
+function useRedwood() {
     const braid = useContext(Context)
     return useMemo(() => braid, [braid])
 }
 
-export default useContracts
+export default useRedwood

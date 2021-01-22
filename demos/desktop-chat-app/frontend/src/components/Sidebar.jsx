@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import styled from 'styled-components'
-import useBraid from '../hooks/useBraid'
+import useRedwood from '../hooks/useRedwood'
 import * as api from '../api'
 
 const SSidebar = styled.div`
@@ -37,7 +37,7 @@ const CreateChatControls = styled.div`
 `
 
 function Sidebar({ selectedStateURI, setSelectedStateURI, className }) {
-    const { appState, registry } = useBraid()
+    const { appState, rooms } = useRedwood()
     const [newChatName, setNewChatName] = useState('')
 
     function onChangeNewChatName(e) {
@@ -49,20 +49,29 @@ function Sidebar({ selectedStateURI, setSelectedStateURI, className }) {
     }
 
     async function onClickCreateNewChat() {
-        await api.createNewChat(newChatName, registry)
+        await api.createNewChat(newChatName, rooms)
     }
 
     let stateURIs = Object.keys(appState)
+    let domains = {}
+    for (let stateURI of stateURIs) {
+        let parts = stateURI.split('/')
+        let domain = parts[0]
+        domains[domain] = domains[domain] || []
+        domains[domain].push(stateURI)
+    }
 
     return (
         <SSidebar className={className}>
             <SidebarTitle>Chats</SidebarTitle>
 
-            {(stateURIs || []).map(stateURI => (
-                <SidebarItem key={stateURI} active={stateURI === selectedStateURI} onClick={() => onClickChat(stateURI)}>
-                    <ChatName>{stateURI.slice('chat.redwood.dev/'.length)}</ChatName>
-                </SidebarItem>
-            ))}
+            {(domains || []).map(domain =>
+                {(stateURIs || []).map(stateURI => (
+                    <SidebarItem key={stateURI} active={stateURI === selectedStateURI} onClick={() => onClickChat(stateURI)}>
+                        <ChatName>{stateURI.slice(stateURI.indexOf('/') + 1)}</ChatName>
+                    </SidebarItem>
+                ))}
+            )}
             <Spacer />
             <CreateChatControls>
                 <input onChange={onChangeNewChatName} value={newChatName} />

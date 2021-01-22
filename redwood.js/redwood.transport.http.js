@@ -207,7 +207,7 @@ export default function (opts) {
         const resp = await fetch(httpHost + path, options)
         if (!resp.ok) {
             let text = await resp.text()
-            throw Error(text)
+            throw { statusCode: resp.status, error: text }
         }
 
         if (typeof window === 'undefined') {

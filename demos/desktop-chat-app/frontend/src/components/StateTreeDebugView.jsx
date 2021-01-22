@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import styled from 'styled-components'
-import useBraid from '../hooks/useBraid'
+import useRedwood from '../hooks/useRedwood'
 
 const SStateTreeDebugView = styled.div`
     padding: 20px;
@@ -28,19 +28,14 @@ const StateTree = styled.div`
 `
 
 function StateTreeDebugView({ className }) {
-    const { appState, nodeAddress, registry } = useBraid()
+    const { stateTrees } = useRedwood()
 
     return (
         <SStateTreeDebugView className={className}>
-            <StateTree>
-                <StateURI>&gt; chat.redwood.dev/registry</StateURI>
-                <pre><code>{JSON.stringify(registry, null, '    ')}</code></pre>
-            </StateTree>
-
-            {Object.keys(appState).map(stateURI => (
+            {Object.keys(stateTrees).map(stateURI => (
                 <StateTree key={stateURI}>
                     <StateURI>&gt; {stateURI}</StateURI>
-                    <pre><code>{JSON.stringify(appState[stateURI], null, '    ')}</code></pre>
+                    <pre><code>{JSON.stringify(stateTrees[stateURI], null, '    ')}</code></pre>
                 </StateTree>
             ))}
         </SStateTreeDebugView>

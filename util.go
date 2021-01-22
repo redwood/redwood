@@ -330,11 +330,17 @@ func NewStringSet(vals []string) StringSet {
 }
 
 func (s StringSet) Add(val string) StringSet {
+	if s == nil {
+		s = StringSet(make(map[string]struct{}))
+	}
 	s[val] = struct{}{}
 	return s
 }
 
 func (s StringSet) Remove(val string) StringSet {
+	if s == nil {
+		return nil
+	}
 	delete(s, val)
 	return s
 }
