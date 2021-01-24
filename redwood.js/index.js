@@ -4,7 +4,7 @@ import * as dumb from './dumb-src'
 import * as utils from './utils'
 import httpTransport from './transport.http'
 // import * as webrtcTransport from './transport.webrtc'
-import rpc from './transport.rpc'
+import rpcTransport from './transport.rpc'
 
 export default {
     createPeer,
@@ -17,7 +17,7 @@ export default {
 }
 
 function createPeer(opts) {
-    const { httpHost, identity, webrtc, onFoundPeersCallback } = opts
+    const { httpHost, identity, webrtc, onFoundPeersCallback, rpcEndpoint } = opts
 
     const transports = [ httpTransport({ onFoundPeers, httpHost, peerID: identity.peerID }) ]
     // if (webrtc === true) {
@@ -102,7 +102,7 @@ function createPeer(opts) {
         storeRef,
         authorize,
         peers,
-        rpc,
+        rpc: rpcTransport(rpcEndpoint || 'http://localhost:8081'),
     }
 }
 

@@ -214,7 +214,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 	for _, bootstrapPeer := range config.Node.BootstrapPeers {
 		bootstrapPeer := bootstrapPeer
 		go func() {
-			app.Info(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
+			app.Infof(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
 			for _, dialAddr := range bootstrapPeer.DialAddresses {
 				host.AddPeer(rw.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr})
 			}

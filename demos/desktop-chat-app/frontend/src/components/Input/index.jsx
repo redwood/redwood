@@ -6,7 +6,7 @@ const SInput = styled.input`
     border: none;
     font-size: 16px;
     border-radius: 12px;
-    background-color: ${props => props.theme.color.grey[300]};
+    background-color: ${props => props.theme.color.grey[100]};
     color: ${props => props.theme.color.white};
     padding: 6px 12px;
 

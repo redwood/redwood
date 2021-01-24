@@ -16,7 +16,6 @@ function useStateTree(stateURI) {
         }
         redwoodClient.rpc.subscribe({ stateURI, keypath: '/', states: true, txs: true })
         const unsubscribePromise = redwoodClient.subscribe({ stateURI, keypath: '/', states: true, callback: async (err, { state, leaves }) => {
-            console.log(stateURI, state)
             if (err) {
                 console.error(err)
                 return

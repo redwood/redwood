@@ -1,7 +1,7 @@
 
 
-async function rpcFetch(method, params) {
-    let resp = await (await fetch('http://localhost:8081', {
+async function rpcFetch(endpoint, method, params) {
+    let resp = await (await fetch(endpoint, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -20,22 +20,28 @@ async function rpcFetch(method, params) {
     return resp.result
 }
 
-export default {
-    rpcFetch,
+export default function createRPCClient({ endpoint }) {
+    return {
+        rpcFetch: (...args) => rpcFetch(endpoint, ...args),
 
-    subscribe: function ({ stateURI, txs, states, keypath }) {
-        return rpcFetch('RPC.Subscribe', { stateURI, txs, states, keypath })
-    },
+        subscribe: function ({ stateURI, txs, states, keypath }) {
+            return rpcFetch(endpoint, 'RPC.Subscribe', { stateURI, txs, states, keypath })
+        },
 
-    nodeAddress: async function ({ stateURI, txs, states, keypath }) {
-        return (await rpcFetch('RPC.NodeAddress')).Address
-    },
+        nodeAddress: async function ({ stateURI, txs, states, keypath }) {
+            return (await rpcFetch(endpoint, 'RPC.NodeAddress')).Address
+        },
 
-    knownStateURIs: async function ({ stateURI, txs, states, keypath }) {
-        return (await rpcFetch('RPC.KnownStateURIs')).StateURIs
-    },
+        knownStateURIs: async function ({ stateURI, txs, states, keypath }) {
+            return (await rpcFetch(endpoint, 'RPC.KnownStateURIs')).StateURIs
+        },
 
-    sendTx: function (tx) {
-        return rpcFetch('RPC.SendTx', { tx })
-    },
+        sendTx: function (tx) {
+            return rpcFetch(endpoint, 'RPC.SendTx', { Tx: tx })
+        },
+
+        addPeer: function ({ transportName, dialAddr }) {
+            return rpcFetch(endpoint, 'RPC.AddPeer', { TransportName: transportName, DialAddr: dialAddr })
+        },
+    }
 }
