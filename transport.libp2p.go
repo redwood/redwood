@@ -13,8 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-
+	"github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
 	dstore "github.com/ipfs/go-datastore"
 	dsync "github.com/ipfs/go-datastore/sync"
@@ -28,9 +27,11 @@ import (
 	peer "github.com/libp2p/go-libp2p-peer"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	protocol "github.com/libp2p/go-libp2p-protocol"
+	recpb "github.com/libp2p/go-libp2p-record/pb"
 	"github.com/libp2p/go-libp2p/p2p/discovery"
 	ma "github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
+	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood/ctx"
 	"github.com/brynbellomy/redwood/tree"
@@ -117,7 +118,9 @@ func (t *libp2pTransport) Start() error {
 			t.libp2pHost = libp2pHost
 
 			// Initialize the DHT
-			t.dht = dht.NewDHT(t.Ctx(), t.libp2pHost, dsync.MutexWrap(dstore.NewMapDatastore()))
+			t.dht = dht.NewDHT(t.Ctx(), t.libp2pHost, dsync.MutexWrap(&notifyingDatastore{
+				Batching: dstore.NewMapDatastore(),
+			}))
 			t.dht.Validator = blankValidator{} // Set a pass-through validator
 
 			t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
@@ -142,6 +145,43 @@ func (t *libp2pTransport) Start() error {
 		// on shutdown
 		nil,
 	)
+}
+
+type notifyingDatastore struct {
+	dstore.Batching
+}
+
+func (ds *notifyingDatastore) Put(k dstore.Key, v []byte) error {
+	err := ds.Batching.Put(k, v)
+	if err != nil {
+		return err
+	}
+
+	key, value, err := decodeDatastoreKeyValue(ds.Batching, k, v)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("FUCK", key, string(value))
+	return nil
+}
+
+func decodeDatastoreKeyValue(ds dstore.Batching, key dstore.Key, value []byte) (string, []byte, error) {
+	buf, err := ds.Get(key)
+	if err == dstore.ErrNotFound {
+		return "", nil, nil
+	} else if err != nil {
+		return "", nil, err
+	}
+
+	rec := new(recpb.Record)
+	err = proto.Unmarshal(buf, rec)
+	if err != nil {
+		// Bad data in datastore, log it but don't return an error, we'll just overwrite it
+		fmt.Printf("Bad record data stored in datastore with key %s: could not unmarshal record\n", key)
+		return "", nil, nil
+	}
+	return string(rec.Key), rec.Value, nil
 }
 
 func (t *libp2pTransport) Name() string {
@@ -364,6 +404,7 @@ func (t *libp2pTransport) ProvidersOfStateURI(ctx context.Context, stateURI stri
 				return
 			default:
 			}
+			t.Debugf("ProvidersOfStateURI %v", stateURI)
 			for pinfo := range t.dht.FindProvidersAsync(ctx, urlCid, 8) {
 				if pinfo.ID == t.libp2pHost.ID() {
 					select {
@@ -373,6 +414,7 @@ func (t *libp2pTransport) ProvidersOfStateURI(ctx context.Context, stateURI stri
 						continue
 					}
 				}
+				t.Debugf("ProvidersOfStateURI %+v", pinfo)
 
 				// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
 				// whitelist, etc.
@@ -501,6 +543,7 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 						t.Errorf(`announce: could not dht.Provide stateURI "%v": %v`, stateURI, err)
 						return
 					}
+					t.Debugf("announced %v", stateURI)
 				}()
 			}
 		}
