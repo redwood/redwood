@@ -3,26 +3,23 @@ export const white = '#FFF'
 export const black = '#000'
 
 export const green = {
-  500: '##00d1810',
+    500: '#42a064',
 }
 
 export const red = {
-  100: '#FFFDFE',
-  200: '#ffc2a8',
-  500: '#d16c00',
+    100: '#FFFDFE',
+    200: '#ffc2a8',
+    500: '#d16c00',
 }
 
 export const grey = {
-  100: '#f7f4f2',
-  200: '#ececec',
-  300: '#e2d6cf',
-  400: '#aa9585',
-  500: '#805e49',
-  600: '#636363aa',
-  800: '#2d1e12',
+    600: 'hsl(220 8% 12% / 1)',
+    500: 'hsl(220 8% 16% / 1)',
+    400: 'hsl(220 8% 18% / 1)',
+    300: 'hsl(220 8% 21% / 1)',
+    200: 'hsl(220 8% 24% / 1)',
+    100: 'hsl(220 8% 50% / 1)',
 }
-
-export const kindOfBlue = '#54549e'
 
 const theme = {
     borderRadius: 12,
@@ -30,9 +27,6 @@ const theme = {
         mobile: 400,
     },
     color: {
-        black,
-        grey,
-        kindOfBlue,
         primary: {
             light: black,
             main: black,
@@ -40,6 +34,9 @@ const theme = {
         secondary: {
             main: green[500],
         },
+        black,
+        grey,
+        green,
         white,
         red
     },

@@ -895,8 +895,6 @@ func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, addr
 		Checkpoint: checkpoint,
 	}
 
-	t.Debugf("TX ~> %v", PrettyJSON(tx))
-
 	// @@TODO: remove .From entirely
 	pubkey, err := RecoverSigningPubkey(tx.Hash(), sig)
 	if err != nil {
@@ -1395,6 +1393,8 @@ type httpWritableSubscription struct {
 	keypath          tree.Keypath
 	chDone           chan struct{} // Keeps the net/http server open until the subscription is closed
 }
+
+var _ WritableSubscription = (*httpWritableSubscription)(nil)
 
 func (sub *httpWritableSubscription) StateURI() string {
 	return sub.stateURI

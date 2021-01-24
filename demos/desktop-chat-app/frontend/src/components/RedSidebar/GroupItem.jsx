@@ -6,7 +6,8 @@ const SItemContainer = styled.div`
     align-items: center;
     padding-top: 16px;
     padding-bottom: 16px;
-    background: ${props => props.selected ? '#2b335c' : 'transparent  '};
+    background: ${props => props.selected ? props.theme.color.grey[200] : 'transparent'};
+    color: ${props => props.selected ? props.theme.color.white : props.theme.color.grey[600]};
 `
 
 const SAvatarCircle = styled.div`
@@ -18,7 +19,6 @@ const SAvatarCircle = styled.div`
     justify-content: center;
     border-radius: 100%;
     margin-left: 12px;
-    box-shadow: 0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px 0px rgba(0,0,0,0.14), 0px 1px 3px 0px rgba(0,0,0,0.12);
 
     img {
         height: 18px;
@@ -33,7 +33,7 @@ const SItemInfo = styled.div`
     span {
         &:first-child {
             font-size: 12px;
-            color: white;
+            color: ${props => props.selected ? props.theme.color.white : props.theme.color.grey[100]};
         }
         &:nth-child(2) {
             font-size: 8px;
@@ -59,7 +59,7 @@ function GroupItem({ selected, color, avatar, name, text, time, ...props }) {
             <SAvatarCircle color={color}>
                 <img src={avatar} alt="User Avatar" />
             </SAvatarCircle>
-            <SItemInfo>
+            <SItemInfo selected={selected}>
                 <SItemInfoSub>
                     <span>{name}</span>
                     <span>{text}</span>

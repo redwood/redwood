@@ -1,24 +1,21 @@
 import React, { useState, useCallback } from 'react'
 import styled from 'styled-components'
+import { Avatar } from '@material-ui/core'
 
 import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
 import useStateTree from '../../hooks/useStateTree'
 import useModal from '../../hooks/useModal'
-import * as api from '../../api'
+import useAPI from '../../hooks/useAPI'
 
 import addChat from './assets/add_chat.svg'
-import avatarPlaceholder from './assets/avatar.png'
-import placeholder2 from './assets/placeholder2.png'
-import placeholder3 from './assets/placeholder3.png'
-import placeholder4 from './assets/placeholder4.png'
+import avatarPlaceholder from './assets/user_placeholder.png'
 
 const ChatBarWrapper = styled.div`
     display: flex;
     flex-direction: column;
-    background: #1b203c;
-    box-shadow: 0px 3px 3px -2px rgba(0,0,0,0.2), 0px 3px 4px 0px rgba(0,0,0,0.14), 0px 1px 8px 0px rgba(0,0,0,0.12);
+    background: ${props => props.theme.color.grey[400]};
 `
 
 const ChatBarTitle = styled.div`
@@ -33,8 +30,12 @@ const ChatBarTitle = styled.div`
 const SGroupItem = styled(GroupItem)`
     cursor: pointer;
     transition: .15s ease-in-out all;
+
+    border-radius: 8px;
+    margin: 6px;
+
     &:hover {
-        background: #2d3354;
+        background: ${props => props.theme.color.grey[300]};
     }
 `
 
@@ -66,23 +67,22 @@ const Spacer = styled.div`
 `
 
 function ChatBar({ selectedServer, selectedStateURI, setSelectedStateURI, className }) {
-    const serverState = useStateTree(`${selectedServer}/registry`)
+    const stateURI = selectedServer === null ? null : `${selectedServer}/registry`
+    const serverState = useStateTree(stateURI)
     const { onPresent: onPresentNewChatModal, onDismiss: onDismissNewChatModal } = useModal('new chat')
 
-    console.log('registry', serverState)
-
     const onClickCreateNewChat = useCallback(() => {
-        if (!selectedServer) {
+        if (!stateURI || !selectedServer) {
             return
         }
         onPresentNewChatModal()
-    }, [onPresentNewChatModal, selectedServer])
+    }, [stateURI, onPresentNewChatModal, selectedServer])
 
-    let serverRooms = (!!serverState ? serverState.rooms : []) || []
+    let serverRooms = ((!!serverState ? serverState.rooms : []) || []).filter(room => !!room)
 
     return (
         <ChatBarWrapper className={className}>
-            <ChatBarTitle>Groups</ChatBarTitle>
+            <ChatBarTitle>{selectedServer}/</ChatBarTitle>
             {serverRooms.map(stateURI => (
                 <ChatBarItem
                     stateURI={stateURI}
@@ -93,9 +93,11 @@ function ChatBar({ selectedServer, selectedStateURI, setSelectedStateURI, classN
 
             <Spacer />
 
-            <SControlWrapper onClick={onClickCreateNewChat}>
-                <img src={addChat} alt="Add Chat" />
-            </SControlWrapper>
+            {!!selectedServer &&
+                <SControlWrapper onClick={onClickCreateNewChat}>
+                    <img src={addChat} alt="Add Chat" />
+                </SControlWrapper>
+            }
             <NewChatModal selectedServer={selectedServer} serverRooms={serverRooms} onDismiss={onDismissNewChatModal} />
         </ChatBarWrapper>
     )
@@ -118,14 +120,17 @@ function ChatBarItem({ stateURI, selectedStateURI, setSelectedStateURI }) {
 
 function NewChatModal({ selectedServer, serverRooms, onDismiss }) {
     const [newChatName, setNewChatName] = useState('')
+    const api = useAPI()
 
     function onChangeNewChatName(e) {
         setNewChatName(e.target.value)
     }
 
-    async function onClickCreate() {
+    const onClickCreate = useCallback(async () => {
+        if (!api) { return }
         await api.createNewChat(selectedServer, newChatName, serverRooms)
-    }
+    }, [api, selectedServer, newChatName, serverRooms])
+
     return (
         <Modal modalKey="new chat">
             <ModalTitle>Add a chat</ModalTitle>

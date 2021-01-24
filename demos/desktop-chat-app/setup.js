@@ -8,32 +8,32 @@ async function main() {
     let { sha3 } = await storeRef(sync9JS)
     console.log('sync9 sha3:', sha3)
 
-    let tx = {
-        stateURI: 'chat.redwood.dev/registry',
-        id: '67656e6573697300000000000000000000000000000000000000000000000000',
-        parents: [],
-        patches: [
-            ' = ' + stableStringify({
-                'Merge-Type': {
-                    'Content-Type': 'resolver/dumb',
-                    'value': {}
-                },
-                'Validator': {
-                    'Content-Type': 'validator/permissions',
-                    'value': {
-                        '*': {
-                            '^.*$': {
-                                'write': true,
-                            },
-                        },
-                    },
-                },
-                'rooms': [],
-            }),
-        ],
-    }
-    await rpcFetch('RPC.Subscribe', { StateURI: 'chat.redwood.dev/registry' })
-    await rpcFetch('RPC.SendTx', { Tx: tx })
+    // let tx = {
+    //     stateURI: 'chat.redwood.dev/registry',
+    //     id: '67656e6573697300000000000000000000000000000000000000000000000000',
+    //     parents: [],
+    //     patches: [
+    //         ' = ' + stableStringify({
+    //             'Merge-Type': {
+    //                 'Content-Type': 'resolver/dumb',
+    //                 'value': {}
+    //             },
+    //             'Validator': {
+    //                 'Content-Type': 'validator/permissions',
+    //                 'value': {
+    //                     '*': {
+    //                         '^.*$': {
+    //                             'write': true,
+    //                         },
+    //                     },
+    //                 },
+    //             },
+    //             'rooms': [],
+    //         }),
+    //     ],
+    // }
+    // await rpcFetch('RPC.Subscribe', { StateURI: 'chat.redwood.dev/registry' })
+    // await rpcFetch('RPC.SendTx', { Tx: tx })
 
     console.log('Done.')
     process.exit(0)

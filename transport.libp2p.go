@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,15 +19,16 @@ import (
 	dstore "github.com/ipfs/go-datastore"
 	dsync "github.com/ipfs/go-datastore/sync"
 	libp2p "github.com/libp2p/go-libp2p"
+	netp2p "github.com/libp2p/go-libp2p-core/network"
 	cryptop2p "github.com/libp2p/go-libp2p-crypto"
 	p2phost "github.com/libp2p/go-libp2p-host"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	metrics "github.com/libp2p/go-libp2p-metrics"
-	netp2p "github.com/libp2p/go-libp2p-net"
 	peer "github.com/libp2p/go-libp2p-peer"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	protocol "github.com/libp2p/go-libp2p-protocol"
+	"github.com/libp2p/go-libp2p/p2p/discovery"
 	ma "github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
 
@@ -119,6 +121,13 @@ func (t *libp2pTransport) Start() error {
 			t.dht.Validator = blankValidator{} // Set a pass-through validator
 
 			t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
+
+			disc, err := discovery.NewMdnsService(t.Ctx().Context, libp2pHost, 10*time.Second, "redwood")
+			if err != nil {
+				return err
+			}
+			disc.RegisterNotifee(t)
+
 			t.libp2pHost.Network().Notify(t)
 
 			go t.periodicallyAnnounceContent()
@@ -157,6 +166,48 @@ func (t *libp2pTransport) Peers() []peerstore.PeerInfo {
 
 func (t *libp2pTransport) SetHost(h Host) {
 	t.host = h
+}
+
+// HandlePeerFoudn is the mDNS peer discovery callback
+func (t *libp2pTransport) HandlePeerFound(pinfo peerstore.PeerInfo) {
+	ctx, cancel := context.WithTimeout(t.Ctx().Context, 10*time.Second)
+	defer cancel()
+
+	// Ensure all peers discovered on the libp2p layer are in the peer store
+	if pinfo.ID == peer.ID("") {
+		return
+	}
+	// dialInfos := t.peerDialInfosFromPeerInfo(pinfo)
+	// t.peerStore.AddDialInfos(dialInfos)
+
+	var i uint
+	for _, dialInfo := range t.peerDialInfosFromPeerInfo(pinfo) {
+		if !t.peerStore.IsKnownPeer(dialInfo) {
+			i++
+		}
+	}
+
+	if i > 0 {
+		t.Infof(0, "mDNS: peer %+v found", pinfo.ID.Pretty())
+	}
+
+	t.addPeerInfosToPeerStore([]peerstore.PeerInfo{pinfo})
+
+	peer := t.makeDisconnectedPeer(pinfo)
+	if peer == nil {
+		t.Infof(0, "mDNS: peer %+v is nil", pinfo.ID.Pretty())
+		return
+	}
+	err := peer.EnsureConnected(ctx)
+	if err != nil {
+		t.Errorf("error connecting to mDNS peer: %v", err)
+	}
+	// if len(dialInfos) > 0 {
+	//  err := t.libp2pHost.Connect(ctx, pinfo)
+	//  if err != nil {
+	//      t.Errorf("error connecting to peer %v: %v", pinfo.ID.Pretty(), err)
+	//  }
+	// }
 }
 
 func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
@@ -516,19 +567,7 @@ func (t *libp2pTransport) periodicallyUpdatePeerStore() {
 		}
 
 		// Ensure all peers discovered on the libp2p layer are in the peer store
-		for _, pinfo := range t.Peers() {
-			if pinfo.ID == peer.ID("") {
-				continue
-			}
-			addrs := multiaddrsFromPeerInfo(pinfo)
-			if len(addrs) > 0 {
-				var dialInfos []PeerDialInfo
-				for addr := range addrs {
-					dialInfos = append(dialInfos, PeerDialInfo{TransportName: t.Name(), DialAddr: addr})
-				}
-				t.peerStore.AddDialInfos(dialInfos)
-			}
-		}
+		t.addPeerInfosToPeerStore(t.Peers())
 
 		// Share our peer store with all of our peers
 		peerDialInfos := t.peerStore.AllDialInfos()
@@ -575,16 +614,27 @@ func (t *libp2pTransport) AnnounceRef(ctx context.Context, refID types.RefID) er
 	return nil
 }
 
+func (t *libp2pTransport) addPeerInfosToPeerStore(pinfos []peerstore.PeerInfo) {
+	for _, pinfo := range pinfos {
+		if pinfo.ID == peer.ID("") {
+			continue
+		}
+		dialInfos := t.peerDialInfosFromPeerInfo(pinfo)
+		t.peerStore.AddDialInfos(dialInfos)
+	}
+}
+
 func (t *libp2pTransport) makeConnectedPeer(stream netp2p.Stream) *libp2pPeer {
 	pinfo := t.libp2pHost.Peerstore().PeerInfo(stream.Conn().RemotePeer())
 	peer := &libp2pPeer{t: t, pinfo: pinfo, stream: stream}
 	dialAddrs := multiaddrsFromPeerInfo(pinfo)
 
 	var dialInfos []PeerDialInfo
-	for dialAddr := range dialAddrs {
+	dialAddrs.ForEach(func(dialAddr string) bool {
 		dialInfo := PeerDialInfo{TransportName: t.Name(), DialAddr: dialAddr}
 		dialInfos = append(dialInfos, dialInfo)
-	}
+		return true
+	})
 	t.peerStore.AddDialInfos(dialInfos)
 
 	for _, dialInfo := range dialInfos {
@@ -599,24 +649,26 @@ func (t *libp2pTransport) makeConnectedPeer(stream netp2p.Stream) *libp2pPeer {
 func (t *libp2pTransport) makeDisconnectedPeer(pinfo peerstore.PeerInfo) *libp2pPeer {
 	peer := &libp2pPeer{t: t, pinfo: pinfo, stream: nil}
 	dialAddrs := multiaddrsFromPeerInfo(pinfo)
-	if len(dialAddrs) == 0 {
+	if dialAddrs.Len() == 0 {
 		return nil
 	}
 
 	var peerDetails PeerDetails
-	for dialAddr := range dialAddrs {
+	dialAddrs.ForEach(func(dialAddr string) bool {
 		peerDetails = t.peerStore.PeerWithDialInfo(PeerDialInfo{TransportName: t.Name(), DialAddr: dialAddr})
 		if peerDetails != nil {
-			break
+			return false
 		}
-	}
+		return true
+	})
 	if peerDetails != nil {
 		peer.PeerDetails = peerDetails
 	} else {
 		var dialInfos []PeerDialInfo
-		for dialAddr := range dialAddrs {
+		dialAddrs.ForEach(func(dialAddr string) bool {
 			dialInfos = append(dialInfos, PeerDialInfo{TransportName: t.Name(), DialAddr: dialAddr})
-		}
+			return true
+		})
 		t.peerStore.AddDialInfos(dialInfos)
 		for _, dialInfo := range dialInfos {
 			peer.PeerDetails = t.peerStore.PeerWithDialInfo(dialInfo)
@@ -637,10 +689,6 @@ type libp2pPeer struct {
 
 func (peer *libp2pPeer) Transport() Transport {
 	return peer.t
-}
-
-func (peer *libp2pPeer) ReachableAt() StringSet {
-	return multiaddrsFromPeerInfo(peer.pinfo)
 }
 
 func (peer *libp2pPeer) EnsureConnected(ctx context.Context) error {
@@ -965,27 +1013,75 @@ func cidForString(s string) (cid.Cid, error) {
 	return c, nil
 }
 
-func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) StringSet {
-	dialAddrs := NewStringSet(nil)
+var (
+	protoDNS4 = ma.ProtocolWithName("dns4")
+	protoIP4  = ma.ProtocolWithName("ip4")
+)
+
+func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *SortedStringSet {
 	multiaddrs, err := peerstore.InfoToP2pAddrs(&pinfo)
 	if err != nil {
 		panic(err)
 	}
+
+	// Deduplicate the addrs
+	deduped := make(map[string]ma.Multiaddr, len(multiaddrs))
 	for _, addr := range multiaddrs {
-		dialAddrs.Add(addr.String())
+		deduped[addr.String()] = addr
 	}
-	return cleanLibp2pAddrs(dialAddrs, pinfo.ID)
+	multiaddrs = make([]ma.Multiaddr, 0, len(deduped))
+	for _, addr := range deduped {
+		multiaddrs = append(multiaddrs, addr)
+	}
+
+	// Sort them
+	sort.Slice(multiaddrs, func(i, j int) bool {
+		if val := protocolValue(multiaddrs[i], protoIP4); val != "" {
+			if val == "127" {
+				return true
+			} else if val == "192" {
+				return true
+			}
+		} else if protocolValue(multiaddrs[i], protoDNS4) != "" {
+			return true
+		}
+		return false
+	})
+
+	// Filter and clean them
+	multiaddrStrings := make([]string, 0, len(multiaddrs))
+	for _, addr := range multiaddrs {
+		if cleaned := cleanLibp2pAddr(addr.String(), pinfo.ID); cleaned != "" {
+			multiaddrStrings = append(multiaddrStrings, cleaned)
+		}
+	}
+	return NewSortedStringSet(multiaddrStrings)
+	// dialAddrs := NewSortedStringSet(multiaddrStrings)
+	// return cleanLibp2pAddrs(dialAddrs, pinfo.ID)
+}
+
+func cleanLibp2pAddr(addrStr string, peerID peer.ID) string {
+	if addrStr[:len("/p2p-circuit")] == "/p2p-circuit" {
+		return ""
+	}
+
+	addrStr = strings.Replace(addrStr, "/ipfs/", "/p2p/", 1)
+
+	if !strings.Contains(addrStr, "/p2p/") {
+		addrStr = addrStr + "/p2p/" + peerID.Pretty()
+	}
+	return addrStr
 }
 
 func cleanLibp2pAddrs(addrStrs StringSet, peerID peer.ID) StringSet {
 	keep := NewStringSet(nil)
 	for addrStr := range addrStrs {
 		if strings.Index(addrStr, "/ip4/172.") == 0 {
-			continue
+			// continue
 			// } else if strings.Index(addrStr, "/ip4/0.0.0.0") == 0 {
 			//  continue
 			// } else if strings.Index(addrStr, "/ip4/127.0.0.1") == 0 {
-			// 	continue
+			//  continue
 		} else if addrStr[:len("/p2p-circuit")] == "/p2p-circuit" {
 			continue
 		}
@@ -999,6 +1095,38 @@ func cleanLibp2pAddrs(addrStrs StringSet, peerID peer.ID) StringSet {
 		keep.Add(addrStr)
 	}
 	return keep
+}
+
+func protocolValue(addr ma.Multiaddr, proto ma.Protocol) string {
+	val, err := addr.ValueForProtocol(proto.Code)
+	if err == ma.ErrProtocolNotFound {
+		return ""
+	}
+	return val
+}
+
+// func sortLibp2pAddrs(addrs StringSet) SortedStringSet {
+// 	s := addrs.Slice()
+// 	sort.Slice(s, func(i, j int) bool {
+//         net.ParseIP(s[i])
+//         strconv.ParseUint(s[i][])
+//         switch s[i][:3] {
+//         case "127":
+//             return true
+//         case "192"
+//         }
+// 	})
+// 	return NewSortedStringSet(s)
+// }
+
+func (t *libp2pTransport) peerDialInfosFromPeerInfo(pinfo peerstore.PeerInfo) []PeerDialInfo {
+	addrs := multiaddrsFromPeerInfo(pinfo)
+	var dialInfos []PeerDialInfo
+	addrs.ForEach(func(addr string) bool {
+		dialInfos = append(dialInfos, PeerDialInfo{TransportName: t.Name(), DialAddr: addr})
+		return true
+	})
+	return dialInfos
 }
 
 type blankValidator struct{}

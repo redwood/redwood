@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import styled from 'styled-components'
+import useAPI from '../hooks/useAPI'
 import useRedwood from '../hooks/useRedwood'
-import * as api from '../api'
 
 const SSidebar = styled.div`
     display: flex;
@@ -37,6 +37,7 @@ const CreateChatControls = styled.div`
 `
 
 function Sidebar({ selectedStateURI, setSelectedStateURI, className }) {
+    const api = useAPI()
     const { appState, rooms } = useRedwood()
     const [newChatName, setNewChatName] = useState('')
 
@@ -48,9 +49,10 @@ function Sidebar({ selectedStateURI, setSelectedStateURI, className }) {
         setSelectedStateURI(stateURI)
     }
 
-    async function onClickCreateNewChat() {
+    const onClickCreateNewChat = useCallback(async () => {
+        if (!api) { return }
         await api.createNewChat(newChatName, rooms)
-    }
+    }, [api, newChatName, rooms])
 
     let stateURIs = Object.keys(appState)
     let domains = {}

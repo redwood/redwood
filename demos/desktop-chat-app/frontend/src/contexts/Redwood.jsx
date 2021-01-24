@@ -1,13 +1,11 @@
-import React, { createContext, useCallback, useState, useEffect } from 'react'
+import React, { createContext, useCallback, useState, useEffect, useRef } from 'react'
 import rpcFetch from '../utils/rpcFetch'
 import Redwood from '../redwood.js'
-import * as api from '../api'
 
 export const Context = createContext({
     nodeAddress: null,
     redwoodClient: null,
     subscribedStateURIs: {},
-    setSubscribedStateURIs: () => {},
     stateTrees: {},
     updateStateTree: () => {},
     leaves: {},
@@ -17,7 +15,7 @@ export const Context = createContext({
 function Provider({ children }) {
     const [nodeAddress, setNodeAddress] = useState(null)
     const [redwoodClient, setRedwoodClient] = useState(null)
-    const [subscribedStateURIs, setSubscribedStateURIs] = useState({})
+    const subscribedStateURIs = useRef({})
     const [stateTrees, setStateTrees] = useState({})
     const [leaves, setLeaves] = useState({})
     const [knownPeers, setKnownPeers] = useState({})
@@ -56,7 +54,6 @@ function Provider({ children }) {
           nodeAddress,
           redwoodClient,
           subscribedStateURIs,
-          setSubscribedStateURIs,
           stateTrees,
           leaves,
           updateStateTree,

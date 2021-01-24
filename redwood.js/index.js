@@ -2,8 +2,9 @@ import * as identity from './identity'
 import * as sync9 from './sync9-src'
 import * as dumb from './dumb-src'
 import * as utils from './utils'
-import httpTransport from './redwood.transport.http'
-// import * as webrtcTransport from './redwood.transport.webrtc'
+import httpTransport from './transport.http'
+// import * as webrtcTransport from './transport.webrtc'
+import rpc from './transport.rpc'
 
 export default {
     createPeer,
@@ -47,9 +48,14 @@ function createPeer(opts) {
     }
 
     async function subscribe({ stateURI, keypath, fromTxID, states, txs, callback }) {
-        for (let tpt of transports) {
-            if (tpt.subscribe) {
-                tpt.subscribe({ stateURI, keypath, fromTxID, states, txs, callback })
+        let unsubscribers = (await Promise.all(
+            transports.map(tpt => tpt.subscribe({ stateURI, keypath, fromTxID, states, txs, callback }))
+        )).filter(unsub => !!unsub)
+        return () => {
+            for (let unsub of unsubscribers) {
+                if (unsub) {
+                    unsub()
+                }
             }
         }
     }
@@ -96,6 +102,7 @@ function createPeer(opts) {
         storeRef,
         authorize,
         peers,
+        rpc,
     }
 }
 

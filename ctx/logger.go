@@ -2,9 +2,12 @@ package ctx
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/brynbellomy/klog"
 )
+
+// Logger anstracts basic logging functions.
 
 // Logger anstracts basic logging functions.
 type Logger interface {
@@ -33,6 +36,8 @@ type logger struct {
 	logLabel  string
 }
 
+var longestLabel int
+
 // NewLogger creates and inits a new Logger with the given label.
 func NewLogger(label string) Logger {
 	l := &logger{}
@@ -55,6 +60,9 @@ func (l *logger) SetLogLabel(inLabel string) {
 	l.hasPrefix = len(inLabel) > 0
 	if l.hasPrefix {
 		l.logPrefix = fmt.Sprintf("[%s] ", inLabel)
+		if len(l.logPrefix) > longestLabel {
+			longestLabel = len(l.logPrefix)
+		}
 	}
 }
 
@@ -75,7 +83,8 @@ func (l *logger) LogV(inVerboseLevel int32) bool {
 
 func (l *logger) Debug(args ...interface{}) {
 	if l.hasPrefix {
-		klog.DebugDepth(1, l.logPrefix, fmt.Sprint(args...))
+		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+		klog.DebugDepth(1, l.logPrefix, padding, fmt.Sprint(args...))
 	} else {
 		klog.DebugDepth(1, args...)
 	}
@@ -83,7 +92,8 @@ func (l *logger) Debug(args ...interface{}) {
 
 func (l *logger) Debugf(inFormat string, args ...interface{}) {
 	if l.hasPrefix {
-		klog.DebugDepth(1, l.logPrefix, fmt.Sprintf(inFormat, args...))
+		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+		klog.DebugDepth(1, l.logPrefix, padding, fmt.Sprintf(inFormat, args...))
 	} else {
 		klog.DebugDepth(1, fmt.Sprintf(inFormat, args...))
 	}
@@ -91,7 +101,8 @@ func (l *logger) Debugf(inFormat string, args ...interface{}) {
 
 func (l *logger) Success(args ...interface{}) {
 	if l.hasPrefix {
-		klog.SuccessDepth(1, l.logPrefix, fmt.Sprint(args...))
+		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+		klog.SuccessDepth(1, l.logPrefix, padding, fmt.Sprint(args...))
 	} else {
 		klog.SuccessDepth(1, args...)
 	}
@@ -99,7 +110,8 @@ func (l *logger) Success(args ...interface{}) {
 
 func (l *logger) Successf(inFormat string, args ...interface{}) {
 	if l.hasPrefix {
-		klog.SuccessDepth(1, l.logPrefix, fmt.Sprintf(inFormat, args...))
+		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+		klog.SuccessDepth(1, l.logPrefix, padding, fmt.Sprintf(inFormat, args...))
 	} else {
 		klog.SuccessDepth(1, fmt.Sprintf(inFormat, args...))
 	}
@@ -120,7 +132,8 @@ func (l *logger) Info(inVerboseLevel int32, args ...interface{}) {
 
 	if logIt {
 		if l.hasPrefix {
-			klog.InfoDepth(1, l.logPrefix, fmt.Sprint(args...))
+			padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+			klog.InfoDepth(1, l.logPrefix, padding, fmt.Sprint(args...))
 		} else {
 			klog.InfoDepth(1, args...)
 		}
@@ -139,7 +152,8 @@ func (l *logger) Infof(inVerboseLevel int32, inFormat string, args ...interface{
 
 	if logIt {
 		if l.hasPrefix {
-			klog.InfoDepth(1, l.logPrefix, fmt.Sprintf(inFormat, args...))
+			padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+			klog.InfoDepth(1, l.logPrefix, padding, fmt.Sprintf(inFormat, args...))
 		} else {
 			klog.InfoDepth(1, fmt.Sprintf(inFormat, args...))
 		}
@@ -152,12 +166,11 @@ func (l *logger) Infof(inVerboseLevel int32, inFormat string, args ...interface{
 // Warnings are reserved for situations that indicate an inconsistency or an error that
 // won't result in a departure of specifications, correctness, or expected behavior.
 func (l *logger) Warn(args ...interface{}) {
-	{
-		if l.hasPrefix {
-			klog.WarningDepth(1, l.logPrefix, fmt.Sprint(args...))
-		} else {
-			klog.WarningDepth(1, args...)
-		}
+	if l.hasPrefix {
+		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+		klog.WarningDepth(1, l.logPrefix, padding, fmt.Sprint(args...))
+	} else {
+		klog.WarningDepth(1, args...)
 	}
 }
 
@@ -166,12 +179,11 @@ func (l *logger) Warn(args ...interface{}) {
 //
 // See comments above for Warn() for guidelines on errors vs warnings.
 func (l *logger) Warnf(inFormat string, args ...interface{}) {
-	{
-		if l.hasPrefix {
-			klog.WarningDepth(1, l.logPrefix, fmt.Sprintf(inFormat, args...))
-		} else {
-			klog.WarningDepth(1, fmt.Sprintf(inFormat, args...))
-		}
+	if l.hasPrefix {
+		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+		klog.WarningDepth(1, l.logPrefix, padding, fmt.Sprintf(inFormat, args...))
+	} else {
+		klog.WarningDepth(1, fmt.Sprintf(inFormat, args...))
 	}
 }
 
@@ -184,7 +196,8 @@ func (l *logger) Warnf(inFormat string, args ...interface{}) {
 func (l *logger) Error(args ...interface{}) {
 	{
 		if l.hasPrefix {
-			klog.ErrorDepth(1, l.logPrefix, fmt.Sprint(args...))
+			padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+			klog.ErrorDepth(1, l.logPrefix, padding, fmt.Sprint(args...))
 		} else {
 			klog.ErrorDepth(1, args...)
 		}
@@ -198,7 +211,8 @@ func (l *logger) Error(args ...interface{}) {
 func (l *logger) Errorf(inFormat string, args ...interface{}) {
 	{
 		if l.hasPrefix {
-			klog.ErrorDepth(1, l.logPrefix, fmt.Sprintf(inFormat, args...))
+			padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+			klog.ErrorDepth(1, l.logPrefix, padding, fmt.Sprintf(inFormat, args...))
 		} else {
 			klog.ErrorDepth(1, fmt.Sprintf(inFormat, args...))
 		}
@@ -210,7 +224,8 @@ func (l *logger) Errorf(inFormat string, args ...interface{}) {
 func (l *logger) Fatalf(inFormat string, args ...interface{}) {
 	{
 		if l.hasPrefix {
-			klog.FatalDepth(1, l.logPrefix, fmt.Sprintf(inFormat, args...))
+			padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+			klog.FatalDepth(1, l.logPrefix, padding, fmt.Sprintf(inFormat, args...))
 		} else {
 			klog.FatalDepth(1, fmt.Sprintf(inFormat, args...))
 		}

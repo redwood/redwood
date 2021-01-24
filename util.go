@@ -391,6 +391,98 @@ func (s *StringSet) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
+type SortedStringSet struct {
+	values map[string]struct{}
+	order  []string
+}
+
+func NewSortedStringSet(vals []string) *SortedStringSet {
+	values := map[string]struct{}{}
+	order := []string{}
+	for _, val := range vals {
+		values[val] = struct{}{}
+		order = append(order, val)
+	}
+	return &SortedStringSet{values, order}
+}
+
+func (s SortedStringSet) Len() int {
+	return len(s.order)
+}
+
+func (s SortedStringSet) Contains(val string) bool {
+	_, exists := s.values[val]
+	return exists
+}
+
+func (s SortedStringSet) ForEach(fn func(val string) bool) {
+	for _, val := range s.order {
+		ok := fn(val)
+		if !ok {
+			break
+		}
+	}
+}
+
+func (s SortedStringSet) Add(val string) SortedStringSet {
+	s.values[val] = struct{}{}
+	s.order = append(s.order, val)
+	return s
+}
+
+func (s SortedStringSet) Remove(val string) SortedStringSet {
+	delete(s.values, val)
+	idx := -1
+	for i, id := range s.order {
+		if id == val {
+			idx = i
+			break
+		}
+	}
+	if idx > -1 {
+		if idx < len(s.order)-1 {
+			s.order = append(s.order[:idx], s.order[idx+1:]...)
+		} else {
+			s.order = s.order[:idx]
+		}
+	}
+	return s
+}
+
+func (s SortedStringSet) Pop() string {
+	id := s.order[len(s.order)-1]
+	delete(s.values, id)
+	s.order = s.order[:len(s.order)-1]
+	return id
+}
+
+func (s SortedStringSet) Any() string {
+	var id string
+	for x := range s.values {
+		id = x
+		break
+	}
+	s.Remove(id)
+	return id
+}
+
+func (s SortedStringSet) Slice() []string {
+	slice := make([]string, len(s.order))
+	copy(slice, s.order)
+	return slice
+}
+
+func (s SortedStringSet) Copy() *SortedStringSet {
+	set := map[string]struct{}{}
+	for val := range s.values {
+		set[val] = struct{}{}
+	}
+	return &SortedStringSet{
+		values: set,
+		order:  s.Slice(),
+	}
+}
+
 type IDSet map[types.ID]struct{}
 
 func NewIDSet(vals []types.ID) IDSet {

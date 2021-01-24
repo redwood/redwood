@@ -38,8 +38,6 @@ type ControllerHub interface {
 type controllerHub struct {
 	*ctx.Context
 
-	address types.Address
-
 	controllers   map[string]Controller
 	controllersMu sync.RWMutex
 	txStore       TxStore
@@ -54,10 +52,9 @@ var (
 	ErrNoController = errors.New("no controller for that stateURI")
 )
 
-func NewControllerHub(address types.Address, dbRootPath string, txStore TxStore, refStore RefStore) ControllerHub {
+func NewControllerHub(dbRootPath string, txStore TxStore, refStore RefStore) ControllerHub {
 	return &controllerHub{
 		Context:     &ctx.Context{},
-		address:     address,
 		controllers: make(map[string]Controller),
 		dbRootPath:  dbRootPath,
 		txStore:     txStore,
@@ -69,7 +66,7 @@ func (m *controllerHub) Start() error {
 	return m.CtxStart(
 		// on startup
 		func() error {
-			m.SetLogLabel(m.address.Pretty() + " controllerHub")
+			m.SetLogLabel("controller hub")
 
 			stateURIs, err := m.txStore.KnownStateURIs()
 			if err != nil {

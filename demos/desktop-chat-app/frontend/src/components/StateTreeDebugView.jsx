@@ -7,7 +7,8 @@ const SStateTreeDebugView = styled.div`
     background-color: #d3d3d3;
     font-family: Consolas, monospace;
     font-weight: 300;
-    height: 100vh;
+    height: calc(100vh - 40px);
+    color: black;
 
     overflow: scroll;
 
@@ -29,6 +30,8 @@ const StateTree = styled.div`
 
 function StateTreeDebugView({ className }) {
     const { stateTrees } = useRedwood()
+
+    return null
 
     return (
         <SStateTreeDebugView className={className}>
