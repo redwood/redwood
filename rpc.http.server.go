@@ -105,6 +105,19 @@ func (s *httpRPCServer) NodeAddress(r *http.Request, args *NodeAddressArgs, resp
 }
 
 type (
+	AddPeerArgs struct {
+		TransportName string
+		DialAddr      string
+	}
+	AddPeerResponse struct{}
+)
+
+func (s *httpRPCServer) AddPeer(r *http.Request, args *AddPeerArgs, resp *AddPeerResponse) error {
+	s.host.AddPeer(PeerDialInfo{TransportName: args.TransportName, DialAddr: args.DialAddr})
+	return nil
+}
+
+type (
 	KnownStateURIsArgs     struct{}
 	KnownStateURIsResponse struct {
 		StateURIs []string

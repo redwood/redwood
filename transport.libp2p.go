@@ -16,7 +16,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
 	dstore "github.com/ipfs/go-datastore"
-	dsync "github.com/ipfs/go-datastore/sync"
 	libp2p "github.com/libp2p/go-libp2p"
 	netp2p "github.com/libp2p/go-libp2p-core/network"
 	cryptop2p "github.com/libp2p/go-libp2p-crypto"
@@ -118,9 +117,17 @@ func (t *libp2pTransport) Start() error {
 			t.libp2pHost = libp2pHost
 
 			// Initialize the DHT
-			t.dht = dht.NewDHT(t.Ctx(), t.libp2pHost, dsync.MutexWrap(&notifyingDatastore{
-				Batching: dstore.NewMapDatastore(),
-			}))
+			t.dht, err = dht.New(t.Ctx(), t.libp2pHost,
+				// dht.BootstrapPeers(config.bootstrapNodes...),
+				dht.Mode(dht.ModeServer),
+				// dsync.MutexWrap(&notifyingDatastore{
+				// 	Batching: dstore.NewMapDatastore(),
+				// }))
+			)
+			if err != nil {
+				return errors.Wrap(err, "could not initialize libp2p dht")
+			}
+
 			t.dht.Validator = blankValidator{} // Set a pass-through validator
 
 			t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
@@ -154,11 +161,13 @@ type notifyingDatastore struct {
 func (ds *notifyingDatastore) Put(k dstore.Key, v []byte) error {
 	err := ds.Batching.Put(k, v)
 	if err != nil {
+		fmt.Println("ERRRRRRRRRRRR", err)
 		return err
 	}
 
 	key, value, err := decodeDatastoreKeyValue(ds.Batching, k, v)
 	if err != nil {
+		fmt.Println("ERRRRRRRRRRRR", err)
 		return err
 	}
 
@@ -404,7 +413,16 @@ func (t *libp2pTransport) ProvidersOfStateURI(ctx context.Context, stateURI stri
 				return
 			default:
 			}
-			t.Debugf("ProvidersOfStateURI %v", stateURI)
+
+			// search, err := t.dht.SearchValue(ctx, stateURI)
+			// if err != nil {
+			// 	t.Errorf("ERR getting: %v", err)
+			// }
+
+			// for val := range search {
+			// 	t.Successf("GET %v: %v", stateURI, string(val))
+			// }
+
 			for pinfo := range t.dht.FindProvidersAsync(ctx, urlCid, 8) {
 				if pinfo.ID == t.libp2pHost.ID() {
 					select {
@@ -414,7 +432,7 @@ func (t *libp2pTransport) ProvidersOfStateURI(ctx context.Context, stateURI stri
 						continue
 					}
 				}
-				t.Debugf("ProvidersOfStateURI %+v", pinfo)
+				// t.Debugf("ProvidersOfStateURI %+v", pinfo)
 
 				// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
 				// whitelist, etc.
@@ -543,7 +561,13 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 						t.Errorf(`announce: could not dht.Provide stateURI "%v": %v`, stateURI, err)
 						return
 					}
-					t.Debugf("announced %v", stateURI)
+					// t.Warnf("PUT: %v %v", stateURI, t.peerID.Pretty())
+					// err = t.dht.PutValue(ctxInner, stateURI, []byte(t.peerID.Pretty()))
+					// if err != nil && err != kbucket.ErrLookupFailure {
+					// 	t.Errorf(`announce: could not dht.Provide stateURI "%v": %v`, stateURI, err)
+					// 	return
+					// }
+					// t.Debugf("announced %v", stateURI)
 				}()
 			}
 		}
@@ -1099,8 +1123,6 @@ func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *SortedStringSet {
 		}
 	}
 	return NewSortedStringSet(multiaddrStrings)
-	// dialAddrs := NewSortedStringSet(multiaddrStrings)
-	// return cleanLibp2pAddrs(dialAddrs, pinfo.ID)
 }
 
 func cleanLibp2pAddr(addrStr string, peerID peer.ID) string {
@@ -1174,8 +1196,17 @@ func (t *libp2pTransport) peerDialInfosFromPeerInfo(pinfo peerstore.PeerInfo) []
 
 type blankValidator struct{}
 
-func (blankValidator) Validate(_ string, _ []byte) error        { return nil }
-func (blankValidator) Select(_ string, _ [][]byte) (int, error) { return 0, nil }
+func (blankValidator) Validate(key string, val []byte) error {
+	fmt.Println("Validate ~>", key, string(val))
+	return nil
+}
+func (blankValidator) Select(key string, vals [][]byte) (int, error) {
+	fmt.Println("SELECT key", key)
+	for _, val := range vals {
+		fmt.Println("  -", string(val))
+	}
+	return 0, nil
+}
 
 type Msg struct {
 	Type    MsgType     `json:"type"`

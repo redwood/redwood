@@ -52,8 +52,8 @@ function UserControl({ server }) {
             <SUserLeft>
                 <img src={userPlaceholderImg} alt="User Avatar" />
                 <SUsernameWrapper>
-                    <span>Tim Shenk</span>
-                    <span>@stenkatron_69</span>
+                    <span>Bill Dipperly</span>
+                    <span>@big_chungus</span>
                 </SUsernameWrapper>
             </SUserLeft>
         </SUserControlContainer>
