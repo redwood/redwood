@@ -1,24 +1,35 @@
 import React, { useState, useCallback } from 'react'
 import styled from 'styled-components'
+import { IconButton } from '@material-ui/core'
+import { SendRounded as SendIcon } from '@material-ui/icons'
 import rpcFetch from '../utils/rpcFetch'
 import Sidebar from './Sidebar'
 import Button from './Button'
 import Input from './Input'
+import useAPI from '../hooks/useAPI'
 import useRedwood from '../hooks/useRedwood'
 import useStateTree from '../hooks/useStateTree'
-import * as api from '../api'
 
 const Container = styled.div`
     display: flex;
     flex-direction: column;
     height: 100%;
+    background-color: ${props => props.theme.color.grey[200]};
 `
 
 const MessageContainer = styled.div`
     display: flex;
     flex-direction: column;
-    overflow-y: scroll;
     flex-grow: 1;
+
+    overflow-y: scroll;
+
+    /* Chrome, Safari, Opera */
+    &::-webkit-scrollbar {
+        display: none;
+    }
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
 `
 
 const Message = styled.div`
@@ -41,8 +52,14 @@ const ControlsContainer = styled.div`
     width: 100%;
 `
 
+const SIconButton = styled(IconButton)`
+    color: ${props => props.theme.color.white} !important;
+    padding: 0 12px !important;
+`
+
 function Chat({ stateURI, className }) {
     const { nodeAddress } = useRedwood()
+    const api = useAPI()
     const roomState = useStateTree(stateURI)
     const [messageText, setMessageText] = useState('')
 
@@ -53,15 +70,24 @@ function Chat({ stateURI, className }) {
     let messages = (roomState || {}).messages || []
 
     const onClickSend = useCallback(async () => {
+        if (!api) { return }
         await api.sendMessage(messageText, nodeAddress, server, room, messages)
-    }, [messageText, nodeAddress, server, room, messages, api.sendMessage])
+    }, [messageText, nodeAddress, server, room, messages, api])
 
     function onChangeMessageText(e) {
         setMessageText(e.target.value)
     }
 
+    function onKeyDown(e) {
+        console.log(e)
+        if (e.code === 'Enter') {
+            onClickSend()
+            setMessageText('')
+        }
+    }
+
     if (!stateURI) {
-        return <div className={className}></div>
+        return <Container className={className}></Container>
     }
     return (
         <Container className={className}>
@@ -75,8 +101,8 @@ function Chat({ stateURI, className }) {
             </MessageContainer>
 
             <ControlsContainer>
-                <Input onChange={onChangeMessageText} value={messageText} />
-                <Button onClick={onClickSend}>Send</Button>
+                <Input onKeyDown={onKeyDown} onChange={onChangeMessageText} value={messageText} />
+                <SIconButton onClick={onClickSend}><SendIcon /></SIconButton>
             </ControlsContainer>
         </Container>
     )

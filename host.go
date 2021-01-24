@@ -18,6 +18,7 @@ type Host interface {
 	Ctx() *ctx.Context
 	Start() error
 
+	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
 	Subscribe(ctx context.Context, stateURI string, subscriptionType SubscriptionType, keypath tree.Keypath) (ReadableSubscription, error)
 	Unsubscribe(stateURI string) error
 	SendTx(ctx context.Context, tx Tx) error
@@ -161,6 +162,10 @@ func (h *host) Controllers() ControllerHub {
 
 func (h *host) Address() types.Address {
 	return h.signingKeypair.Address()
+}
+
+func (h *host) StateAtVersion(stateURI string, version *types.ID) (tree.Node, error) {
+	return h.Controllers().StateAtVersion(stateURI, version)
 }
 
 // Returns peers discovered through any transport that have already been authenticated.
@@ -483,20 +488,23 @@ func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription) {
 
 		// Immediately write the current state to the subscriber
 		state, err := h.Controllers().StateAtVersion(writeSub.StateURI(), nil)
-		if err != nil {
+		if err != nil && errors.Cause(err) != ErrNoController {
 			h.Errorf("error writing initial state to peer: %v", err)
 			return
-		}
-		leaves, err := h.Controllers().Leaves(writeSub.StateURI())
-		if err != nil {
-			h.Errorf("error writing initial state to peer: %v", err)
-			return
-		}
+		} else if err == nil {
+			defer state.Close()
 
-		err = writeSub.Write(context.TODO(), nil, state.NodeAt(keypath, nil), leaves)
-		if err != nil {
-			h.Errorf("error writing tx to peer: %v", err)
-			return
+			leaves, err := h.Controllers().Leaves(writeSub.StateURI())
+			if err != nil {
+				h.Errorf("error writing initial state to peer: %v", err)
+				return
+			}
+
+			err = writeSub.Write(context.TODO(), nil, state.NodeAt(keypath, nil), leaves)
+			if err != nil {
+				h.Errorf("error writing tx to peer: %v", err)
+				return
+			}
 		}
 	}
 
@@ -829,7 +837,7 @@ func (h *host) broadcastToWritableSubscribers(
 }
 
 func (h *host) SendTx(ctx context.Context, tx Tx) (err error) {
-	h.Info(0, "adding tx ", tx.ID.Pretty())
+	h.Infof(0, "adding tx (%v) %v", tx.StateURI, tx.ID.Pretty())
 
 	defer func() {
 		if err != nil {
@@ -857,7 +865,6 @@ func (h *host) SendTx(ctx context.Context, tx Tx) (err error) {
 		if err != nil {
 			return err
 		}
-
 		tx.Parents = parents
 	}
 

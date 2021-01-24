@@ -10,6 +10,7 @@ const Layout = styled.div`
     display: flex;
     height: 100vh;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    color: ${props => props.theme.color.white};
 `
 
 const SSidebar = styled(Sidebar)`

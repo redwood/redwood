@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/brynbellomy/klog"
+	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"github.com/webview/webview"
@@ -43,6 +44,11 @@ func main() {
 			Value: configPath,
 			Usage: "location of config file",
 		},
+		cli.UintFlag{
+			Name:  "port",
+			Value: 54231,
+			Usage: "port on which to serve UI assets",
+		},
 		cli.BoolFlag{
 			Name:  "pprof",
 			Usage: "enable pprof",
@@ -57,7 +63,8 @@ func main() {
 		configPath := c.String("config")
 		enablePprof := c.Bool("pprof")
 		dev := c.Bool("dev")
-		return run(configPath, enablePprof, dev)
+		port := c.Uint("port")
+		return run(configPath, enablePprof, dev, port)
 	}
 
 	err = cliApp.Run(os.Args)
@@ -67,7 +74,7 @@ func main() {
 	}
 }
 
-func run(configPath string, enablePprof bool, dev bool) error {
+func run(configPath string, enablePprof bool, dev bool, port uint) error {
 	if enablePprof {
 		go func() {
 			http.ListenAndServe(":6060", nil)
@@ -125,7 +132,7 @@ func run(configPath string, enablePprof bool, dev bool) error {
 		txStore       = rw.NewBadgerTxStore(config.TxDBRoot())
 		refStore      = rw.NewRefStore(config.RefDataRoot())
 		peerStore     = rw.NewPeerStore()
-		controllerHub = rw.NewControllerHub(signingKeypair.Address(), config.StateDBRoot(), txStore, refStore)
+		controllerHub = rw.NewControllerHub(config.StateDBRoot(), txStore, refStore)
 	)
 
 	err = refStore.Start()
@@ -241,8 +248,10 @@ func run(configPath string, enablePprof bool, dev bool) error {
 
 	klog.Info(rw.PrettyJSON(config))
 
-	go startGUI()
-	go startAPI(host)
+	initializeLocalState(host)
+
+	go startGUI(port)
+	go startAPI(host, port)
 	go inputLoop(host)
 	app.AttachInterruptHandler()
 	app.CtxWait()
@@ -250,19 +259,72 @@ func run(configPath string, enablePprof bool, dev bool) error {
 	return nil
 }
 
-func startGUI() {
-	// indexBytes, err := ioutil.ReadFile("./index.html")
-	// if err != nil {
-	// 	panic(err)
-	// }
+func initializeLocalState(host rw.Host) {
+	// pkger.Include("./sync9.js")
+	f, err := pkger.Open("/sync9.js")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
 
+	_, _, err = host.AddRef(f)
+	if err != nil {
+		panic(err)
+	}
+
+	state, err := host.StateAtVersion("chat.local/servers", nil)
+	if err != nil && errors.Cause(err) != rw.ErrNoController {
+		panic(err)
+	} else if err == nil {
+		defer state.Close()
+
+		exists, err := state.Exists(tree.Keypath("value"))
+		if err != nil {
+			panic(err)
+		}
+		if exists {
+			return
+		}
+		state.Close()
+	}
+
+	type M = map[string]interface{}
+
+	err = host.SendTx(context.Background(), rw.Tx{
+		StateURI: "chat.local/servers",
+		ID:       rw.GenesisTxID,
+		Patches: []rw.Patch{{
+			Val: M{
+				"Merge-Type": M{
+					"Content-Type": "resolver/dumb",
+					"value":        M{},
+				},
+				"Validator": M{
+					"Content-Type": "validator/permissions",
+					"value": M{
+						host.Address().Hex(): M{
+							"^.*$": M{
+								"write": true,
+							},
+						},
+					},
+				},
+				"value": []interface{}{},
+			},
+		}},
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+func startGUI(port uint) {
 	debug := true
 	w := webview.New(debug)
 	defer w.Destroy()
 	w.SetTitle("Minimal webview example")
 	w.SetSize(800, 600, webview.HintNone)
-	// w.Navigate("data:text/html," + string(indexBytes))
-	w.Navigate("http://localhost:54231/index.html")
+	w.Navigate(fmt.Sprintf("http://localhost:%v/index.html", port))
 	w.Run()
 }
 

@@ -71,9 +71,9 @@ const StyledModal = styled.div`
     height: ${props => props.height || 'unset'};
     padding: 0 20px;
     background: ${(props) => props.theme.color.white};
-    border: 1px solid ${(props) => props.theme.color.grey[300]}ff;
+    border: 1px solid ${(props) => props.theme.color.grey[600]}ff;
     border-radius: 12px;
-    box-shadow: inset 1px 1px 0px ${(props) => props.theme.color.grey[100]};
+    box-shadow: inset 1px 1px 0px ${(props) => props.theme.color.grey[200]};
     display: flex;
     flex-direction: column;
     position: relative;
@@ -129,7 +129,7 @@ function ModalActions({ children }) {
 
 const StyledModalActions = styled.div`
     align-items: center;
-    background-color: ${props => props.theme.color.grey[100]}00;
+    background-color: ${props => props.theme.color.grey[200]}00;
     display: flex;
     margin: 0;
     padding: ${props => props.theme.spacing[4]}px;

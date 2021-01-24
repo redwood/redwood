@@ -3,13 +3,12 @@ import styled from 'styled-components'
 
 import userPlaceholderImg from './assets/user_placeholder.png'
 
-const SUserControlContainer = styled.span`
+const SUserControlContainer = styled.div`
     display: flex;
     align-items: center;
     height: 56px;
     width: 100%;
-    box-shadow: 0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px 0px rgba(0,0,0,0.14), 0px 1px 3px 0px rgba(0,0,0,0.12);
-
+    background-color: ${props => props.theme.color.grey[500]};
 `
 
 const SUserLeft = styled.div`

@@ -16,6 +16,7 @@ type PeerStore interface {
 	PeerWithDialInfo(dialInfo PeerDialInfo) PeerDetails
 	PeersWithAddress(address types.Address) []PeerDetails
 	PeersFromTransportWithAddress(transportName string, address types.Address) []PeerDetails
+	IsKnownPeer(dialInfo PeerDialInfo) bool
 	OnNewUnverifiedPeer(fn func(dialInfo PeerDialInfo))
 }
 
@@ -174,6 +175,18 @@ func (s *peerStore) PeersFromTransportWithAddress(transport string, address type
 		}
 	}
 	return peers
+}
+
+func (s *peerStore) IsKnownPeer(dialInfo PeerDialInfo) bool {
+	s.muPeers.RLock()
+	defer s.muPeers.RUnlock()
+
+	for di := range s.peers {
+		if di == dialInfo {
+			return true
+		}
+	}
+	return false
 }
 
 type PeerDetails interface {

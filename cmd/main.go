@@ -130,7 +130,7 @@ func run(configPath string, gui bool, dev bool) error {
 		txStore       = rw.NewBadgerTxStore(config.TxDBRoot())
 		refStore      = rw.NewRefStore(config.RefDataRoot())
 		peerStore     = rw.NewPeerStore()
-		controllerHub = rw.NewControllerHub(signingKeypair.Address(), config.StateDBRoot(), txStore, refStore)
+		controllerHub = rw.NewControllerHub(config.StateDBRoot(), txStore, refStore)
 	)
 
 	err = refStore.Start()

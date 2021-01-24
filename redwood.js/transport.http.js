@@ -35,7 +35,7 @@ export default function (opts) {
                 callback('http transport: fetch failed')
                 return
             }
-            readSubscription(resp.body.getReader(), (err, { tx, state, leaves }) => {
+            const unsubscribe = readSubscription(stateURI, resp.body.getReader(), (err, { tx, state, leaves }) => {
                 if (tx) {
                     ack(tx.id)
                     if (!alreadyRespondedTo[tx.id]) {
@@ -46,6 +46,7 @@ export default function (opts) {
                     callback(err, { tx, state, leaves })
                 }
             })
+            return unsubscribe
 
         } catch (err) {
             callback('http transport: ' + err)
@@ -53,45 +54,60 @@ export default function (opts) {
         }
     }
 
-    async function readSubscription(reader, callback) {
-        try {
-            const decoder = new TextDecoder('utf-8')
-            let buffer = ''
+    function readSubscription(stateURI, reader, callback) {
+        let shouldStop = false
+        function unsubscribe() {
+            shouldStop = true
+            reader.cancel()
+        }
 
-            async function read() {
-                const x = await reader.read()
-                if (x.done) {
-                    return
-                }
+        setTimeout(async () => {
+            try {
+                const decoder = new TextDecoder('utf-8')
+                let buffer = ''
 
-                const newData = decoder.decode(x.value)
-                buffer += newData
-                let idx
-                while ((idx = buffer.indexOf('\n')) > -1) {
-                    const line = buffer.substring(0, idx).trim()
-                    if (line.length > 0) {
-                        const payloadStr = line.substring(5).trim() // remove "data:" prefix
-                        let payload
-                        try {
-                            payload = JSON.parse(payloadStr)
-                        } catch (err) {
-                            console.error('Error parsing JSON:', payloadStr)
-                            callback('http transport: ' + err)
+                async function read() {
+                    const x = await reader.read()
+                    if (x.done) {
+                        return
+                    }
+
+                    const newData = decoder.decode(x.value)
+                    buffer += newData
+                    let idx
+                    while ((idx = buffer.indexOf('\n')) > -1) {
+                        if (shouldStop) {
                             return
                         }
-                        callback(null, payload)
+                        const line = buffer.substring(0, idx).trim()
+                        if (line.length > 0) {
+                            const payloadStr = line.substring(5).trim() // remove "data:" prefix
+                            let payload
+                            try {
+                                payload = JSON.parse(payloadStr)
+                            } catch (err) {
+                                console.error('Error parsing JSON:', payloadStr)
+                                callback('http transport: ' + err)
+                                return
+                            }
+                            callback(null, payload)
 
+                        }
+                        buffer = buffer.substring(idx+1)
                     }
-                    buffer = buffer.substring(idx+1)
+                    if (shouldStop) {
+                        return
+                    }
+                    read()
                 }
                 read()
-            }
-            read()
 
-        } catch (err) {
-            callback('http transport: ' + err)
-            return
-        }
+            } catch (err) {
+                callback('http transport: ' + err)
+                return
+            }
+        }, 0)
+        return unsubscribe
     }
 
     async function get({ stateURI, keypath, raw }) {
