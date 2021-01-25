@@ -408,10 +408,12 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 
 	c.handleNewRefs(state)
 
+	c.behaviorTree.debugPrint()
 	err = c.updateBehaviorTree(state)
 	if err != nil {
 		return err
 	}
+	c.behaviorTree.debugPrint()
 
 	err = state.Save()
 	if err != nil {
@@ -502,10 +504,10 @@ func (c *controller) handleNewRefs(state tree.Node) {
 }
 
 func (c *controller) updateBehaviorTree(state tree.Node) error {
-	// Walk the tree and initialize validators and resolvers
-	// @@TODO: inefficient
-	newBehaviorTree := newBehaviorTree()
-	newBehaviorTree.addResolver(nil, &dumbResolver{})
+	// Walk the tree and initialize validators and resolvers (@@TODO: inefficient)
+
+	// We need to be able to roll back in case of error, so we make a copy
+	newBehaviorTree := c.behaviorTree.copy()
 
 	diff := state.Diff()
 
@@ -526,12 +528,12 @@ func (c *controller) updateBehaviorTree(state tree.Node) error {
 			nextParentKeypath, key := parentKeypath.Pop()
 			switch {
 			case key.Equals(MergeTypeKeypath):
-				err := c.initializeResolver(state, parentKeypath)
+				err := c.initializeResolver(newBehaviorTree, state, parentKeypath)
 				if err != nil {
 					return err
 				}
 			case key.Equals(ValidatorKeypath):
-				err := c.initializeValidator(state, parentKeypath)
+				err := c.initializeValidator(newBehaviorTree, state, parentKeypath)
 				if err != nil {
 					return err
 				}
@@ -546,19 +548,19 @@ func (c *controller) updateBehaviorTree(state tree.Node) error {
 		parentKeypath, key := keypath.Pop()
 		switch {
 		case key.Equals(MergeTypeKeypath):
-			err := c.initializeResolver(state, keypath)
+			err := c.initializeResolver(newBehaviorTree, state, keypath)
 			if err != nil {
 				return err
 			}
 
 		case key.Equals(ValidatorKeypath):
-			err := c.initializeValidator(state, keypath)
+			err := c.initializeValidator(newBehaviorTree, state, keypath)
 			if err != nil {
 				return err
 			}
 
 		case key.Equals(tree.Keypath("Indices")):
-			err := c.initializeIndexer(state, keypath)
+			err := c.initializeIndexer(newBehaviorTree, state, keypath)
 			if err != nil {
 				return err
 			}
@@ -568,12 +570,12 @@ func (c *controller) updateBehaviorTree(state tree.Node) error {
 			nextParentKeypath, key := parentKeypath.Pop()
 			switch {
 			case key.Equals(MergeTypeKeypath):
-				err := c.initializeResolver(state, parentKeypath)
+				err := c.initializeResolver(newBehaviorTree, state, parentKeypath)
 				if err != nil {
 					return err
 				}
 			case key.Equals(ValidatorKeypath):
-				err := c.initializeValidator(state, parentKeypath)
+				err := c.initializeValidator(newBehaviorTree, state, parentKeypath)
 				if err != nil {
 					return err
 				}
@@ -581,10 +583,11 @@ func (c *controller) updateBehaviorTree(state tree.Node) error {
 			parentKeypath = nextParentKeypath
 		}
 	}
+	c.behaviorTree = newBehaviorTree
 	return nil
 }
 
-func (c *controller) initializeResolver(state tree.Node, resolverConfigKeypath tree.Keypath) error {
+func (c *controller) initializeResolver(behaviorTree *behaviorTree, state tree.Node, resolverConfigKeypath tree.Keypath) error {
 	// Resolve any refs (to code) in the resolver config object.  We copy the config so
 	// that we don't inject any refs into the state tree itself
 	config, err := state.CopyToMemory(resolverConfigKeypath, nil)
@@ -613,7 +616,7 @@ func (c *controller) initializeResolver(state tree.Node, resolverConfigKeypath t
 
 	// @@TODO: if the resolver type changes, this totally breaks everything
 	var internalState map[string]interface{}
-	oldResolver, oldResolverKeypath := c.behaviorTree.nearestResolverForKeypath(resolverConfigKeypath)
+	oldResolver, oldResolverKeypath := behaviorTree.nearestResolverForKeypath(resolverConfigKeypath)
 	if !oldResolverKeypath.Equals(resolverConfigKeypath) {
 		internalState = make(map[string]interface{})
 	} else {
@@ -627,7 +630,7 @@ func (c *controller) initializeResolver(state tree.Node, resolverConfigKeypath t
 
 	resolverNodeKeypath, _ := resolverConfigKeypath.Pop()
 
-	c.behaviorTree.addResolver(resolverNodeKeypath, resolver)
+	behaviorTree.addResolver(resolverNodeKeypath, resolver)
 	return nil
 }
 
@@ -635,7 +638,7 @@ func debugPrint(inFormat string, args ...interface{}) {
 	fmt.Printf(inFormat, args...)
 }
 
-func (c *controller) initializeValidator(state tree.Node, validatorConfigKeypath tree.Keypath) error {
+func (c *controller) initializeValidator(behaviorTree *behaviorTree, state tree.Node, validatorConfigKeypath tree.Keypath) error {
 	// Resolve any refs (to code) in the validator config object.  We copy the config so
 	// that we don't inject any refs into the state tree itself
 	config, err := state.CopyToMemory(validatorConfigKeypath, nil)
@@ -669,11 +672,11 @@ func (c *controller) initializeValidator(state tree.Node, validatorConfigKeypath
 
 	validatorNodeKeypath, _ := validatorConfigKeypath.Pop()
 
-	c.behaviorTree.addValidator(validatorNodeKeypath, validator)
+	behaviorTree.addValidator(validatorNodeKeypath, validator)
 	return nil
 }
 
-func (c *controller) initializeIndexer(state tree.Node, indexerConfigKeypath tree.Keypath) error {
+func (c *controller) initializeIndexer(behaviorTree *behaviorTree, state tree.Node, indexerConfigKeypath tree.Keypath) error {
 	// Resolve any refs (to code) in the indexer config object.  We copy the config so
 	// that we don't inject any refs into the state tree itself
 	indexConfigs, err := state.CopyToMemory(indexerConfigKeypath, nil)
@@ -710,7 +713,7 @@ func (c *controller) initializeIndexer(state tree.Node, indexerConfigKeypath tre
 
 		indexerNodeKeypath, _ := indexerConfigKeypath.Pop()
 
-		c.behaviorTree.addIndexer(indexerNodeKeypath, indexName, indexer)
+		behaviorTree.addIndexer(indexerNodeKeypath, indexName, indexer)
 	}
 	return nil
 }

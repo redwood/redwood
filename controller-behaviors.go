@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"sort"
 
+	"github.com/brynbellomy/redwood/ctx"
 	"github.com/brynbellomy/redwood/tree"
 	"github.com/brynbellomy/redwood/types"
 )
@@ -42,6 +43,7 @@ var indexerRegistry = map[string]IndexerConstructor{
 }
 
 type behaviorTree struct {
+	ctx.Logger
 	validatorKeypaths []tree.Keypath
 	validators        map[string]Validator
 	resolverKeypaths  []tree.Keypath
@@ -54,6 +56,51 @@ func newBehaviorTree() *behaviorTree {
 		validators: make(map[string]Validator),
 		resolvers:  make(map[string]Resolver),
 		indexers:   make(map[string]map[string]Indexer),
+	}
+}
+
+func (t *behaviorTree) copy() *behaviorTree {
+	cp := &behaviorTree{
+		validatorKeypaths: make([]tree.Keypath, len(t.validatorKeypaths)),
+		validators:        make(map[string]Validator, len(t.validators)),
+		resolverKeypaths:  make([]tree.Keypath, len(t.resolverKeypaths)),
+		resolvers:         make(map[string]Resolver, len(t.resolvers)),
+		indexers:          make(map[string]map[string]Indexer, len(t.indexers)),
+	}
+	for i, v := range t.validatorKeypaths {
+		cp.validatorKeypaths[i] = v
+	}
+	for k, v := range t.validators {
+		cp.validators[k] = v
+	}
+	for i, v := range t.resolverKeypaths {
+		cp.resolverKeypaths[i] = v
+	}
+	for k, v := range t.resolvers {
+		cp.resolvers[k] = v
+	}
+	for k, v := range t.indexers {
+		cp.indexers[k] = make(map[string]Indexer, len(t.indexers[k]))
+		for kk, vv := range v {
+			cp.indexers[k][kk] = vv
+		}
+	}
+	return cp
+}
+
+func (t *behaviorTree) debugPrint() {
+	t.Debugf("BehaviorTree:\n----------------------------------------")
+	for i := range t.validatorKeypaths {
+		t.Debugf("  - validatorKeypaths[%v] = %v", i, t.validatorKeypaths[i])
+	}
+	for k := range t.validators {
+		t.Debugf("  - validators[%v] = (%T) %v", k, t.validators[k], t.validators[k])
+	}
+	for i := range t.resolverKeypaths {
+		t.Debugf("  - resolverKeypaths[%v] = %v", i, t.resolverKeypaths[i])
+	}
+	for k := range t.resolvers {
+		t.Debugf("  - resolvers[%v] = (%T) %v", k, t.resolvers[k], t.resolvers[k])
 	}
 }
 

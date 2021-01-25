@@ -438,7 +438,9 @@ func (t *libp2pTransport) ProvidersOfStateURI(ctx context.Context, stateURI stri
 				// whitelist, etc.
 
 				peer := t.makeDisconnectedPeer(pinfo)
-				if peer == nil || peer.DialInfo().DialAddr == "" {
+				if peer == nil {
+					continue
+				} else if peer.DialInfo().DialAddr == "" {
 					continue
 				}
 
@@ -723,12 +725,12 @@ func (t *libp2pTransport) makeDisconnectedPeer(pinfo peerstore.PeerInfo) *libp2p
 	var peerDetails PeerDetails
 	dialAddrs.ForEach(func(dialAddr string) bool {
 		peerDetails = t.peerStore.PeerWithDialInfo(PeerDialInfo{TransportName: t.Name(), DialAddr: dialAddr})
-		if peerDetails != nil {
+		if peerDetails != PeerDetails(nil) {
 			return false
 		}
 		return true
 	})
-	if peerDetails != nil {
+	if peerDetails != PeerDetails(nil) {
 		peer.PeerDetails = peerDetails
 	} else {
 		var dialInfos []PeerDialInfo
@@ -739,7 +741,7 @@ func (t *libp2pTransport) makeDisconnectedPeer(pinfo peerstore.PeerInfo) *libp2p
 		t.peerStore.AddDialInfos(dialInfos)
 		for _, dialInfo := range dialInfos {
 			peer.PeerDetails = t.peerStore.PeerWithDialInfo(dialInfo)
-			if peer.PeerDetails != nil {
+			if peer.PeerDetails != PeerDetails(nil) {
 				break
 			}
 		}
