@@ -408,12 +408,10 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 
 	c.handleNewRefs(state)
 
-	c.behaviorTree.debugPrint()
 	err = c.updateBehaviorTree(state)
 	if err != nil {
 		return err
 	}
-	c.behaviorTree.debugPrint()
 
 	err = state.Save()
 	if err != nil {
