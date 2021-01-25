@@ -118,6 +118,7 @@ export default function(redwoodClient) {
 
     return {
         addServer,
+        importServer,
         createNewChat,
         sendMessage,
     }
