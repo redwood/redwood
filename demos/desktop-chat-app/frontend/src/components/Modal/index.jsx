@@ -94,7 +94,7 @@ const StyledModalTitle = styled.div`
     align-items: center;
     display: flex;
     font-size: 20px;
-    font-weight: 700;
+    font-weight: 500;
     height: ${props => props.theme.topBarSize}px;
     justify-content: center;
 `

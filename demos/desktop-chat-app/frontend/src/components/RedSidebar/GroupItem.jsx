@@ -21,36 +21,42 @@ const SAvatarCircle = styled.div`
     margin-left: 12px;
 
     img {
-        height: 18px;
+        height: 28px;
     }
 `
 
 const SItemInfo = styled.div`
     display: flex;
-    justify-content: space-between;
-    width: calc(100% - 36px);
+    flex-direction: column;
+    flex-grow: 1;
+    width: calc(100% - 44px);
     padding-left: 8px;
-    span {
-        &:first-child {
-            font-size: 12px;
-            color: ${props => props.selected ? props.theme.color.white : props.theme.color.grey[100]};
-        }
-        &:nth-child(2) {
-            font-size: 8px;
-            color: rgba(255, 255, 255, .6);
-        }
-    }
 `
 
 const SItemInfoSub = styled.div`
     display: flex;
-    flex-direction: column;
+    justify-content: space-between;
 `
 
-const STime = styled.span`
-    display: flex;
-    align-items: flex-end;
+const STime = styled.div`
     padding-right: 12px;
+    white-space: nowrap;
+    font-size: 0.8rem;
+    color: ${props => props.theme.color.grey[100]}
+`
+
+const ChatName = styled.div`
+    font-weight: 500;
+    font-size: 12px;
+    color: ${props => props.selected ? props.theme.color.white : props.theme.color.grey[100]};
+`
+
+const MostRecentMessage = styled.div`
+    font-size: 12px;
+    color: rgba(255, 255, 255, .6);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
 `
 
 function GroupItem({ selected, color, avatar, name, text, time, ...props }) {
@@ -61,10 +67,10 @@ function GroupItem({ selected, color, avatar, name, text, time, ...props }) {
             </SAvatarCircle>
             <SItemInfo selected={selected}>
                 <SItemInfoSub>
-                    <span>{name}</span>
-                    <span>{text}</span>
+                    <ChatName selected={selected}>{name}</ChatName>
+                    <STime>{time}</STime>
                 </SItemInfoSub>
-                <STime>{time}</STime>
+                <MostRecentMessage>{text}</MostRecentMessage>
             </SItemInfo>
         </SItemContainer>
     )

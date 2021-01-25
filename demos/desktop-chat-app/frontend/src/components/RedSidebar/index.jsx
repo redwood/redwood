@@ -26,7 +26,7 @@ const SServerBar = styled(ServerBar)`
 `
 
 const SChatBar = styled(ChatBar)`
-    width: 200px;
+    width: 250px;
     flex-grow: 1;
 `
 

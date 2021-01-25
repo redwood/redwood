@@ -10,6 +10,7 @@ import Input from '../Input'
 import useStateTree from '../../hooks/useStateTree'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
+import strToColor from '../../utils/strToColor'
 
 const Container = styled.div`
     display: flex;
@@ -51,8 +52,10 @@ const SFab = styled(Fab)`
     width: 50px !important;
     height: 50px !important;
     transition: .12s ease-in-out border-radius !important;
-    background-color: ${props => props.theme.color.grey[400]} !important;
-    color: ${props => props.theme.color.white};
+    background-color: ${props => strToColor(props.text)} !important;
+    color: ${props => props.theme.color.white} !important;
+    font-weight: 700 !important;
+    font-size: 1.1rem !important;
 
     &:hover {
         border-radius: 20px !important;
@@ -77,13 +80,13 @@ function ServerBar({ selectedServer, setSelectedServer, className, verticalPaddi
         onPresentImportServerModal()
     }, [onPresentImportServerModal])
 
-    let knownServers = (knownServersTree || {}).value || []
+    let knownServers = ((knownServersTree || {}).value || []).filter(x => !!x)
 
     return (
         <Container className={className} verticalPadding={verticalPadding}>
             {knownServers.map(server => (
                 <ServerIconWrapper key={server} selected={server === selectedServer} onClick={() => setSelectedServer(server)}>
-                    <SFab>{server.slice(0, 1)}</SFab>
+                    <SFab text={server}>{server.slice(0, 1)}</SFab>
                 </ServerIconWrapper>
             ))}
 
@@ -109,16 +112,25 @@ function AddServerModal({ onDismiss }) {
     const knownServersTree = useStateTree('chat.local/servers')
     const theme = useTheme()
 
-    function onChangeServerName(e) {
-        setServerName(e.target.value)
-    }
-
     let knownServers = (knownServersTree || {}).value || []
 
     const onClickAdd = useCallback(async () => {
         if (!api) { return }
-        await api.addServer(serverName, knownServers)
-    }, [api, serverName, knownServers])
+        try {
+            await api.addServer(serverName, knownServers)
+            onDismiss()
+        } catch (err) {
+            console.error(err)
+        }
+    }, [api, serverName, knownServers, onDismiss])
+
+    function onChangeServerName(e) {
+        if (e.code === 'Enter') {
+            onClickAdd()
+        } else {
+            setServerName(e.target.value)
+        }
+    }
 
     return (
         <Modal modalKey="add server">
@@ -139,16 +151,25 @@ function ImportServerModal({ onDismiss }) {
     const api = useAPI()
     const knownServersTree = useStateTree('chat.local/servers')
 
-    function onChangeServerName(e) {
-        setServerName(e.target.value)
-    }
-
     let knownServers = (knownServersTree || {}).value || []
 
     const onClickImport = useCallback(async () => {
         if (!api) { return }
-        await api.importServer(serverName, knownServers)
+        try {
+            await api.importServer(serverName, knownServers)
+            onDismiss()
+        } catch (err) {
+            console.error(err)
+        }
     }, [api, serverName, knownServers])
+
+    function onChangeServerName(e) {
+        if (e.code === 'Enter') {
+            onClickAdd()
+        } else {
+            setServerName(e.target.value)
+        }
+    }
 
     return (
         <Modal modalKey="import server">

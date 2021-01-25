@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react'
-import styled from 'styled-components'
-import { IconButton } from '@material-ui/core'
-import { SendRounded as SendIcon } from '@material-ui/icons'
+import React, { useState, useCallback, useRef } from 'react'
+import styled, { useTheme } from 'styled-components'
+import { IconButton, Avatar } from '@material-ui/core'
+import { SendRounded as SendIcon, AddCircleRounded as AddIcon } from '@material-ui/icons'
+import * as tinycolor from 'tinycolor2'
 import rpcFetch from '../utils/rpcFetch'
 import Sidebar from './Sidebar'
 import Button from './Button'
@@ -9,6 +10,7 @@ import Input from './Input'
 import useAPI from '../hooks/useAPI'
 import useRedwood from '../hooks/useRedwood'
 import useStateTree from '../hooks/useStateTree'
+import strToColor from '../utils/strToColor'
 
 const Container = styled.div`
     display: flex;
@@ -34,12 +36,11 @@ const MessageContainer = styled.div`
 
 const Message = styled.div`
     display: flex;
-    flex-direction: column;
-    padding: 10px 0;
+    padding: ${props => props.firstByUser ? '20px 0 0' : '0'};
 `
 
 const MessageSender = styled.div`
-    font-weight: 700;
+    font-weight: 500;
 `
 
 const MessageText = styled.div`
@@ -50,6 +51,13 @@ const ControlsContainer = styled.div`
     align-self: end;
     padding-bottom: 6px;
     width: 100%;
+    margin-top: 6px;
+`
+
+const MessageInput = styled(Input)`
+    padding-left: 34px;
+    font-family: 'Noto Sans KR';
+    font-size: 14px;
 `
 
 const SIconButton = styled(IconButton)`
@@ -57,11 +65,40 @@ const SIconButton = styled(IconButton)`
     padding: 0 12px !important;
 `
 
+const HiddenInput = styled.input`
+    opacity: 0;
+    width: 1px;
+`
+
+const AddAttachmentButton = styled(AddIcon)`
+    position: absolute;
+    cursor: pointer;
+    margin-top: 3px;
+    margin-left: 3px;
+`
+
+const UserAvatar = styled(Avatar)`
+    background-color: ${props => tinycolor(strToColor(props.sender)).darken(10).desaturate(25)} !important;
+    font-weight: 700;
+`
+
+const UserAvatarPlaceholder = styled.div`
+    width: 40px;
+`
+
+const MessageDetails = styled.div`
+    display: flex;
+    flex-direction: column;
+    padding-left: 14px;
+`
+
 function Chat({ stateURI, className }) {
     const { nodeAddress } = useRedwood()
     const api = useAPI()
     const roomState = useStateTree(stateURI)
     const [messageText, setMessageText] = useState('')
+    const attachmentInput = useRef()
+    const theme = useTheme()
 
     let server, room
     if (!!stateURI) {
@@ -71,7 +108,8 @@ function Chat({ stateURI, className }) {
 
     const onClickSend = useCallback(async () => {
         if (!api) { return }
-        await api.sendMessage(messageText, nodeAddress, server, room, messages)
+        console.log('attachmentInput', attachmentInput)
+        await api.sendMessage(messageText, attachmentInput.current, nodeAddress, server, room, messages)
     }, [messageText, nodeAddress, server, room, messages, api])
 
     function onChangeMessageText(e) {
@@ -79,12 +117,25 @@ function Chat({ stateURI, className }) {
     }
 
     function onKeyDown(e) {
-        console.log(e)
         if (e.code === 'Enter') {
             onClickSend()
             setMessageText('')
         }
     }
+
+    function onClickAddAttachment() {
+        attachmentInput.current.click()
+    }
+
+    let previousSender
+    messages = messages.map(msg => {
+        msg = {
+            ...msg,
+            firstByUser: previousSender !== msg.sender,
+        }
+        previousSender = msg.sender
+        return msg
+    })
 
     if (!stateURI) {
         return <Container className={className}></Container>
@@ -93,15 +144,21 @@ function Chat({ stateURI, className }) {
         <Container className={className}>
             <MessageContainer>
                 {messages.map(msg => (
-                    <Message>
-                        <MessageSender>{msg.sender}:</MessageSender>
-                        <MessageText>{msg.text}</MessageText>
+                    <Message firstByUser={msg.firstByUser}>
+                        {msg.firstByUser  && <UserAvatar sender={msg.sender}>{(msg.sender || '').slice(0, 1).toUpperCase()}</UserAvatar>}
+                        {!msg.firstByUser && <UserAvatarPlaceholder />}
+                        <MessageDetails>
+                            {msg.firstByUser && <MessageSender>{msg.sender}</MessageSender>}
+                            <MessageText>{msg.text}</MessageText>
+                        </MessageDetails>
                     </Message>
                 ))}
             </MessageContainer>
 
             <ControlsContainer>
-                <Input onKeyDown={onKeyDown} onChange={onChangeMessageText} value={messageText} />
+                <HiddenInput type="file" ref={attachmentInput} />
+                <AddAttachmentButton onClick={onClickAddAttachment} style={{ color: theme.color.white }} />
+                <MessageInput onKeyDown={onKeyDown} onChange={onChangeMessageText} value={messageText} />
                 <SIconButton onClick={onClickSend}><SendIcon /></SIconButton>
             </ControlsContainer>
         </Container>

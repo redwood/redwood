@@ -1,4 +1,4 @@
-import 'isomorphic-fetch'
+// import 'isomorphic-fetch'
 
 export default function (opts) {
     const { httpHost, onFoundPeers, peerID } = opts
@@ -173,7 +173,7 @@ export default function (opts) {
         }
 
         const resp = await wrappedFetch(`/`, {
-            method: 'PUT',
+            method: 'POST',
             headers: {
                 'Ref': 'true',
             },

@@ -101,8 +101,26 @@ export default function(redwoodClient) {
         await redwoodClient.rpc.sendTx(tx)
     }
 
-    async function sendMessage(messageText, nodeAddress, server, room, messages) {
+    async function sendMessage(messageText, attachmentInput, nodeAddress, server, room, messages) {
         console.log('API sendMessage', { messageText, nodeAddress, server, room, messages })
+        let attachment = null
+        console.log('!!attachmentInput', !!attachmentInput)
+        console.log('!!attachmentInput.files', !!attachmentInput.files)
+        console.log('attachmentInput.files.length', attachmentInput.files.length)
+        console.log('attachmentInput.files.length > 0', attachmentInput.files.length > 0)
+        if (!!attachmentInput && !!attachmentInput.files && attachmentInput.files.length > 0) {
+            console.log('yup')
+            let refHashes = await redwoodClient.storeRef(attachmentInput.files[0])
+            return
+            attachment = {
+                'Content-Type': attachmentInput.files[0].type,
+                'value': {
+                    'Content-Type': 'link',
+                    'value': 'ref:sha3:' + refHashes.sha3,
+                },
+            }
+        }
+
         let tx = {
             id: Redwood.utils.randomID(),
             stateURI: `${server}/${room}`,
@@ -110,6 +128,8 @@ export default function(redwoodClient) {
                 '.messages[' + messages.length + ':' + messages.length + '] = ' + Redwood.utils.JSON.stringify([{
                     sender: nodeAddress.toLowerCase(),
                     text: messageText,
+                    timestamp: new Date().getTime() / 1000,
+                    attachment,
                 }]),
             ],
         }

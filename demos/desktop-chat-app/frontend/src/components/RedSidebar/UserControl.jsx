@@ -46,13 +46,18 @@ const SUsernameWrapper = styled.div`
     }
 `
 
+const Name = styled.div`
+    font-weight: 700;
+    font-size: 0.8rem;
+`
+
 function UserControl({ server }) {
     return (
         <SUserControlContainer>
             <SUserLeft>
                 <img src={userPlaceholderImg} alt="User Avatar" />
                 <SUsernameWrapper>
-                    <span>Bill Dipperly</span>
+                    <Name>Bill Dipperly</Name>
                     <span>@big_chungus</span>
                 </SUsernameWrapper>
             </SUserLeft>

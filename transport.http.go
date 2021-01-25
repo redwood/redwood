@@ -127,7 +127,7 @@ func (t *httpTransport) Start() error {
 				} else {
 					srv := &http.Server{
 						Addr:    t.listenAddr,
-						Handler: UnrestrictedCors(t),
+						Handler: help{UnrestrictedCors(t)},
 					}
 					err := srv.ListenAndServe()
 					if err != nil {
@@ -144,6 +144,16 @@ func (t *httpTransport) Start() error {
 		// on shutdown
 		nil,
 	)
+}
+
+type help struct {
+	h http.Handler
+}
+
+func (t help) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("YOO", r.Method, r.Header)
+	t.h.ServeHTTP(w, r)
+	fmt.Println("DONE")
 }
 
 func (t *httpTransport) Name() string {
@@ -172,6 +182,7 @@ func forEachAltSvcHeaderPeer(header string, fn func(transportName, dialAddr stri
 }
 
 func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("YO", r.Method, r.Header)
 	defer r.Body.Close()
 
 	sessionID, err := t.ensureSessionIDCookie(w, r)
@@ -238,15 +249,17 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+	case "POST":
+		if r.Header.Get("Ref") == "true" {
+			t.servePostRef(w, r)
+		}
+
 	case "ACK":
 		t.serveAck(w, r, address)
 
 	case "PUT":
 		if r.Header.Get("Private") == "true" {
 			t.servePostPrivateTx(w, r, address)
-
-		} else if r.Header.Get("Ref") == "true" {
-			t.servePostRef(w, r)
 
 		} else {
 			t.servePostTx(w, r, address)
