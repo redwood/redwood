@@ -21,6 +21,7 @@ async function rpcFetch(endpoint, method, params) {
 }
 
 export default function createRPCClient({ endpoint }) {
+    endpoint = endpoint || 'http://localhost:8081'
     return {
         rpcFetch: (...args) => rpcFetch(endpoint, ...args),
 
