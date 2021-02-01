@@ -8,8 +8,6 @@ import (
 )
 
 // Logger anstracts basic logging functions.
-
-// Logger anstracts basic logging functions.
 type Logger interface {
 	SetLogLabel(inLabel string)
 	GetLogLabel() string

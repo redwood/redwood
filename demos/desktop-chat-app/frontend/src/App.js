@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import styled from 'styled-components'
 
 import Sidebar from './components/Sidebar'
-import RedSidebar from './components/RedSidebar'
 import Chat from './components/Chat'
 import StateTreeDebugView from './components/StateTreeDebugView'
 
@@ -12,12 +11,6 @@ const Layout = styled.div`
     font-family: 'Noto Sans KR';
     font-weight: 300;
     color: ${props => props.theme.color.white};
-`
-
-const SSidebar = styled(Sidebar)`
-    width: 150px;
-    background-color: #252525;
-    color: white;
 `
 
 const SChat = styled(Chat)`
@@ -30,14 +23,11 @@ const SStateTreeDebugView = styled(StateTreeDebugView)`
 `
 
 function App() {
-    const [selectedStateURI, setSelectedStateURI] = useState(null)
-
     return (
         <Layout>
-            <RedSidebar selectedStateURI={selectedStateURI} setSelectedStateURI={setSelectedStateURI} />
-            {/*<SSidebar selectedStateURI={selectedStateURI} setSelectedStateURI={setSelectedStateURI} />*/}
-            <SChat stateURI={selectedStateURI} />
-            <SStateTreeDebugView/>
+            <Sidebar />
+            <SChat />
+            <SStateTreeDebugView />
         </Layout>
     )
 }

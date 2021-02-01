@@ -6,6 +6,7 @@ import reportWebVitals from './reportWebVitals'
 import RedwoodProvider from './contexts/Redwood'
 import ModalsProvider from './contexts/Modals'
 import APIProvider from './contexts/API'
+import NavigationProvider from './contexts/Navigation'
 
 import './index.css'
 import theme from './theme'
@@ -15,9 +16,11 @@ ReactDOM.render(
         <ThemeProvider theme={theme}>
             <RedwoodProvider>
                 <APIProvider>
-                    <ModalsProvider>
-                        <App />
-                    </ModalsProvider>
+                    <NavigationProvider>
+                        <ModalsProvider>
+                            <App />
+                        </ModalsProvider>
+                    </NavigationProvider>
                 </APIProvider>
             </RedwoodProvider>
         </ThemeProvider>

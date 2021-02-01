@@ -110,6 +110,9 @@ func (t *libp2pTransport) Start() error {
 				libp2p.Identity(t.p2pKey),
 				libp2p.BandwidthReporter(t.BandwidthCounter),
 				libp2p.NATPortMap(),
+				libp2p.EnableNATService(),
+				libp2p.EnableAutoRelay(),
+				libp2p.DefaultStaticRelays(),
 			)
 			if err != nil {
 				return errors.Wrap(err, "could not initialize libp2p host")

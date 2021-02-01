@@ -13,7 +13,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httputil"
 	"net/url"
+	"os"
 	"path"
 	"regexp"
 	"strconv"
@@ -127,7 +129,7 @@ func (t *httpTransport) Start() error {
 				} else {
 					srv := &http.Server{
 						Addr:    t.listenAddr,
-						Handler: help{UnrestrictedCors(t)},
+						Handler: UnrestrictedCors(t),
 					}
 					err := srv.ListenAndServe()
 					if err != nil {
@@ -144,16 +146,6 @@ func (t *httpTransport) Start() error {
 		// on shutdown
 		nil,
 	)
-}
-
-type help struct {
-	h http.Handler
-}
-
-func (t help) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("YOO", r.Method, r.Header)
-	t.h.ServeHTTP(w, r)
-	fmt.Println("DONE")
 }
 
 func (t *httpTransport) Name() string {
@@ -182,8 +174,16 @@ func forEachAltSvcHeaderPeer(header string, fn func(transportName, dialAddr stri
 }
 
 func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("YO", r.Method, r.Header)
 	defer r.Body.Close()
+
+	if dump, _ := strconv.ParseBool(os.Getenv("HTTP_DUMP_REQUESTS")); dump {
+		reqBytes, err := httputil.DumpRequest(r, true)
+		if err != nil {
+			t.Errorf("error dumping request body: %v", err)
+		} else {
+			t.Debugf("incoming HTTP request:\n%v", string(reqBytes))
+		}
+	}
 
 	sessionID, err := t.ensureSessionIDCookie(w, r)
 	if err != nil {

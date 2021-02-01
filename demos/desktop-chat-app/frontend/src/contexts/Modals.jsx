@@ -18,7 +18,7 @@ function Modals({ children }) {
         if (activeModalKey === key) {
             setActiveModalKey(undefined)
         }
-    }, [activeModalKey])
+    }, [activeModalKey, setActiveModalKey])
 
     return (
         <Context.Provider value={{

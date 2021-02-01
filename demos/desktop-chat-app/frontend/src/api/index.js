@@ -4,6 +4,10 @@ import Redwood from '../redwood.js'
 const sync9JSSha3 = '0c87e1035db28f334cd7484b47d9e7cc285e026d4f876d24ddad78c47ac40a14'
 
 export default function(redwoodClient) {
+    async function addPeer(transportName, dialAddr) {
+        await redwoodClient.rpc.addPeer({ TransportName: transportName, DialAddr: dialAddr })
+    }
+
     async function addServer(server, servers) {
         let stateURI = `${server}/registry`
         let tx = {
@@ -26,6 +30,7 @@ export default function(redwoodClient) {
                         },
                     },
                     'rooms': [],
+                    'users': {},
                 }),
             ],
         }
@@ -101,24 +106,20 @@ export default function(redwoodClient) {
         await redwoodClient.rpc.sendTx(tx)
     }
 
-    async function sendMessage(messageText, attachmentInput, nodeAddress, server, room, messages) {
-        console.log('API sendMessage', { messageText, nodeAddress, server, room, messages })
-        let attachment = null
-        console.log('!!attachmentInput', !!attachmentInput)
-        console.log('!!attachmentInput.files', !!attachmentInput.files)
-        console.log('attachmentInput.files.length', attachmentInput.files.length)
-        console.log('attachmentInput.files.length > 0', attachmentInput.files.length > 0)
-        if (!!attachmentInput && !!attachmentInput.files && attachmentInput.files.length > 0) {
-            console.log('yup')
-            let refHashes = await redwoodClient.storeRef(attachmentInput.files[0])
-            return
-            attachment = {
-                'Content-Type': attachmentInput.files[0].type,
+    async function sendMessage(messageText, files, nodeAddress, server, room, messages) {
+        let attachments = []
+        if (!!files && files.length > 0) {
+            attachments = (await Promise.all(
+                files.map(file => redwoodClient.storeRef(file).then(refHashes => ({ refHashes, file })))
+            )).map(({ refHashes, file }) => ({
+                'Content-Type': file.type,
+                'Content-Length': file.size,
+                'filename': file.name,
                 'value': {
                     'Content-Type': 'link',
                     'value': 'ref:sha3:' + refHashes.sha3,
                 },
-            }
+            }))
         }
 
         let tx = {
@@ -128,10 +129,40 @@ export default function(redwoodClient) {
                 '.messages[' + messages.length + ':' + messages.length + '] = ' + Redwood.utils.JSON.stringify([{
                     sender: nodeAddress.toLowerCase(),
                     text: messageText,
-                    timestamp: new Date().getTime() / 1000,
-                    attachment,
+                    timestamp: Math.floor(new Date().getTime() / 1000),
+                    attachments: attachments.length > 0 ? attachments : null,
                 }]),
             ],
+        }
+        console.log('tx', tx)
+        await redwoodClient.rpc.sendTx(tx)
+    }
+
+    async function updateProfile(nodeAddress, server, username, photoFile) {
+        nodeAddress = nodeAddress.toLowerCase()
+        let patches = []
+        if (photoFile) {
+            let { sha3 } = await redwoodClient.storeRef(photoFile)
+            let { type } = photoFile
+            patches.push(`.users.${nodeAddress}.photo = ` + Redwood.utils.JSON.stringify({
+                'Content-Type': type,
+                'value': {
+                    'Content-Type': 'link',
+                    'value': 'ref:sha3:' + sha3,
+                },
+            }))
+        }
+        if (username) {
+            patches.push(`.users.${nodeAddress}.username = "${username}"`)
+        }
+        if (patches.length === 0) {
+            return
+        }
+
+        let tx = {
+            id: Redwood.utils.randomID(),
+            stateURI: `${server}/registry`,
+            patches,
         }
         await redwoodClient.rpc.sendTx(tx)
     }
@@ -141,5 +172,6 @@ export default function(redwoodClient) {
         importServer,
         createNewChat,
         sendMessage,
+        updateProfile,
     }
 }

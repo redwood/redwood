@@ -56,8 +56,8 @@ const StyledResponsiveWrapper = styled.div`
     flex-direction: column;
     justify-content: flex-end;
     position: relative;
-    width: 100%;
-    max-width: 512px;
+    // width: 100%;
+    // max-width: 512px;
     @media (max-width: ${props => props.theme.breakpoints.mobile}px) {
         flex: 1;
         position: absolute;
@@ -71,7 +71,7 @@ const StyledResponsiveWrapper = styled.div`
 
 const StyledModal = styled.div`
     height: ${props => props.height || 'unset'};
-    padding: 0 20px;
+    // padding: 0 20px;
     background-color: ${props => props.theme.color.grey[200]};
     color: ${props => props.theme.color.white};
     border-radius: 12px;
@@ -99,8 +99,8 @@ const StyledModalTitle = styled.div`
     justify-content: center;
 `
 
-function ModalContent({ children }) {
-    return <StyledModalContent>{children}</StyledModalContent>
+function ModalContent({ className, children }) {
+    return <StyledModalContent className={className}>{children}</StyledModalContent>
 }
 
 const StyledModalContent = styled.div`

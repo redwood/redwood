@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import styled from 'styled-components'
 import useRedwood from '../hooks/useRedwood'
+// import Button from '../Button'
 
 const SStateTreeDebugView = styled.div`
     padding: 20px;
@@ -30,15 +31,29 @@ const StateTree = styled.div`
 
 function StateTreeDebugView({ className }) {
     const { stateTrees } = useRedwood()
+    const [disableMetadata, setDisableMetadata] = useState(true)
 
-    return null
+    let trees = {}
+    for (let key of Object.keys(stateTrees)) {
+        trees[key] = { ...stateTrees[key] }
+    }
+    if (disableMetadata) {
+        for (let key of Object.keys(trees)) {
+            for (let key2 of Object.keys(trees[key])) {
+                if (key2 === 'Merge-Type' || key2 === 'Validator') {
+                    delete trees[key][key2]
+                }
+            }
+        }
+    }
 
     return (
         <SStateTreeDebugView className={className}>
-            {Object.keys(stateTrees).map(stateURI => (
+            <button onClick={() => setDisableMetadata(!disableMetadata)}>Toggle metadata</button>
+            {Object.keys(trees).map(stateURI => (
                 <StateTree key={stateURI}>
                     <StateURI>&gt; {stateURI}</StateURI>
-                    <pre><code>{JSON.stringify(stateTrees[stateURI], null, '    ')}</code></pre>
+                    <pre><code>{JSON.stringify(trees[stateURI], null, '    ')}</code></pre>
                 </StateTree>
             ))}
         </SStateTreeDebugView>
