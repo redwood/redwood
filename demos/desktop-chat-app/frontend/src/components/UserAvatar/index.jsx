@@ -23,7 +23,6 @@ const TextAvatar = styled.div`
 `
 
 function UserAvatar({ username, address, photoURL, className }) {
-    console.log({ username, address, photoURL, className })
     if (photoURL) {
         return <Avatar className={className} src={photoURL} />
     }

@@ -20,7 +20,7 @@ function CurrentUserAvatar({ className }) {
     if (registry && registry.users && registry.users[nodeAddress]) {
         username = registry.users[nodeAddress].username
         if (registry.users[nodeAddress].photo) {
-            userPhotoURL = `http://localhost:8080/users/${nodeAddress}/photo?state_uri=${selectedServer}/registry`
+            userPhotoURL = `http://localhost:8080/users/${nodeAddress}/photo?state_uri=${selectedServer}/registry&${Date.now()}`
         }
     }
     return <UserAvatar address={nodeAddress} username={username} photoURL={userPhotoURL} className={className} />

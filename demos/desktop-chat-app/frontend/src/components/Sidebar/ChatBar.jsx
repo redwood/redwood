@@ -51,7 +51,7 @@ const SControlWrapper = styled.div`
     background: transparent;
     height: 40px;
     padding-left: 12px;
-    color: ${props => props.theme.color.green[500]};
+    color: ${props => props.theme.color.indigo[500]};
     font-weight: 500;
 
     &:hover {
@@ -106,7 +106,7 @@ function ChatBar({ className }) {
 
             {!!selectedServer &&
                 <SControlWrapper onClick={onClickCreateNewChat}>
-                    <SAddIcon style={{ color: theme.color.green[500] }} /> New chat
+                    <SAddIcon style={{ color: theme.color.indigo[500] }} /> New chat
                 </SControlWrapper>
             }
             <NewChatModal selectedServer={selectedServer} serverRooms={serverRooms} onDismiss={onDismissNewChatModal} navigate={navigate} />
@@ -161,15 +161,25 @@ function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
         }
     }
 
+    function closeModal() {
+      setNewChatName()
+      onDismiss()
+    }
+
     return (
         <Modal modalKey="new chat">
-            <ModalTitle>Add a chat</ModalTitle>
+            <ModalTitle closeModal={closeModal}>Create a Chat</ModalTitle>
             <ModalContent>
-                <SInput value={newChatName} onChange={onChangeNewChatName} onKeyDown={onKeyDown} />
+                <Input
+                  value={newChatName}
+                  onChange={onChangeNewChatName}
+                  onKeyDown={onKeyDown}
+                  label={'Chat Name'}
+                  width={'460px'}
+                />
             </ModalContent>
             <ModalActions>
                 <Button primary onClick={onClickCreate}>Create</Button>
-                <Button onClick={onDismiss}>Cancel</Button>
             </ModalActions>
         </Modal>
     )

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import styled from 'styled-components'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Input from '../Input'
@@ -9,6 +9,7 @@ import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
 import useStateTree from '../../hooks/useStateTree'
+import UploadAvatar from '../UploadAvatar'
 
 const SUserControlContainer = styled.div`
     display: flex;
@@ -65,16 +66,20 @@ function UserControl() {
     let { onPresent, onDismiss } = useModal('user profile')
     let { nodeAddress } = useRedwood()
     let { selectedServer } = useNavigation()
+    const [username, setUsername] = useState(null)
+    const [userPhotoURL, setUserPhotoURL] = useState(null)
     let registry = useStateTree(`${selectedServer}/registry`)
     nodeAddress = !!nodeAddress ? nodeAddress.toLowerCase() : null
-    let userPhotoURL
-    let username
-    if (registry && registry.users && registry.users[nodeAddress]) {
-        username = registry.users[nodeAddress].username
+
+    useEffect(() => {
+      if (registry && registry.users && registry.users[nodeAddress]) {
+        setUsername(registry.users[nodeAddress].username)
         if (registry.users[nodeAddress].photo) {
-            userPhotoURL = `http://localhost:8080/users/${nodeAddress}/photo?state_uri=${selectedServer}/registry`
+          setUserPhotoURL(`http://localhost:8080/users/${nodeAddress}/photo?state_uri=${selectedServer}/registry&${Date.now()}`)
         }
-    }
+      }
+    }, [registry])
+
     return (
         <SUserControlContainer>
             <SUserLeft onClick={onPresent}>
@@ -84,31 +89,44 @@ function UserControl() {
                     <NodeAddress>{!!username ? nodeAddress : null}</NodeAddress>
                 </UsernameWrapper>
             </SUserLeft>
-            <UserProfileModal onDismiss={onDismiss} />
+            <UserProfileModal
+              onDismiss={onDismiss}
+              currentUsername={username} 
+              userPhotoURL={userPhotoURL}
+            />
         </SUserControlContainer>
     )
 }
 
-function UserProfileModal({ onDismiss }) {
+function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
     const [username, setUsername] = useState('')
+    const [iconImg, setIconImg] = useState(null)
+    const [iconFile, setIconFile] = useState(null)
     const { nodeAddress } = useRedwood()
     const api = useAPI()
     const { selectedServer } = useNavigation()
     const photoFileRef = useRef()
 
+    useEffect(() => {
+      if (currentUsername) {
+        setUsername(currentUsername)
+        setIconImg(userPhotoURL)
+      }
+    }, [currentUsername, userPhotoURL])
+
     const onSave = useCallback(async () => {
         if (!api) { return }
         try {
-            let photoFile
-            if (photoFileRef && photoFileRef.current && photoFileRef.current.files && photoFileRef.current.files.length > 0) {
-                photoFile = photoFileRef.current.files[0]
-            }
-            await api.updateProfile(nodeAddress, selectedServer, username, photoFile)
+            // let photoFile
+            // if (photoFileRef && photoFileRef.current && photoFileRef.current.files && photoFileRef.current.files.length > 0) {
+            //     photoFile = photoFileRef.current.files[0]
+            // }
+            await api.updateProfile(nodeAddress, selectedServer, username, iconFile)
             onDismiss()
         } catch (err) {
             console.error(err)
         }
-    }, [api, nodeAddress, selectedServer, username, onDismiss])
+    }, [api, nodeAddress, selectedServer, username, iconFile, onDismiss])
 
     const onChangeUsername = useCallback((e) => {
         if (e.code === 'Enter') {
@@ -118,21 +136,36 @@ function UserProfileModal({ onDismiss }) {
         }
     }, [onSave, setUsername])
 
+    function closeModal() {
+      setUsername(currentUsername)
+      onDismiss()
+    }
+
     return (
         <Modal modalKey="user profile">
-            <ModalTitle>Your profile</ModalTitle>
+            <ModalTitle closeModal={closeModal}>Your Profile</ModalTitle>
             <ModalContent>
-                <div>
+                {/* <div>
                     <input type="file" ref={photoFileRef} />
-                </div>
-                <div>
+                </div> */}
+                <UploadAvatar
+                  iconImg={iconImg}
+                  setIconImg={setIconImg}
+                  setIconFile={setIconFile}
+                />
+                <Input
+                  value={username}
+                  onChange={onChangeUsername}
+                  label={'Username'}
+                  width={'460px'}
+                />
+                {/* <div>
                     Username:
                     <Input value={username} onChange={onChangeUsername} />
-                </div>
+                </div> */}
             </ModalContent>
             <ModalActions>
                 <Button onClick={onSave} primary>Save</Button>
-                <Button onClick={onDismiss}>Cancel</Button>
             </ModalActions>
         </Modal>
     )

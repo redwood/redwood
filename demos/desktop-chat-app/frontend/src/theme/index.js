@@ -6,6 +6,10 @@ export const green = {
     500: '#42a064',
 }
 
+export const indigo = {
+  500: '#4e5cac',
+}
+
 export const red = {
     100: '#FFFDFE',
     200: '#ffc2a8',
@@ -32,13 +36,14 @@ const theme = {
             main: black,
         },
         secondary: {
-            main: green[500],
+            main: indigo[500],
         },
         black,
         grey,
         green,
         white,
-        red
+        red,
+        indigo,
     },
     siteWidth: 1200,
     spacing: {
@@ -50,7 +55,7 @@ const theme = {
         6: 48,
         7: 64,
     },
-    topBarSize: 72
+    topBarSize: 56 
 }
 
 export default theme
