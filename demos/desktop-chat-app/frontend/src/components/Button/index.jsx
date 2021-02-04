@@ -6,12 +6,12 @@ import theme from '../../theme'
 
 const PrimaryButton = withStyles({
     root: {
-        backgroundColor: theme.color.green[500],
+        backgroundColor: theme.color.indigo[500],
+        color: theme.color.white,
     },
 })(MUIButton)
 
 function Button({ primary, ...props }) {
-        console.log(primary)
     if (primary) {
         return <PrimaryButton variant="contained" {...props} />
     }

@@ -2,6 +2,7 @@ Node:
     HDMnemonicPhrase: drink glass cruel clown supreme gloom huge oxygen toddler find
         ripple until rookie hurt gasp amazing high above ginger stick adult blur sheriff
         evil
+    BootstrapPeers: []
     MaxPeersPerSubscription: 4
     DataRoot: ./node2_data
     DevMode: true

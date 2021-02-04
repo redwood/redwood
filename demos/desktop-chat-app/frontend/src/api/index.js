@@ -8,8 +8,24 @@ export default function(redwoodClient) {
         await redwoodClient.rpc.addPeer({ TransportName: transportName, DialAddr: dialAddr })
     }
 
-    async function addServer(server, servers) {
+    async function addServer(server, servers, iconFile) {
         let stateURI = `${server}/registry`
+
+        let iconImgPatch = null
+
+        if (iconFile) {
+          let { sha3 } = await redwoodClient.storeRef(iconFile)
+          let { type } = iconFile
+
+          iconImgPatch = {
+            'Content-Type': type,
+            'value': {
+                'Content-Type': 'link',
+                'value': 'ref:sha3:' + sha3,
+            },
+          }
+      }
+
         let tx = {
             stateURI,
             id: Redwood.utils.genesisTxID,
@@ -31,9 +47,11 @@ export default function(redwoodClient) {
                     },
                     'rooms': [],
                     'users': {},
+                    'iconImg': iconImgPatch
                 }),
             ],
         }
+
         await redwoodClient.rpc.subscribe({ stateURI, keypath: '/', txs: true, states: true })
         await redwoodClient.rpc.sendTx(tx)
 
