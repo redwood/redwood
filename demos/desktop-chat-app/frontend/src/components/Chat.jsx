@@ -317,10 +317,12 @@ function getTimestampDisplay(timestamp) {
 }
 
 function Message({ msg, user, selectedServer, selectedStateURI, onClickAttachment, messageIndex }) {
+    // console.log('user', user)
+    console.log('msg', msg)
     user = user || {}
     let userAddress = msg.sender.toLowerCase()
     let displayName = user.username || msg.sender
-    const { dayDisplay, displayTime } = getTimestampDisplay(msg.timestamp)
+    let displayTimestamp = moment.unix(msg.timestamp).format('MM/YY h:mm A')
 
     return (
       <Tooltip title={`${dayDisplay} ${displayTime}`} placement="left" arrow>
@@ -337,17 +339,17 @@ function Message({ msg, user, selectedServer, selectedStateURI, onClickAttachmen
             {msg.firstByUser &&
               <MessageSender>{displayName} <MessageTimeStamp dayDisplay={dayDisplay} displayTime={displayTime} /></MessageSender>
             }
-
-            <MessageText>{msg.text}</MessageText>
-            {(msg.attachments || []).map((attachment, j) => (
-              <SAttachment
-                key={`${selectedStateURI}${messageIndex},${j}`}
-                attachment={attachment}
-                url={`http://localhost:8080/messages[${messageIndex}]/attachments[${j}]?state_uri=${encodeURIComponent(selectedStateURI)}`}
-                onClick={onClickAttachment}
-              />
-            ))}
-          </MessageDetails>
+                
+                <MessageText>{msg.text}</MessageText>
+                {(msg.attachments || []).map((attachment, j) => (
+                    <SAttachment
+                        key={`${selectedStateURI}${messageIndex},${j}`}
+                        attachment={attachment}
+                        url={`http://localhost:8080/messages[${messageIndex}]/attachments[${j}]?state_uri=${encodeURIComponent(selectedStateURI)}`}
+                        onClick={onClickAttachment}
+                    />
+                ))}
+            </MessageDetails>
         </MessageWrapper>
       </Tooltip>
     )

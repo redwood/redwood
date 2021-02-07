@@ -6,8 +6,9 @@ Node:
     SubscribedStateURIs:
       - test/another chat
       - chat.local/servers
+      - null/registry
       - test/registry
-      - test/chat
+      - test/general
     MaxPeersPerSubscription: 4
     DataRoot: ./node2_data
     DevMode: true
