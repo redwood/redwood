@@ -390,8 +390,7 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 	notify := w.(http.CloseNotifier).CloseNotify()
 	go func() {
 		<-notify
-		writeSub.Close()
-		t.Infof(0, "http connection closed")
+		t.Infof(0, "http subscription closed (%v)", stateURI)
 		t.host.HandleWritableSubscriptionClosed(writeSub)
 	}()
 
@@ -970,7 +969,9 @@ func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, theURL string) 
 
 	u.Path = path.Join(u.Path, "providers")
 
-	resp, err := http.Get(u.String())
+	client := http.Client{}
+
+	resp, err := client.Get(u.String())
 	if err != nil {
 		close(ch)
 		return nil, err
@@ -1143,7 +1144,6 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 		return nil, errors.New("peer has no DialAddr")
 	}
 
-	var client http.Client
 	req, err := http.NewRequest("GET", p.DialInfo().DialAddr, nil)
 	if err != nil {
 		return nil, err
@@ -1154,6 +1154,7 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Subscribe", "keep-alive")
 
+	var client http.Client
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -1162,6 +1163,7 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 	}
 
 	return &httpReadableSubscription{
+		client:  &client,
 		peer:    p,
 		stream:  resp.Body,
 		private: resp.Header.Get("Private") == "true",
@@ -1222,14 +1224,16 @@ func (p *httpPeer) PutPrivate(tx *Tx, state tree.Node, leaves []types.ID) (err e
 		return errors.WithStack(err)
 	}
 
-	var client http.Client
-	req, err := http.NewRequest("PUT", p.DialInfo().DialAddr, bytes.NewReader(msg))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "PUT", p.DialInfo().DialAddr, bytes.NewReader(msg))
 	if err != nil {
 		return errors.WithStack(err)
 	}
 	req.Header.Set("Private", "true")
 
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -1253,15 +1257,17 @@ func (p *httpPeer) Ack(stateURI string, txID types.ID) (err error) {
 		return errors.WithStack(err)
 	}
 
-	var client http.Client
-	req, err := http.NewRequest("ACK", p.DialInfo().DialAddr, bytes.NewReader(txIDBytes))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "ACK", p.DialInfo().DialAddr, bytes.NewReader(txIDBytes))
 	if err != nil {
 		return err
 	}
 
 	req.Header.Set("State-URI", stateURI)
 
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	} else if resp.StatusCode != 200 {
@@ -1279,14 +1285,16 @@ func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error
 		return nil
 	}
 
-	req, err := http.NewRequest("AUTHORIZE", p.DialInfo().DialAddr, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "AUTHORIZE", p.DialInfo().DialAddr, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Challenge", hex.EncodeToString(challengeMsg))
 
-	var client http.Client
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	} else if resp.StatusCode != 200 {
@@ -1347,6 +1355,7 @@ func (p *httpPeer) Close() error {
 }
 
 type httpReadableSubscription struct {
+	client  *http.Client
 	stream  io.ReadCloser
 	peer    *httpPeer
 	private bool
@@ -1396,6 +1405,7 @@ func (s *httpReadableSubscription) Read() (_ SubscriptionMsg, err error) {
 }
 
 func (c *httpReadableSubscription) Close() error {
+	c.client.CloseIdleConnections()
 	return c.peer.Close()
 }
 
@@ -1421,6 +1431,7 @@ func (sub *httpWritableSubscription) Keypath() tree.Keypath {
 	return sub.keypath
 }
 
+// If an error is returned, the stream will be closed by the Host.
 func (sub *httpWritableSubscription) Write(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { sub.UpdateConnStats(err == nil) }()
 
@@ -1450,6 +1461,7 @@ type httpPrivateTxSubscriptionMessage struct {
 	Leaves []types.ID  `json:"leaves"`
 }
 
+// If an error is returned, the stream will be closed by the Host.
 func (sub *httpWritableSubscription) WritePrivate(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { sub.UpdateConnStats(err == nil) }()
 

@@ -2,8 +2,10 @@ package redwood
 
 import (
 	"context"
-	"github.com/pkg/errors"
+	"sync"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/brynbellomy/redwood/tree"
 	"github.com/brynbellomy/redwood/types"
@@ -19,8 +21,13 @@ type (
 		StateURI() string
 		Type() SubscriptionType
 		Keypath() tree.Keypath
+
+		// If an error is returned, the stream will be closed by the Host.
 		Write(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error
+
+		// If an error is returned, the stream will be closed by the Host.
 		WritePrivate(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error
+
 		Close() error
 	}
 
@@ -108,6 +115,7 @@ type multiReaderSubscription struct {
 	host     Host
 	conns    map[types.Address]Peer
 	chStop   chan struct{}
+	chDone   chan struct{}
 	peerPool *peerPool
 }
 
@@ -118,6 +126,7 @@ func newMultiReaderSubscription(stateURI string, maxConns uint64, host Host) *mu
 		host:     host,
 		conns:    make(map[types.Address]Peer),
 		chStop:   make(chan struct{}),
+		chDone:   make(chan struct{}),
 	}
 }
 
@@ -129,6 +138,14 @@ func (s *multiReaderSubscription) Start() {
 		},
 	)
 	defer s.peerPool.Close()
+
+	var wgClose sync.WaitGroup
+	wgClose.Add(1)
+	defer func() {
+		wgClose.Done()
+		wgClose.Wait()
+		close(s.chDone)
+	}()
 
 	for {
 		select {
@@ -159,7 +176,9 @@ func (s *multiReaderSubscription) Start() {
 			continue
 		}
 
+		wgClose.Add(1)
 		go func() {
+			defer wgClose.Done()
 			defer s.peerPool.ReturnPeer(peer, false)
 			defer peerSub.Close()
 
@@ -187,5 +206,6 @@ func (s *multiReaderSubscription) Start() {
 
 func (s *multiReaderSubscription) Close() error {
 	close(s.chStop)
+	<-s.chDone
 	return nil
 }

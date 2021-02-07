@@ -14,40 +14,24 @@ import (
 	"github.com/brynbellomy/redwood/types"
 )
 
-type HTTPRPCServer interface {
-	Ctx() *ctx.Context
-	Start() error
+type HTTPRPCService interface {
+	ctx.Logger
+	CtxStart(onStartup func() error, onAboutToStop func(), onChildAboutToStop func(inChild ctx.Ctx), onStopping func()) error
+	ListenAddr() string
 }
 
-type httpRPCServer struct {
-	*ctx.Context
-
-	address    types.Address
-	listenAddr string
-	host       Host
-}
-
-func NewHTTPRPCServer(addr types.Address, listenAddr string, host Host) HTTPRPCServer {
-	return &httpRPCServer{
-		Context:    &ctx.Context{},
-		address:    addr,
-		listenAddr: listenAddr,
-		host:       host,
-	}
-}
-
-func (s *httpRPCServer) Start() error {
-	return s.CtxStart(
+func StartHTTPRPC(svc HTTPRPCService) error {
+	return svc.CtxStart(
 		// on startup
 		func() error {
-			s.SetLogLabel("rpc")
-			s.Infof(0, "rpc server listening on %v", s.listenAddr)
+			svc.SetLogLabel("rpc")
+			svc.Infof(0, "rpc server listening on %v", svc.ListenAddr())
 
 			go func() {
 				server := rpc.NewServer()
 				server.RegisterCodec(json2.NewCodec(), "application/json")
-				server.RegisterService(s, "RPC")
-				http.ListenAndServe(s.listenAddr, UnrestrictedCors(server))
+				server.RegisterService(svc, "RPC")
+				http.ListenAndServe(svc.ListenAddr(), UnrestrictedCors(server))
 			}()
 
 			return nil
@@ -57,6 +41,27 @@ func (s *httpRPCServer) Start() error {
 		// on shutdown
 		nil,
 	)
+}
+
+type HTTPRPCServer struct {
+	*ctx.Context
+
+	address    types.Address
+	listenAddr string
+	host       Host
+}
+
+func NewHTTPRPCServer(addr types.Address, listenAddr string, host Host) *HTTPRPCServer {
+	return &HTTPRPCServer{
+		Context:    &ctx.Context{},
+		address:    addr,
+		listenAddr: listenAddr,
+		host:       host,
+	}
+}
+
+func (s *HTTPRPCServer) ListenAddr() string {
+	return s.listenAddr
 }
 
 type (
@@ -69,7 +74,7 @@ type (
 	SubscribeResponse struct{}
 )
 
-func (s *httpRPCServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *SubscribeResponse) error {
+func (s *HTTPRPCServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *SubscribeResponse) error {
 	if args.StateURI == "" {
 		return errors.New("missing StateURI")
 	}
@@ -99,7 +104,7 @@ type (
 	}
 )
 
-func (s *httpRPCServer) NodeAddress(r *http.Request, args *NodeAddressArgs, resp *NodeAddressResponse) error {
+func (s *HTTPRPCServer) NodeAddress(r *http.Request, args *NodeAddressArgs, resp *NodeAddressResponse) error {
 	resp.Address = s.address
 	return nil
 }
@@ -112,7 +117,7 @@ type (
 	AddPeerResponse struct{}
 )
 
-func (s *httpRPCServer) AddPeer(r *http.Request, args *AddPeerArgs, resp *AddPeerResponse) error {
+func (s *HTTPRPCServer) AddPeer(r *http.Request, args *AddPeerArgs, resp *AddPeerResponse) error {
 	s.host.AddPeer(PeerDialInfo{TransportName: args.TransportName, DialAddr: args.DialAddr})
 	return nil
 }
@@ -124,7 +129,7 @@ type (
 	}
 )
 
-func (s *httpRPCServer) KnownStateURIs(r *http.Request, args *KnownStateURIsArgs, resp *KnownStateURIsResponse) error {
+func (s *HTTPRPCServer) KnownStateURIs(r *http.Request, args *KnownStateURIsArgs, resp *KnownStateURIsResponse) error {
 	stateURIs, err := s.host.Controllers().KnownStateURIs()
 	if err != nil {
 		return err
@@ -140,6 +145,6 @@ type (
 	SendTxResponse struct{}
 )
 
-func (s *httpRPCServer) SendTx(r *http.Request, args *SendTxArgs, resp *SendTxResponse) error {
+func (s *HTTPRPCServer) SendTx(r *http.Request, args *SendTxArgs, resp *SendTxResponse) error {
 	return s.host.SendTx(context.Background(), args.Tx)
 }

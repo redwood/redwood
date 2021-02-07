@@ -1,0 +1,11 @@
+**/node_modules
+
+.dockerignore
+**/.dockerignore
+
+Dockerfile
+**/Dockerfile
+*.Dockerfile
+**/*.Dockerfile
+
+demos/desktop-chat-app/main.go

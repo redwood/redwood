@@ -521,6 +521,11 @@ func (h *host) HandleWritableSubscriptionClosed(writeSub WritableSubscription) {
 	h.writableSubscriptionsMu.Lock()
 	defer h.writableSubscriptionsMu.Unlock()
 
+	err := writeSub.Close()
+	if err != nil {
+		h.Errorf("error closing writable subscription: %+v", err)
+	}
+
 	if _, exists := h.writableSubscriptions[writeSub.StateURI()]; exists {
 		delete(h.writableSubscriptions[writeSub.StateURI()], writeSub)
 	}
@@ -544,9 +549,11 @@ func (h *host) subscribe(ctx context.Context, stateURI string) error {
 		h.readableSubscriptions[stateURI] = multiSub
 
 		go func() {
+			defer multiSub.Close()
+
 			select {
 			case <-h.Ctx().Done():
-			case <-multiSub.chStop:
+			case <-multiSub.chDone:
 			}
 
 			h.readableSubscriptionsMu.Lock()
