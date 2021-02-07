@@ -87,15 +87,6 @@ function Login(props) {
 }
 
 function App() {
-  const [isLoggedin, setIsLoggedIn] = useState(null)
-
-  // if (true) {
-  //   return <Login
-  //     isLoggedin={isLoggedin}
-  //     setIsLoggedIn={setIsLoggedIn}
-  //   />
-  // }
-
     return (
         <Layout>
             <SServerBar verticalPadding={serverBarVerticalPadding} />
