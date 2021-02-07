@@ -3,6 +3,11 @@ Node:
         ripple until rookie hurt gasp amazing high above ginger stick adult blur sheriff
         evil
     BootstrapPeers: []
+    SubscribedStateURIs:
+      - chat.local/servers
+      - null/registry
+      - test/registry
+      - test/general
     MaxPeersPerSubscription: 4
     DataRoot: ./node2_data
     DevMode: true

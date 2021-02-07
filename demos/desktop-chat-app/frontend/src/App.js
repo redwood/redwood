@@ -27,7 +27,7 @@ function App() {
         <Layout>
             <Sidebar />
             <SChat />
-            <SStateTreeDebugView />
+            {/* <SStateTreeDebugView /> */}
         </Layout>
     )
 }

@@ -4,6 +4,8 @@ import { IconButton, Avatar } from '@material-ui/core'
 import { SendRounded as SendIcon, AddCircleRounded as AddIcon } from '@material-ui/icons'
 import * as tinycolor from 'tinycolor2'
 import filesize from 'filesize.js'
+import moment from 'moment'
+
 import Button from './Button'
 import Input from './Input'
 import Attachment from './Attachment'
@@ -222,10 +224,13 @@ const MessageText = styled.div`
 `
 
 function Message({ msg, user, selectedServer, selectedStateURI, onClickAttachment, messageIndex }) {
-    console.log('user', user)
+    // console.log('user', user)
+    console.log('msg', msg)
     user = user || {}
     let userAddress = msg.sender.toLowerCase()
     let displayName = user.username || msg.sender
+    let displayTimestamp = moment.unix(msg.timestamp).format('MM/YY h:mm A')
+
     return (
         <MessageWrapper firstByUser={msg.firstByUser} key={userAddress + msg.timestamp}>
             {msg.firstByUser ? <UserAvatar
@@ -237,8 +242,9 @@ function Message({ msg, user, selectedServer, selectedStateURI, onClickAttachmen
             }
             <MessageDetails>
                 {msg.firstByUser &&
-                    <MessageSender>{displayName}</MessageSender>
+                    <MessageSender>{displayName} - {displayTimestamp}</MessageSender>
                 }
+                
                 <MessageText>{msg.text}</MessageText>
                 {(msg.attachments || []).map((attachment, j) => (
                     <SAttachment
