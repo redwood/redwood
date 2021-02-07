@@ -8,7 +8,7 @@ export default function(redwoodClient) {
         await redwoodClient.rpc.addPeer({ TransportName: transportName, DialAddr: dialAddr })
     }
 
-    async function addServer(server, servers, iconFile) {
+    async function addServer(server, servers, iconFile, provider, cloudStackOptions) {
         let stateURI = `${server}/registry`
 
         let iconImgPatch = null
@@ -55,7 +55,6 @@ export default function(redwoodClient) {
         await redwoodClient.rpc.subscribe({ stateURI, keypath: '/', txs: true, states: true })
         await redwoodClient.rpc.sendTx(tx)
 
-        console.log('API addServer', server, servers)
         tx = {
             stateURI: 'chat.local/servers',
             id: Redwood.utils.randomID(),
@@ -64,6 +63,11 @@ export default function(redwoodClient) {
             ],
         }
         await redwoodClient.rpc.sendTx(tx)
+
+        if (!!provider && provider !== 'none' && !!cloudStackOptions) {
+            console.log('rv', provider, cloudStackOptions)
+            await redwoodClient.rpc.rpcFetch('RPC.CreateCloudStack', { ...cloudStackOptions, provider })
+        }
     }
 
     async function importServer(server, servers) {
@@ -185,11 +189,16 @@ export default function(redwoodClient) {
         await redwoodClient.rpc.sendTx(tx)
     }
 
+    function createCloudStackOptions(provider, apiKey) {
+        return redwoodClient.rpc.rpcFetch('RPC.CreateCloudStackOptions', { provider, apiKey })
+    }
+
     return {
         addServer,
         importServer,
         createNewChat,
         sendMessage,
         updateProfile,
+        createCloudStackOptions,
     }
 }
