@@ -1,9 +1,8 @@
-// +build !headless
+// +build headless
 
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -12,14 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/brynbellomy/klog"
 	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
-	"github.com/webview/webview"
 
 	rw "github.com/brynbellomy/redwood"
 	"github.com/brynbellomy/redwood/ctx"
@@ -34,7 +31,7 @@ func main() {
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
-	configPath, err := rw.DefaultConfigPath("redwood-webview")
+	configPath, err := rw.DefaultConfigPath("redwood-chat")
 	if err != nil {
 		app.Error(err)
 		os.Exit(1)
@@ -96,13 +93,13 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 	klog.Flush()
 	defer klog.Flush()
 
-	config, err := rw.ReadConfigAtPath("redwood-webview", configPath)
+	config, err := rw.ReadConfigAtPath("redwood-chat", configPath)
 	if os.IsNotExist(err) {
 		err := os.MkdirAll(filepath.Dir(configPath), 0777|os.ModeDir)
 		if err != nil {
 			return err
 		}
-		config, err = rw.ReadConfigAtPath("redwood-webview", configPath)
+		config, err = rw.ReadConfigAtPath("redwood-chat", configPath)
 		if err != nil {
 			return err
 		}
@@ -253,9 +250,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 
 	initializeLocalState(host)
 
-	go startGUI(port)
 	go startAPI(host, port)
-	go inputLoop(host)
 	app.AttachInterruptHandler()
 	app.CtxWait()
 
@@ -321,16 +316,6 @@ func initializeLocalState(host rw.Host) {
 	}
 }
 
-func startGUI(port uint) {
-	debug := true
-	w := webview.New(debug)
-	defer w.Destroy()
-	w.SetTitle("Minimal webview example")
-	w.SetSize(800, 600, webview.HintNone)
-	w.Navigate(fmt.Sprintf("http://localhost:%v/index.html", port))
-	w.Run()
-}
-
 func ensureDataDirs(config *rw.Config) error {
 	err := os.MkdirAll(config.RefDataRoot(), 0777|os.ModeDir)
 	if err != nil {
@@ -347,106 +332,4 @@ func ensureDataDirs(config *rw.Config) error {
 		return err
 	}
 	return nil
-}
-
-func inputLoop(host rw.Host) {
-	fmt.Println("Type \"help\" for a list of commands.")
-	fmt.Println()
-
-	var longestCommandLength int
-	for cmd := range replCommands {
-		if len(cmd) > longestCommandLength {
-			longestCommandLength = len(cmd)
-		}
-	}
-
-	scanner := bufio.NewScanner(os.Stdin)
-	for {
-		fmt.Printf("> ")
-
-		if !scanner.Scan() {
-			break
-		}
-
-		line := scanner.Text()
-		parts := strings.Split(line, " ")
-		for i := range parts {
-			parts[i] = strings.TrimSpace(parts[i])
-		}
-
-		if len(parts) < 1 {
-			app.Error("enter a command")
-			continue
-		} else if parts[0] == "help" {
-			fmt.Println("___ Commands _________")
-			fmt.Println()
-			for cmd, info := range replCommands {
-				difference := longestCommandLength - len(cmd)
-				space := strings.Repeat(" ", difference+4)
-				fmt.Printf("%v%v- %v\n", cmd, space, info.HelpText)
-			}
-			continue
-		}
-
-		cmd, exists := replCommands[parts[0]]
-		if !exists {
-			app.Error("unknown command")
-			continue
-		}
-
-		err := cmd.Handler(app.Ctx(), parts[1:], host)
-		if err != nil {
-			app.Error(err)
-		}
-	}
-}
-
-var replCommands = map[string]struct {
-	HelpText string
-	Handler  func(ctx context.Context, args []string, host rw.Host) error
-}{
-	"stateuris": {
-		"list all known state URIs",
-		func(ctx context.Context, args []string, host rw.Host) error {
-			stateURIs, err := host.Controllers().KnownStateURIs()
-			if err != nil {
-				return err
-			}
-			if len(stateURIs) == 0 {
-				fmt.Println("no known state URIs")
-			} else {
-				for _, stateURI := range stateURIs {
-					fmt.Println("- ", stateURI)
-				}
-			}
-			return nil
-		},
-	},
-	"state": {
-		"print the current state tree",
-		func(ctx context.Context, args []string, host rw.Host) error {
-			if len(args) < 1 {
-				return errors.New("missing argument: state URI")
-			}
-
-			stateURI := args[0]
-			state, err := host.Controllers().StateAtVersion(stateURI, nil)
-			if err != nil {
-				return err
-			}
-			var keypath tree.Keypath
-			var rng *tree.Range
-			if len(args) > 1 {
-				_, keypath, rng, err = rw.ParsePatchPath([]byte(args[1]))
-				if err != nil {
-					return err
-				}
-			}
-			app.Debugf("stateURI: %v / keypath: %v / range: %v", stateURI, keypath, rng)
-			state = state.NodeAt(keypath, rng)
-			state.DebugPrint(app.Debugf, false, 0)
-			fmt.Println(rw.PrettyJSON(state))
-			return nil
-		},
-	},
 }

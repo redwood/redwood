@@ -12,7 +12,6 @@ import './index.css'
 import theme from './theme'
 
 ReactDOM.render(
-    <React.StrictMode>
         <ThemeProvider theme={theme}>
             <RedwoodProvider>
                 <APIProvider>
@@ -23,8 +22,7 @@ ReactDOM.render(
                     </NavigationProvider>
                 </APIProvider>
             </RedwoodProvider>
-        </ThemeProvider>
-    </React.StrictMode>,
+        </ThemeProvider>,
     document.getElementById('root')
 )
 

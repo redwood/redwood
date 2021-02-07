@@ -1023,6 +1023,7 @@ func (p *libp2pWritableSubscription) Keypath() tree.Keypath {
 	return nil
 }
 
+// If an error is returned, the stream will be closed by the Host.
 func (p *libp2pWritableSubscription) Write(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error {
 	err := p.EnsureConnected(ctx)
 	if err != nil {
@@ -1031,6 +1032,7 @@ func (p *libp2pWritableSubscription) Write(ctx context.Context, tx *Tx, state tr
 	return p.libp2pPeer.Put(tx, state, leaves)
 }
 
+// If an error is returned, the stream will be closed by the Host.
 func (p *libp2pWritableSubscription) WritePrivate(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error {
 	err := p.EnsureConnected(ctx)
 	if err != nil {

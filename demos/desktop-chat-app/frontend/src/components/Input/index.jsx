@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import styled from 'styled-components'
 
 const SInput = styled.input`
-    width: 100%;
+    width: calc(100% - 24px);
     border: none;
     font-size: 16px;
     border-radius: 12px;
@@ -14,13 +14,16 @@ const SInput = styled.input`
     }
 `
 
+function Input(props, ref) {
+    return (
+        <SInput {...props} ref={ref} />
+    )
+}
+
 const SInputWrapper = styled.div`
     display: flex;
     flex-direction: column;
-    width: ${props => props.width ? props.width : '300px'};
-    input {
-        width: calc(100% - 24px);
-    }
+    width: ${props => props.width ? props.width : '100%'};
 `
 
 const SInputLabel = styled.label`
@@ -28,17 +31,13 @@ const SInputLabel = styled.label`
     margin-bottom: 6px;
 `
 
-function Input(props) {
-    if (props.label) {
-        return (
-            <SInputWrapper width={props.width}>
-                <SInputLabel>{props.label}</SInputLabel>
-                <SInput {...props} />     
-            </SInputWrapper>
-        )
-    }
-
-    return <SInput {...props} />
+export function InputLabel(props) {
+    return (
+        <SInputWrapper width={props.width}>
+            <SInputLabel>{props.label}</SInputLabel>
+            {props.children}
+        </SInputWrapper>
+    )
 }
 
-export default Input
+export default React.forwardRef(Input)

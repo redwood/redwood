@@ -47,6 +47,8 @@ function StateTreeDebugView({ className }) {
         }
     }
 
+    return null
+
     return (
         <SStateTreeDebugView className={className}>
             <button onClick={() => setDisableMetadata(!disableMetadata)}>Toggle metadata</button>

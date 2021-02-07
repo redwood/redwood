@@ -9,10 +9,11 @@ import useModal from '../../hooks/useModal'
 import Spacer from '../Spacer'
 
 
-function Modal({ children, height, modalKey }) {
+function Modal({ children, height, modalKey, closeModal }) {
     const modalRoot = document.getElementById('modal-root')
     const { activeModalKey } = useContext(Context)
     const { onDismiss } = useModal(modalKey)
+    closeModal = closeModal || onDismiss
     if (!modalRoot) {
         return null
     } else if (modalKey !== activeModalKey) {
@@ -20,7 +21,7 @@ function Modal({ children, height, modalKey }) {
     }
     return ReactDOM.createPortal(
         <StyledModalWrapper>
-            <StyledModalBackdrop onClick={onDismiss} />
+            <StyledModalBackdrop onClick={closeModal} />
                 <StyledResponsiveWrapper>
                     <StyledModal height={height}>{children}</StyledModal>
                 </StyledResponsiveWrapper>
@@ -89,7 +90,7 @@ function ModalTitle({ children, closeModal }) {
         <StyledModalTitle>
             {children}
             <StyledModalClose onClick={closeModal}>
-             <CloseIcon color={'white'} />
+                <CloseIcon style={{ color: 'white' }} />
             </StyledModalClose>
         </StyledModalTitle>
     )

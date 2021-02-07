@@ -7,7 +7,7 @@ export const green = {
 }
 
 export const indigo = {
-  500: '#4e5cac',
+  500: 'hsl(231deg 36% 53%)',
 }
 
 export const red = {
@@ -55,7 +55,7 @@ const theme = {
         6: 48,
         7: 64,
     },
-    topBarSize: 56 
+    topBarSize: 56
 }
 
 export default theme

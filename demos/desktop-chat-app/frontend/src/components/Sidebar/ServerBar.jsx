@@ -1,24 +1,33 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { Avatar, Fab, IconButton, TextField } from '@material-ui/core'
 import { Add as AddIcon, CloudDownloadRounded as ImportIcon } from '@material-ui/icons'
 
 import Tooltip from '../Tooltip'
 import GroupItem from './GroupItem'
-import UploadAvatar from '../UploadAvatar'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
 import Input from '../Input'
+import AddServerModal from './AddServerModal'
 import useStateTree from '../../hooks/useStateTree'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
 import strToColor from '../../utils/strToColor'
+import theme from '../../theme'
 
 const Container = styled.div`
     display: flex;
     flex-direction: column;
     padding: ${props => props.verticalPadding} 0;
+
+    overflow-y: scroll;
+    /* Chrome, Safari, Opera */
+    &::-webkit-scrollbar {
+        display: none;
+    }
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
 `
 
 const ServerIconWrapper = styled.div`
@@ -31,7 +40,6 @@ const ServerIconWrapper = styled.div`
     transition: .12s ease-in-out all;
 
     &:hover {
-        // background: #2d3354;
         img {
             transform: scale(1.125);
         }
@@ -76,20 +84,17 @@ const PrimaryButton = styled(Button)`
     background-color: ${props => props.theme.color.green} !important;
 `
 
-function ServerFab({
-  serverName,
-}) {
-  const stateTree = useStateTree(`${serverName}/registry`)
-  
-  if (stateTree && stateTree.iconImg) {
-    return (
-      <SFab text={serverName}>
-        <img src={`http://localhost:8080/iconImg?state_uri=${serverName}/registry`} />
-      </SFab>
-    )
-  }
+function ServerFab({ serverName }) {
+    const stateTree = useStateTree(`${serverName}/registry`)
 
-  return <SFab text={serverName}>{serverName.slice(0, 1)}</SFab>
+    if (stateTree && stateTree.iconImg) {
+        return (
+            <SFab text={serverName}>
+                <img src={`http://localhost:8080/iconImg?state_uri=${serverName}/registry`} />
+            </SFab>
+        )
+    }
+    return <SFab text={serverName}>{serverName.slice(0, 1)}</SFab>
 }
 
 function ServerBar({ className, verticalPadding }) {
@@ -112,10 +117,10 @@ function ServerBar({ className, verticalPadding }) {
     let knownServers = ((knownServersTree || {}).value || []).filter(x => !!x)
 
     useEffect(() => {
-      if (!isLoaded && knownServers.length > 0) {
-        setIsLoaded(true)
-        navigate(knownServers[0], null)
-      }
+        if (!isLoaded && knownServers.length > 0) {
+            setIsLoaded(true)
+            navigate(knownServers[0], null)
+        }
     }, [knownServersTree])
 
     return (
@@ -148,69 +153,11 @@ function ServerBar({ className, verticalPadding }) {
     )
 }
 
+
+
 const SInput = styled(Input)`
     width: 460px;
 `
-
-function AddServerModal({ onDismiss }) {
-    const { navigate } = useNavigation()
-    const [serverName, setServerName] = useState('')
-    const [iconImg, setIconImg] = useState(null)
-    const [iconFile, setIconFile] = useState(null)
-    const api = useAPI()
-    const knownServersTree = useStateTree('chat.local/servers')
-    const theme = useTheme()
-
-    let knownServers = (knownServersTree || {}).value || []
-
-    const onClickAdd = useCallback(async () => {
-        if (!api) { return }
-        try {
-            await api.addServer(serverName, knownServers, iconFile)
-            onDismiss()
-            navigate(serverName, null)
-        } catch (err) {
-            console.error(err)
-        }
-    }, [api, serverName, knownServers, iconFile, onDismiss])
-
-    function onChangeServerName(e) {
-        if (e.code === 'Enter') {
-            onClickAdd()
-        } else {
-            setServerName(e.target.value)
-        }
-    }
-
-    function closeModal() {
-      setServerName('')
-      setIconFile(null)
-      setIconImg(null)
-      onDismiss()
-    }
-
-    return (
-        <Modal modalKey="add server">
-            <ModalTitle closeModal={closeModal}>Create a Server</ModalTitle>
-            <ModalContent>
-                <UploadAvatar
-                  iconImg={iconImg}
-                  setIconImg={setIconImg}
-                  setIconFile={setIconFile}
-                />
-                <Input
-                  value={serverName}
-                  onChange={onChangeServerName}
-                  label={'Server Name'}
-                  width={'460px'}
-                />
-            </ModalContent>
-            <ModalActions>
-                <Button onClick={onClickAdd} primary>Create</Button>
-            </ModalActions>
-        </Modal>
-    )
-}
 
 function ImportServerModal({ onDismiss }) {
     const { navigate } = useNavigation()
@@ -244,10 +191,10 @@ function ImportServerModal({ onDismiss }) {
             <ModalTitle closeModal={onDismiss}>Import a Server</ModalTitle>
             <ModalContent>
                 <SInput
-                  value={serverName}
-                  onChange={onChangeServerName}
-                  label={'Server Name'}
-                  width={'460px'}
+                    value={serverName}
+                    onChange={onChangeServerName}
+                    label={'Server Name'}
+                    width={'460px'}
                 />
             </ModalContent>
             <ModalActions>

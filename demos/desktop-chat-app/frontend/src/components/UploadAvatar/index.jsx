@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react'
 import styled from 'styled-components'
-import PhotoCameraIcon from '@material-ui/icons/PhotoCamera'
-import AddCircleIcon from '@material-ui/icons/AddCircle'
+import { PhotoCamera as PhotoCameraIcon, AddCircle as AddCircleIcon } from '@material-ui/icons'
+import { makeStyles } from '@material-ui/core/styles'
 
 import theme from '../../theme'
 
@@ -12,11 +12,14 @@ const SUploadAvatarContainer = styled.div`
   justify-content: center;
 `
 
-const SCircleIcon = styled(AddCircleIcon)`
-  color: ${theme.color.indigo[500]};
-  position: absolute;
-  top: -19px;
-`
+const useCircleIconStyles = makeStyles({
+    root: {
+        color: theme.color.indigo[500],
+        position: 'absolute',
+        top: props => props.iconPlacement === 'bottom right' ? '52px' : '-19px',
+        left: props => props.iconPlacement === 'bottom right' ? '59px' : 'unset',
+    }
+})
 
 const SUploadAvatarCircle = styled.div`
   height: 72px;
@@ -62,6 +65,7 @@ function UploadAvatar({
   setIconFile,
 }) {
   const fileUploadRef = useRef(null)
+  const circleIconClasses = useCircleIconStyles({ iconPlacement: 'bottom right' })
 
   const handleFileUpload = () => {
     fileUploadRef.current.click()
@@ -74,7 +78,7 @@ function UploadAvatar({
     reader.addEventListener('load', () => {
       setIconImg(reader.result)
     }, false)
-    
+
     if (file) {
       reader.readAsDataURL(file)
       setIconFile(file)
@@ -83,8 +87,8 @@ function UploadAvatar({
 
   let content = (
     <SUploadAvatarCircle onClick={handleFileUpload}>
-      <SCircleIcon />
-      <PhotoCameraIcon color={theme.color.white} />
+      <AddCircleIcon classes={circleIconClasses} />
+      <PhotoCameraIcon style={{ color: theme.color.white }} />
       <span>UPLOAD</span>
     </SUploadAvatarCircle>
   )
@@ -92,7 +96,7 @@ function UploadAvatar({
   if (iconImg) {
     content = (
       <SUploadAvatarCircle onClick={handleFileUpload}>
-        <SCircleIcon />
+        <AddCircleIcon classes={circleIconClasses} />
         <SAvatarOverflow>
           <SAvatarImg src={iconImg} />
         </SAvatarOverflow>

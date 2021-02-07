@@ -24,29 +24,20 @@ import (
 	"github.com/brynbellomy/redwood/types"
 )
 
-type HTTPClient interface {
-	Authorize() error
-	Subscribe(ctx context.Context, stateURI string) (chan MaybeTx, error)
-	FetchTx(stateURI string, txID types.ID) (*Tx, error)
-	Get(stateURI string, version *types.ID, keypath tree.Keypath, rng *tree.Range, raw bool) (io.ReadCloser, int64, []types.ID, error)
-	Put(tx *Tx) error
-	StoreRef(file io.Reader) (StoreRefResponse, error)
-}
-
-type httpClient struct {
+type HTTPClient struct {
 	dialAddr  string
 	sigkeys   *SigningKeypair
 	cookieJar http.CookieJar
 	tls       bool
 }
 
-func NewHTTPClient(dialAddr string, sigkeys *SigningKeypair, tls bool) (HTTPClient, error) {
+func NewHTTPClient(dialAddr string, sigkeys *SigningKeypair, tls bool) (*HTTPClient, error) {
 	cookieJar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
 	}
 
-	return &httpClient{
+	return &HTTPClient{
 		dialAddr:  dialAddr,
 		sigkeys:   sigkeys,
 		cookieJar: cookieJar,
@@ -54,7 +45,7 @@ func NewHTTPClient(dialAddr string, sigkeys *SigningKeypair, tls bool) (HTTPClie
 	}, nil
 }
 
-func (c *httpClient) client() *http.Client {
+func (c *HTTPClient) client() *http.Client {
 	var tlsConfig *tls.Config
 	if c.tls {
 		tlsConfig = &tls.Config{
@@ -65,7 +56,7 @@ func (c *httpClient) client() *http.Client {
 	return &http.Client{Jar: c.cookieJar, Transport: tr}
 }
 
-func (c *httpClient) Authorize() error {
+func (c *HTTPClient) Authorize() error {
 	client := c.client()
 
 	req, err := http.NewRequest("AUTHORIZE", c.dialAddr, nil)
@@ -118,7 +109,7 @@ type MaybeTx struct {
 	Err error
 }
 
-func (c *httpClient) Subscribe(ctx context.Context, stateURI string) (chan MaybeTx, error) {
+func (c *HTTPClient) Subscribe(ctx context.Context, stateURI string) (chan MaybeTx, error) {
 	client := c.client()
 
 	req, err := http.NewRequest("GET", c.dialAddr, nil)
@@ -168,7 +159,7 @@ func (c *httpClient) Subscribe(ctx context.Context, stateURI string) (chan Maybe
 	return ch, nil
 }
 
-func (c *httpClient) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
+func (c *HTTPClient) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 	client := c.client()
 	req, err := http.NewRequest("GET", c.dialAddr+"/__tx/"+txID.Hex(), nil)
 	if err != nil {
@@ -195,7 +186,7 @@ func (c *httpClient) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 	return &tx, nil
 }
 
-func (c *httpClient) Get(stateURI string, version *types.ID, keypath tree.Keypath, rng *tree.Range, raw bool) (io.ReadCloser, int64, []types.ID, error) {
+func (c *HTTPClient) Get(stateURI string, version *types.ID, keypath tree.Keypath, rng *tree.Range, raw bool) (io.ReadCloser, int64, []types.ID, error) {
 	client := c.client()
 	url := c.dialAddr + "/" + string(keypath)
 	if raw {
@@ -250,7 +241,7 @@ func (c *httpClient) Get(stateURI string, version *types.ID, keypath tree.Keypat
 	return resp.Body, int64(contentLength), parents, nil
 }
 
-func (c *httpClient) Put(tx *Tx) error {
+func (c *HTTPClient) Put(tx *Tx) error {
 	if len(tx.Sig) == 0 {
 		sig, err := c.sigkeys.SignHash(tx.Hash())
 		if err != nil {
@@ -296,7 +287,7 @@ func (c *httpClient) Put(tx *Tx) error {
 	return nil
 }
 
-func (c *httpClient) StoreRef(file io.Reader) (StoreRefResponse, error) {
+func (c *HTTPClient) StoreRef(file io.Reader) (StoreRefResponse, error) {
 	client := c.client()
 
 	var buf bytes.Buffer
