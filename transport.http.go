@@ -969,9 +969,7 @@ func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, theURL string) 
 
 	u.Path = path.Join(u.Path, "providers")
 
-	client := http.Client{}
-
-	resp, err := client.Get(u.String())
+	resp, err := httpClient.Get(u.String())
 	if err != nil {
 		close(ch)
 		return nil, err
