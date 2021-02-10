@@ -201,10 +201,10 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 	}
 
 	if config.HTTPRPC.Enabled {
-		rwRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), config.HTTPRPC.ListenHost, host)
-		httpRPC := HTTPRPCServer{rwRPC}
+		rwRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), host)
+		httpRPC := HTTPRPCServer{rwRPC, signingKeypair}
 
-		err = rw.StartHTTPRPC(httpRPC)
+		err = rw.StartHTTPRPC(httpRPC, config.HTTPRPC)
 		if err != nil {
 			return err
 		}

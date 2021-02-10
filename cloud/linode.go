@@ -33,7 +33,7 @@ func NewLinodeClient(apiKey string) *LinodeClient {
 	}
 }
 
-func (c *LinodeClient) CreateStack(ctx context.Context, opts CreateStackOptions) error {
+func (c *LinodeClient) CreateStack(ctx context.Context, opts CreateStackOptions) (err error) {
 	instance, err := c.ensureInstance(ctx, opts)
 	if err != nil {
 		return err
@@ -45,14 +45,68 @@ func (c *LinodeClient) CreateStack(ctx context.Context, opts CreateStackOptions)
 	return nil
 }
 
+const stackScriptTemplate = `#!/bin/sh
+
+apt update
+apt -y install \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    software-properties-common
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+sudo add-apt-repository \
+   "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+   $(lsb_release -cs) \
+   stable"
+
+apt update
+apt -y install docker-ce
+systemctl enable docker
+service docker start
+
+mkdir -p /root/config
+cat <<EOF > /root/config/.redwoodrc
+Node:
+    SubscribedStateURIs:
+      - %v
+    DevMode: true
+P2PTransport:
+    Enabled: true
+    ListenAddr: 0.0.0.0
+    ListenPort: 21231
+HTTPTransport:
+    Enabled: true
+    ListenHost: :8080
+HTTPRPC:
+    Enabled: true
+    ListenHost: :8081
+    Whitelist:
+        Enabled: true
+        PermittedAddrs:
+          - %v
+EOF
+
+docker run -v /root/config:/config -p 8080:8080 -p 8081:8081 -p 21231:21231 brynbellomy/redwood-chat
+`
+
 func (c *LinodeClient) ensureInstance(ctx context.Context, opts CreateStackOptions) (instance *linodego.Instance, err error) {
 	defer func() { err = errors.WithStack(err) }()
 
 	instance, err = c.findInstance(ctx, opts.InstanceLabel)
 	if errors.Cause(err) == Err404 {
+		script, err := c.client.CreateStackscript(ctx, linodego.StackscriptCreateOptions{
+			Description: "redwood-chat--" + opts.DomainName,
+			Images:      []string{opts.InstanceImage},
+			Label:       opts.InstanceLabel,
+			Script:      fmt.Sprintf(stackScriptTemplate, opts.FirstStateURI, opts.AdminAddress),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "while creating stack script")
+		}
+
 		swapSize := 1024
 		booted := true
-		return c.client.CreateInstance(ctx, linodego.InstanceCreateOptions{
+		instance, err = c.client.CreateInstance(ctx, linodego.InstanceCreateOptions{
 			Region:         opts.InstanceRegion,
 			Type:           opts.InstanceType,
 			Label:          opts.InstanceLabel,
@@ -64,13 +118,14 @@ func (c *LinodeClient) ensureInstance(ctx context.Context, opts CreateStackOptio
 			Booted:         &booted,
 			// AuthorizedKeys  []string          `json:"authorized_keys,omitempty"`
 			// AuthorizedUsers []string          `json:"authorized_users,omitempty"`
-			StackScriptID: 754379,
-			// StackScriptData map[string]string `json:"stackscript_data,omitempty"`
+			StackScriptID: script.ID,
+			// StackScriptData: map[string]string{},
 			// BackupID        int               `json:"backup_id,omitempty"`
 			// PrivateIP       bool              `json:"private_ip,omitempty"`
 		})
+		return instance, errors.Wrap(err, "while creating instance")
 	} else if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "while trying to fetch instance")
 	}
 	fmt.Println("Instance:", prettyJSON(instance))
 	return
@@ -85,6 +140,8 @@ func (c *LinodeClient) ensureDomain(ctx context.Context, instance *linodego.Inst
 	if len(parts) > 2 {
 		rootDomainName = strings.Join(parts[len(parts)-2:], ".")
 		subdomain = strings.Join(parts[:len(parts)-2], ".")
+	} else {
+		rootDomainName = opts.DomainName
 	}
 
 	//
@@ -107,11 +164,11 @@ func (c *LinodeClient) ensureDomain(ctx context.Context, instance *linodego.Inst
 			Tags:        []string{"redwood", "redwood-" + rootDomainName},
 		})
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "while creating domain (%v)", rootDomainName)
 		}
 		domain = *d
 	} else if err != nil {
-		return err
+		return errors.Wrap(err, "while trying to find existing domain")
 	}
 	fmt.Println("Domain:", prettyJSON(domain))
 
@@ -157,7 +214,7 @@ func (c *LinodeClient) ensureDomain(ctx context.Context, instance *linodego.Inst
 				TTLSec: 0,
 			})
 			if err != nil {
-				return err
+				return errors.Wrap(err, "while creating domain record")
 			}
 		} else if err != nil {
 			return err

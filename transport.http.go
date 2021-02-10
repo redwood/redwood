@@ -25,7 +25,6 @@ import (
 
 	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
-
 	"golang.org/x/net/publicsuffix"
 
 	"redwood.dev/ctx"
@@ -958,33 +957,48 @@ func (t *httpTransport) NewPeerConn(ctx context.Context, dialAddr string) (Peer,
 	return t.makePeer(nil, nil, dialAddr), nil
 }
 
-func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, theURL string) (<-chan Peer, error) {
+func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, theURL string) (_ <-chan Peer, err error) {
+	defer withStack(&err)
+
 	ch := make(chan Peer)
 
-	u, err := url.Parse("http://" + theURL)
+	parts := strings.Split(theURL, "/")
+
+	u, err := url.Parse("http://" + parts[0] + ":8080?state_uri=" + theURL)
 	if err != nil {
 		close(ch)
-		return nil, err
+		return ch, err
 	}
 
 	u.Path = path.Join(u.Path, "providers")
+	t.Warnf("GET %v", u.String())
 
 	resp, err := httpClient.Get(u.String())
 	if err != nil {
 		close(ch)
 		return nil, err
-	} else if resp.StatusCode != 200 {
-		close(ch)
-		return nil, errors.Errorf("error GETting providers: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			close(ch)
+			return ch, err
+		}
+		err = errors.Errorf("error GETting providers: (%v) %v: %v", resp.StatusCode, resp.Status, string(body))
+		t.Error(err)
+		close(ch)
+		return ch, err
+	}
 
 	var providers []string
 	err = json.NewDecoder(resp.Body).Decode(&providers)
 	if err != nil {
 		close(ch)
-		return nil, err
+		return ch, err
 	}
+	providers = append(providers, theURL)
 
 	go func() {
 		defer close(ch)

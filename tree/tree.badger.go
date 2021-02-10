@@ -994,7 +994,7 @@ func (tx *DBNode) CopyToMemory(relKeypath Keypath, rng *Range) (n Node, err erro
 	rootKeypath := tx.addKeyPrefix(tx.rootKeypath.Push(relKeypath))
 
 	item, err := tx.tx.Get(rootKeypath)
-	if err != nil && errors.Cause(err) == badger.ErrKeyNotFound {
+	if errors.Cause(err) == badger.ErrKeyNotFound {
 		return nil, types.Err404
 	} else if err != nil {
 		return nil, err

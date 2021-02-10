@@ -204,10 +204,10 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 	}
 
 	if config.HTTPRPC.Enabled {
-		rwRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), config.HTTPRPC.ListenHost, host)
-		httpRPC := HTTPRPCServer{rwRPC}
+		rwRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), host)
+		httpRPC := &HTTPRPCServer{rwRPC, signingKeypair}
 
-		err = rw.StartHTTPRPC(httpRPC)
+		err = rw.StartHTTPRPC(httpRPC, config.HTTPRPC)
 		if err != nil {
 			return err
 		}
@@ -446,6 +446,15 @@ var replCommands = map[string]struct {
 			state = state.NodeAt(keypath, rng)
 			state.DebugPrint(app.Debugf, false, 0)
 			fmt.Println(rw.PrettyJSON(state))
+			return nil
+		},
+	},
+	"peers": {
+		"list all known peers",
+		func(ctx context.Context, args []string, host rw.Host) error {
+			for _, peer := range host.Peers() {
+				fmt.Println("- ", peer.Address(), peer.DialInfo(), peer.LastContact())
+			}
 			return nil
 		},
 	},

@@ -26,6 +26,8 @@ export const grey = {
 }
 
 const theme = {
+    chatSidebarWidth: '250px',
+
     borderRadius: 12,
     breakpoints: {
         mobile: 400,

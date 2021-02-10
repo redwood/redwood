@@ -162,6 +162,8 @@ func (s *multiReaderSubscription) Start() {
 			continue
 		}
 
+		log.Warnf("subscribe: %v", peer.DialInfo())
+
 		err = peer.EnsureConnected(context.TODO())
 		if err != nil {
 			log.Errorf("error connecting to peer: %v", err)

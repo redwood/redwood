@@ -21,6 +21,7 @@ type ControllerHub interface {
 	FetchTxs(stateURI string, fromTxID types.ID) TxIterator
 	HaveTx(stateURI string, txID types.ID) (bool, error)
 
+	EnsureController(stateURI string) (Controller, error)
 	KnownStateURIs() ([]string, error)
 	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
 	QueryIndex(stateURI string, version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (tree.Node, error)
@@ -74,7 +75,7 @@ func (m *controllerHub) Start() error {
 			}
 
 			for _, stateURI := range stateURIs {
-				_, err := m.ensureController(stateURI)
+				_, err := m.EnsureController(stateURI)
 				if err != nil {
 					return err
 				}
@@ -89,7 +90,7 @@ func (m *controllerHub) Start() error {
 	)
 }
 
-func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
+func (m *controllerHub) EnsureController(stateURI string) (Controller, error) {
 	m.controllersMu.Lock()
 	defer m.controllersMu.Unlock()
 
@@ -132,7 +133,7 @@ func (m *controllerHub) AddTx(tx *Tx, force bool) error {
 		}
 	}
 
-	ctrl, err := m.ensureController(tx.StateURI)
+	ctrl, err := m.EnsureController(tx.StateURI)
 	if err != nil {
 		return err
 	}

@@ -51,8 +51,9 @@ type HTTPTransportConfig struct {
 }
 
 type HTTPRPCConfig struct {
-	Enabled    bool   `yaml:"Enabled"`
-	ListenHost string `yaml:"ListenHost"`
+	Enabled    bool            `yaml:"Enabled"`
+	ListenHost string          `yaml:"ListenHost"`
+	Whitelist  WhitelistConfig `yaml:"Whitelist"`
 }
 
 func DefaultConfig(appName string) Config {

@@ -16,6 +16,7 @@ require (
 	github.com/ethereum/go-ethereum v1.9.6
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/gizak/termui/v3 v3.1.0
+	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.4.0
 	github.com/gorilla/rpc v1.2.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
@@ -32,12 +33,14 @@ require (
 	github.com/libp2p/go-libp2p-peer v0.2.0
 	github.com/libp2p/go-libp2p-peerstore v0.2.6
 	github.com/libp2p/go-libp2p-protocol v0.1.0
+	github.com/libp2p/go-libp2p-record v0.1.3
 	github.com/markbates/pkger v0.17.0
 	github.com/mattn/go-isatty v0.0.7 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/multiformats/go-multiaddr v0.3.1
 	github.com/multiformats/go-multihash v0.0.14
 	github.com/pkg/errors v0.9.1
+	github.com/powerman/rpc-codec v1.2.2
 	github.com/rs/cors v1.7.0
 	github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570 // indirect
 	github.com/steakknife/hamming v0.0.0-20180906055917-c99c65617cd3 // indirect
@@ -51,7 +54,7 @@ require (
 	golang.org/x/text v0.3.2 // indirect
 	google.golang.org/grpc v1.31.1
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
-	rogchap.com/v8go v0.4.0
+	rogchap.com/v8go v0.5.0
 )
 
 go 1.13

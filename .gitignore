@@ -1,4 +1,5 @@
 .DS_Store
 _sandbox/
+_attic/
 node_modules/
 demos/pair-programming-session/recordings

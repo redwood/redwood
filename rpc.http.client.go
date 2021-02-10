@@ -91,24 +91,24 @@ func (c *HTTPRPCClient) Authorize(signingKeypair *SigningKeypair) error {
 	return nil
 }
 
-func (c *HTTPRPCClient) Subscribe(args SubscribeArgs) error {
+func (c *HTTPRPCClient) Subscribe(args RPCSubscribeArgs) error {
 	return c.client.Call("RPC.Subscribe", args, nil)
 }
 
 func (c *HTTPRPCClient) NodeAddress() (types.Address, error) {
-	var resp NodeAddressResponse
+	var resp RPCNodeAddressResponse
 	return resp.Address, c.client.Call("RPC.NodeAddress", nil, &resp)
 }
 
-func (c *HTTPRPCClient) AddPeer(args AddPeerArgs) error {
+func (c *HTTPRPCClient) AddPeer(args RPCAddPeerArgs) error {
 	return c.client.Call("RPC.AddPeer", args, nil)
 }
 
 func (c *HTTPRPCClient) KnownStateURIs() ([]string, error) {
-	var resp KnownStateURIsResponse
+	var resp RPCKnownStateURIsResponse
 	return resp.StateURIs, c.client.Call("RPC.KnownStateURIs", nil, &resp)
 }
 
-func (c *HTTPRPCClient) SendTx(args SendTxArgs) error {
+func (c *HTTPRPCClient) SendTx(args RPCSendTxArgs) error {
 	return c.client.Call("RPC.SendTx", args, nil)
 }

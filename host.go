@@ -18,6 +18,7 @@ type Host interface {
 	Ctx() *ctx.Context
 	Start() error
 
+	Peers() []PeerDetails
 	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
 	Subscribe(ctx context.Context, stateURI string, subscriptionType SubscriptionType, keypath tree.Keypath) (ReadableSubscription, error)
 	Unsubscribe(stateURI string) error
@@ -152,6 +153,10 @@ func (h *host) Start() error {
 	)
 }
 
+func (h *host) Peers() []PeerDetails {
+	return h.peerStore.Peers()
+}
+
 func (h *host) Transport(name string) Transport {
 	return h.transports[name]
 }
@@ -176,6 +181,7 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 	for _, tpt := range h.transports {
 		innerCh, err := tpt.ProvidersOfStateURI(ctx, stateURI)
 		if err != nil {
+			h.Warnf("error fetching providers of State-URI %v on transport %v: %v", stateURI, tpt.Name(), err)
 			continue
 		}
 
@@ -384,8 +390,10 @@ func (h *host) handleNewUnverifiedPeer(dialInfo PeerDialInfo) {
 
 func (h *host) verifyPeers() {
 	unverifiedPeers := h.peerStore.UnverifiedPeers()
+
 	var wg sync.WaitGroup
 	wg.Add(len(unverifiedPeers))
+
 	for _, unverifiedPeer := range unverifiedPeers {
 		unverifiedPeer := unverifiedPeer
 		go func() {
@@ -539,6 +547,11 @@ func (h *host) subscribe(ctx context.Context, stateURI string) error {
 		h.config.Node.SubscribedStateURIs.Add(stateURI)
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	_, err = h.Controllers().EnsureController(stateURI)
 	if err != nil {
 		return err
 	}
@@ -705,6 +718,8 @@ func (h *host) handleNewState(tx *Tx, state tree.Node, leaves []types.ID) {
 		wg.Add(2)
 		go h.broadcastToWritableSubscribers(ctx, tx, state, leaves, &alreadySentPeers, &wg)
 		go h.broadcastToStateURIProviders(ctx, tx, leaves, &alreadySentPeers, &wg)
+
+		wg.Wait()
 	}()
 }
 
@@ -725,7 +740,14 @@ func (h *host) broadcastToStateURIProviders(ctx context.Context, tx *Tx, leaves 
 				if !open {
 					return
 				}
-				ch <- peer
+				select {
+				case ch <- peer:
+				case <-ctx.Done():
+					return
+				case <-h.Ctx().Done():
+					return
+				}
+
 			case <-ctx.Done():
 				return
 			case <-h.Ctx().Done():

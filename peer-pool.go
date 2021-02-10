@@ -27,11 +27,7 @@ const (
 	peerState_InUse
 )
 
-func newPeerPool(
-	concurrentConns uint64,
-	// host Host,
-	fnGetPeers func(ctx context.Context) (<-chan Peer, error),
-) *peerPool {
+func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<-chan Peer, error)) *peerPool {
 	chProviders := make(chan Peer)
 	close(chProviders)
 

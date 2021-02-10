@@ -12,6 +12,7 @@ type PeerStore interface {
 	AddDialInfos(dialInfos []PeerDialInfo)
 	AddVerifiedCredentials(dialInfo PeerDialInfo, address types.Address, sigpubkey SigningPublicKey, encpubkey EncryptingPublicKey)
 	UnverifiedPeers() []PeerDetails
+	Peers() []PeerDetails
 	AllDialInfos() []PeerDialInfo
 	PeerWithDialInfo(dialInfo PeerDialInfo) PeerDetails
 	PeersWithAddress(address types.Address) []PeerDetails
@@ -45,6 +46,17 @@ func NewPeerStore() *peerStore {
 	}
 
 	return s
+}
+
+func (s *peerStore) Peers() []PeerDetails {
+	s.muPeers.Lock()
+	defer s.muPeers.Unlock()
+
+	var pds []PeerDetails
+	for _, pd := range s.peers {
+		pds = append(pds, pd)
+	}
+	return pds
 }
 
 func (s *peerStore) OnNewUnverifiedPeer(fn func(dialInfo PeerDialInfo)) {
@@ -192,7 +204,7 @@ func (s *peerStore) IsKnownPeer(dialInfo PeerDialInfo) bool {
 type PeerDetails interface {
 	Address() types.Address
 	DialInfo() PeerDialInfo
-	PublicKeypairs() (SigningPublicKey, EncryptingPublicKey)
+	PublicKeys() (SigningPublicKey, EncryptingPublicKey)
 
 	UpdateConnStats(success bool)
 	LastContact() time.Time
@@ -217,7 +229,7 @@ func (p *peerDetails) Address() types.Address {
 	return p.address
 }
 
-func (p *peerDetails) PublicKeypairs() (SigningPublicKey, EncryptingPublicKey) {
+func (p *peerDetails) PublicKeys() (SigningPublicKey, EncryptingPublicKey) {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
 	return p.sigpubkey, p.encpubkey

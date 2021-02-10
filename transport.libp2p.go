@@ -164,13 +164,11 @@ type notifyingDatastore struct {
 func (ds *notifyingDatastore) Put(k dstore.Key, v []byte) error {
 	err := ds.Batching.Put(k, v)
 	if err != nil {
-		fmt.Println("ERRRRRRRRRRRR", err)
 		return err
 	}
 
 	key, value, err := decodeDatastoreKeyValue(ds.Batching, k, v)
 	if err != nil {
-		fmt.Println("ERRRRRRRRRRRR", err)
 		return err
 	}
 

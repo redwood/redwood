@@ -24,6 +24,9 @@ func NewClient(provider, apiKey string) (Client, error) {
 }
 
 type CreateStackOptions struct {
+	FirstStateURI string `json:"firstStateURI"`
+	AdminAddress  string `json:"adminAddress"`
+
 	DomainName       string `json:"domainName"`
 	DomainEmail      string `json:"domainEmail"`
 	InstanceLabel    string `json:"instanceLabel"`
