@@ -6,7 +6,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
-	ctxpkg "github.com/brynbellomy/redwood/ctx"
+	ctxpkg "redwood.dev/ctx"
 )
 
 func UnaryServerLogger(log ctxpkg.Logger) grpc.ServerOption {

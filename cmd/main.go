@@ -17,9 +17,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 
-	rw "github.com/brynbellomy/redwood"
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/tree"
+	rw "redwood.dev"
+	"redwood.dev/ctx"
+	"redwood.dev/tree"
 )
 
 var app = struct {

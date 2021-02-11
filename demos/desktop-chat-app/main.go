@@ -21,9 +21,9 @@ import (
 	"github.com/urfave/cli"
 	"github.com/webview/webview"
 
-	rw "github.com/brynbellomy/redwood"
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/tree"
+	rw "redwood.dev"
+	"redwood.dev/ctx"
+	"redwood.dev/tree"
 )
 
 var app = struct {
@@ -168,8 +168,8 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 	}
 
 	if config.HTTPTransport.Enabled {
-		tlsCertFilename := filepath.Join(config.Node.DataRoot, "server.crt")
-		tlsKeyFilename := filepath.Join(config.Node.DataRoot, "server.key")
+		tlsCertFilename := filepath.Join(config.Node.DataRoot, "..", "server.crt")
+		tlsKeyFilename := filepath.Join(config.Node.DataRoot, "..", "server.key")
 
 		var cookieSecret [32]byte
 		copy(cookieSecret[:], []byte(config.HTTPTransport.CookieSecret))

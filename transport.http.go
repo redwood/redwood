@@ -28,10 +28,10 @@ import (
 
 	"golang.org/x/net/publicsuffix"
 
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/nelson"
-	"github.com/brynbellomy/redwood/tree"
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/ctx"
+	"redwood.dev/nelson"
+	"redwood.dev/tree"
+	"redwood.dev/types"
 )
 
 type httpTransport struct {
@@ -118,7 +118,7 @@ func (t *httpTransport) Start() error {
 				if !t.devMode {
 					srv := &http.Server{
 						Addr:      t.listenAddr,
-						Handler:   t,
+						Handler:   UnrestrictedCors(t),
 						TLSConfig: &tls.Config{},
 					}
 					err := srv.ListenAndServeTLS(t.tlsCertFilename, t.tlsKeyFilename)

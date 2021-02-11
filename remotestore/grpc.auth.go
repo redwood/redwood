@@ -9,7 +9,7 @@ package remotestore
 // 	"google.golang.org/grpc/codes"
 // 	"google.golang.org/grpc/credentials"
 
-// 	rw "github.com/brynbellomy/redwood"
+// 	rw "redwood.dev"
 // )
 
 // // grpcHandshaker is the credentials required for authenticating a connection using ALTS.

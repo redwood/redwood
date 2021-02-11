@@ -6,7 +6,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/types"
 )
 
 type peerPool struct {

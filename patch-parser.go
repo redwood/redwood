@@ -7,7 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/brynbellomy/redwood/tree"
+	"redwood.dev/tree"
 )
 
 var ErrBadPatch = errors.New("bad patch string")

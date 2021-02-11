@@ -11,7 +11,7 @@ import (
 	// "github.com/gorilla/websocket"
 	"github.com/markbates/pkger"
 
-	rw "github.com/brynbellomy/redwood"
+	rw "redwood.dev"
 )
 
 func startAPI(host rw.Host, port uint) {

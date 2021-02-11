@@ -7,9 +7,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/brynbellomy/redwood/nelson"
-	"github.com/brynbellomy/redwood/tree"
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/nelson"
+	"redwood.dev/tree"
+	"redwood.dev/types"
 )
 
 type permissionsValidator struct {

@@ -14,8 +14,8 @@ import (
 	badgerpb "github.com/dgraph-io/badger/v2/pb"
 	"github.com/pkg/errors"
 
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/ctx"
+	"redwood.dev/types"
 )
 
 type DBTree struct {

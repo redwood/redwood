@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	rw "github.com/brynbellomy/redwood"
+	rw "redwood.dev"
 )
 
 func MakeHost(signingKeypairHex string, port uint, defaultStateURI, cookieSecretStr, tlsCertFilename, tlsKeyFilename string) rw.Host {

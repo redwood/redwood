@@ -1,8 +1,8 @@
 package redwood
 
 import (
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/ctx"
+	"redwood.dev/types"
 )
 
 type TxStore interface {

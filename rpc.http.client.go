@@ -7,7 +7,7 @@ import (
 
 	"github.com/powerman/rpc-codec/jsonrpc2"
 
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/types"
 )
 
 type HTTPRPCClient struct {
@@ -91,24 +91,24 @@ func (c *HTTPRPCClient) Authorize(signingKeypair *SigningKeypair) error {
 	return nil
 }
 
-func (c *HTTPRPCClient) Subscribe(args RPCSubscribeArgs) error {
+func (c *HTTPRPCClient) Subscribe(args SubscribeArgs) error {
 	return c.client.Call("RPC.Subscribe", args, nil)
 }
 
 func (c *HTTPRPCClient) NodeAddress() (types.Address, error) {
-	var resp RPCNodeAddressResponse
+	var resp NodeAddressResponse
 	return resp.Address, c.client.Call("RPC.NodeAddress", nil, &resp)
 }
 
-func (c *HTTPRPCClient) AddPeer(args RPCAddPeerArgs) error {
+func (c *HTTPRPCClient) AddPeer(args AddPeerArgs) error {
 	return c.client.Call("RPC.AddPeer", args, nil)
 }
 
 func (c *HTTPRPCClient) KnownStateURIs() ([]string, error) {
-	var resp RPCKnownStateURIsResponse
+	var resp KnownStateURIsResponse
 	return resp.StateURIs, c.client.Call("RPC.KnownStateURIs", nil, &resp)
 }
 
-func (c *HTTPRPCClient) SendTx(args RPCSendTxArgs) error {
+func (c *HTTPRPCClient) SendTx(args SendTxArgs) error {
 	return c.client.Call("RPC.SendTx", args, nil)
 }

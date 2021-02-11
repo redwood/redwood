@@ -1,9 +1,9 @@
 package main
 
 import (
-	rw "github.com/brynbellomy/redwood"
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/remotestore"
+	rw "redwood.dev"
+	"redwood.dev/ctx"
+	"redwood.dev/remotestore"
 )
 
 type app struct {

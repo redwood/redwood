@@ -1,4 +1,4 @@
-module github.com/brynbellomy/redwood
+module redwood.dev
 
 require (
 	github.com/allegro/bigcache v1.2.1 // indirect
