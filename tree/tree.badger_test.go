@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/types"
 )
 
 func TestDBTree_Value_MapWithRange(T *testing.T) {

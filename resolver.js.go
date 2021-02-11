@@ -6,12 +6,13 @@ import (
 
 	"github.com/pkg/errors"
 	"rogchap.com/v8go"
+
 	//"github.com/saibing/go-v8"
 
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/nelson"
-	"github.com/brynbellomy/redwood/tree"
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/ctx"
+	"redwood.dev/nelson"
+	"redwood.dev/tree"
+	"redwood.dev/types"
 )
 
 type jsResolver struct {

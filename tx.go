@@ -10,9 +10,9 @@ import (
 	proto "github.com/golang/protobuf/proto"
 	any "github.com/golang/protobuf/ptypes/any"
 
-	"github.com/brynbellomy/redwood/pb"
-	"github.com/brynbellomy/redwood/tree"
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/pb"
+	"redwood.dev/tree"
+	"redwood.dev/types"
 )
 
 var (

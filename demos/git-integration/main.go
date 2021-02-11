@@ -8,10 +8,10 @@ import (
 
 	"github.com/brynbellomy/klog"
 
-	rw "github.com/brynbellomy/redwood"
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/demos/demoutils"
-	"github.com/brynbellomy/redwood/types"
+	rw "redwood.dev"
+	"redwood.dev/ctx"
+	"redwood.dev/demos/demoutils"
+	"redwood.dev/types"
 )
 
 type app struct {

@@ -9,9 +9,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/tree"
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/ctx"
+	"redwood.dev/tree"
+	"redwood.dev/types"
 )
 
 var log = ctx.NewLogger("nelson")

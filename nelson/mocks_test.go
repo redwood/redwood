@@ -3,8 +3,8 @@ package nelson
 import (
 	"io"
 
-	"github.com/brynbellomy/redwood/tree"
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/tree"
+	"redwood.dev/types"
 )
 
 type refResolverMock struct {

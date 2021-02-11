@@ -3,7 +3,7 @@ package redwood
 import (
 	"github.com/pkg/errors"
 
-	"github.com/brynbellomy/redwood/tree"
+	"redwood.dev/tree"
 )
 
 type keypathIndexer struct {

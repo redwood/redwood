@@ -4,8 +4,8 @@ import (
 	"github.com/dgraph-io/badger/v2"
 	"github.com/pkg/errors"
 
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/ctx"
+	"redwood.dev/types"
 )
 
 type badgerTxStore struct {

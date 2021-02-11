@@ -32,9 +32,9 @@ import (
 	multihash "github.com/multiformats/go-multihash"
 	"github.com/pkg/errors"
 
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/tree"
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/ctx"
+	"redwood.dev/tree"
+	"redwood.dev/types"
 )
 
 type libp2pTransport struct {

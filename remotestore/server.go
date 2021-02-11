@@ -11,9 +11,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
-	rw "github.com/brynbellomy/redwood"
-	"github.com/brynbellomy/redwood/ctx"
-	"github.com/brynbellomy/redwood/types"
+	rw "redwood.dev"
+	"redwood.dev/ctx"
+	"redwood.dev/types"
 )
 
 type server struct {

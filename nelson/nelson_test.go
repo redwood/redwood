@@ -11,7 +11,7 @@ import (
 	"github.com/brynbellomy/klog"
 	"github.com/stretchr/testify/require"
 
-	"github.com/brynbellomy/redwood/tree"
+	"redwood.dev/tree"
 )
 
 type M = map[string]interface{}

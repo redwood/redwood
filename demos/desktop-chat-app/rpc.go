@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/brynbellomy/redwood"
-	"github.com/brynbellomy/redwood/cloud"
+	"redwood.dev"
+	"redwood.dev/cloud"
 )
 
 type HTTPRPCServer struct {

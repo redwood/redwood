@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tyler-smith/go-bip39"
 
-	"github.com/brynbellomy/redwood/types"
+	"redwood.dev/types"
 )
 
 type (

@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/brynbellomy/redwood/tree"
+	"redwood.dev/tree"
 )
 
 func TestParsePatch(t *testing.T) {

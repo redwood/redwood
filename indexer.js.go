@@ -8,8 +8,8 @@ import (
 	"github.com/pkg/errors"
 	"rogchap.com/v8go"
 
-	"github.com/brynbellomy/redwood/nelson"
-	"github.com/brynbellomy/redwood/tree"
+	"redwood.dev/nelson"
+	"redwood.dev/tree"
 )
 
 type jsIndexer struct {
