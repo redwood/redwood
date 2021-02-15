@@ -4,6 +4,8 @@ Node:
         evil
     BootstrapPeers: []
     SubscribedStateURIs:
+      - test/working
+      - test/another chat
       - chat.local/servers
       - test/registry
       - test/chat
