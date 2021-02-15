@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { Avatar } from '@material-ui/core'
 import { AddCircleOutline as AddIcon } from '@material-ui/icons'
+import moment from 'moment'
 
 import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
@@ -14,7 +15,7 @@ import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
 
 import addChat from './assets/add_chat.svg'
-import avatarPlaceholder from './assets/user_placeholder.png'
+import avatarPlaceholder from './assets/speech-bubble.svg'
 
 const ChatBarWrapper = styled.div`
     display: flex;
@@ -108,6 +109,28 @@ function ChatBar({ className }) {
 function ChatBarItem({ stateURI, selectedServer, selectedStateURI, navigate, mostRecentMessageText }) {
     const chatState = useStateTree(stateURI)
     let [ _, roomName ] = stateURI.split('/')
+    const [latestMessageTime, setLatestMessageTime] = useState(null)
+
+    let latestTimestamp
+    if (chatState && chatState.messages) {
+      if (chatState.messages[chatState.messages.length - 1]) {
+        latestTimestamp = chatState.messages[chatState.messages.length - 1].timestamp
+      }
+    }
+
+    useEffect(() => {
+      const intervalId = setInterval(() => {
+        if (latestTimestamp) {
+          let timeAgo = moment.unix(latestTimestamp).fromNow()
+          if (timeAgo === 'a few seconds ago') { timeAgo = 'moments ago' }
+          setLatestMessageTime(timeAgo)
+        }
+      }, 1000)
+      return () => {
+        clearInterval(intervalId)
+      }
+    }, [chatState])
+
     return (
         <SGroupItem
             key={stateURI}
@@ -115,7 +138,7 @@ function ChatBarItem({ stateURI, selectedServer, selectedStateURI, navigate, mos
             onClick={() => navigate(selectedServer, roomName)}
             name={roomName}
             text={mostRecentMessageText}
-            time={'8 min ago'}
+            time={latestMessageTime}
             avatar={avatarPlaceholder}
         />
     )
