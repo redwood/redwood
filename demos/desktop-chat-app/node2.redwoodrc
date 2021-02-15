@@ -7,11 +7,14 @@ Node:
       - test/another chat
       - chat.local/servers
       - null/registry
-      - test/registry
       - Server/registry
-      - Server/test
       - test/general
       - Server/yooo
+      - Server/test
+      - test/working
+      - test/test
+      - test/registry
+      - test/yooo
     MaxPeersPerSubscription: 4
     DataRoot: ./node2_data
     DevMode: true
