@@ -4,8 +4,8 @@ import styled from 'styled-components'
 const SItemContainer = styled.div`
     display: flex;
     align-items: center;
-    padding-top: 16px;
-    padding-bottom: 16px;
+    padding-top: 8px;
+    padding-bottom: 8px;
     background: ${props => props.selected ? props.theme.color.grey[200] : 'transparent'};
     color: ${props => props.selected ? props.theme.color.white : props.theme.color.grey[600]};
 `
@@ -13,7 +13,7 @@ const SItemContainer = styled.div`
 const SAvatarCircle = styled.div`
     height: 28px;
     width: 28px;
-    background: ${props => props.color ? props.color : '#365cd2'};
+    background: ${props => props.color ? props.color : props.theme.color.indigo[500]};
     display: flex;
     align-items: center;
     justify-content: center;
@@ -21,7 +21,7 @@ const SAvatarCircle = styled.div`
     margin-left: 12px;
 
     img {
-        height: 28px;
+        height: 18px;
     }
 `
 
@@ -41,7 +41,7 @@ const SItemInfoSub = styled.div`
 const STime = styled.div`
     padding-right: 12px;
     white-space: nowrap;
-    font-size: 0.8rem;
+    font-size: 0.6rem;
     color: ${props => props.theme.color.grey[100]}
 `
 

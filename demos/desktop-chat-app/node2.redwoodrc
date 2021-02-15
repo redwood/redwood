@@ -4,10 +4,15 @@ Node:
         evil
     BootstrapPeers: []
     SubscribedStateURIs:
+      - test/working
+      - test/another chat
       - chat.local/servers
       - null/registry
       - test/registry
+      - Server/registry
+      - Server/test
       - test/general
+      - Server/yooo
     MaxPeersPerSubscription: 4
     DataRoot: ./node2_data
     DevMode: true

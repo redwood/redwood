@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import styled, { useTheme } from 'styled-components'
-import { IconButton, Avatar } from '@material-ui/core'
+import { IconButton, Tooltip } from '@material-ui/core'
 import { SendRounded as SendIcon, AddCircleRounded as AddIcon } from '@material-ui/icons'
 import * as tinycolor from 'tinycolor2'
 import filesize from 'filesize.js'
 import moment from 'moment'
+import CloseIcon from '@material-ui/icons/Close'
 
 import Button from './Button'
 import Input from './Input'
@@ -73,13 +74,15 @@ const AddAttachmentButton = styled(AddIcon)`
 `
 
 const UserAvatarPlaceholder = styled.div`
-    width: 40px;
+    padding-left: 40px;
+    // width: 40px;
 `
 
 const MessageDetails = styled.div`
     display: flex;
     flex-direction: column;
     padding-left: 14px;
+    padding-bottom: 6px;
 `
 
 const SAttachment = styled(Attachment)`
@@ -92,8 +95,38 @@ const ImgPreviewContainer = styled.div`
 
 const ImgPreview = styled.img`
     height: 100px;
-    border: 1px solid white;
+    border: 1px dashed rgba(255, 255, 255, .5);
+    padding: 4px;
     margin: 3px;
+`
+
+const SImgPreviewWrapper = styled.div`
+    position: relative;
+    display: inline-block;
+    margin-right: 12px;
+    button {
+      cursor: pointer;
+      border: none;
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      border-radius: 100%;
+      height: 24px;
+      width: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: ${props => props.theme.color.indigo[500]};
+      transition: all ease-in-out .15s;
+      outline: none;
+      &:hover {
+        transform: scale(1.1);
+      }
+      svg {
+        color: white;
+        height: 18px;
+      }
+    }
 `
 
 function Chat({ className }) {
@@ -105,6 +138,7 @@ function Chat({ className }) {
     const [messageText, setMessageText] = useState('')
     const theme = useTheme()
     const attachmentsInput = useRef()
+    const messageTextContainer = useRef()
     const [attachments, setAttachments] = useState([])
     const [previews, setPreviews] = useState([])
 
@@ -125,6 +159,13 @@ function Chat({ className }) {
         setPreviews([])
     }, [messageText, nodeAddress, selectedServer, selectedRoom, messages, api])
 
+    useEffect(() => {
+      // Scrolls on new messages
+      if (messageTextContainer.current) {
+        messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
+      }
+    }, [roomState])
+
     function onChangeMessageText(e) {
         setMessageText(e.target.value)
     }
@@ -138,6 +179,12 @@ function Chat({ className }) {
 
     function onClickAddAttachment() {
         attachmentsInput.current.click()
+    }
+
+    function removePreview(itemIdx) {
+      let clonedPreviews = [...previews]
+      clonedPreviews.splice(itemIdx, 1)
+      setPreviews(clonedPreviews)
     }
 
     function onChangeAttachments() {
@@ -183,7 +230,7 @@ function Chat({ className }) {
 
     return (
         <Container className={className}>
-            <MessageContainer>
+            <MessageContainer ref={messageTextContainer}>
                 {messages.map((msg, i) => (
                     <Message
                         msg={msg}
@@ -199,7 +246,14 @@ function Chat({ className }) {
             <AttachmentPreviewModal attachment={previewedAttachment.attachment} url={previewedAttachment.url} />
 
             <ImgPreviewContainer show={previews.length > 0}>
-                {previews.map(dataURL => !!dataURL ? <ImgPreview src={dataURL} key={dataURL} /> : null)}
+                {previews.map((dataURL, idx) => !!dataURL ? (
+                  <SImgPreviewWrapper key={idx}>
+                    <button onClick={() => removePreview(idx)}>
+                      <CloseIcon />
+                    </button>
+                    <ImgPreview src={dataURL} key={dataURL} />
+                  </SImgPreviewWrapper>
+                ) : null)}
                 <HiddenInput type="file" multiple ref={attachmentsInput} onChange={onChangeAttachments} />
             </ImgPreviewContainer>
             <ControlsContainer>
@@ -214,6 +268,11 @@ function Chat({ className }) {
 const MessageWrapper = styled.div`
     display: flex;
     padding: ${props => props.firstByUser ? '20px 0 0' : '0'};
+    cursor: pointer;
+    transition: .1s all ease-in-out;
+    &:hover {
+      background: rgba(0,0,0, .12);
+    }
 `
 
 const MessageSender = styled.div`
@@ -223,39 +282,72 @@ const MessageSender = styled.div`
 const MessageText = styled.div`
 `
 
+const SMessageTimestamp = styled.span`
+  font-size: 10px;
+  font-weight: 300;
+  color: rgba(255,255,255, .4);
+  margin-left: 4px;
+`
+
+function MessageTimeStamp({ dayDisplay, displayTime }) {
+
+  return (
+    <SMessageTimestamp>{dayDisplay} {displayTime}</SMessageTimestamp>
+  )
+}
+
+function getTimestampDisplay(timestamp) {
+  const momentDate = moment.unix(timestamp)
+  let dayDisplay = momentDate.format('MM/YY')
+  let displayTime = momentDate.format('h:mm A')
+
+  if (momentDate.format('MM/YY') === moment().format('MM/YY')){
+    dayDisplay = 'Today'
+  } else if (momentDate.subtract(1, 'day') === moment().subtract(1, 'day')) {
+    dayDisplay = 'Yesterday'
+  }
+
+  return {
+    dayDisplay,
+    displayTime,
+  }
+
+}
+
 function Message({ msg, user, selectedServer, selectedStateURI, onClickAttachment, messageIndex }) {
-    // console.log('user', user)
-    console.log('msg', msg)
     user = user || {}
     let userAddress = msg.sender.toLowerCase()
     let displayName = user.username || msg.sender
-    let displayTimestamp = moment.unix(msg.timestamp).format('MM/YY h:mm A')
+    const { dayDisplay, displayTime } = getTimestampDisplay(msg.timestamp)
 
     return (
+      <Tooltip title={`${dayDisplay} ${displayTime}`} placement="left" arrow>
         <MessageWrapper firstByUser={msg.firstByUser} key={userAddress + msg.timestamp}>
-            {msg.firstByUser ? <UserAvatar
-                                    address={userAddress}
-                                    username={user.username}
-                                    photoURL={!!user.photo ? `http://localhost:8080/users/${userAddress.toLowerCase()}/photo?state_uri=${selectedServer}/registry` : null}
-                                />
-                             : <UserAvatarPlaceholder />
+
+          {msg.firstByUser ? <UserAvatar
+            address={userAddress}
+            username={user.username}
+            photoURL={!!user.photo ? `http://localhost:8080/users/${userAddress.toLowerCase()}/photo?state_uri=${selectedServer}/registry` : null}
+          />
+            : <UserAvatarPlaceholder />
+          }
+          <MessageDetails>
+            {msg.firstByUser &&
+              <MessageSender>{displayName} <MessageTimeStamp dayDisplay={dayDisplay} displayTime={displayTime} /></MessageSender>
             }
-            <MessageDetails>
-                {msg.firstByUser &&
-                    <MessageSender>{displayName} - {displayTimestamp}</MessageSender>
-                }
-                
-                <MessageText>{msg.text}</MessageText>
-                {(msg.attachments || []).map((attachment, j) => (
-                    <SAttachment
-                        key={`${selectedStateURI}${messageIndex},${j}`}
-                        attachment={attachment}
-                        url={`http://localhost:8080/messages[${messageIndex}]/attachments[${j}]?state_uri=${encodeURIComponent(selectedStateURI)}`}
-                        onClick={onClickAttachment}
-                    />
-                ))}
-            </MessageDetails>
+
+            <MessageText>{msg.text}</MessageText>
+            {(msg.attachments || []).map((attachment, j) => (
+              <SAttachment
+                key={`${selectedStateURI}${messageIndex},${j}`}
+                attachment={attachment}
+                url={`http://localhost:8080/messages[${messageIndex}]/attachments[${j}]?state_uri=${encodeURIComponent(selectedStateURI)}`}
+                onClick={onClickAttachment}
+              />
+            ))}
+          </MessageDetails>
         </MessageWrapper>
+      </Tooltip>
     )
 }
 
