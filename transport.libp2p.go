@@ -11,6 +11,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -54,6 +55,9 @@ type libp2pTransport struct {
 	controllerHub ControllerHub
 	refStore      RefStore
 	peerStore     PeerStore
+
+	writeSubsByPeerID   map[peer.ID]map[netp2p.Stream]WritableSubscription
+	writeSubsByPeerIDMu sync.Mutex
 }
 
 const (
@@ -75,14 +79,15 @@ func NewLibp2pTransport(
 	}
 
 	t := &libp2pTransport{
-		Context:       &ctx.Context{},
-		port:          port,
-		address:       addr,
-		enckeys:       enckeys,
-		p2pKey:        p2pKey,
-		controllerHub: controllerHub,
-		refStore:      refStore,
-		peerStore:     peerStore,
+		Context:           &ctx.Context{},
+		port:              port,
+		address:           addr,
+		enckeys:           enckeys,
+		p2pKey:            p2pKey,
+		controllerHub:     controllerHub,
+		refStore:          refStore,
+		peerStore:         peerStore,
+		writeSubsByPeerID: make(map[peer.ID]map[netp2p.Stream]WritableSubscription),
 	}
 	return t, nil
 }
@@ -278,23 +283,18 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			return
 		}
 
-		fromTxID := types.ID{}
-		toTxID := types.ID{}
+		writeSub := newWritableSubscription(t.host, stateURI, nil, SubscriptionType_Txs, &libp2pWritableSubscription{peer})
+		func() {
+			t.writeSubsByPeerIDMu.Lock()
+			defer t.writeSubsByPeerIDMu.Unlock()
+			if _, exists := t.writeSubsByPeerID[peer.pinfo.ID]; !exists {
+				t.writeSubsByPeerID[peer.pinfo.ID] = make(map[netp2p.Stream]WritableSubscription)
+			}
+			t.writeSubsByPeerID[peer.pinfo.ID][stream] = writeSub
+		}()
 
-		writeSub := &libp2pWritableSubscription{
-			libp2pPeer:       peer,
-			stateURI:         stateURI,
-			subscriptionType: SubscriptionType_Txs, // libp2p only deals with txs, not states
-		}
-
-		err := t.host.HandleFetchHistoryRequest(stateURI, fromTxID, toTxID, writeSub)
-		if err != nil {
-			t.Errorf("error fetching history: %v", err)
-			peer.Close()
-			return
-		}
-
-		t.host.HandleWritableSubscriptionOpened(writeSub)
+		fetchHistoryOpts := &FetchHistoryOpts{} // Fetch all history (@@TODO)
+		t.host.HandleWritableSubscriptionOpened(writeSub, fetchHistoryOpts)
 
 	case MsgType_Put:
 		defer peer.Close()
@@ -755,6 +755,7 @@ type libp2pPeer struct {
 	t      *libp2pTransport
 	pinfo  peerstore.PeerInfo
 	stream netp2p.Stream
+	mu     sync.Mutex
 }
 
 func (peer *libp2pPeer) Transport() Transport {
@@ -794,38 +795,32 @@ func (peer *libp2pPeer) Subscribe(ctx context.Context, stateURI string) (Readabl
 		return nil, err
 	}
 
-	return &libp2pReadableSubscription{
-		stateURI: stateURI,
-		peer:     peer,
-	}, nil
+	return &libp2pReadableSubscription{peer}, nil
 }
 
-func (p *libp2pPeer) Put(tx *Tx, state tree.Node, leaves []types.ID) error {
+func (peer *libp2pPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error {
 	// Note: libp2p peers ignore `state` and `leaves`
-	return p.writeMsg(Msg{Type: MsgType_Put, Payload: tx})
-}
+	if tx.IsPrivate() {
+		marshalledTx, err := json.Marshal(tx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 
-func (peer *libp2pPeer) PutPrivate(tx *Tx, state tree.Node, leaves []types.ID) error {
-	// Note: libp2p peers ignore `state` and `leaves`
-	marshalledTx, err := json.Marshal(tx)
-	if err != nil {
-		return errors.WithStack(err)
+		_, peerEncPubkey := peer.PublicKeys()
+
+		encryptedTxBytes, err := peer.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		etx := EncryptedTx{
+			TxID:             tx.ID,
+			EncryptedPayload: encryptedTxBytes,
+			SenderPublicKey:  peer.t.enckeys.EncryptingPublicKey.Bytes(),
+		}
+		return peer.writeMsg(Msg{Type: MsgType_Private, Payload: etx})
 	}
-
-	_, peerEncPubkey := peer.PublicKeypairs()
-
-	encryptedTxBytes, err := peer.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	etx := EncryptedTx{
-		TxID:             tx.ID,
-		EncryptedPayload: encryptedTxBytes,
-		SenderPublicKey:  peer.t.enckeys.EncryptingPublicKey.Bytes(),
-	}
-
-	return peer.writeMsg(Msg{Type: MsgType_Private, Payload: etx})
+	return peer.writeMsg(Msg{Type: MsgType_Put, Payload: tx})
 }
 
 type libp2pAckMsg struct {
@@ -957,90 +952,61 @@ func (p *libp2pPeer) Close() error {
 }
 
 type libp2pReadableSubscription struct {
-	peer     *libp2pPeer
-	stateURI string
+	*libp2pPeer
 }
 
-func (sub *libp2pReadableSubscription) Read() (SubscriptionMsg, error) {
-	msg, err := sub.peer.readMsg()
+func (sub *libp2pReadableSubscription) Read() (_ *SubscriptionMsg, err error) {
+	defer func() { sub.UpdateConnStats(err == nil) }()
+
+	msg, err := sub.readMsg()
 	if err != nil {
-		return SubscriptionMsg{}, errors.Errorf("error reading from subscription: %v", err)
+		return nil, errors.Errorf("error reading from subscription: %v", err)
 	}
 
 	switch msg.Type {
 	case MsgType_Put:
 		tx := msg.Payload.(Tx)
-		return SubscriptionMsg{Tx: &tx}, nil
+		return &SubscriptionMsg{Tx: &tx}, nil
 
 	case MsgType_Private:
 		encryptedTx, ok := msg.Payload.(EncryptedTx)
 		if !ok {
-			return SubscriptionMsg{}, errors.Errorf("Private message: bad payload: (%T) %v", msg.Payload, msg.Payload)
+			return nil, errors.Errorf("Private message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 		}
-		bs, err := sub.peer.t.enckeys.OpenMessageFrom(
+		bs, err := sub.t.enckeys.OpenMessageFrom(
 			EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
 			encryptedTx.EncryptedPayload,
 		)
 		if err != nil {
-			return SubscriptionMsg{}, errors.Errorf("error decrypting tx: %v", err)
+			return nil, errors.Errorf("error decrypting tx: %v", err)
 		}
 
 		var tx Tx
 		err = json.Unmarshal(bs, &tx)
 		if err != nil {
-			return SubscriptionMsg{}, errors.Errorf("error decoding tx: %v", err)
+			return nil, errors.Errorf("error decoding tx: %v", err)
 		} else if encryptedTx.TxID != tx.ID {
-			return SubscriptionMsg{}, errors.Errorf("private tx id does not match")
+			return nil, errors.Errorf("private tx id does not match")
 		}
-		return SubscriptionMsg{Tx: &tx, EncryptedTx: &encryptedTx}, nil
+		return &SubscriptionMsg{Tx: &tx, EncryptedTx: &encryptedTx}, nil
 
 	default:
-		return SubscriptionMsg{}, errors.New("protocol error, expecting MsgType_Put or MsgType_Private")
+		return nil, errors.New("protocol error, expecting MsgType_Put or MsgType_Private")
 	}
-}
-
-func (sub *libp2pReadableSubscription) Close() error {
-	return sub.peer.Close()
 }
 
 type libp2pWritableSubscription struct {
 	*libp2pPeer
-	stateURI         string
-	subscriptionType SubscriptionType
 }
 
-func (p *libp2pWritableSubscription) StateURI() string {
-	return p.stateURI
-}
+func (sub *libp2pWritableSubscription) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
+	defer func() { sub.UpdateConnStats(err == nil) }()
 
-func (p *libp2pWritableSubscription) Type() SubscriptionType {
-	return p.subscriptionType
-}
-
-func (p *libp2pWritableSubscription) Keypath() tree.Keypath {
-	return nil
-}
-
-// If an error is returned, the stream will be closed by the Host.
-func (p *libp2pWritableSubscription) Write(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error {
-	err := p.EnsureConnected(ctx)
+	err = sub.libp2pPeer.EnsureConnected(ctx)
 	if err != nil {
 		return err
 	}
-	return p.libp2pPeer.Put(tx, state, leaves)
-}
-
-// If an error is returned, the stream will be closed by the Host.
-func (p *libp2pWritableSubscription) WritePrivate(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error {
-	err := p.EnsureConnected(ctx)
-	if err != nil {
-		return err
-	}
-	return p.libp2pPeer.Put(tx, state, leaves)
-}
-
-func (p *libp2pWritableSubscription) Close() error {
-	return p.libp2pPeer.Close()
+	return sub.libp2pPeer.Put(ctx, tx, state, leaves)
 }
 
 func obtainP2PKey(keyfilePath string) (cryptop2p.PrivKey, error) {
@@ -1361,5 +1327,22 @@ func (t *libp2pTransport) Disconnected(network netp2p.Network, conn netp2p.Conn)
 	t.Debugf("libp2p disconnected: %v", addr)
 }
 
-func (t *libp2pTransport) OpenedStream(network netp2p.Network, stream netp2p.Stream) {}
-func (t *libp2pTransport) ClosedStream(network netp2p.Network, stream netp2p.Stream) {}
+func (t *libp2pTransport) OpenedStream(network netp2p.Network, stream netp2p.Stream) {
+	t.Debugf("libp2p stream opened: %v", stream.Conn().RemotePeer().Pretty())
+}
+
+func (t *libp2pTransport) ClosedStream(network netp2p.Network, stream netp2p.Stream) {
+	peerID := stream.Conn().RemotePeer()
+	t.Debugf("libp2p stream closed: %v", peerID.Pretty())
+	t.writeSubsByPeerIDMu.Lock()
+	defer t.writeSubsByPeerIDMu.Unlock()
+
+	writeSubs, exists := t.writeSubsByPeerID[peerID]
+	if exists {
+		if sub, exists := writeSubs[stream]; exists && sub != nil {
+			t.Debugf("closing libp2p writable subscription (peer: %v, stateURI: %v)", peerID.Pretty(), sub.StateURI())
+			delete(t.writeSubsByPeerID[peerID], stream)
+			t.host.HandleWritableSubscriptionClosed(sub)
+		}
+	}
+}

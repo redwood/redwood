@@ -32,8 +32,7 @@ type Peer interface {
 
 	// Transactions
 	Subscribe(ctx context.Context, stateURI string) (ReadableSubscription, error)
-	Put(tx *Tx, state tree.Node, leaves []types.ID) error
-	PutPrivate(tx *Tx, state tree.Node, leaves []types.ID) error
+	Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error
 	Ack(stateURI string, txID types.ID) error
 
 	// Identity/authentication

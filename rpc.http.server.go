@@ -247,7 +247,7 @@ func (s *HTTPRPCServer) Subscribe(r *http.Request, args *RPCSubscribeArgs, resp 
 		subscriptionType |= SubscriptionType_States
 	}
 
-	sub, err := s.host.Subscribe(ctx, args.StateURI, subscriptionType, tree.Keypath(args.Keypath))
+	sub, err := s.host.Subscribe(ctx, args.StateURI, subscriptionType, tree.Keypath(args.Keypath), nil)
 	if err != nil {
 		return errors.Wrap(err, "error subscribing to "+args.StateURI)
 	}

@@ -18,9 +18,8 @@ type Host interface {
 	Ctx() *ctx.Context
 	Start() error
 
-	Peers() []PeerDetails
 	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
-	Subscribe(ctx context.Context, stateURI string, subscriptionType SubscriptionType, keypath tree.Keypath) (ReadableSubscription, error)
+	Subscribe(ctx context.Context, stateURI string, subscriptionType SubscriptionType, keypath tree.Keypath, fetchHistoryOpts *FetchHistoryOpts) (ReadableSubscription, error)
 	Unsubscribe(stateURI string) error
 	SendTx(ctx context.Context, tx Tx) error
 	AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error)
@@ -31,12 +30,13 @@ type Host interface {
 	Address() types.Address
 	ChallengePeerIdentity(ctx context.Context, peer Peer) (SigningPublicKey, EncryptingPublicKey, error)
 
+	Peers() []PeerDetails
 	ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan Peer
 	ProvidersOfRef(ctx context.Context, refID types.RefID) <-chan Peer
 	PeersClaimingAddress(ctx context.Context, address types.Address) <-chan Peer
 
-	HandleFetchHistoryRequest(stateURI string, fromTxID types.ID, toVersion types.ID, writeSub WritableSubscription) error
-	HandleWritableSubscriptionOpened(writeSub WritableSubscription)
+	HandleFetchHistoryRequest(stateURI string, opts FetchHistoryOpts, writeSub WritableSubscription) error
+	HandleWritableSubscriptionOpened(writeSub WritableSubscription, fetchHistoryOpts *FetchHistoryOpts)
 	HandleWritableSubscriptionClosed(writeSub WritableSubscription)
 	HandleTxReceived(tx Tx, peer Peer)
 	HandleAckReceived(stateURI string, txID types.ID, peer Peer)
@@ -428,10 +428,15 @@ func (h *host) verifyPeers() {
 	wg.Wait()
 }
 
-func (h *host) HandleFetchHistoryRequest(stateURI string, fromTxID types.ID, toVersion types.ID, writeSub WritableSubscription) error {
-	// @@TODO: respect the input params
+type FetchHistoryOpts struct {
+	FromTxID types.ID
+	ToTxID   types.ID
+}
 
-	iter := h.controllerHub.FetchTxs(stateURI, fromTxID)
+func (h *host) HandleFetchHistoryRequest(stateURI string, opts FetchHistoryOpts, writeSub WritableSubscription) error {
+	// @@TODO: respect the `opts.ToTxID` param
+
+	iter := h.controllerHub.FetchTxs(stateURI, opts.FromTxID)
 	defer iter.Cancel()
 
 	for {
@@ -466,27 +471,21 @@ func (h *host) HandleFetchHistoryRequest(stateURI string, fromTxID types.ID, toV
 			}
 
 			if isAllowed {
-				err = writeSub.WritePrivate(context.TODO(), tx, nil, leaves)
-				if err != nil {
-					h.Errorf("error writing tx to peer: %v", err)
-					h.HandleWritableSubscriptionClosed(writeSub)
-					return err
-				}
+				writeSub.EnqueueWrite(tx, nil, leaves)
 			}
 
 		} else {
-			err = writeSub.Write(context.TODO(), tx, nil, leaves)
-			if err != nil {
-				h.Errorf("error writing tx to peer: %v", err)
-				h.HandleWritableSubscriptionClosed(writeSub)
-				return err
-			}
+			writeSub.EnqueueWrite(tx, nil, leaves)
 		}
 	}
 	return nil
 }
 
-func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription) {
+func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription, fetchHistoryOpts *FetchHistoryOpts) {
+	if writeSub.Type().Includes(SubscriptionType_Txs) && fetchHistoryOpts != nil {
+		h.HandleFetchHistoryRequest(writeSub.StateURI(), *fetchHistoryOpts, writeSub)
+	}
+
 	if writeSub.Type().Includes(SubscriptionType_States) {
 		// Normalize empty keypaths
 		keypath := writeSub.Keypath()
@@ -508,11 +507,12 @@ func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription) {
 				return
 			}
 
-			err = writeSub.Write(context.TODO(), nil, state.NodeAt(keypath, nil), leaves)
+			node, err := state.CopyToMemory(keypath, nil)
 			if err != nil {
-				h.Errorf("error writing tx to peer: %v", err)
+				h.Errorf("error writing initial state to peer: %v", err)
 				return
 			}
+			writeSub.EnqueueWrite(nil, node, leaves)
 		}
 	}
 
@@ -528,11 +528,6 @@ func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription) {
 func (h *host) HandleWritableSubscriptionClosed(writeSub WritableSubscription) {
 	h.writableSubscriptionsMu.Lock()
 	defer h.writableSubscriptionsMu.Unlock()
-
-	err := writeSub.Close()
-	if err != nil {
-		h.Errorf("error closing writable subscription: %+v", err)
-	}
 
 	if _, exists := h.writableSubscriptions[writeSub.StateURI()]; exists {
 		delete(h.writableSubscriptions[writeSub.StateURI()], writeSub)
@@ -582,42 +577,16 @@ func (h *host) Subscribe(
 	stateURI string,
 	subscriptionType SubscriptionType,
 	stateKeypath tree.Keypath,
+	fetchHistoryOpts *FetchHistoryOpts,
 ) (ReadableSubscription, error) {
 	err := h.subscribe(ctx, stateURI)
 	if err != nil {
 		return nil, err
 	}
 
-	h.writableSubscriptionsMu.Lock()
-	defer h.writableSubscriptionsMu.Unlock()
-
-	if _, exists := h.writableSubscriptions[stateURI]; !exists {
-		h.writableSubscriptions[stateURI] = make(map[WritableSubscription]struct{})
-	}
-
-	so := &inProcessSubscription{
-		stateURI:         stateURI,
-		keypath:          stateKeypath,
-		subscriptionType: subscriptionType,
-		ch:               make(chan SubscriptionMsg),
-		chStop:           make(chan struct{}),
-	}
-	h.writableSubscriptions[stateURI][so] = struct{}{}
-
-	go func() {
-		defer close(so.ch)
-
-		select {
-		case <-h.Ctx().Done():
-		case <-so.chStop:
-		}
-
-		h.writableSubscriptionsMu.Lock()
-		defer h.writableSubscriptionsMu.Unlock()
-		delete(h.writableSubscriptions[stateURI], so)
-	}()
-
-	return so, nil
+	sub := newInProcessSubscription(stateURI, stateKeypath, subscriptionType, h)
+	h.HandleWritableSubscriptionOpened(sub, fetchHistoryOpts)
+	return sub, nil
 }
 
 func (h *host) Unsubscribe(stateURI string) error {
@@ -701,7 +670,7 @@ func (h *host) handleNewState(tx *Tx, state tree.Node, leaves []types.ID) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			sub, err := h.Subscribe(ctx, tx.StateURI, 0, nil)
+			sub, err := h.Subscribe(ctx, tx.StateURI, 0, nil, nil)
 			if err != nil {
 				h.Errorf("error subscribing to state URI %v: %v", tx.StateURI, err)
 			}
@@ -778,7 +747,7 @@ func (h *host) broadcastToStateURIProviders(ctx context.Context, tx *Tx, leaves 
 			}
 			defer peer.Close()
 
-			err = peer.Put(tx, nil, leaves)
+			err = peer.Put(ctx, tx, nil, leaves)
 			if err != nil {
 				h.Errorf("error writing tx to peer: %v", err)
 				return
@@ -845,21 +814,11 @@ func (h *host) broadcastToWritableSubscribers(
 				}
 
 				if isAllowed {
-					err = writeSub.WritePrivate(ctx, tx, state, leaves)
-					if err != nil {
-						h.Errorf("error writing tx to peer: %v", err)
-						h.HandleWritableSubscriptionClosed(writeSub)
-						return
-					}
+					writeSub.EnqueueWrite(tx, state, leaves)
 				}
 
 			} else {
-				err = writeSub.Write(ctx, tx, state, leaves)
-				if err != nil {
-					h.Errorf("error writing tx to peer: %v", err)
-					h.HandleWritableSubscriptionClosed(writeSub)
-					return
-				}
+				writeSub.EnqueueWrite(tx, state, leaves)
 			}
 		}()
 	}

@@ -230,7 +230,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			sub, err := host.Subscribe(ctx, stateURI, 0, nil)
+			sub, err := host.Subscribe(ctx, stateURI, 0, nil, nil)
 			if err != nil {
 				app.Errorf("error subscribing to %v: %v", stateURI, err)
 				continue

@@ -377,40 +377,30 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	writeSub := &httpWritableSubscription{
-		httpPeer:         t.makePeerWithAddress(w, f, address),
-		chDone:           make(chan struct{}),
-		stateURI:         stateURI,
-		subscriptionType: subscriptionType,
-		keypath:          tree.Keypath(keypath),
-	}
+	httpWriteSub := &httpWritableSubscription{t.makePeerWithAddress(w, f, address)}
 
 	// Listen to the closing of the http connection via the CloseNotifier
 	notify := w.(http.CloseNotifier).CloseNotify()
 	go func() {
+		defer httpWriteSub.Close()
 		<-notify
 		t.Infof(0, "http subscription closed (%v)", stateURI)
-		t.host.HandleWritableSubscriptionClosed(writeSub)
 	}()
 
 	f.Flush()
 
+	var fetchHistoryOpts *FetchHistoryOpts
 	if fromTxHeader := r.Header.Get("From-Tx"); fromTxHeader != "" {
 		fromTxID, err := types.IDFromHex(fromTxHeader)
 		if err != nil {
 			http.Error(w, "could not parse From-Tx header", http.StatusBadRequest)
 			return
 		}
-
-		err = t.host.HandleFetchHistoryRequest(stateURI, fromTxID, types.ID{}, writeSub)
-		if err != nil {
-			t.Errorf("error fetching history: %v", err)
-			// @@TODO: close subscription?
-			return
-		}
+		fetchHistoryOpts = &FetchHistoryOpts{FromTxID: fromTxID}
 	}
 
-	t.host.HandleWritableSubscriptionOpened(writeSub)
+	writeSub := newWritableSubscription(t.host, stateURI, tree.Keypath(keypath), subscriptionType, httpWriteSub)
+	t.host.HandleWritableSubscriptionOpened(writeSub, fetchHistoryOpts)
 
 	// Block until the subscription is canceled so that net/http doesn't close the connection
 	<-writeSub.chDone
@@ -971,7 +961,6 @@ func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, theURL string) 
 	}
 
 	u.Path = path.Join(u.Path, "providers")
-	t.Warnf("GET %v", u.String())
 
 	resp, err := httpClient.Get(u.String())
 	if err != nil {
@@ -1182,77 +1171,74 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 	}, nil
 }
 
-func (p *httpPeer) Put(tx *Tx, state tree.Node, leaves []types.ID) (err error) {
-	// defer func() { p.UpdateConnStats(err == nil) }()
-
-	// This peer is not subscribed, so we make a PUT
-	// bs, err := json.Marshal(tx)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// client := http.Client{}
-	// req, err := http.NewRequest("PUT", p.ReachableAt().Any(), bytes.NewReader(bs))
-	// if err != nil {
-	// 	return err
-	// }
-
-	// resp, err := client.Do(req)
-	// if err != nil {
-	// 	return err
-	// } else if resp.StatusCode != 200 {
-	// 	return errors.Errorf("error PUTting to peer: (%v) %v", resp.StatusCode, resp.Status)
-	// }
-	// defer resp.Body.Close()
-	panic("unimplemented")
-}
-
-func (p *httpPeer) PutPrivate(tx *Tx, state tree.Node, leaves []types.ID) (err error) {
+func (p *httpPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
-	if p.DialInfo().DialAddr == "" {
-		p.t.Warn("peer has no DialAddr")
+	if tx.IsPrivate() {
+		if p.DialInfo().DialAddr == "" {
+			p.t.Warn("peer has no DialAddr")
+			return nil
+		}
+
+		marshalledTx, err := json.Marshal(tx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		_, peerEncPubkey := p.PublicKeys()
+
+		encryptedTxBytes, err := p.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		msg, err := json.Marshal(EncryptedTx{
+			TxID:             tx.ID,
+			EncryptedPayload: encryptedTxBytes,
+			SenderPublicKey:  p.t.enckeys.EncryptingPublicKey.Bytes(),
+		})
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, "PUT", p.DialInfo().DialAddr, bytes.NewReader(msg))
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		req.Header.Set("Private", "true")
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			return errors.Errorf("error sending private PUT: (%v) %v", resp.StatusCode, resp.Status)
+		}
 		return nil
 	}
 
-	marshalledTx, err := json.Marshal(tx)
+	// This peer is not subscribed, so we make a PUT
+	bs, err := json.Marshal(tx)
 	if err != nil {
-		return errors.WithStack(err)
+		return err
 	}
 
-	_, peerEncPubkey := p.PublicKeypairs()
-
-	encryptedTxBytes, err := p.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
+	req, err := http.NewRequest("PUT", p.DialInfo().DialAddr, bytes.NewReader(bs))
 	if err != nil {
-		return errors.WithStack(err)
+		return err
 	}
-
-	msg, err := json.Marshal(EncryptedTx{
-		TxID:             tx.ID,
-		EncryptedPayload: encryptedTxBytes,
-		SenderPublicKey:  p.t.enckeys.EncryptingPublicKey.Bytes(),
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "PUT", p.DialInfo().DialAddr, bytes.NewReader(msg))
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	req.Header.Set("Private", "true")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return errors.WithStack(err)
+		return err
+	} else if resp.StatusCode != 200 {
+		return errors.Errorf("error PUTting to peer: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return errors.Errorf("error sending private PUT: (%v) %v", resp.StatusCode, resp.Status)
-	}
 	return nil
 }
 
@@ -1373,13 +1359,13 @@ type httpReadableSubscription struct {
 	private bool
 }
 
-func (s *httpReadableSubscription) Read() (_ SubscriptionMsg, err error) {
+func (s *httpReadableSubscription) Read() (_ *SubscriptionMsg, err error) {
 	defer func() { s.peer.UpdateConnStats(err == nil) }()
 
 	r := bufio.NewReader(s.stream)
 	bs, err := r.ReadBytes(byte('\n'))
 	if err != nil {
-		return SubscriptionMsg{}, err
+		return nil, err
 	}
 	bs = bytes.TrimPrefix(bs, []byte("data: "))
 	bs = bytes.Trim(bs, "\n ")
@@ -1387,32 +1373,32 @@ func (s *httpReadableSubscription) Read() (_ SubscriptionMsg, err error) {
 	var msg SubscriptionMsg
 	err = json.Unmarshal(bs, &msg)
 	if err != nil {
-		return SubscriptionMsg{}, err
+		return nil, err
 	}
 
 	if s.private {
 		if msg.EncryptedTx == nil {
-			return SubscriptionMsg{}, errors.New("no encrypted tx sent by http peer")
+			return nil, errors.New("no encrypted tx sent by http peer")
 		}
 
 		bs, err = s.peer.t.enckeys.OpenMessageFrom(EncryptingPublicKeyFromBytes(msg.EncryptedTx.SenderPublicKey), msg.EncryptedTx.EncryptedPayload)
 		if err != nil {
-			return SubscriptionMsg{}, err
+			return nil, err
 		}
 
 		var tx Tx
 		err = json.Unmarshal(bs, &tx)
 		if err != nil {
-			return SubscriptionMsg{}, err
+			return nil, err
 		}
 		msg.Tx = &tx
-		return msg, nil
+		return &msg, nil
 
 	} else {
 		if msg.Tx == nil {
-			return SubscriptionMsg{}, errors.New("no tx sent by http peer")
+			return nil, errors.New("no tx sent by http peer")
 		}
-		return msg, nil
+		return &msg, nil
 	}
 }
 
@@ -1423,31 +1409,39 @@ func (c *httpReadableSubscription) Close() error {
 
 type httpWritableSubscription struct {
 	*httpPeer
-	stateURI         string
-	subscriptionType SubscriptionType
-	keypath          tree.Keypath
-	chDone           chan struct{} // Keeps the net/http server open until the subscription is closed
 }
 
-var _ WritableSubscription = (*httpWritableSubscription)(nil)
+var _ WritableSubscriptionImpl = (*httpWritableSubscription)(nil)
 
-func (sub *httpWritableSubscription) StateURI() string {
-	return sub.stateURI
-}
-
-func (sub *httpWritableSubscription) Type() SubscriptionType {
-	return sub.subscriptionType
-}
-
-func (sub *httpWritableSubscription) Keypath() tree.Keypath {
-	return sub.keypath
-}
-
-// If an error is returned, the stream will be closed by the Host.
-func (sub *httpWritableSubscription) Write(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
+func (sub *httpWritableSubscription) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { sub.UpdateConnStats(err == nil) }()
 
-	bs, err := json.Marshal(SubscriptionMsg{Tx: tx, State: state, Leaves: leaves})
+	var msg *SubscriptionMsg
+	if tx.IsPrivate() {
+		marshalledTx, err := json.Marshal(tx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		_, peerEncPubkey := sub.PublicKeys()
+
+		encryptedTxBytes, err := sub.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		etx := &EncryptedTx{
+			TxID:             tx.ID,
+			EncryptedPayload: encryptedTxBytes,
+			SenderPublicKey:  sub.t.enckeys.EncryptingPublicKey.Bytes(),
+		}
+
+		msg = &SubscriptionMsg{EncryptedTx: etx, Leaves: leaves}
+	} else {
+		msg = &SubscriptionMsg{Tx: tx, State: state, Leaves: leaves}
+	}
+
+	bs, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -1459,64 +1453,7 @@ func (sub *httpWritableSubscription) Write(ctx context.Context, tx *Tx, state tr
 	if err != nil {
 		return err
 	} else if n < len(event) {
-		return errors.New("didn't write enough")
-	}
-
-	if sub.stream.Flusher != nil {
-		sub.stream.Flusher.Flush()
+		return errors.New("error writing message to http peer: didn't write enough")
 	}
 	return nil
-}
-
-type httpPrivateTxSubscriptionMessage struct {
-	Tx     EncryptedTx `json:"tx"`
-	Leaves []types.ID  `json:"leaves"`
-}
-
-// If an error is returned, the stream will be closed by the Host.
-func (sub *httpWritableSubscription) WritePrivate(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
-	defer func() { sub.UpdateConnStats(err == nil) }()
-
-	marshalledTx, err := json.Marshal(tx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	_, peerEncPubkey := sub.PublicKeypairs()
-
-	encryptedTxBytes, err := sub.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	etx := &EncryptedTx{
-		TxID:             tx.ID,
-		EncryptedPayload: encryptedTxBytes,
-		SenderPublicKey:  sub.t.enckeys.EncryptingPublicKey.Bytes(),
-	}
-
-	bs, err := json.Marshal(SubscriptionMsg{EncryptedTx: etx, Leaves: leaves})
-	if err != nil {
-		return err
-	}
-
-	// This is encoded using HTTP's SSE format
-	event := []byte("data: " + string(bs) + "\n\n")
-
-	n, err := sub.stream.Writer.Write(event)
-	if err != nil {
-		return err
-	} else if n < len(event) {
-		return errors.New("didn't write enough")
-	}
-
-	if sub.stream.Flusher != nil {
-		sub.stream.Flusher.Flush()
-	}
-	return nil
-}
-
-func (sub *httpWritableSubscription) Close() error {
-	close(sub.chDone)
-	return sub.httpPeer.Close()
 }
