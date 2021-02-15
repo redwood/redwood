@@ -155,10 +155,11 @@ function Chat({ className }) {
 
     const onClickSend = useCallback(async () => {
         if (!api) { return }
+        console.log('attachments', attachments)
         await api.sendMessage(messageText, attachments, nodeAddress, selectedServer, selectedRoom, messages)
         setAttachments([])
         setPreviews([])
-    }, [messageText, nodeAddress, selectedServer, selectedRoom, messages, api])
+    }, [messageText, nodeAddress, attachments, selectedServer, selectedRoom, messages, api])
 
     useEffect(() => {
       // Scrolls on new messages
