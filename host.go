@@ -11,6 +11,7 @@ import (
 	"redwood.dev/ctx"
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type Host interface {
@@ -176,6 +177,11 @@ func (h *host) StateAtVersion(stateURI string, version *types.ID) (tree.Node, er
 // Returns peers discovered through any transport that have already been authenticated.
 // It's not guaranteed that they actually provide
 func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan Peer {
+	if utils.IsLocalStateURI(stateURI) {
+		ch := make(chan Peer)
+		ch <- nil
+	}
+
 	var wg sync.WaitGroup
 	ch := make(chan Peer)
 	for _, tpt := range h.transports {
@@ -435,6 +441,7 @@ type FetchHistoryOpts struct {
 
 func (h *host) HandleFetchHistoryRequest(stateURI string, opts FetchHistoryOpts, writeSub WritableSubscription) error {
 	// @@TODO: respect the `opts.ToTxID` param
+	// @@TODO: if .FromTxID == 0, set it to GenesisTxID
 
 	iter := h.controllerHub.FetchTxs(stateURI, opts.FromTxID)
 	defer iter.Cancel()
@@ -549,6 +556,11 @@ func (h *host) subscribe(ctx context.Context, stateURI string) error {
 	_, err = h.Controllers().EnsureController(stateURI)
 	if err != nil {
 		return err
+	}
+
+	// If this state URI is not intended to be shared, don't bother subscribing to other nodes
+	if utils.IsLocalStateURI(stateURI) {
+		return nil
 	}
 
 	if _, exists := h.readableSubscriptions[stateURI]; !exists {
@@ -675,6 +687,11 @@ func (h *host) handleNewState(tx *Tx, state tree.Node, leaves []types.ID) {
 				h.Errorf("error subscribing to state URI %v: %v", tx.StateURI, err)
 			}
 			sub.Close() // We don't need the in-process subscription
+		}
+
+		// If this state URI isn't meant to be shared, don't broadcast
+		if utils.IsLocalStateURI(tx.StateURI) {
+			return
 		}
 
 		// Broadcast state and tx to others

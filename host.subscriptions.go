@@ -2,6 +2,7 @@ package redwood
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +42,38 @@ const (
 	SubscriptionType_Txs SubscriptionType = 1 << iota
 	SubscriptionType_States
 )
+
+func (t *SubscriptionType) UnmarshalText(bs []byte) error {
+	str := strings.Trim(string(bs), `"`)
+	parts := strings.Split(str, ",")
+	var st SubscriptionType
+	for i := range parts {
+		switch strings.TrimSpace(parts[i]) {
+		case "transactions":
+			st |= SubscriptionType_Txs
+		case "states":
+			st |= SubscriptionType_States
+		default:
+			return errors.Errorf("bad value for SubscriptionType: %v", str)
+		}
+	}
+	if st == 0 {
+		return errors.New("empty value for SubscriptionType")
+	}
+	*t = st
+	return nil
+}
+
+func (t SubscriptionType) MarshalText() ([]byte, error) {
+	var strs []string
+	if t.Includes(SubscriptionType_Txs) {
+		strs = append(strs, "transactions")
+	}
+	if t.Includes(SubscriptionType_States) {
+		strs = append(strs, "states")
+	}
+	return []byte(strings.Join(strs, ",")), nil
+}
 
 func (t SubscriptionType) Includes(x SubscriptionType) bool {
 	return t&x == x

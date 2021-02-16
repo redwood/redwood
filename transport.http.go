@@ -371,19 +371,11 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 	keypath := r.Header.Get("Keypath")
 	subscriptionTypeStr := r.Header.Get("Subscribe")
 
-	subscriptionTypes := strings.Split(subscriptionTypeStr, ",")
 	var subscriptionType SubscriptionType
-	for _, st := range subscriptionTypes {
-		st = strings.TrimSpace(st)
-		switch st {
-		case "transactions":
-			subscriptionType |= SubscriptionType_Txs
-		case "states":
-			subscriptionType |= SubscriptionType_States
-		default:
-			http.Error(w, fmt.Sprintf("unknown subscription type '%v'", st), http.StatusBadRequest)
-			return
-		}
+	err := subscriptionType.UnmarshalText([]byte(subscriptionTypeStr))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("could not parse Subscribe header: %v", err), http.StatusBadRequest)
+		return
 	}
 
 	httpWriteSub := &httpWritableSubscription{t.makePeerWithAddress(w, f, address)}
@@ -989,7 +981,7 @@ func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, stateURI string
 func (t *httpTransport) tryFetchProvidersFromAuthoritativeHost(stateURI string) ([]string, error) {
 	parts := strings.Split(stateURI, "/")
 
-	u, err := url.Parse("http://" + parts[0] + ":8080?state_uri=" + stateURI)
+	u, err := url.Parse("http://" + parts[0] + ":80?state_uri=" + stateURI)
 	if err != nil {
 		return nil, err
 	}
@@ -1166,7 +1158,12 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Subscribe", "keep-alive")
+
+	subTypeBytes, err := SubscriptionType_Txs.MarshalText()
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Subscribe", string(subTypeBytes))
 
 	var client http.Client
 	resp, err := client.Do(req)
