@@ -35,8 +35,6 @@ type Client struct {
 }
 
 func (c *Client) writePump() {
-	log.Println("OPEN WS writePump")
-
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
@@ -52,13 +50,11 @@ func (c *Client) writePump() {
 		// defer c.sub.Close()
 		defer close(chSub)
 		for {
-			fmt.Println("TRY READ FROM SUB")
 			msg, err := c.sub.Read()
 			if err != nil {
 				fmt.Println("error", err)
 				return
 			}
-			fmt.Println("READ FROM SUB ~>", msg)
 			select {
 			case chSub <- *msg:
 			case <-chKill:
@@ -123,15 +119,12 @@ func (c *Client) writePump() {
 func serveWs(host redwood.Host) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		stateURI := r.URL.Query().Get("state_uri")
-		log.Println("OPEN WS", stateURI)
 
 		sub, err := host.Subscribe(context.Background(), stateURI, redwood.SubscriptionType_States|redwood.SubscriptionType_Txs, nil, nil)
-		log.Println("OPEN WS", stateURI, "after sub")
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		log.Println("OPEN WS", stateURI, "subscribed")
 
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -139,9 +132,6 @@ func serveWs(host redwood.Host) http.HandlerFunc {
 			return
 		}
 		client := &Client{sub: sub, conn: conn}
-
-		// Allow collection of memory referenced by the caller by doing all work in
-		// new goroutines.
 		client.writePump()
 	}
 }

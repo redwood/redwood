@@ -57,6 +57,7 @@ type httpTransport struct {
 
 func NewHTTPTransport(
 	listenAddr string,
+	reachableAt string,
 	defaultStateURI string,
 	controllerHub ControllerHub,
 	refStore RefStore,
@@ -72,9 +73,14 @@ func NewHTTPTransport(
 		return nil, err
 	}
 
-	ownURL := listenAddr
-	if len(listenAddr) > 0 && listenAddr[0] == ':' {
-		ownURL = "localhost" + listenAddr
+	var ownURL string
+	if reachableAt != "" {
+		ownURL = reachableAt
+	} else {
+		ownURL = "http://" + listenAddr
+		if len(listenAddr) > 0 && listenAddr[0] == ':' {
+			ownURL = "http://localhost" + listenAddr
+		}
 	}
 
 	t := &httpTransport{
@@ -111,6 +117,7 @@ func (t *httpTransport) Start() error {
 				}
 			}
 
+			// Update our node's info in the peer store
 			t.peerStore.AddDialInfos([]PeerDialInfo{{t.Name(), t.ownURL}})
 
 			go func() {
@@ -132,8 +139,7 @@ func (t *httpTransport) Start() error {
 					}
 					err := srv.ListenAndServe()
 					if err != nil {
-						fmt.Printf("%+v\n", err.Error())
-						panic("http transport failed to start")
+						panic(fmt.Sprintf("http transport failed to start: %+v", err.Error()))
 					}
 				}
 			}()
@@ -172,6 +178,14 @@ func forEachAltSvcHeaderPeer(header string, fn func(transportName, dialAddr stri
 	}
 }
 
+func (t *httpTransport) storeAltSvcHeaderPeers(h http.Header) {
+	if altSvcHeader := h.Get("Alt-Svc"); altSvcHeader != "" {
+		forEachAltSvcHeaderPeer(altSvcHeader, func(transportName, dialAddr string, metadata map[string]string) {
+			t.peerStore.AddDialInfos([]PeerDialInfo{{transportName, dialAddr}})
+		})
+	}
+}
+
 func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
@@ -203,11 +217,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Alt-Svc", strings.Join(others, ", "))
 
 		// Similarly, if other peers give us Alt-Svc headers, track them
-		if altSvcHeader := r.Header.Get("Alt-Svc"); altSvcHeader != "" {
-			forEachAltSvcHeaderPeer(altSvcHeader, func(transportName, dialAddr string, metadata map[string]string) {
-				t.peerStore.AddDialInfos([]PeerDialInfo{{transportName, dialAddr}})
-			})
-		}
+		t.storeAltSvcHeaderPeers(r.Header)
 	}
 
 	switch r.Method {
@@ -259,7 +269,6 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "PUT":
 		if r.Header.Get("Private") == "true" {
 			t.servePostPrivateTx(w, r, address)
-
 		} else {
 			t.servePostTx(w, r, address)
 		}
@@ -947,48 +956,20 @@ func (t *httpTransport) NewPeerConn(ctx context.Context, dialAddr string) (Peer,
 	return t.makePeer(nil, nil, dialAddr), nil
 }
 
-func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, theURL string) (_ <-chan Peer, err error) {
+func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_ <-chan Peer, err error) {
 	defer withStack(&err)
 
+	providers, err := t.tryFetchProvidersFromAuthoritativeHost(stateURI)
+	if err != nil {
+		t.Warnf("could not fetch providers of state URI '%v' from authoritative host: %v", stateURI, err)
+	}
+
+	u, err := url.Parse("http://" + stateURI)
+	if err == nil {
+		providers = append(providers, "http://"+u.Hostname())
+	}
+
 	ch := make(chan Peer)
-
-	parts := strings.Split(theURL, "/")
-
-	u, err := url.Parse("http://" + parts[0] + ":8080?state_uri=" + theURL)
-	if err != nil {
-		close(ch)
-		return ch, err
-	}
-
-	u.Path = path.Join(u.Path, "providers")
-
-	resp, err := httpClient.Get(u.String())
-	if err != nil {
-		close(ch)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			close(ch)
-			return ch, err
-		}
-		err = errors.Errorf("error GETting providers: (%v) %v: %v", resp.StatusCode, resp.Status, string(body))
-		t.Error(err)
-		close(ch)
-		return ch, err
-	}
-
-	var providers []string
-	err = json.NewDecoder(resp.Body).Decode(&providers)
-	if err != nil {
-		close(ch)
-		return ch, err
-	}
-	providers = append(providers, theURL)
-
 	go func() {
 		defer close(ch)
 		for _, providerURL := range providers {
@@ -1003,6 +984,38 @@ func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, theURL string) 
 		}
 	}()
 	return ch, nil
+}
+
+func (t *httpTransport) tryFetchProvidersFromAuthoritativeHost(stateURI string) ([]string, error) {
+	parts := strings.Split(stateURI, "/")
+
+	u, err := url.Parse("http://" + parts[0] + ":8080?state_uri=" + stateURI)
+	if err != nil {
+		return nil, err
+	}
+
+	u.Path = path.Join(u.Path, "providers")
+
+	resp, err := httpClient.Get(u.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, errors.Errorf("got status code %v %v: %v", resp.StatusCode, resp.Status, string(body))
+	}
+
+	var providers []string
+	err = json.NewDecoder(resp.Body).Decode(&providers)
+	if err != nil {
+		return nil, err
+	}
+	return providers, nil
 }
 
 func (t *httpTransport) ProvidersOfRef(ctx context.Context, refID types.RefID) (<-chan Peer, error) {
@@ -1091,7 +1104,7 @@ func (t *httpTransport) makePeer(writer io.Writer, flusher http.Flusher, dialAdd
 	peer.stream.Flusher = flusher
 
 	peerDetails := t.peerStore.PeerWithDialInfo(PeerDialInfo{t.Name(), dialAddr})
-	if peerDetails != nil {
+	if peerDetails != nil && peerDetails != PeerDetails(nil) {
 		peer.PeerDetails = peerDetails
 	} else {
 		t.peerStore.AddDialInfos([]PeerDialInfo{{t.Name(), dialAddr}})
@@ -1163,6 +1176,8 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 		return nil, errors.Errorf("error GETting peer: (%v) %v", resp.StatusCode, resp.Status)
 	}
 
+	p.t.storeAltSvcHeaderPeers(resp.Header)
+
 	return &httpReadableSubscription{
 		client:  &client,
 		peer:    p,
@@ -1215,6 +1230,9 @@ func (p *httpPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []ty
 			return errors.WithStack(err)
 		}
 		defer resp.Body.Close()
+
+		p.t.storeAltSvcHeaderPeers(resp.Header)
+
 		if resp.StatusCode != 200 {
 			return errors.Errorf("error sending private PUT: (%v) %v", resp.StatusCode, resp.Status)
 		}
@@ -1239,6 +1257,8 @@ func (p *httpPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []ty
 		return errors.Errorf("error PUTting to peer: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
+
+	p.t.storeAltSvcHeaderPeers(resp.Header)
 	return nil
 }
 
@@ -1272,10 +1292,13 @@ func (p *httpPeer) Ack(stateURI string, txID types.ID) (err error) {
 		return errors.Errorf("error ACKing to peer: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
+
+	p.t.storeAltSvcHeaderPeers(resp.Header)
 	return nil
 }
 
 func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error) {
+	defer withStack(&err)
 	defer func() { p.UpdateConnStats(err == nil) }()
 
 	if p.DialInfo().DialAddr == "" {
@@ -1298,6 +1321,8 @@ func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error
 	} else if resp.StatusCode != 200 {
 		return errors.Errorf("error verifying peer address: (%v) %v", resp.StatusCode, resp.Status)
 	}
+
+	p.t.storeAltSvcHeaderPeers(resp.Header)
 
 	p.stream.ReadCloser = resp.Body
 	return nil

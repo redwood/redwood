@@ -152,6 +152,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 		libp2pTransport, err := rw.NewLibp2pTransport(
 			signingKeypair.Address(),
 			config.P2PTransport.ListenPort,
+			config.P2PTransport.ReachableAt,
 			config.P2PTransport.KeyFile,
 			encryptingKeypair,
 			controllerHub,
@@ -173,6 +174,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 
 		httpTransport, err := rw.NewHTTPTransport(
 			config.HTTPTransport.ListenHost,
+			config.HTTPTransport.ReachableAt,
 			config.HTTPTransport.DefaultStateURI,
 			controllerHub,
 			refStore,
@@ -227,7 +229,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			sub, err := host.Subscribe(ctx, stateURI, 0, nil)
+			sub, err := host.Subscribe(ctx, stateURI, 0, nil, nil)
 			if err != nil {
 				app.Errorf("error subscribing to %v: %v", stateURI, err)
 				continue

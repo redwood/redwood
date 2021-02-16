@@ -14,7 +14,7 @@ type PeerStore interface {
 	UnverifiedPeers() []PeerDetails
 	Peers() []PeerDetails
 	AllDialInfos() []PeerDialInfo
-	PeerWithDialInfo(dialInfo PeerDialInfo) PeerDetails
+	PeerWithDialInfo(dialInfo PeerDialInfo) *peerDetails
 	PeersWithAddress(address types.Address) []PeerDetails
 	PeersFromTransportWithAddress(transportName string, address types.Address) []PeerDetails
 	IsKnownPeer(dialInfo PeerDialInfo) bool
@@ -127,7 +127,7 @@ func (s *peerStore) AddVerifiedCredentials(
 	}
 }
 
-func (s *peerStore) PeerWithDialInfo(dialInfo PeerDialInfo) PeerDetails {
+func (s *peerStore) PeerWithDialInfo(dialInfo PeerDialInfo) *peerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 

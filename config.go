@@ -37,10 +37,11 @@ type BootstrapPeer struct {
 }
 
 type P2PTransportConfig struct {
-	Enabled    bool   `yaml:"Enabled"`
-	KeyFile    string `yaml:"KeyFile"`
-	ListenAddr string `yaml:"ListenAddr"`
-	ListenPort uint   `yaml:"ListenPort"`
+	Enabled     bool   `yaml:"Enabled"`
+	KeyFile     string `yaml:"KeyFile"`
+	ListenAddr  string `yaml:"ListenAddr"`
+	ListenPort  uint   `yaml:"ListenPort"`
+	ReachableAt string `yaml:"ReachableAt"`
 }
 
 type HTTPTransportConfig struct {
@@ -48,6 +49,7 @@ type HTTPTransportConfig struct {
 	ListenHost      string `yaml:"ListenHost"`
 	CookieSecret    string `yaml:"CookieSecret"`
 	DefaultStateURI string `yaml:"DefaultStateURI"`
+	ReachableAt     string `yaml:"ReachableAt"`
 }
 
 type HTTPRPCConfig struct {

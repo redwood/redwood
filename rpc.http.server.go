@@ -26,8 +26,8 @@ type HTTPRPCService interface {
 }
 
 type WhitelistConfig struct {
-	Enabled        bool
-	PermittedAddrs []types.Address
+	Enabled        bool            `yaml:"Enabled"`
+	PermittedAddrs []types.Address `yaml:"PermittedAddrs"`
 }
 
 type whitelistMiddleware struct {

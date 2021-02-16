@@ -41,11 +41,12 @@ import (
 type libp2pTransport struct {
 	*ctx.Context
 
-	libp2pHost p2phost.Host
-	dht        *dht.IpfsDHT
-	peerID     peer.ID
-	port       uint
-	p2pKey     cryptop2p.PrivKey
+	libp2pHost  p2phost.Host
+	dht         *dht.IpfsDHT
+	peerID      peer.ID
+	port        uint
+	p2pKey      cryptop2p.PrivKey
+	reachableAt string
 	*metrics.BandwidthCounter
 
 	address types.Address
@@ -67,6 +68,7 @@ const (
 func NewLibp2pTransport(
 	addr types.Address,
 	port uint,
+	reachableAt string,
 	keyfilePath string,
 	enckeys *EncryptingKeypair,
 	controllerHub ControllerHub,
@@ -77,11 +79,11 @@ func NewLibp2pTransport(
 	if err != nil {
 		return nil, err
 	}
-
 	t := &libp2pTransport{
 		Context:           &ctx.Context{},
 		port:              port,
 		address:           addr,
+		reachableAt:       reachableAt,
 		enckeys:           enckeys,
 		p2pKey:            p2pKey,
 		controllerHub:     controllerHub,
@@ -299,12 +301,12 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 	case MsgType_Put:
 		defer peer.Close()
 
-		tx, ok := msg.Payload.(*Tx)
+		tx, ok := msg.Payload.(Tx)
 		if !ok {
 			t.Errorf("Put message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
-		t.host.HandleTxReceived(*tx, peer)
+		t.host.HandleTxReceived(tx, peer)
 
 	case MsgType_Ack:
 		defer peer.Close()
@@ -415,15 +417,6 @@ func (t *libp2pTransport) ProvidersOfStateURI(ctx context.Context, stateURI stri
 			default:
 			}
 
-			// search, err := t.dht.SearchValue(ctx, stateURI)
-			// if err != nil {
-			// 	t.Errorf("ERR getting: %v", err)
-			// }
-
-			// for val := range search {
-			// 	t.Successf("GET %v: %v", stateURI, string(val))
-			// }
-
 			for pinfo := range t.dht.FindProvidersAsync(ctx, urlCid, 8) {
 				if pinfo.ID == t.libp2pHost.ID() {
 					select {
@@ -433,7 +426,6 @@ func (t *libp2pTransport) ProvidersOfStateURI(ctx context.Context, stateURI stri
 						continue
 					}
 				}
-				// t.Debugf("ProvidersOfStateURI %+v", pinfo)
 
 				// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
 				// whitelist, etc.
@@ -621,6 +613,9 @@ func (t *libp2pTransport) periodicallyUpdatePeerStore() {
 		for _, addr := range t.libp2pHost.Addrs() {
 			addrStr := addr.String()
 			myAddrs.Add(addrStr)
+		}
+		if t.reachableAt != "" {
+			myAddrs.Add(fmt.Sprintf("%v/p2p/%v", t.reachableAt, t.Libp2pPeerID()))
 		}
 		myAddrs = cleanLibp2pAddrs(myAddrs, t.peerID)
 
@@ -1327,13 +1322,10 @@ func (t *libp2pTransport) Disconnected(network netp2p.Network, conn netp2p.Conn)
 	t.Debugf("libp2p disconnected: %v", addr)
 }
 
-func (t *libp2pTransport) OpenedStream(network netp2p.Network, stream netp2p.Stream) {
-	t.Debugf("libp2p stream opened: %v", stream.Conn().RemotePeer().Pretty())
-}
+func (t *libp2pTransport) OpenedStream(network netp2p.Network, stream netp2p.Stream) {}
 
 func (t *libp2pTransport) ClosedStream(network netp2p.Network, stream netp2p.Stream) {
 	peerID := stream.Conn().RemotePeer()
-	t.Debugf("libp2p stream closed: %v", peerID.Pretty())
 	t.writeSubsByPeerIDMu.Lock()
 	defer t.writeSubsByPeerIDMu.Unlock()
 
