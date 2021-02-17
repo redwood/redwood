@@ -29,7 +29,7 @@ type peerStore struct {
 	peersWithAddress map[types.Address]map[PeerDialInfo]*peerDetails
 	unverifiedPeers  map[PeerDialInfo]struct{}
 
-	newUnverifiedPeerHandler func(dialInfo PeerDialInfo)
+	onNewUnverifiedPeer func(dialInfo PeerDialInfo)
 }
 
 type PeerDialInfo struct {
@@ -60,7 +60,7 @@ func (s *peerStore) Peers() []PeerDetails {
 }
 
 func (s *peerStore) OnNewUnverifiedPeer(fn func(dialInfo PeerDialInfo)) {
-	s.newUnverifiedPeerHandler = fn
+	s.onNewUnverifiedPeer = fn
 }
 
 func (s *peerStore) AddDialInfos(dialInfos []PeerDialInfo) {
@@ -76,7 +76,7 @@ func (s *peerStore) AddDialInfos(dialInfos []PeerDialInfo) {
 		if !exists {
 			s.peers[dialInfo] = &peerDetails{peerStore: s, dialInfo: dialInfo}
 			s.unverifiedPeers[dialInfo] = struct{}{}
-			s.newUnverifiedPeerHandler(dialInfo)
+			s.onNewUnverifiedPeer(dialInfo)
 		}
 	}
 }
@@ -209,7 +209,7 @@ type PeerDetails interface {
 	UpdateConnStats(success bool)
 	LastContact() time.Time
 	LastFailure() time.Time
-	Failures() int
+	Failures() uint64
 }
 
 type peerDetails struct {
@@ -220,7 +220,7 @@ type peerDetails struct {
 	encpubkey   EncryptingPublicKey
 	lastContact time.Time
 	lastFailure time.Time
-	failures    int
+	failures    uint64
 }
 
 func (p *peerDetails) Address() types.Address {
@@ -265,7 +265,7 @@ func (p *peerDetails) LastFailure() time.Time {
 	return p.lastFailure
 }
 
-func (p *peerDetails) Failures() int {
+func (p *peerDetails) Failures() uint64 {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
 	return p.failures

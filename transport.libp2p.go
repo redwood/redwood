@@ -786,8 +786,10 @@ func (peer *libp2pPeer) EnsureConnected(ctx context.Context) error {
 	return nil
 }
 
-func (peer *libp2pPeer) Subscribe(ctx context.Context, stateURI string) (ReadableSubscription, error) {
-	err := peer.EnsureConnected(ctx)
+func (peer *libp2pPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSubscription, err error) {
+	defer func() { peer.UpdateConnStats(err == nil) }()
+
+	err = peer.EnsureConnected(ctx)
 	if err != nil {
 		peer.t.Errorf("error connecting to peer: %v", err)
 		return nil, err

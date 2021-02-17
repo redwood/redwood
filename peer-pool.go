@@ -3,20 +3,28 @@ package redwood
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type peerPool struct {
-	chPeers       chan Peer
-	chNeedNewPeer chan struct{}
-	chProviders   <-chan Peer
-	chStop        chan struct{}
+	chPeers         chan Peer
+	chPeerAvailable chan struct{}
+	chNeedNewPeer   chan struct{}
+	chProviders     <-chan Peer
+	chStop          chan struct{}
 
-	peerStates   map[types.Address]peerState
-	peerStatesMu sync.RWMutex
+	fnGetPeers func(ctx context.Context) (<-chan Peer, error)
+
+	peers map[PeerDialInfo]struct {
+		peer  Peer
+		state peerState
+	}
+	peersMu sync.RWMutex
 }
 
 type peerState int
@@ -32,75 +40,67 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 	close(chProviders)
 
 	p := &peerPool{
-		chPeers:       make(chan Peer, concurrentConns),
-		chNeedNewPeer: make(chan struct{}, concurrentConns),
-		chProviders:   chProviders,
-		chStop:        make(chan struct{}),
-		peerStates:    make(map[types.Address]peerState),
+		chPeerAvailable: make(chan struct{}, concurrentConns),
+		chPeers:         make(chan Peer, concurrentConns),
+		chNeedNewPeer:   make(chan struct{}, concurrentConns),
+		chProviders:     chProviders,
+		chStop:          make(chan struct{}),
+		fnGetPeers:      fnGetPeers,
+		peers: make(map[PeerDialInfo]struct {
+			peer  Peer
+			state peerState
+		}),
 	}
 
 	// When a message is sent on the `needNewPeer` channel, this goroutine attempts
-	// to take a peer from the `chProviders` channel, validate its identity, and add it to the pool.
+	// to take a peer from the `chProviders` channel and add it to the pool.
 	go func() {
 		// defer close(p.chPeers)
 
 		for {
-			select {
-			case <-p.chNeedNewPeer:
-			case <-p.chStop:
-				return
-			}
-
-			var peer Peer
 		FindPeerLoop:
 			for {
 				select {
 				case <-p.chStop:
 					return
-				case maybePeer, open := <-p.chProviders:
+				case peer, open := <-p.chProviders:
 					if !open {
-						var err error
-						ctx, cancel := context.WithCancel(context.Background())
-						p.chProviders, err = fnGetPeers(ctx)
-						if err != nil {
-							log.Warnf("[peer pool] error finding peers: %v", err)
-							// @@TODO: exponential backoff
-							cancel()
-							continue FindPeerLoop
-						}
+						p.restartSearch()
 						continue FindPeerLoop
 					}
-
-					address := maybePeer.Address()
-					if address == (types.Address{}) {
-						// _, _, err := host.ChallengePeerIdentity(context.TODO(), maybePeer)
-						// if err != nil {
-						// 	log.Warnf("error verifying peer: %v", err)
-						// 	continue FindPeerLoop
-						// }
-						// address = maybePeer.Address()
-						continue FindPeerLoop
-					}
-
-					p.peerStatesMu.Lock()
-					if p.peerStates[address] != peerState_Unknown {
-						p.peerStatesMu.Unlock()
-						continue FindPeerLoop
-					}
-
-					p.peerStates[address] = peerState_InUse
-					p.peerStatesMu.Unlock()
-					peer = maybePeer
+					p.addPeerToPool(peer)
 				}
-
-				log.Debugf("[peer pool] found peer %v", peer.DialInfo())
-				break
 			}
+		}
+	}()
 
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		for {
 			select {
-			case p.chPeers <- peer:
 			case <-p.chStop:
 				return
+			case <-p.chNeedNewPeer:
+			}
+
+			var peer Peer
+			for {
+				select {
+				case <-p.chStop:
+					return
+				case <-ticker.C:
+				case <-p.chPeerAvailable:
+				}
+
+				peer = p.nextAvailablePeer()
+				if peer != nil {
+					break
+				}
+			}
+			select {
+			case <-p.chStop:
+				return
+			case p.chPeers <- peer:
 			}
 		}
 	}()
@@ -119,20 +119,74 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 	return p
 }
 
+func (p *peerPool) addPeerToPool(peer Peer) {
+	p.peersMu.Lock()
+	defer p.peersMu.Unlock()
+
+	if _, exists := p.peers[peer.DialInfo()]; !exists {
+		log.Debugf("[peer pool] found peer %v", peer.DialInfo())
+
+		p.peers[peer.DialInfo()] = struct {
+			peer  Peer
+			state peerState
+		}{peer, peerState_Unknown}
+
+		select {
+		case p.chPeerAvailable <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (p *peerPool) nextAvailablePeer() Peer {
+	p.peersMu.Lock()
+	defer p.peersMu.Unlock()
+
+	for _, p := range p.peers {
+		if p.state != peerState_Unknown {
+			continue
+		} else if uint64(time.Now().Sub(p.peer.LastFailure())/time.Second) < p.peer.Failures() {
+			continue
+		} else if p.peer.Address() == (types.Address{}) {
+			continue
+		}
+		return p.peer
+	}
+	return nil
+}
+
+func (p *peerPool) restartSearch() {
+	var err error
+	ctx, cancel := utils.ContextFromChan(p.chStop)
+	p.chProviders, err = p.fnGetPeers(ctx)
+	if err != nil {
+		log.Warnf("[peer pool] error finding peers: %v", err)
+		// @@TODO: exponential backoff
+		cancel()
+	}
+}
+
 func (p *peerPool) Close() {
 	close(p.chStop)
 }
 
 func (p *peerPool) GetPeer() (Peer, error) {
-	select {
-	case peer, open := <-p.chPeers:
-		if !open {
-			return nil, errors.New("connection closed")
-		}
-		return peer, nil
+	for {
+		select {
+		case peer, open := <-p.chPeers:
+			if !open {
+				return nil, errors.New("connection closed")
+			}
+			if uint64(time.Now().Sub(peer.LastFailure())/time.Second) < peer.Failures() {
+				p.ReturnPeer(peer, false)
+				continue
+			}
+			p.setPeerState(peer, peerState_InUse)
+			return peer, nil
 
-	case <-p.chStop:
-		return nil, nil
+		case <-p.chStop:
+			return nil, nil
+		}
 	}
 }
 
@@ -141,21 +195,30 @@ func (p *peerPool) ReturnPeer(peer Peer, strike bool) {
 		// Close the faulty connection
 		peer.Close()
 
-		p.peerStatesMu.Lock()
-		p.peerStates[peer.Address()] = peerState_Strike
-		p.peerStatesMu.Unlock()
+		p.setPeerState(peer, peerState_Strike)
 
 		// Try to obtain a new peer
 		select {
 		case p.chNeedNewPeer <- struct{}{}:
-		case <-p.chStop:
+		default:
 		}
 
 	} else {
 		// Return the peer to the pool
+		p.setPeerState(peer, peerState_Unknown)
+
 		select {
-		case p.chPeers <- peer:
-		case <-p.chStop:
+		case p.chPeerAvailable <- struct{}{}:
+		default:
 		}
 	}
+}
+
+func (p *peerPool) setPeerState(peer Peer, state peerState) {
+	p.peersMu.Lock()
+	defer p.peersMu.Unlock()
+
+	peerInfo := p.peers[peer.DialInfo()]
+	peerInfo.state = state
+	p.peers[peer.DialInfo()] = peerInfo
 }
