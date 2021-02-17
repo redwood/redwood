@@ -708,6 +708,9 @@ func (t *libp2pTransport) makeConnectedPeer(stream netp2p.Stream) *libp2pPeer {
 			break
 		}
 	}
+	if peer.PeerDetails == nil {
+		return nil
+	}
 	return peer
 }
 
@@ -718,29 +721,34 @@ func (t *libp2pTransport) makeDisconnectedPeer(pinfo peerstore.PeerInfo) *libp2p
 		return nil
 	}
 
-	var peerDetails PeerDetails
+	var peerDetails *peerDetails
 	dialAddrs.ForEach(func(dialAddr string) bool {
 		peerDetails = t.peerStore.PeerWithDialInfo(PeerDialInfo{TransportName: t.Name(), DialAddr: dialAddr})
-		if peerDetails != PeerDetails(nil) {
+		if peerDetails != nil {
 			return false
 		}
 		return true
 	})
-	if peerDetails != PeerDetails(nil) {
-		peer.PeerDetails = peerDetails
-	} else {
+	if peerDetails == nil {
 		var dialInfos []PeerDialInfo
 		dialAddrs.ForEach(func(dialAddr string) bool {
 			dialInfos = append(dialInfos, PeerDialInfo{TransportName: t.Name(), DialAddr: dialAddr})
 			return true
 		})
 		t.peerStore.AddDialInfos(dialInfos)
+		var peerDetails PeerDetails
 		for _, dialInfo := range dialInfos {
-			peer.PeerDetails = t.peerStore.PeerWithDialInfo(dialInfo)
-			if peer.PeerDetails != PeerDetails(nil) {
+			peerDetails = t.peerStore.PeerWithDialInfo(dialInfo)
+			if peerDetails != nil {
 				break
 			}
 		}
+		if peerDetails == nil {
+			return nil
+		}
+		peer.PeerDetails = peerDetails
+	} else {
+		peer.PeerDetails = peerDetails
 	}
 	return peer
 }
