@@ -27,11 +27,12 @@ import (
 type HTTPClient struct {
 	dialAddr  string
 	sigkeys   *SigningKeypair
+	enckeys   *EncryptingKeypair
 	cookieJar http.CookieJar
 	tls       bool
 }
 
-func NewHTTPClient(dialAddr string, sigkeys *SigningKeypair, tls bool) (*HTTPClient, error) {
+func NewHTTPClient(dialAddr string, sigkeys *SigningKeypair, enckeys *EncryptingKeypair, tls bool) (*HTTPClient, error) {
 	cookieJar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
@@ -40,6 +41,7 @@ func NewHTTPClient(dialAddr string, sigkeys *SigningKeypair, tls bool) (*HTTPCli
 	return &HTTPClient{
 		dialAddr:  dialAddr,
 		sigkeys:   sigkeys,
+		enckeys:   enckeys,
 		cookieJar: cookieJar,
 		tls:       tls,
 	}, nil
@@ -241,7 +243,7 @@ func (c *HTTPClient) Get(stateURI string, version *types.ID, keypath tree.Keypat
 	return resp.Body, int64(contentLength), parents, nil
 }
 
-func (c *HTTPClient) Put(tx *Tx) error {
+func (c *HTTPClient) Put(ctx context.Context, tx *Tx, recipientEncPubkey EncryptingPublicKey) error {
 	if len(tx.Sig) == 0 {
 		sig, err := c.sigkeys.SignHash(tx.Hash())
 		if err != nil {
@@ -250,34 +252,12 @@ func (c *HTTPClient) Put(tx *Tx) error {
 		tx.Sig = sig
 	}
 
-	var parentStrs []string
-	for _, parent := range tx.Parents {
-		parentStrs = append(parentStrs, parent.Hex())
-	}
-
-	var body bytes.Buffer
-	for _, patch := range tx.Patches {
-		_, err := body.Write([]byte(patch.String() + "\n"))
-		if err != nil {
-			return errors.WithStack(err)
-		}
-	}
-
-	client := c.client()
-	req, err := http.NewRequest("PUT", c.dialAddr, &body)
+	req, err := PutRequestFromTx(ctx, tx, c.dialAddr, c.enckeys, recipientEncPubkey)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	req.Header.Set("Version", tx.ID.Hex())
-	req.Header.Set("State-URI", tx.StateURI)
-	req.Header.Set("Signature", tx.Sig.Hex())
-	req.Header.Set("Parents", strings.Join(parentStrs, ","))
-	if tx.Checkpoint {
-		req.Header.Set("Checkpoint", "true")
-	}
-
-	resp, err := client.Do(req)
+	resp, err := c.client().Do(req)
 	if err != nil {
 		return errors.WithStack(err)
 	} else if resp.StatusCode != 200 {

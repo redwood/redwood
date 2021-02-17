@@ -25,6 +25,7 @@ import (
 
 	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 	"golang.org/x/net/publicsuffix"
 
 	"redwood.dev/ctx"
@@ -1186,76 +1187,39 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 func (p *httpPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
+	requestContext, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	if tx.IsPrivate() {
 		if p.DialInfo().DialAddr == "" {
 			p.t.Warn("peer has no DialAddr")
 			return nil
 		}
-
-		marshalledTx, err := json.Marshal(tx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		_, peerEncPubkey := p.PublicKeys()
-
-		encryptedTxBytes, err := p.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		msg, err := json.Marshal(EncryptedTx{
-			TxID:             tx.ID,
-			EncryptedPayload: encryptedTxBytes,
-			SenderPublicKey:  p.t.enckeys.EncryptingPublicKey.Bytes(),
-		})
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-
-		req, err := http.NewRequestWithContext(ctx, "PUT", p.DialInfo().DialAddr, bytes.NewReader(msg))
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		req.Header.Set("Private", "true")
-
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		defer resp.Body.Close()
-
-		p.t.storeAltSvcHeaderPeers(resp.Header)
-
-		if resp.StatusCode != 200 {
-			return errors.Errorf("error sending private PUT: (%v) %v", resp.StatusCode, resp.Status)
-		}
-		return nil
 	}
 
-	// This peer is not subscribed, so we make a PUT
-	bs, err := json.Marshal(tx)
+	_, peerEncPubkey := p.PublicKeys()
+	req, err := PutRequestFromTx(requestContext, tx, p.DialInfo().DialAddr, p.t.enckeys, peerEncPubkey)
 	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest("PUT", p.DialInfo().DialAddr, bytes.NewReader(bs))
-	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return err
-	} else if resp.StatusCode != 200 {
-		return errors.Errorf("error PUTting to peer: (%v) %v", resp.StatusCode, resp.Status)
+		return errors.WithStack(err)
 	}
 	defer resp.Body.Close()
 
 	p.t.storeAltSvcHeaderPeers(resp.Header)
+
+	if resp.StatusCode != 200 {
+		bs, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			err = errors.Wrapf(err, "error reading response body")
+			err2 := errors.Errorf("error PUTting to peer %v: (%v) %v", p.DialInfo().DialAddr, resp.StatusCode, resp.Status)
+			return multierr.Append(err, err2)
+		}
+		return errors.Errorf("error PUTting to peer %v: (%v) %v: %v", p.DialInfo().DialAddr, resp.StatusCode, resp.Status, string(bs))
+	}
 	return nil
 }
 
