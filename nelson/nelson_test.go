@@ -19,7 +19,7 @@ type M = map[string]interface{}
 func setupDBTreeWithValue(T *testing.T, keypath tree.Keypath, val interface{}) *tree.DBTree {
 	i := rand.Int()
 
-	db, err := tree.NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i))
+	db, err := tree.NewVersionedDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i))
 	require.NoError(T, err)
 
 	state := db.StateAtVersion(nil, true)

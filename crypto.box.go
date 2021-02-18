@@ -79,6 +79,18 @@ func (pubkey *encryptingPublicKey) Bytes() []byte {
 	return bs
 }
 
+func (pubkey *encryptingPublicKey) UnmarshalText(bs []byte) error {
+	if len(bs) != len(pubkey) {
+		return errors.New("EncryptingPublicKey#UnmarshalText: wrong length")
+	}
+	copy((*pubkey)[:], bs)
+	return nil
+}
+
+func (pubkey *encryptingPublicKey) MarshalText() ([]byte, error) {
+	return pubkey.Bytes(), nil
+}
+
 func (privkey *encryptingPrivateKey) SealMessageFor(recipientPubKey EncryptingPublicKey, msg []byte) ([]byte, error) {
 	// The shared key can be used to speed up processing when using the same
 	// pair of keys repeatedly.

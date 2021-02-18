@@ -22,14 +22,6 @@ const ChatBarWrapper = styled.div`
     background: ${props => props.theme.color.grey[400]};
 `
 
-const ChatBarTitle = styled.div`
-    font-size: 1.1rem;
-    font-weight: 500;
-    margin-top: 24px;
-    margin-bottom: 24px;
-    padding-left: 12px;
-`
-
 const SGroupItem = styled(GroupItem)`
     cursor: pointer;
     transition: .15s ease-in-out all;
@@ -85,7 +77,6 @@ function ChatBar({ className }) {
 
     return (
         <ChatBarWrapper className={className}>
-            <ChatBarTitle>{selectedServer}/</ChatBarTitle>
             {serverRooms.map(roomStateURI => {
                 let messages = (stateTrees[roomStateURI] || {}).messages || []
                 let mostRecentMessageText

@@ -12,6 +12,7 @@ import (
 
 type HTTPRPCServer struct {
 	*redwood.HTTPRPCServer
+	signingKeypair *redwood.SigningKeypair
 }
 
 type (
@@ -56,6 +57,7 @@ func (s *HTTPRPCServer) CreateCloudStackOptions(r *http.Request, args *CreateClo
 
 type (
 	CreateCloudStackArgs struct {
+		FirstStateURI    string `json:"firstStateURI"`
 		Provider         string `json:"provider"`
 		APIKey           string `json:"apiKey"`
 		DomainName       string `json:"domainName"`
@@ -73,20 +75,40 @@ type (
 func (s *HTTPRPCServer) CreateCloudStack(r *http.Request, args *CreateCloudStackArgs, resp *CreateCloudStackResponse) error {
 	bs, _ := json.MarshalIndent(args, "", "    ")
 	fmt.Println("create stack", string(bs))
-	return nil
-	// c, err := cloud.NewClient(args.Provider, args.APIKey)
-	// if err != nil {
-	// 	return err
-	// }
-	// ctx := context.Background()
-	// return c.CreateStack(ctx, cloud.CreateStackOptions{
-	// 	DomainName:       args.DomainName,
-	// 	DomainEmail:      args.DomainEmail,
-	// 	InstanceLabel:    args.InstanceLabel,
-	// 	InstanceRegion:   args.InstanceRegion,
-	// 	InstancePassword: args.InstancePassword,
-	// 	InstanceType:     args.InstanceType,
-	// 	InstanceImage:    args.InstanceImage,
-	// 	InstanceSSHKey:   args.InstanceSSHKey,
-	// })
+	c, err := cloud.NewClient(args.Provider, args.APIKey)
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	return c.CreateStack(ctx, cloud.CreateStackOptions{
+		FirstStateURI:    args.FirstStateURI,
+		AdminAddress:     s.signingKeypair.Address().Hex(),
+		DomainName:       args.DomainName,
+		DomainEmail:      args.DomainEmail,
+		InstanceLabel:    args.InstanceLabel,
+		InstanceRegion:   args.InstanceRegion,
+		InstancePassword: args.InstancePassword,
+		InstanceType:     args.InstanceType,
+		InstanceImage:    args.InstanceImage,
+		InstanceSSHKey:   args.InstanceSSHKey,
+	})
+}
+
+type (
+	CloudNodeSubscribeArgs struct {
+		RemoteRPCHost string `json:"remoteRPCHost"`
+		StateURI      string `json:"stateURI"`
+	}
+	CloudNodeSubscribeResponse struct{}
+)
+
+func (s *HTTPRPCServer) CloudNodeSubscribe(r *http.Request, args *CloudNodeSubscribeArgs, resp *CloudNodeSubscribeResponse) error {
+	client := redwood.NewHTTPRPCClient(args.RemoteRPCHost)
+	defer client.Close()
+
+	err := client.Authorize(s.signingKeypair)
+	if err != nil {
+		return err
+	}
+	return client.Subscribe(redwood.RPCSubscribeArgs{StateURI: args.StateURI, Txs: true})
 }

@@ -20,7 +20,8 @@ import strToColor from '../utils/strToColor'
 const Container = styled.div`
     display: flex;
     flex-direction: column;
-    height: 100%;
+    // height: 100%;
+    flex-grow: 1;
     background-color: ${props => props.theme.color.grey[200]};
 `
 
@@ -222,7 +223,6 @@ const MessageText = styled.div`
 `
 
 function Message({ msg, user, selectedServer, selectedStateURI, onClickAttachment, messageIndex }) {
-    console.log('user', user)
     user = user || {}
     let userAddress = msg.sender.toLowerCase()
     let displayName = user.username || msg.sender

@@ -68,7 +68,7 @@ function UserControl() {
     let { selectedServer } = useNavigation()
     const [username, setUsername] = useState(null)
     const [userPhotoURL, setUserPhotoURL] = useState(null)
-    let registry = useStateTree(`${selectedServer}/registry`)
+    let registry = useStateTree(!!selectedServer ? `${selectedServer}/registry` : null)
     nodeAddress = !!nodeAddress ? nodeAddress.toLowerCase() : null
 
     useEffect(() => {
@@ -91,7 +91,7 @@ function UserControl() {
             </SUserLeft>
             <UserProfileModal
               onDismiss={onDismiss}
-              currentUsername={username} 
+              currentUsername={username}
               userPhotoURL={userPhotoURL}
             />
         </SUserControlContainer>

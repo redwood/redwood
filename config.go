@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"redwood.dev/utils"
 )
 
 type Config struct {
@@ -25,7 +27,7 @@ type Config struct {
 type NodeConfig struct {
 	HDMnemonicPhrase        string          `yaml:"HDMnemonicPhrase"`
 	BootstrapPeers          []BootstrapPeer `yaml:"BootstrapPeers"`
-	SubscribedStateURIs     StringSet       `yaml:"SubscribedStateURIs"`
+	SubscribedStateURIs     utils.StringSet `yaml:"SubscribedStateURIs"`
 	MaxPeersPerSubscription uint64          `yaml:"MaxPeersPerSubscription"`
 	DataRoot                string          `yaml:"DataRoot"`
 	DevMode                 bool            `yaml:"DevMode"`
@@ -37,10 +39,11 @@ type BootstrapPeer struct {
 }
 
 type P2PTransportConfig struct {
-	Enabled    bool   `yaml:"Enabled"`
-	KeyFile    string `yaml:"KeyFile"`
-	ListenAddr string `yaml:"ListenAddr"`
-	ListenPort uint   `yaml:"ListenPort"`
+	Enabled     bool   `yaml:"Enabled"`
+	KeyFile     string `yaml:"KeyFile"`
+	ListenAddr  string `yaml:"ListenAddr"`
+	ListenPort  uint   `yaml:"ListenPort"`
+	ReachableAt string `yaml:"ReachableAt"`
 }
 
 type HTTPTransportConfig struct {
@@ -48,11 +51,13 @@ type HTTPTransportConfig struct {
 	ListenHost      string `yaml:"ListenHost"`
 	CookieSecret    string `yaml:"CookieSecret"`
 	DefaultStateURI string `yaml:"DefaultStateURI"`
+	ReachableAt     string `yaml:"ReachableAt"`
 }
 
 type HTTPRPCConfig struct {
-	Enabled    bool   `yaml:"Enabled"`
-	ListenHost string `yaml:"ListenHost"`
+	Enabled    bool            `yaml:"Enabled"`
+	ListenHost string          `yaml:"ListenHost"`
+	Whitelist  WhitelistConfig `yaml:"Whitelist"`
 }
 
 func DefaultConfig(appName string) Config {

@@ -25,7 +25,7 @@ import (
 
 	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
-
+	"go.uber.org/multierr"
 	"golang.org/x/net/publicsuffix"
 
 	"redwood.dev/ctx"
@@ -58,6 +58,7 @@ type httpTransport struct {
 
 func NewHTTPTransport(
 	listenAddr string,
+	reachableAt string,
 	defaultStateURI string,
 	controllerHub ControllerHub,
 	refStore RefStore,
@@ -73,9 +74,14 @@ func NewHTTPTransport(
 		return nil, err
 	}
 
-	ownURL := listenAddr
-	if len(listenAddr) > 0 && listenAddr[0] == ':' {
-		ownURL = "localhost" + listenAddr
+	var ownURL string
+	if reachableAt != "" {
+		ownURL = reachableAt
+	} else {
+		ownURL = "http://" + listenAddr
+		if len(listenAddr) > 0 && listenAddr[0] == ':' {
+			ownURL = "http://localhost" + listenAddr
+		}
 	}
 
 	t := &httpTransport{
@@ -112,6 +118,7 @@ func (t *httpTransport) Start() error {
 				}
 			}
 
+			// Update our node's info in the peer store
 			t.peerStore.AddDialInfos([]PeerDialInfo{{t.Name(), t.ownURL}})
 
 			go func() {
@@ -133,8 +140,7 @@ func (t *httpTransport) Start() error {
 					}
 					err := srv.ListenAndServe()
 					if err != nil {
-						fmt.Printf("%+v\n", err.Error())
-						panic("http transport failed to start")
+						panic(fmt.Sprintf("http transport failed to start: %+v", err.Error()))
 					}
 				}
 			}()
@@ -173,6 +179,14 @@ func forEachAltSvcHeaderPeer(header string, fn func(transportName, dialAddr stri
 	}
 }
 
+func (t *httpTransport) storeAltSvcHeaderPeers(h http.Header) {
+	if altSvcHeader := h.Get("Alt-Svc"); altSvcHeader != "" {
+		forEachAltSvcHeaderPeer(altSvcHeader, func(transportName, dialAddr string, metadata map[string]string) {
+			t.peerStore.AddDialInfos([]PeerDialInfo{{transportName, dialAddr}})
+		})
+	}
+}
+
 func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
@@ -204,11 +218,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Alt-Svc", strings.Join(others, ", "))
 
 		// Similarly, if other peers give us Alt-Svc headers, track them
-		if altSvcHeader := r.Header.Get("Alt-Svc"); altSvcHeader != "" {
-			forEachAltSvcHeaderPeer(altSvcHeader, func(transportName, dialAddr string, metadata map[string]string) {
-				t.peerStore.AddDialInfos([]PeerDialInfo{{transportName, dialAddr}})
-			})
-		}
+		t.storeAltSvcHeaderPeers(r.Header)
 	}
 
 	switch r.Method {
@@ -260,7 +270,6 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "PUT":
 		if r.Header.Get("Private") == "true" {
 			t.servePostPrivateTx(w, r, address)
-
 		} else {
 			t.servePostTx(w, r, address)
 		}
@@ -363,55 +372,37 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 	keypath := r.Header.Get("Keypath")
 	subscriptionTypeStr := r.Header.Get("Subscribe")
 
-	subscriptionTypes := strings.Split(subscriptionTypeStr, ",")
 	var subscriptionType SubscriptionType
-	for _, st := range subscriptionTypes {
-		st = strings.TrimSpace(st)
-		switch st {
-		case "transactions":
-			subscriptionType |= SubscriptionType_Txs
-		case "states":
-			subscriptionType |= SubscriptionType_States
-		default:
-			http.Error(w, fmt.Sprintf("unknown subscription type '%v'", st), http.StatusBadRequest)
-			return
-		}
+	err := subscriptionType.UnmarshalText([]byte(subscriptionTypeStr))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("could not parse Subscribe header: %v", err), http.StatusBadRequest)
+		return
 	}
 
-	writeSub := &httpWritableSubscription{
-		httpPeer:         t.makePeerWithAddress(w, f, address),
-		chDone:           make(chan struct{}),
-		stateURI:         stateURI,
-		subscriptionType: subscriptionType,
-		keypath:          tree.Keypath(keypath),
-	}
+	httpWriteSub := &httpWritableSubscription{t.makePeerWithAddress(w, f, address)}
 
 	// Listen to the closing of the http connection via the CloseNotifier
 	notify := w.(http.CloseNotifier).CloseNotify()
 	go func() {
+		defer httpWriteSub.Close()
 		<-notify
 		t.Infof(0, "http subscription closed (%v)", stateURI)
-		t.host.HandleWritableSubscriptionClosed(writeSub)
 	}()
 
 	f.Flush()
 
+	var fetchHistoryOpts *FetchHistoryOpts
 	if fromTxHeader := r.Header.Get("From-Tx"); fromTxHeader != "" {
 		fromTxID, err := types.IDFromHex(fromTxHeader)
 		if err != nil {
 			http.Error(w, "could not parse From-Tx header", http.StatusBadRequest)
 			return
 		}
-
-		err = t.host.HandleFetchHistoryRequest(stateURI, fromTxID, types.ID{}, writeSub)
-		if err != nil {
-			t.Errorf("error fetching history: %v", err)
-			// @@TODO: close subscription?
-			return
-		}
+		fetchHistoryOpts = &FetchHistoryOpts{FromTxID: fromTxID}
 	}
 
-	t.host.HandleWritableSubscriptionOpened(writeSub)
+	writeSub := newWritableSubscription(t.host, stateURI, tree.Keypath(keypath), subscriptionType, httpWriteSub)
+	t.host.HandleWritableSubscriptionOpened(writeSub, fetchHistoryOpts)
 
 	// Block until the subscription is canceled so that net/http doesn't close the connection
 	<-writeSub.chDone
@@ -958,34 +949,20 @@ func (t *httpTransport) NewPeerConn(ctx context.Context, dialAddr string) (Peer,
 	return t.makePeer(nil, nil, dialAddr), nil
 }
 
-func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, theURL string) (<-chan Peer, error) {
+func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_ <-chan Peer, err error) {
+	defer withStack(&err)
+
+	providers, err := t.tryFetchProvidersFromAuthoritativeHost(stateURI)
+	if err != nil {
+		t.Warnf("could not fetch providers of state URI '%v' from authoritative host: %v", stateURI, err)
+	}
+
+	u, err := url.Parse("http://" + stateURI)
+	if err == nil {
+		providers = append(providers, "http://"+u.Hostname())
+	}
+
 	ch := make(chan Peer)
-
-	u, err := url.Parse("http://" + theURL)
-	if err != nil {
-		close(ch)
-		return nil, err
-	}
-
-	u.Path = path.Join(u.Path, "providers")
-
-	resp, err := httpClient.Get(u.String())
-	if err != nil {
-		close(ch)
-		return nil, err
-	} else if resp.StatusCode != 200 {
-		close(ch)
-		return nil, errors.Errorf("error GETting providers: (%v) %v", resp.StatusCode, resp.Status)
-	}
-	defer resp.Body.Close()
-
-	var providers []string
-	err = json.NewDecoder(resp.Body).Decode(&providers)
-	if err != nil {
-		close(ch)
-		return nil, err
-	}
-
 	go func() {
 		defer close(ch)
 		for _, providerURL := range providers {
@@ -1000,6 +977,38 @@ func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, theURL string) 
 		}
 	}()
 	return ch, nil
+}
+
+func (t *httpTransport) tryFetchProvidersFromAuthoritativeHost(stateURI string) ([]string, error) {
+	parts := strings.Split(stateURI, "/")
+
+	u, err := url.Parse("http://" + parts[0] + ":80?state_uri=" + stateURI)
+	if err != nil {
+		return nil, err
+	}
+
+	u.Path = path.Join(u.Path, "providers")
+
+	resp, err := httpClient.Get(u.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, errors.Errorf("got status code %v %v: %v", resp.StatusCode, resp.Status, string(body))
+	}
+
+	var providers []string
+	err = json.NewDecoder(resp.Body).Decode(&providers)
+	if err != nil {
+		return nil, err
+	}
+	return providers, nil
 }
 
 func (t *httpTransport) ProvidersOfRef(ctx context.Context, refID types.RefID) (<-chan Peer, error) {
@@ -1088,7 +1097,7 @@ func (t *httpTransport) makePeer(writer io.Writer, flusher http.Flusher, dialAdd
 	peer.stream.Flusher = flusher
 
 	peerDetails := t.peerStore.PeerWithDialInfo(PeerDialInfo{t.Name(), dialAddr})
-	if peerDetails != nil {
+	if peerDetails != nil && peerDetails != PeerDetails(nil) {
 		peer.PeerDetails = peerDetails
 	} else {
 		t.peerStore.AddDialInfos([]PeerDialInfo{{t.Name(), dialAddr}})
@@ -1150,7 +1159,12 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Subscribe", "keep-alive")
+
+	subTypeBytes, err := SubscriptionType_Txs.MarshalText()
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Subscribe", string(subTypeBytes))
 
 	var client http.Client
 	resp, err := client.Do(req)
@@ -1160,6 +1174,8 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 		return nil, errors.Errorf("error GETting peer: (%v) %v", resp.StatusCode, resp.Status)
 	}
 
+	p.t.storeAltSvcHeaderPeers(resp.Header)
+
 	return &httpReadableSubscription{
 		client:  &client,
 		peer:    p,
@@ -1168,76 +1184,41 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 	}, nil
 }
 
-func (p *httpPeer) Put(tx *Tx, state tree.Node, leaves []types.ID) (err error) {
-	// defer func() { p.UpdateConnStats(err == nil) }()
-
-	// This peer is not subscribed, so we make a PUT
-	// bs, err := json.Marshal(tx)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// client := http.Client{}
-	// req, err := http.NewRequest("PUT", p.ReachableAt().Any(), bytes.NewReader(bs))
-	// if err != nil {
-	// 	return err
-	// }
-
-	// resp, err := client.Do(req)
-	// if err != nil {
-	// 	return err
-	// } else if resp.StatusCode != 200 {
-	// 	return errors.Errorf("error PUTting to peer: (%v) %v", resp.StatusCode, resp.Status)
-	// }
-	// defer resp.Body.Close()
-	panic("unimplemented")
-}
-
-func (p *httpPeer) PutPrivate(tx *Tx, state tree.Node, leaves []types.ID) (err error) {
+func (p *httpPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
-	if p.DialInfo().DialAddr == "" {
-		p.t.Warn("peer has no DialAddr")
-		return nil
-	}
-
-	marshalledTx, err := json.Marshal(tx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	_, peerEncPubkey := p.PublicKeypairs()
-
-	encryptedTxBytes, err := p.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	msg, err := json.Marshal(EncryptedTx{
-		TxID:             tx.ID,
-		EncryptedPayload: encryptedTxBytes,
-		SenderPublicKey:  p.t.enckeys.EncryptingPublicKey.Bytes(),
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	requestContext, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "PUT", p.DialInfo().DialAddr, bytes.NewReader(msg))
+	if tx.IsPrivate() {
+		if p.DialInfo().DialAddr == "" {
+			p.t.Warn("peer has no DialAddr")
+			return nil
+		}
+	}
+
+	_, peerEncPubkey := p.PublicKeys()
+	req, err := PutRequestFromTx(requestContext, tx, p.DialInfo().DialAddr, p.t.enckeys, peerEncPubkey)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	req.Header.Set("Private", "true")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 	defer resp.Body.Close()
+
+	p.t.storeAltSvcHeaderPeers(resp.Header)
+
 	if resp.StatusCode != 200 {
-		return errors.Errorf("error sending private PUT: (%v) %v", resp.StatusCode, resp.Status)
+		bs, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			err = errors.Wrapf(err, "error reading response body")
+			err2 := errors.Errorf("error PUTting to peer %v: (%v) %v", p.DialInfo().DialAddr, resp.StatusCode, resp.Status)
+			return multierr.Append(err, err2)
+		}
+		return errors.Errorf("error PUTting to peer %v: (%v) %v: %v", p.DialInfo().DialAddr, resp.StatusCode, resp.Status, string(bs))
 	}
 	return nil
 }
@@ -1272,10 +1253,13 @@ func (p *httpPeer) Ack(stateURI string, txID types.ID) (err error) {
 		return errors.Errorf("error ACKing to peer: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
+
+	p.t.storeAltSvcHeaderPeers(resp.Header)
 	return nil
 }
 
 func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error) {
+	defer withStack(&err)
 	defer func() { p.UpdateConnStats(err == nil) }()
 
 	if p.DialInfo().DialAddr == "" {
@@ -1298,6 +1282,8 @@ func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error
 	} else if resp.StatusCode != 200 {
 		return errors.Errorf("error verifying peer address: (%v) %v", resp.StatusCode, resp.Status)
 	}
+
+	p.t.storeAltSvcHeaderPeers(resp.Header)
 
 	p.stream.ReadCloser = resp.Body
 	return nil
@@ -1359,13 +1345,13 @@ type httpReadableSubscription struct {
 	private bool
 }
 
-func (s *httpReadableSubscription) Read() (_ SubscriptionMsg, err error) {
+func (s *httpReadableSubscription) Read() (_ *SubscriptionMsg, err error) {
 	defer func() { s.peer.UpdateConnStats(err == nil) }()
 
 	r := bufio.NewReader(s.stream)
 	bs, err := r.ReadBytes(byte('\n'))
 	if err != nil {
-		return SubscriptionMsg{}, err
+		return nil, err
 	}
 	bs = bytes.TrimPrefix(bs, []byte("data: "))
 	bs = bytes.Trim(bs, "\n ")
@@ -1373,32 +1359,32 @@ func (s *httpReadableSubscription) Read() (_ SubscriptionMsg, err error) {
 	var msg SubscriptionMsg
 	err = json.Unmarshal(bs, &msg)
 	if err != nil {
-		return SubscriptionMsg{}, err
+		return nil, err
 	}
 
 	if s.private {
 		if msg.EncryptedTx == nil {
-			return SubscriptionMsg{}, errors.New("no encrypted tx sent by http peer")
+			return nil, errors.New("no encrypted tx sent by http peer")
 		}
 
 		bs, err = s.peer.t.enckeys.OpenMessageFrom(EncryptingPublicKeyFromBytes(msg.EncryptedTx.SenderPublicKey), msg.EncryptedTx.EncryptedPayload)
 		if err != nil {
-			return SubscriptionMsg{}, err
+			return nil, err
 		}
 
 		var tx Tx
 		err = json.Unmarshal(bs, &tx)
 		if err != nil {
-			return SubscriptionMsg{}, err
+			return nil, err
 		}
 		msg.Tx = &tx
-		return msg, nil
+		return &msg, nil
 
 	} else {
 		if msg.Tx == nil {
-			return SubscriptionMsg{}, errors.New("no tx sent by http peer")
+			return nil, errors.New("no tx sent by http peer")
 		}
-		return msg, nil
+		return &msg, nil
 	}
 }
 
@@ -1409,31 +1395,39 @@ func (c *httpReadableSubscription) Close() error {
 
 type httpWritableSubscription struct {
 	*httpPeer
-	stateURI         string
-	subscriptionType SubscriptionType
-	keypath          tree.Keypath
-	chDone           chan struct{} // Keeps the net/http server open until the subscription is closed
 }
 
-var _ WritableSubscription = (*httpWritableSubscription)(nil)
+var _ WritableSubscriptionImpl = (*httpWritableSubscription)(nil)
 
-func (sub *httpWritableSubscription) StateURI() string {
-	return sub.stateURI
-}
-
-func (sub *httpWritableSubscription) Type() SubscriptionType {
-	return sub.subscriptionType
-}
-
-func (sub *httpWritableSubscription) Keypath() tree.Keypath {
-	return sub.keypath
-}
-
-// If an error is returned, the stream will be closed by the Host.
-func (sub *httpWritableSubscription) Write(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
+func (sub *httpWritableSubscription) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { sub.UpdateConnStats(err == nil) }()
 
-	bs, err := json.Marshal(SubscriptionMsg{Tx: tx, State: state, Leaves: leaves})
+	var msg *SubscriptionMsg
+	if tx.IsPrivate() {
+		marshalledTx, err := json.Marshal(tx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		_, peerEncPubkey := sub.PublicKeys()
+
+		encryptedTxBytes, err := sub.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		etx := &EncryptedTx{
+			TxID:             tx.ID,
+			EncryptedPayload: encryptedTxBytes,
+			SenderPublicKey:  sub.t.enckeys.EncryptingPublicKey.Bytes(),
+		}
+
+		msg = &SubscriptionMsg{EncryptedTx: etx, Leaves: leaves}
+	} else {
+		msg = &SubscriptionMsg{Tx: tx, State: state, Leaves: leaves}
+	}
+
+	bs, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -1445,64 +1439,7 @@ func (sub *httpWritableSubscription) Write(ctx context.Context, tx *Tx, state tr
 	if err != nil {
 		return err
 	} else if n < len(event) {
-		return errors.New("didn't write enough")
-	}
-
-	if sub.stream.Flusher != nil {
-		sub.stream.Flusher.Flush()
+		return errors.New("error writing message to http peer: didn't write enough")
 	}
 	return nil
-}
-
-type httpPrivateTxSubscriptionMessage struct {
-	Tx     EncryptedTx `json:"tx"`
-	Leaves []types.ID  `json:"leaves"`
-}
-
-// If an error is returned, the stream will be closed by the Host.
-func (sub *httpWritableSubscription) WritePrivate(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
-	defer func() { sub.UpdateConnStats(err == nil) }()
-
-	marshalledTx, err := json.Marshal(tx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	_, peerEncPubkey := sub.PublicKeypairs()
-
-	encryptedTxBytes, err := sub.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	etx := &EncryptedTx{
-		TxID:             tx.ID,
-		EncryptedPayload: encryptedTxBytes,
-		SenderPublicKey:  sub.t.enckeys.EncryptingPublicKey.Bytes(),
-	}
-
-	bs, err := json.Marshal(SubscriptionMsg{EncryptedTx: etx, Leaves: leaves})
-	if err != nil {
-		return err
-	}
-
-	// This is encoded using HTTP's SSE format
-	event := []byte("data: " + string(bs) + "\n\n")
-
-	n, err := sub.stream.Writer.Write(event)
-	if err != nil {
-		return err
-	} else if n < len(event) {
-		return errors.New("didn't write enough")
-	}
-
-	if sub.stream.Flusher != nil {
-		sub.stream.Flusher.Flush()
-	}
-	return nil
-}
-
-func (sub *httpWritableSubscription) Close() error {
-	close(sub.chDone)
-	return sub.httpPeer.Close()
 }

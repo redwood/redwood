@@ -130,10 +130,15 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 		return err
 	}
 
+	peerDB, err := tree.NewDBTree(filepath.Join(config.Node.DataRoot, "peers"))
+	if err != nil {
+		return err
+	}
+
 	var (
 		txStore       = rw.NewBadgerTxStore(config.TxDBRoot())
 		refStore      = rw.NewRefStore(config.RefDataRoot())
-		peerStore     = rw.NewPeerStore()
+		peerStore     = rw.NewPeerStore(peerDB)
 		controllerHub = rw.NewControllerHub(config.StateDBRoot(), txStore, refStore)
 	)
 
@@ -155,6 +160,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 		libp2pTransport, err := rw.NewLibp2pTransport(
 			signingKeypair.Address(),
 			config.P2PTransport.ListenPort,
+			config.P2PTransport.ReachableAt,
 			config.P2PTransport.KeyFile,
 			encryptingKeypair,
 			controllerHub,
@@ -176,6 +182,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 
 		httpTransport, err := rw.NewHTTPTransport(
 			config.HTTPTransport.ListenHost,
+			config.HTTPTransport.ReachableAt,
 			config.HTTPTransport.DefaultStateURI,
 			controllerHub,
 			refStore,
@@ -204,10 +211,10 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 	}
 
 	if config.HTTPRPC.Enabled {
-		rwRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), config.HTTPRPC.ListenHost, host)
-		httpRPC := HTTPRPCServer{rwRPC}
+		rwRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), host)
+		httpRPC := &HTTPRPCServer{rwRPC, signingKeypair}
 
-		err = rw.StartHTTPRPC(httpRPC)
+		err = rw.StartHTTPRPC(httpRPC, config.HTTPRPC)
 		if err != nil {
 			return err
 		}
@@ -230,7 +237,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			sub, err := host.Subscribe(ctx, stateURI, 0, nil)
+			sub, err := host.Subscribe(ctx, stateURI, 0, nil, nil)
 			if err != nil {
 				app.Errorf("error subscribing to %v: %v", stateURI, err)
 				continue
@@ -446,6 +453,15 @@ var replCommands = map[string]struct {
 			state = state.NodeAt(keypath, rng)
 			state.DebugPrint(app.Debugf, false, 0)
 			fmt.Println(rw.PrettyJSON(state))
+			return nil
+		},
+	},
+	"peers": {
+		"list all known peers",
+		func(ctx context.Context, args []string, host rw.Host) error {
+			for _, peer := range host.Peers() {
+				fmt.Println("- ", peer.Address(), peer.DialInfo(), peer.LastContact())
+			}
 			return nil
 		},
 	},

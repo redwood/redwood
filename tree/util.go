@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"reflect"
 	"runtime"
 	"strconv"
 
+	"github.com/brynbellomy/go-structomancer"
 	"github.com/pkg/errors"
 )
+
+const StructTag = "tree"
 
 func getFileAndLine() (string, int) {
 	pc, _, _, _ := runtime.Caller(2)
@@ -73,6 +77,21 @@ func walkGoValue(tree interface{}, fn func(keypath Keypath, val interface{}) err
 					val:     asSlice[i],
 					keypath: current.keypath.Push(EncodeSliceIndex(uint64(i))),
 				})
+			}
+		} else {
+			rval := reflect.ValueOf(current.val)
+			if rval.Kind() == reflect.Struct {
+				z := structomancer.NewWithType(rval.Type(), StructTag)
+				for _, fieldName := range z.FieldNames() {
+					val, err := z.GetFieldValueV(rval, fieldName)
+					if err != nil {
+						return err
+					}
+					stack = append(stack, item{
+						val:     val.Interface(),
+						keypath: current.keypath.Push(Keypath(fieldName)),
+					})
+				}
 			}
 		}
 	}

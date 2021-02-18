@@ -6,6 +6,7 @@ import (
 
 	"redwood.dev/ctx"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type badgerTxStore struct {
@@ -80,7 +81,7 @@ func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
 					return err
 				}
 
-				parentTx.Children = NewIDSet(parentTx.Children).Add(tx.ID).Slice()
+				parentTx.Children = utils.NewIDSet(parentTx.Children).Add(tx.ID).Slice()
 
 				parentBytes, err := parentTx.MarshalProto()
 				if err != nil {

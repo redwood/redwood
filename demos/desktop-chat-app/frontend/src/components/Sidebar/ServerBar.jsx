@@ -85,7 +85,7 @@ const PrimaryButton = styled(Button)`
 `
 
 function ServerFab({ serverName }) {
-    const stateTree = useStateTree(`${serverName}/registry`)
+    const stateTree = useStateTree(!!serverName ? `${serverName}/registry` : null)
 
     if (stateTree && stateTree.iconImg) {
         return (

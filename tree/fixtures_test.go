@@ -252,8 +252,8 @@ func mustEncodeGoValue(x interface{}) []byte {
 	return enc
 }
 
-func mustNewDBTree(T *testing.T) *DBTree {
-	tree, err := NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", rand.Int()))
+func mustNewVersionedDBTree(T *testing.T) *VersionedDBTree {
+	tree, err := NewVersionedDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", rand.Int()))
 	require.NoError(T, err)
 	return tree
 }

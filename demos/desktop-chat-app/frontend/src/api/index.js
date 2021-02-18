@@ -66,7 +66,11 @@ export default function(redwoodClient) {
 
         if (!!provider && provider !== 'none' && !!cloudStackOptions) {
             console.log('rv', provider, cloudStackOptions)
-            await redwoodClient.rpc.rpcFetch('RPC.CreateCloudStack', { ...cloudStackOptions, provider })
+            await redwoodClient.rpc.rpcFetch('RPC.CreateCloudStack', {
+                ...cloudStackOptions,
+                firstStateURI: stateURI,
+                provider,
+            })
         }
     }
 

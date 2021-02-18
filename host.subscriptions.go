@@ -2,6 +2,7 @@ package redwood
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -9,11 +10,12 @@ import (
 
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type (
 	ReadableSubscription interface {
-		Read() (SubscriptionMsg, error)
+		Read() (*SubscriptionMsg, error)
 		Close() error
 	}
 
@@ -21,13 +23,7 @@ type (
 		StateURI() string
 		Type() SubscriptionType
 		Keypath() tree.Keypath
-
-		// If an error is returned, the stream will be closed by the Host.
-		Write(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error
-
-		// If an error is returned, the stream will be closed by the Host.
-		WritePrivate(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error
-
+		EnqueueWrite(tx *Tx, state tree.Node, leaves []types.ID)
 		Close() error
 	}
 
@@ -36,6 +32,7 @@ type (
 		EncryptedTx *EncryptedTx `json:"encryptedTx,omitempty"`
 		State       tree.Node    `json:"state,omitempty"`
 		Leaves      []types.ID   `json:"leaves,omitempty"`
+		Error       error        `json:"error,omitempty"`
 	}
 
 	SubscriptionType uint8
@@ -46,66 +43,237 @@ const (
 	SubscriptionType_States
 )
 
+func (t *SubscriptionType) UnmarshalText(bs []byte) error {
+	str := strings.Trim(string(bs), `"`)
+	parts := strings.Split(str, ",")
+	var st SubscriptionType
+	for i := range parts {
+		switch strings.TrimSpace(parts[i]) {
+		case "transactions":
+			st |= SubscriptionType_Txs
+		case "states":
+			st |= SubscriptionType_States
+		default:
+			return errors.Errorf("bad value for SubscriptionType: %v", str)
+		}
+	}
+	if st == 0 {
+		return errors.New("empty value for SubscriptionType")
+	}
+	*t = st
+	return nil
+}
+
+func (t SubscriptionType) MarshalText() ([]byte, error) {
+	var strs []string
+	if t.Includes(SubscriptionType_Txs) {
+		strs = append(strs, "transactions")
+	}
+	if t.Includes(SubscriptionType_States) {
+		strs = append(strs, "states")
+	}
+	return []byte(strings.Join(strs, ",")), nil
+}
+
 func (t SubscriptionType) Includes(x SubscriptionType) bool {
 	return t&x == x
+}
+
+type writableSubscription struct {
+	stateURI         string
+	keypath          tree.Keypath
+	subscriptionType SubscriptionType
+	host             Host
+	subImpl          WritableSubscriptionImpl
+	messages         *utils.Mailbox
+	chMsgNotif       chan struct{}
+	chErrored        chan struct{}
+	chStop           chan struct{}
+	chDone           chan struct{}
+}
+
+type WritableSubscriptionImpl interface {
+	Transport() Transport
+	Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error
+	UpdateConnStats(ok bool)
+	Close() error
+}
+
+func newWritableSubscription(
+	host Host,
+	stateURI string,
+	keypath tree.Keypath,
+	subscriptionType SubscriptionType,
+	subImpl WritableSubscriptionImpl,
+) *writableSubscription {
+	writeSub := &writableSubscription{
+		stateURI:         stateURI,
+		keypath:          keypath,
+		subscriptionType: subscriptionType,
+		host:             host,
+		subImpl:          subImpl,
+		messages:         utils.NewMailbox(10000),
+		chErrored:        make(chan struct{}),
+		chStop:           make(chan struct{}),
+		chDone:           make(chan struct{}),
+	}
+	writeSub.chMsgNotif = writeSub.messages.Notify()
+
+	go func() {
+		defer func() {
+			if perr := recover(); perr != nil {
+				writeSub.host.Errorf("caught panic: %+v", perr)
+			}
+		}()
+		defer writeSub.destroy()
+
+		for {
+			select {
+			case <-writeSub.chMsgNotif:
+				writeSub.writeMessages()
+			case <-writeSub.chStop:
+				return
+			case <-writeSub.chErrored:
+				return
+			}
+		}
+	}()
+
+	return writeSub
+}
+
+func (sub *writableSubscription) writeMessages() {
+	var err error
+	defer func() {
+		sub.subImpl.UpdateConnStats(err == nil)
+		if err != nil {
+			close(sub.chErrored)
+		}
+	}()
+	for {
+		x := sub.messages.Retrieve()
+		if x == nil {
+			return
+		}
+		msg := x.(*SubscriptionMsg)
+		err = sub.subImpl.Put(context.TODO(), msg.Tx, msg.State, msg.Leaves)
+		if err != nil {
+			sub.host.Errorf("error writing to subscribed peer: %v", err)
+			return
+		}
+	}
+}
+
+func (sub *writableSubscription) destroy() {
+	defer close(sub.chDone)
+
+	sub.host.HandleWritableSubscriptionClosed(sub)
+	sub.messages.Clear()
+	err := sub.subImpl.Close()
+	if err != nil {
+		sub.host.Errorf("error closing writable subscription (%v): %v", sub.subImpl.Transport().Name(), err)
+	}
+}
+
+func (sub *writableSubscription) StateURI() string       { return sub.stateURI }
+func (sub *writableSubscription) Type() SubscriptionType { return sub.subscriptionType }
+func (sub *writableSubscription) Keypath() tree.Keypath  { return sub.keypath }
+
+func (sub *writableSubscription) EnqueueWrite(tx *Tx, state tree.Node, leaves []types.ID) {
+	sub.messages.Deliver(&SubscriptionMsg{Tx: tx, State: state, Leaves: leaves})
+}
+
+func (sub *writableSubscription) Close() error {
+	sub.chMsgNotif = nil
+	close(sub.chStop)
+	<-sub.chDone
+	return nil
 }
 
 type inProcessSubscription struct {
 	stateURI         string
 	keypath          tree.Keypath
 	subscriptionType SubscriptionType
-	ch               chan SubscriptionMsg
+	host             Host
+	messages         *utils.Mailbox
+	chMessages       chan SubscriptionMsg
 	chStop           chan struct{}
+	chDone           chan struct{}
 }
 
-var _ ReadableSubscription = inProcessSubscription{}
-var _ WritableSubscription = inProcessSubscription{}
+var _ ReadableSubscription = (*inProcessSubscription)(nil)
+var _ WritableSubscription = (*inProcessSubscription)(nil)
 
-func (sub inProcessSubscription) StateURI() string {
+func newInProcessSubscription(stateURI string, keypath tree.Keypath, subscriptionType SubscriptionType, host Host) *inProcessSubscription {
+	sub := &inProcessSubscription{
+		stateURI:         stateURI,
+		keypath:          keypath,
+		subscriptionType: subscriptionType,
+		host:             host,
+		messages:         utils.NewMailbox(10000),
+		chMessages:       make(chan SubscriptionMsg),
+		chStop:           make(chan struct{}),
+		chDone:           make(chan struct{}),
+	}
+
+	go func() {
+		defer close(sub.chDone)
+
+		for {
+			select {
+			case <-sub.chStop:
+				return
+
+			case <-sub.messages.Notify():
+				for {
+					x := sub.messages.Retrieve()
+					if x == nil {
+						break
+					}
+					msg := x.(*SubscriptionMsg)
+					select {
+					case sub.chMessages <- *msg:
+					case <-sub.chStop:
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return sub
+}
+
+func (sub *inProcessSubscription) StateURI() string {
 	return sub.stateURI
 }
 
-func (sub inProcessSubscription) Type() SubscriptionType {
+func (sub *inProcessSubscription) Type() SubscriptionType {
 	return sub.subscriptionType
 }
 
-func (sub inProcessSubscription) Keypath() tree.Keypath {
+func (sub *inProcessSubscription) Keypath() tree.Keypath {
 	return sub.keypath
 }
 
-func (sub inProcessSubscription) Write(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error {
-	select {
-	case sub.ch <- SubscriptionMsg{Tx: tx, State: state, Leaves: leaves}:
-	case <-sub.chStop:
-		return errors.New("shutting down")
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	return nil
+func (sub *inProcessSubscription) EnqueueWrite(tx *Tx, state tree.Node, leaves []types.ID) {
+	sub.messages.Deliver(&SubscriptionMsg{Tx: tx, State: state, Leaves: leaves})
 }
 
-func (sub inProcessSubscription) WritePrivate(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error {
+func (sub *inProcessSubscription) Read() (*SubscriptionMsg, error) {
 	select {
-	case sub.ch <- SubscriptionMsg{Tx: tx, State: state, Leaves: leaves}:
 	case <-sub.chStop:
-		return errors.New("shutting down")
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	return nil
-}
-
-func (sub inProcessSubscription) Read() (SubscriptionMsg, error) {
-	select {
-	case msg := <-sub.ch:
-		return msg, nil
-	case <-sub.chStop:
-		return SubscriptionMsg{}, errors.New("shutting down")
+		return nil, errors.New("shutting down")
+	case msg := <-sub.chMessages:
+		return &msg, nil
 	}
 }
 
-func (sub inProcessSubscription) Close() error {
+func (sub *inProcessSubscription) Close() error {
+	sub.host.HandleWritableSubscriptionClosed(sub)
+	sub.messages.Clear()
 	close(sub.chStop)
+	<-sub.chDone
 	return nil
 }
 
@@ -164,14 +332,14 @@ func (s *multiReaderSubscription) Start() {
 
 		err = peer.EnsureConnected(context.TODO())
 		if err != nil {
-			log.Errorf("error connecting to peer: %v", err)
+			s.host.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
 			s.peerPool.ReturnPeer(peer, false)
 			continue
 		}
 
 		peerSub, err := peer.Subscribe(context.TODO(), s.stateURI)
 		if err != nil {
-			s.host.Errorf("error connecting to %v peer: %v", peer.Transport().Name(), err)
+			s.host.Errorf("error subscribing to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
 			s.peerPool.ReturnPeer(peer, false)
 			continue
 		}

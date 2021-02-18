@@ -12,6 +12,7 @@ import (
 	"redwood.dev/ctx"
 	"redwood.dev/demos/demoutils"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type app struct {
@@ -53,7 +54,7 @@ func main() {
 
 	// Connect the two peers using libp2p
 	libp2pTransport := host1.Transport("libp2p").(interface{ Libp2pPeerID() string })
-	host2.AddPeer(host2.Ctx(), "libp2p", rw.NewStringSet([]string{"/ip4/0.0.0.0/tcp/21231/p2p/" + libp2pTransport.Libp2pPeerID()}))
+	host2.AddPeer(host2.Ctx(), "libp2p", utils.NewStringSet([]string{"/ip4/0.0.0.0/tcp/21231/p2p/" + libp2pTransport.Libp2pPeerID()}))
 
 	time.Sleep(2 * time.Second)
 
