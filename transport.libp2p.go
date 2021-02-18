@@ -36,6 +36,7 @@ import (
 	"redwood.dev/ctx"
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type libp2pTransport struct {
@@ -609,7 +610,7 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 func (t *libp2pTransport) periodicallyUpdatePeerStore() {
 	for {
 		// Update our node's info in the peer store
-		myAddrs := NewStringSet(nil)
+		myAddrs := utils.NewStringSet(nil)
 		for _, addr := range t.libp2pHost.Addrs() {
 			addrStr := addr.String()
 			myAddrs.Add(addrStr)
@@ -1061,7 +1062,7 @@ var (
 	protoIP4  = ma.ProtocolWithName("ip4")
 )
 
-func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *SortedStringSet {
+func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *utils.SortedStringSet {
 	multiaddrs, err := peerstore.InfoToP2pAddrs(&pinfo)
 	if err != nil {
 		panic(err)
@@ -1098,7 +1099,7 @@ func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *SortedStringSet {
 			multiaddrStrings = append(multiaddrStrings, cleaned)
 		}
 	}
-	return NewSortedStringSet(multiaddrStrings)
+	return utils.NewSortedStringSet(multiaddrStrings)
 }
 
 func cleanLibp2pAddr(addrStr string, peerID peer.ID) string {
@@ -1114,8 +1115,8 @@ func cleanLibp2pAddr(addrStr string, peerID peer.ID) string {
 	return addrStr
 }
 
-func cleanLibp2pAddrs(addrStrs StringSet, peerID peer.ID) StringSet {
-	keep := NewStringSet(nil)
+func cleanLibp2pAddrs(addrStrs utils.StringSet, peerID peer.ID) utils.StringSet {
+	keep := utils.NewStringSet(nil)
 	for addrStr := range addrStrs {
 		if strings.Index(addrStr, "/ip4/172.") == 0 {
 			// continue
@@ -1157,7 +1158,7 @@ func protocolValue(addr ma.Multiaddr, proto ma.Protocol) string {
 //         case "192"
 //         }
 // 	})
-// 	return NewSortedStringSet(s)
+// 	return utils.NewSortedStringSet(s)
 // }
 
 func (t *libp2pTransport) peerDialInfosFromPeerInfo(pinfo peerstore.PeerInfo) []PeerDialInfo {

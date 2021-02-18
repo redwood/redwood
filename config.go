@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"redwood.dev/utils"
 )
 
 type Config struct {
@@ -25,7 +27,7 @@ type Config struct {
 type NodeConfig struct {
 	HDMnemonicPhrase        string          `yaml:"HDMnemonicPhrase"`
 	BootstrapPeers          []BootstrapPeer `yaml:"BootstrapPeers"`
-	SubscribedStateURIs     StringSet       `yaml:"SubscribedStateURIs"`
+	SubscribedStateURIs     utils.StringSet `yaml:"SubscribedStateURIs"`
 	MaxPeersPerSubscription uint64          `yaml:"MaxPeersPerSubscription"`
 	DataRoot                string          `yaml:"DataRoot"`
 	DevMode                 bool            `yaml:"DevMode"`

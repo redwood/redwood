@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"golang.org/x/sync/semaphore"
 
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -17,6 +18,7 @@ type peerPool struct {
 	chNeedNewPeer   chan struct{}
 	chProviders     <-chan Peer
 	chStop          chan struct{}
+	sem             *semaphore.Weighted
 
 	fnGetPeers func(ctx context.Context) (<-chan Peer, error)
 
@@ -45,6 +47,7 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 		chNeedNewPeer:   make(chan struct{}, concurrentConns),
 		chProviders:     chProviders,
 		chStop:          make(chan struct{}),
+		sem:             semaphore.NewWeighted(int64(concurrentConns)),
 		fnGetPeers:      fnGetPeers,
 		peers: make(map[PeerDialInfo]struct {
 			peer  Peer
@@ -52,10 +55,12 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 		}),
 	}
 
-	// When a message is sent on the `needNewPeer` channel, this goroutine attempts
-	// to take a peer from the `chProviders` channel and add it to the pool.
+	// This goroutine does two things:
+	//   - Adds peers to the `peers` map as they're received from the `fnGetPeers` channel
+	//   - If the transports stop searching before `.Close()` is called, the search is reinitiated
 	go func() {
-		// defer close(p.chPeers)
+		ctx, cancel := utils.ContextFromChan(p.chStop)
+		defer cancel()
 
 		for {
 		FindPeerLoop:
@@ -66,6 +71,11 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 				case peer, open := <-p.chProviders:
 					if !open {
 						p.restartSearch()
+						func() {
+							p.sem.Acquire(ctx, 1)
+							defer p.sem.Release(1)
+							p.restartSearch(ctx)
+						}()
 						continue FindPeerLoop
 					}
 					p.addPeerToPool(peer)
@@ -75,6 +85,8 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 	}()
 
 	go func() {
+		defer close(p.chPeers)
+
 		ticker := time.NewTicker(5 * time.Second)
 		for {
 			select {
@@ -133,7 +145,8 @@ func (p *peerPool) addPeerToPool(peer Peer) {
 
 		select {
 		case p.chPeerAvailable <- struct{}{}:
-		default:
+		case <-p.chStop:
+			return
 		}
 	}
 }
@@ -155,14 +168,12 @@ func (p *peerPool) nextAvailablePeer() Peer {
 	return nil
 }
 
-func (p *peerPool) restartSearch() {
+func (p *peerPool) restartSearch(ctx context.Context) {
 	var err error
-	ctx, cancel := utils.ContextFromChan(p.chStop)
 	p.chProviders, err = p.fnGetPeers(ctx)
 	if err != nil {
 		log.Warnf("[peer pool] error finding peers: %v", err)
 		// @@TODO: exponential backoff
-		cancel()
 	}
 }
 
@@ -171,6 +182,10 @@ func (p *peerPool) Close() {
 }
 
 func (p *peerPool) GetPeer() (Peer, error) {
+	ctx, cancel := utils.ContextFromChan(p.chStop)
+	defer cancel()
+
+	p.sem.Acquire(ctx, 1)
 	for {
 		select {
 		case peer, open := <-p.chPeers:
@@ -200,7 +215,8 @@ func (p *peerPool) ReturnPeer(peer Peer, strike bool) {
 		// Try to obtain a new peer
 		select {
 		case p.chNeedNewPeer <- struct{}{}:
-		default:
+		case <-p.chStop:
+			return
 		}
 
 	} else {
@@ -209,9 +225,11 @@ func (p *peerPool) ReturnPeer(peer Peer, strike bool) {
 
 		select {
 		case p.chPeerAvailable <- struct{}{}:
-		default:
+		case <-p.chStop:
+			return
 		}
 	}
+	p.sem.Release(1)
 }
 
 func (p *peerPool) setPeerState(peer Peer, state peerState) {

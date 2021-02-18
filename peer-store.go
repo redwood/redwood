@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"redwood.dev/ctx"
+	"redwood.dev/tree"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type PeerStore interface {
@@ -17,6 +19,7 @@ type PeerStore interface {
 	PeerWithDialInfo(dialInfo PeerDialInfo) *peerDetails
 	PeersWithAddress(address types.Address) []PeerDetails
 	PeersFromTransportWithAddress(transportName string, address types.Address) []PeerDetails
+	PeersServingStateURI(stateURI string) []PeerDetails
 	IsKnownPeer(dialInfo PeerDialInfo) bool
 	OnNewUnverifiedPeer(fn func(dialInfo PeerDialInfo))
 }
@@ -44,7 +47,6 @@ func NewPeerStore() *peerStore {
 		peersWithAddress: make(map[types.Address]map[PeerDialInfo]*peerDetails),
 		unverifiedPeers:  make(map[PeerDialInfo]struct{}),
 	}
-
 	return s
 }
 
@@ -74,7 +76,7 @@ func (s *peerStore) AddDialInfos(dialInfos []PeerDialInfo) {
 
 		_, exists := s.peers[dialInfo]
 		if !exists {
-			s.peers[dialInfo] = &peerDetails{peerStore: s, dialInfo: dialInfo}
+			s.peers[dialInfo] = newPeerDetails(s, dialInfo)
 			s.unverifiedPeers[dialInfo] = struct{}{}
 			s.onNewUnverifiedPeer(dialInfo)
 		}
@@ -102,10 +104,7 @@ func (s *peerStore) AddVerifiedCredentials(
 		}
 	}
 	if peer == nil {
-		peer = &peerDetails{
-			peerStore: s,
-			dialInfo:  dialInfo,
-		}
+		peer = newPeerDetails(s, dialInfo)
 	}
 
 	peer.peerStore = s
@@ -189,6 +188,19 @@ func (s *peerStore) PeersFromTransportWithAddress(transport string, address type
 	return peers
 }
 
+func (s *peerStore) PeersServingStateURI(stateURI string) []PeerDetails {
+	s.muPeers.RLock()
+	defer s.muPeers.RUnlock()
+
+	var peers []PeerDetails
+	for _, peerDetails := range s.peers {
+		if peerDetails.stateURIs.Contains(stateURI) {
+			peers = append(peers, peerDetails)
+		}
+	}
+	return peers
+}
+
 func (s *peerStore) IsKnownPeer(dialInfo PeerDialInfo) bool {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
@@ -205,6 +217,9 @@ type PeerDetails interface {
 	Address() types.Address
 	DialInfo() PeerDialInfo
 	PublicKeys() (SigningPublicKey, EncryptingPublicKey)
+	AddStateURI(stateURI string)
+	RemoveStateURI(stateURI string)
+	StateURIs() utils.StringSet
 
 	UpdateConnStats(success bool)
 	LastContact() time.Time
@@ -218,9 +233,18 @@ type peerDetails struct {
 	address     types.Address
 	sigpubkey   SigningPublicKey
 	encpubkey   EncryptingPublicKey
+	stateURIs   utils.StringSet
 	lastContact time.Time
 	lastFailure time.Time
 	failures    uint64
+}
+
+func newPeerDetails(peerStore *peerStore, dialInfo PeerDialInfo) *peerDetails {
+	return &peerDetails{
+		peerStore: peerStore,
+		dialInfo:  dialInfo,
+		stateURIs: utils.NewStringSet(nil),
+	}
 }
 
 func (p *peerDetails) Address() types.Address {
@@ -239,6 +263,24 @@ func (p *peerDetails) DialInfo() PeerDialInfo {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
 	return p.dialInfo
+}
+
+func (p *peerDetails) AddStateURI(stateURI string) {
+	p.peerStore.muPeers.Lock()
+	defer p.peerStore.muPeers.Unlock()
+	p.stateURIs.Add(stateURI)
+}
+
+func (p *peerDetails) RemoveStateURI(stateURI string) {
+	p.peerStore.muPeers.Lock()
+	defer p.peerStore.muPeers.Unlock()
+	p.stateURIs.Remove(stateURI)
+}
+
+func (p *peerDetails) StateURIs() utils.StringSet {
+	p.peerStore.muPeers.RLock()
+	defer p.peerStore.muPeers.RUnlock()
+	return p.stateURIs.Copy()
 }
 
 func (p *peerDetails) UpdateConnStats(success bool) {

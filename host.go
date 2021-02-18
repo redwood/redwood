@@ -57,7 +57,7 @@ type host struct {
 	readableSubscriptionsMu sync.RWMutex
 	writableSubscriptions   map[string]map[WritableSubscription]struct{} // map[stateURI]
 	writableSubscriptionsMu sync.RWMutex
-	peerSeenTxs             map[PeerDialInfo]map[string]map[types.ID]bool
+	peerSeenTxs             map[PeerDialInfo]map[string]map[types.ID]bool // map[PeerDialInfo]map[stateURI]map[tx.ID]
 	peerSeenTxsMu           sync.RWMutex
 
 	verifyPeersWorker WorkQueue
@@ -182,8 +182,42 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 		ch <- nil
 	}
 
-	var wg sync.WaitGroup
-	ch := make(chan Peer)
+	var (
+		ch          = make(chan Peer)
+		wg          sync.WaitGroup
+		alreadySent sync.Map
+	)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for _, peerDetails := range h.peerStore.PeersServingStateURI(stateURI) {
+			dialInfo := peerDetails.DialInfo()
+			tpt := h.Transport(dialInfo.TransportName)
+			if tpt == nil {
+				continue
+			}
+
+			if _, exists := alreadySent.LoadOrStore(dialInfo, struct{}{}); exists {
+				continue
+			}
+
+			peer, err := tpt.NewPeerConn(ctx, dialInfo.DialAddr)
+			if err != nil {
+				h.Warnf("error creating new peer conn (transport: %v, dialAddr: %v)", dialInfo.TransportName, dialInfo.DialAddr)
+				continue
+			}
+
+			select {
+			case <-h.Ctx().Done():
+				return
+			case <-ctx.Done():
+				return
+			case ch <- peer:
+			}
+		}
+	}()
+
 	for _, tpt := range h.transports {
 		innerCh, err := tpt.ProvidersOfStateURI(ctx, stateURI)
 		if err != nil {
@@ -204,6 +238,12 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 					if !open {
 						return
 					}
+
+					if _, exists := alreadySent.LoadOrStore(peer.DialInfo(), struct{}{}); exists {
+						continue
+					}
+
+					peer.AddStateURI(stateURI)
 
 					select {
 					case <-h.Ctx().Done():
