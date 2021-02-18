@@ -175,11 +175,13 @@ func (h *host) StateAtVersion(stateURI string, version *types.ID) (tree.Node, er
 }
 
 // Returns peers discovered through any transport that have already been authenticated.
-// It's not guaranteed that they actually provide
+// It's not guaranteed that they actually provide the stateURI in question. These are
+// simply peers that claim to.
 func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan Peer {
 	if utils.IsLocalStateURI(stateURI) {
 		ch := make(chan Peer)
-		ch <- nil
+		close(ch)
+		return ch
 	}
 
 	var (
