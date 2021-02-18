@@ -7,6 +7,7 @@ import (
 )
 
 var (
+	ErrWrongType         = errors.New("wrong type")
 	ErrNodeEncoding      = errors.New("corrupted encoding for node")
 	ErrInvalidRange      = errors.New("invalid range")
 	ErrRangeOverNonSlice = errors.New("range over non-slice")
@@ -29,6 +30,9 @@ type Node interface {
 	BoolValue(keypath Keypath) (bool, bool, error)
 	StringValue(keypath Keypath) (string, bool, error)
 	BytesValue(keypath Keypath) ([]byte, bool, error)
+	MapValue(keypath Keypath) (map[string]interface{}, bool, error)
+	SliceValue(keypath Keypath) ([]interface{}, bool, error)
+	Scan(into interface{}) error
 	Length() (uint64, error)
 	NodeInfo(keypath Keypath) (NodeType, ValueType, uint64, error)
 	Exists(keypath Keypath) (bool, error)

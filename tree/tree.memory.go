@@ -372,6 +372,18 @@ func (n *MemoryNode) BytesValue(keypath Keypath) ([]byte, bool, error) {
 	return nil, false, nil
 }
 
+func (n *MemoryNode) MapValue(keypath Keypath) (map[string]interface{}, bool, error) {
+	panic("@@TODO: unimplemented")
+}
+
+func (n *MemoryNode) SliceValue(keypath Keypath) ([]interface{}, bool, error) {
+	panic("@@TODO: unimplemented")
+}
+
+func (n *MemoryNode) Scan(into interface{}) error {
+	panic("@@TODO: unimplemented")
+}
+
 // Value returns the native Go value at the given keypath and range.
 func (n *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, error) {
 	if node, relKeypath := n.ParentNodeFor(keypath); n != node {

@@ -14,7 +14,7 @@ func TestParsePatch(t *testing.T) {
 
 	require.Equal(t, tree.Keypath("text/value"), patch.Keypath)
 	require.NotNil(t, patch.Range)
-	require.Equal(t, int64(0), patch.Range[0])
-	require.Equal(t, int64(0), patch.Range[1])
+	require.Equal(t, int64(0), patch.Range.Start)
+	require.Equal(t, int64(0), patch.Range.End)
 	require.Equal(t, "a", patch.Val)
 }

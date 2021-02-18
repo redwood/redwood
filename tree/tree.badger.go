@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 
+	"github.com/brynbellomy/go-structomancer"
 	"github.com/dgraph-io/badger/v2"
 	badgerpb "github.com/dgraph-io/badger/v2/pb"
 	"github.com/pkg/errors"
@@ -47,17 +49,53 @@ func (t *DBTree) DeleteDB() error {
 	return os.RemoveAll(t.filename)
 }
 
+func (t *DBTree) State(mutable bool) *DBNode {
+	var diff *Diff
+	if mutable {
+		diff = NewDiff()
+	}
+	return &DBNode{
+		tx:        t.db.NewTransaction(mutable),
+		keyPrefix: KeypathSeparator,
+		diff:      diff,
+		activeIterator: &activeIterator{
+			mutable: mutable,
+		},
+	}
+}
+
+type VersionedDBTree struct {
+	db       *badger.DB
+	filename string
+	ctx.Logger
+}
+
+func NewVersionedDBTree(dbFilename string) (*VersionedDBTree, error) {
+	opts := badger.DefaultOptions(dbFilename)
+	opts.Logger = nil
+
+	db, err := badger.Open(opts)
+	if err != nil {
+		return nil, err
+	}
+	return &VersionedDBTree{db, dbFilename, ctx.NewLogger("db tree")}, nil
+}
+
+func (t *VersionedDBTree) Close() error {
+	return t.db.Close()
+}
+
+func (t *VersionedDBTree) DeleteDB() error {
+	err := t.Close()
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(t.filename)
+}
+
 var stateKeyPrefixLen = len(types.ID{}) + 1
 
-func (tx *DBNode) addKeyPrefix(keypath Keypath) Keypath {
-	return append(tx.keyPrefix, keypath...)
-}
-
-func (tx *DBNode) rmKeyPrefix(keypath Keypath) Keypath {
-	return keypath[len(tx.keyPrefix):]
-}
-
-func (t *DBTree) makeStateKeyPrefix(version types.ID) []byte {
+func (t *VersionedDBTree) makeStateKeyPrefix(version types.ID) []byte {
 	// <version>:
 	keyPrefix := make([]byte, stateKeyPrefixLen)
 	copy(keyPrefix, version.Bytes())
@@ -65,13 +103,13 @@ func (t *DBTree) makeStateKeyPrefix(version types.ID) []byte {
 	return keyPrefix
 }
 
-func (t *DBTree) makeIndexKeyPrefix(version types.ID, keypath Keypath, indexName Keypath) []byte {
+func (t *VersionedDBTree) makeIndexKeyPrefix(version types.ID, keypath Keypath, indexName Keypath) []byte {
 	// i:<version>:<keypath>:<indexName>:
 	// i:deadbeef19482:foo/messages:author:
 	return bytes.Join([][]byte{[]byte("i"), version[:], keypath, indexName, []byte{}}, []byte(":"))
 }
 
-func (t *DBTree) StateAtVersion(version *types.ID, mutable bool) *DBNode {
+func (t *VersionedDBTree) StateAtVersion(version *types.ID, mutable bool) *DBNode {
 	if version == nil {
 		version = &CurrentVersion
 	}
@@ -89,7 +127,7 @@ func (t *DBTree) StateAtVersion(version *types.ID, mutable bool) *DBNode {
 	}
 }
 
-func (t *DBTree) IndexAtVersion(version *types.ID, keypath Keypath, indexName Keypath, mutable bool) *DBNode {
+func (t *VersionedDBTree) IndexAtVersion(version *types.ID, keypath Keypath, indexName Keypath, mutable bool) *DBNode {
 	if version == nil {
 		version = &CurrentVersion
 	}
@@ -100,12 +138,6 @@ func (t *DBTree) IndexAtVersion(version *types.ID, keypath Keypath, indexName Ke
 			mutable: mutable,
 		},
 	}
-}
-
-func (t *DBTree) Value(version *types.ID, keypathPrefix Keypath, rng *Range) (interface{}, bool, error) {
-	node := t.StateAtVersion(version, false)
-	defer node.Close()
-	return node.Value(keypathPrefix, rng)
 }
 
 type DBNode struct {
@@ -138,6 +170,14 @@ func (tx *DBNode) Save() error {
 		wg.Done()
 	})
 	return err
+}
+
+func (tx *DBNode) addKeyPrefix(keypath Keypath) Keypath {
+	return append(tx.keyPrefix, keypath...)
+}
+
+func (tx *DBNode) rmKeyPrefix(keypath Keypath) Keypath {
+	return keypath[len(tx.keyPrefix):]
 }
 
 func (tx *DBNode) Keypath() Keypath {
@@ -434,6 +474,158 @@ func (tx *DBNode) BytesValue(keypath Keypath) ([]byte, bool, error) {
 		return nil, false, nil
 	}
 	return bs, true, nil
+}
+
+func (tx *DBNode) MapValue(keypath Keypath) (map[string]interface{}, bool, error) {
+	// @@TODO: maybe optimize the case where the keypath holds a complex object
+	// that .Value takes a while to decode by first checking the value's type?
+	val, exists, err := tx.Value(keypath, nil)
+	if err != nil {
+		return nil, false, err
+	} else if !exists {
+		return nil, false, nil
+	}
+	m, isMap := val.(map[string]interface{})
+	if !isMap {
+		return nil, false, nil
+	}
+	return m, true, nil
+}
+
+func (tx *DBNode) SliceValue(keypath Keypath) ([]interface{}, bool, error) {
+	// @@TODO: maybe optimize the case where the keypath holds a complex object
+	// that .Value takes a while to decode by first checking the value's type?
+	val, exists, err := tx.Value(keypath, nil)
+	if err != nil {
+		return nil, false, err
+	} else if !exists {
+		return nil, false, nil
+	}
+	s, isSlice := val.([]interface{})
+	if !isSlice {
+		return nil, false, nil
+	}
+	return s, true, nil
+}
+
+func makeScanError(node *DBNode, dest interface{}) error {
+	nodeType, valueType, _, _ := node.NodeInfo(nil)
+	return errors.Wrapf(ErrWrongType, "cannot scan a (%s:%s) into a %T", nodeType, valueType, dest)
+}
+
+func (tx *DBNode) Scan(into interface{}) error {
+	switch dest := into.(type) {
+	case *string:
+		x, is, err := tx.StringValue(nil)
+		if err != nil {
+			return err
+		} else if !is {
+			return makeScanError(tx, dest)
+		}
+		*dest = x
+		return nil
+
+	case *bool:
+		x, is, err := tx.BoolValue(nil)
+		if err != nil {
+			return err
+		} else if !is {
+			return makeScanError(tx, dest)
+		}
+		*dest = x
+		return nil
+
+	case *uint64:
+		x, is, err := tx.UintValue(nil)
+		if err != nil {
+			return err
+		} else if !is {
+			return makeScanError(tx, dest)
+		}
+		*dest = x
+		return nil
+
+	case *int64:
+		x, is, err := tx.IntValue(nil)
+		if err != nil {
+			return err
+		} else if !is {
+			return makeScanError(tx, dest)
+		}
+		*dest = x
+		return nil
+
+	case *float64:
+		x, is, err := tx.FloatValue(nil)
+		if err != nil {
+			return err
+		} else if !is {
+			return makeScanError(tx, dest)
+		}
+		*dest = x
+		return nil
+
+	case *map[string]interface{}:
+		x, is, err := tx.MapValue(nil)
+		if err != nil {
+			return err
+		} else if !is {
+			return makeScanError(tx, dest)
+		}
+		*dest = x
+		return nil
+
+	case *[]interface{}:
+		x, is, err := tx.SliceValue(nil)
+		if err != nil {
+			return err
+		} else if !is {
+			return makeScanError(tx, dest)
+		}
+		*dest = x
+		return nil
+
+	default:
+		rval := reflect.ValueOf(into)
+
+		if rval.Kind() == reflect.Ptr && rval.Elem().Kind() == reflect.Map {
+			if rval.Elem().IsNil() {
+				rval.Elem().Set(reflect.MakeMap(rval.Elem().Type()))
+			}
+			rval = rval.Elem()
+			elemType := rval.Type().Elem()
+			iter := tx.ChildIterator(nil, true, 10)
+			defer iter.Close()
+
+			for iter.Rewind(); iter.Valid(); iter.Next() {
+				node := iter.Node()
+				val := reflect.New(elemType)
+				err := node.Scan(val.Interface())
+				if err != nil {
+					return err
+				}
+				_, key := node.Keypath().Pop()
+				rval.SetMapIndex(reflect.ValueOf(string(key)), val.Elem())
+			}
+			return nil
+
+		} else if rval.Kind() == reflect.Ptr && rval.Elem().Kind() == reflect.Struct {
+			z := structomancer.NewWithType(rval.Type(), StructTag)
+			for _, fieldName := range z.FieldNames() {
+				ptr, err := z.PointerToFieldV(rval, fieldName)
+				if err != nil {
+					return err
+				}
+
+				err = tx.NodeAt(Keypath(fieldName), nil).Scan(ptr.Interface())
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+	return makeScanError(tx, into)
 }
 
 func (tx *DBNode) Length() (uint64, error) {
@@ -1131,7 +1323,7 @@ func (tx *DBNode) DebugPrint(printFn func(inFormat string, args ...interface{}),
 	printFn(indent + "}")
 }
 
-func (t *DBTree) CopyVersion(dstVersion, srcVersion types.ID) error {
+func (t *VersionedDBTree) CopyVersion(dstVersion, srcVersion types.ID) error {
 	return t.db.Update(func(tx *badger.Txn) error {
 		stream := t.db.NewStream()
 		stream.NumGo = 16
@@ -1260,7 +1452,7 @@ func prettyJSON(x interface{}) string {
 	return string(j)
 }
 
-func (t *DBTree) BuildIndex(version *types.ID, keypath Keypath, node Node, indexName Keypath, indexer Indexer) (err error) {
+func (t *VersionedDBTree) BuildIndex(version *types.ID, keypath Keypath, node Node, indexName Keypath, indexer Indexer) (err error) {
 	defer annotate(&err, "BuildIndex")
 
 	// @@TODO: ensure NodeType is map or slice
@@ -1562,6 +1754,11 @@ func encodeGoValue(nodeValue interface{}) ([]byte, error) {
 	case nil:
 		return encodeNode(NodeTypeValue, ValueTypeNil, 0, nv)
 	default:
+		rval := reflect.ValueOf(nodeValue)
+		if rval.Kind() == reflect.Struct {
+			z := structomancer.NewWithType(rval.Type(), StructTag)
+			return encodeNode(NodeTypeMap, 0, uint64(z.NumFields()), nil)
+		}
 		return nil, errors.Errorf("cannot encode Go value of type (%T)", nodeValue)
 	}
 }

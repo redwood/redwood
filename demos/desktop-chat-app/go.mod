@@ -5,6 +5,7 @@ go 1.15
 replace redwood.dev => ../../
 
 require (
+	github.com/brynbellomy/go-structomancer v1.0.2 // indirect
 	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae
 	github.com/gorilla/websocket v1.4.2
 	github.com/linode/linodego v1.0.0 // indirect

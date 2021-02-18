@@ -62,6 +62,19 @@ func (pubkey *signingPublicKey) String() string {
 	return hex.EncodeToString(pubkey.Bytes())
 }
 
+func (pubkey *signingPublicKey) UnmarshalText(bs []byte) error {
+	pk, err := crypto.UnmarshalPubkey(bs)
+	if err != nil {
+		return err
+	}
+	pubkey.PublicKey = pk
+	return nil
+}
+
+func (pubkey *signingPublicKey) MarshalText() ([]byte, error) {
+	return crypto.FromECDSAPub(pubkey.PublicKey), nil
+}
+
 func (privkey *signingPrivateKey) SignHash(hash types.Hash) ([]byte, error) {
 	sig, err := crypto.Sign(hash[:], privkey.PrivateKey)
 	if err != nil {
@@ -98,6 +111,12 @@ func SigningKeypairFromHex(s string) (*SigningKeypair, error) {
 		SigningPrivateKey: &signingPrivateKey{pk},
 		SigningPublicKey:  &signingPublicKey{&pk.PublicKey},
 	}, nil
+}
+
+func SigningPublicKeyFromBytes(bs []byte) (SigningPublicKey, error) {
+	var sigpubkey signingPublicKey
+	err := sigpubkey.UnmarshalText(bs)
+	return &sigpubkey, err
 }
 
 func RecoverSigningPubkey(hash types.Hash, signature []byte) (SigningPublicKey, error) {

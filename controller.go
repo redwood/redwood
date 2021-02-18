@@ -43,8 +43,8 @@ type controller struct {
 
 	behaviorTree *behaviorTree
 
-	states  *tree.DBTree
-	indices *tree.DBTree
+	states  *tree.VersionedDBTree
+	indices *tree.VersionedDBTree
 
 	newStateListeners   []func(tx *Tx, state tree.Node, leaves []types.ID)
 	newStateListenersMu sync.RWMutex
@@ -67,12 +67,12 @@ func NewController(
 	refStore RefStore,
 ) (Controller, error) {
 	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(stateURI)
-	states, err := tree.NewDBTree(filepath.Join(stateDBRootPath, stateURIClean))
+	states, err := tree.NewVersionedDBTree(filepath.Join(stateDBRootPath, stateURIClean))
 	if err != nil {
 		return nil, err
 	}
 
-	indices, err := tree.NewDBTree(filepath.Join(stateDBRootPath, stateURIClean+"_indices"))
+	indices, err := tree.NewVersionedDBTree(filepath.Join(stateDBRootPath, stateURIClean+"_indices"))
 	if err != nil {
 		return nil, err
 	}

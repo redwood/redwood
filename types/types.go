@@ -88,6 +88,16 @@ func AddressFromBytes(bs []byte) Address {
 	return addr
 }
 
+func (a Address) IsZero() bool {
+	return [20]byte(a) == [20]byte{}
+}
+
+func (a Address) Bytes() []byte {
+	bs := make([]byte, len(a))
+	copy(bs, a[:])
+	return bs
+}
+
 func (a Address) String() string {
 	return a.Hex()
 }

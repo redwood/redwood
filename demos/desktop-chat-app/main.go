@@ -130,10 +130,15 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 		return err
 	}
 
+	peerDB, err := tree.NewDBTree(filepath.Join(config.Node.DataRoot, "peers"))
+	if err != nil {
+		return err
+	}
+
 	var (
 		txStore       = rw.NewBadgerTxStore(config.TxDBRoot())
 		refStore      = rw.NewRefStore(config.RefDataRoot())
-		peerStore     = rw.NewPeerStore()
+		peerStore     = rw.NewPeerStore(peerDB)
 		controllerHub = rw.NewControllerHub(config.StateDBRoot(), txStore, refStore)
 	)
 
