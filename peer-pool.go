@@ -70,7 +70,6 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 					return
 				case peer, open := <-p.chProviders:
 					if !open {
-						p.restartSearch()
 						func() {
 							p.sem.Acquire(ctx, 1)
 							defer p.sem.Release(1)
@@ -157,10 +156,13 @@ func (p *peerPool) nextAvailablePeer() Peer {
 
 	for _, p := range p.peers {
 		if p.state != peerState_Unknown {
+			log.Debugf("skipping peer: not ready (%v, %v)", p.peer.DialInfo(), p.state)
 			continue
 		} else if uint64(time.Now().Sub(p.peer.LastFailure())/time.Second) < p.peer.Failures() {
+			log.Debugf("skipping peer: failures=%v lastFailure=%vs", p.peer.Failures(), time.Now().Sub(p.peer.LastFailure())/time.Second)
 			continue
 		} else if p.peer.Address() == (types.Address{}) {
+			log.Debugf("skipping peer: unverified (%v: %v)", p.peer.DialInfo().TransportName, p.peer.DialInfo().DialAddr)
 			continue
 		}
 		return p.peer
@@ -186,13 +188,16 @@ func (p *peerPool) GetPeer() (Peer, error) {
 	defer cancel()
 
 	p.sem.Acquire(ctx, 1)
+
 	for {
 		select {
 		case peer, open := <-p.chPeers:
 			if !open {
 				return nil, errors.New("connection closed")
 			}
+
 			if uint64(time.Now().Sub(peer.LastFailure())/time.Second) < peer.Failures() {
+				log.Warnf("skipping peer: failures=%v lastFailure=%vs", peer.Failures(), time.Now().Sub(peer.LastFailure())/time.Second)
 				p.ReturnPeer(peer, false)
 				continue
 			}
