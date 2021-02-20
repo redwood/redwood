@@ -1,37 +1,38 @@
-package tree
+package tree_test
 
 import (
 	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"redwood.dev/tree"
 )
 
 func TestMemoryNode_Set(T *testing.T) {
 	tests := []struct {
 		name       string
-		setKeypath Keypath
-		atKeypath  Keypath
-		rng        *Range
+		setKeypath tree.Keypath
+		atKeypath  tree.Keypath
+		rng        *tree.Range
 		fixture    fixture
 	}{
-		{"root keypath, single set, map value", Keypath(nil), Keypath(nil), nil, fixture1},
-		{"root keypath, single set, map value 2", Keypath(nil), Keypath(nil), nil, fixture2},
-		{"root keypath, single set, float value", Keypath(nil), Keypath(nil), nil, fixture5},
-		{"root keypath, single set, string value", Keypath(nil), Keypath(nil), nil, fixture6},
-		{"root keypath, single set, bool value", Keypath(nil), Keypath(nil), nil, fixture7},
+		{"root keypath, single set, map value", tree.Keypath(nil), tree.Keypath(nil), nil, fixture1},
+		{"root keypath, single set, map value 2", tree.Keypath(nil), tree.Keypath(nil), nil, fixture2},
+		{"root keypath, single set, float value", tree.Keypath(nil), tree.Keypath(nil), nil, fixture5},
+		{"root keypath, single set, string value", tree.Keypath(nil), tree.Keypath(nil), nil, fixture6},
+		{"root keypath, single set, bool value", tree.Keypath(nil), tree.Keypath(nil), nil, fixture7},
 
-		{"non-root keypath, single set, map value", Keypath("foo/bar"), Keypath(nil), nil, fixture1},
-		{"non-root keypath, single set, map value 2", Keypath("foo/bar"), Keypath(nil), nil, fixture2},
-		{"non-root keypath, single set, float value", Keypath("foo/bar"), Keypath(nil), nil, fixture5},
-		{"non-root keypath, single set, string value", Keypath("foo/bar"), Keypath(nil), nil, fixture6},
-		{"non-root keypath, single set, bool value", Keypath("foo/bar"), Keypath(nil), nil, fixture7},
+		{"non-root keypath, single set, map value", tree.Keypath("foo/bar"), tree.Keypath(nil), nil, fixture1},
+		{"non-root keypath, single set, map value 2", tree.Keypath("foo/bar"), tree.Keypath(nil), nil, fixture2},
+		{"non-root keypath, single set, float value", tree.Keypath("foo/bar"), tree.Keypath(nil), nil, fixture5},
+		{"non-root keypath, single set, string value", tree.Keypath("foo/bar"), tree.Keypath(nil), nil, fixture6},
+		{"non-root keypath, single set, bool value", tree.Keypath("foo/bar"), tree.Keypath(nil), nil, fixture7},
 	}
 
 	for _, test := range tests {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
-			state := NewMemoryNode().NodeAt(test.atKeypath, nil).(*MemoryNode)
+			state := tree.NewMemoryNode().NodeAt(test.atKeypath, nil).(*tree.MemoryNode)
 
 			err := state.Set(test.setKeypath, test.rng, test.fixture.input)
 			require.NoError(T, err)
@@ -62,25 +63,25 @@ func TestMemoryNode_Set(T *testing.T) {
 }
 
 func TestMemoryNode_SetNode(T *testing.T) {
-	T.Run("inner MemoryNode", func(T *testing.T) {
-		state := NewMemoryNode().(*MemoryNode)
-		innerNode := NewMemoryNode().(*MemoryNode)
+	T.Run("inner tree.MemoryNode", func(T *testing.T) {
+		state := tree.NewMemoryNode().(*tree.MemoryNode)
+		innerNode := tree.NewMemoryNode().(*tree.MemoryNode)
 
-		err := state.Set(Keypath("foo"), nil, M{
+		err := state.Set(tree.Keypath("foo"), nil, M{
 			"one":   uint64(123),
 			"two":   M{"two a": false, "two b": nil},
 			"three": "hello",
 		})
 		require.NoError(T, err)
 
-		err = innerNode.Set(Keypath("bar"), nil, M{
+		err = innerNode.Set(tree.Keypath("bar"), nil, M{
 			"baz": M{
 				"xyzzy": "zork",
 			},
 		})
 		require.NoError(T, err)
 
-		err = state.Set(Keypath("foo/two"), nil, innerNode)
+		err = state.Set(tree.Keypath("foo/two"), nil, innerNode)
 		require.NoError(T, err)
 
 		require.Len(T, state.keypaths, 5)
@@ -108,44 +109,44 @@ func TestMemoryNode_SetNode(T *testing.T) {
 
 func TestMemoryNode_ParentNodeFor(T *testing.T) {
 	T.Run("non-root node", func(T *testing.T) {
-		state := NewMemoryNode().(*MemoryNode)
-		innerNode := NewMemoryNode().(*MemoryNode)
+		state := tree.NewMemoryNode().(*tree.MemoryNode)
+		innerNode := tree.NewMemoryNode().(*tree.MemoryNode)
 
-		err := state.Set(Keypath("foo"), nil, M{
+		err := state.Set(tree.Keypath("foo"), nil, M{
 			"one":   uint64(123),
 			"two":   M{"two a": false, "two b": nil},
 			"three": "hello",
 		})
 		require.NoError(T, err)
 
-		err = innerNode.Set(Keypath("bar"), nil, M{
+		err = innerNode.Set(tree.Keypath("bar"), nil, M{
 			"baz": M{
 				"xyzzy": "zork",
 			},
 		})
 		require.NoError(T, err)
 
-		err = state.Set(Keypath("foo/two"), nil, innerNode)
+		err = state.Set(tree.Keypath("foo/two"), nil, innerNode)
 		require.NoError(T, err)
 
-		node, keypath := state.ParentNodeFor(Keypath("foo/two/bar/baz/xyzzy"))
-		require.Equal(T, Keypath("bar/baz/xyzzy"), keypath)
-		memNode := node.(*MemoryNode)
+		node, keypath := state.ParentNodeFor(tree.Keypath("foo/two/bar/baz/xyzzy"))
+		require.Equal(T, tree.Keypath("bar/baz/xyzzy"), keypath)
+		memNode := node.(*tree.MemoryNode)
 		require.Equal(T, innerNode.keypaths, memNode.keypaths)
 	})
 
 	T.Run("root node", func(T *testing.T) {
-		state := NewMemoryNode().(*MemoryNode)
-		innerNode := NewMemoryNode().(*MemoryNode)
+		state := tree.NewMemoryNode().(*tree.MemoryNode)
+		innerNode := tree.NewMemoryNode().(*tree.MemoryNode)
 
-		err := state.Set(Keypath("foo"), nil, M{
+		err := state.Set(tree.Keypath("foo"), nil, M{
 			"one":   uint64(123),
 			"two":   M{"two a": false, "two b": nil},
 			"three": "hello",
 		})
 		require.NoError(T, err)
 
-		err = innerNode.Set(Keypath("bar"), nil, M{
+		err = innerNode.Set(tree.Keypath("bar"), nil, M{
 			"baz": M{
 				"xyzzy": "zork",
 			},
@@ -155,9 +156,9 @@ func TestMemoryNode_ParentNodeFor(T *testing.T) {
 		err = state.Set(nil, nil, innerNode)
 		require.NoError(T, err)
 
-		node, keypath := state.ParentNodeFor(Keypath("bar/baz/xyzzy"))
-		require.Equal(T, Keypath("bar/baz/xyzzy"), keypath)
-		memNode := node.(*MemoryNode)
+		node, keypath := state.ParentNodeFor(tree.Keypath("bar/baz/xyzzy"))
+		require.Equal(T, tree.Keypath("bar/baz/xyzzy"), keypath)
+		memNode := node.(*tree.MemoryNode)
 		require.Equal(T, innerNode.keypaths, memNode.keypaths)
 	})
 }
@@ -165,29 +166,29 @@ func TestMemoryNode_ParentNodeFor(T *testing.T) {
 func TestMemoryNode_Delete(T *testing.T) {
 	tests := []struct {
 		name          string
-		setKeypath    Keypath
-		setRange      *Range
-		deleteKeypath Keypath
-		deleteRange   *Range
+		setKeypath    tree.Keypath
+		setRange      *tree.Range
+		deleteKeypath tree.Keypath
+		deleteRange   *tree.Range
 		fixture       fixture
 	}{
-		{"root keypath, single set, map value", Keypath(nil), nil, Keypath("flox"), nil, fixture1},
-		{"root keypath, single set, map value 2", Keypath(nil), nil, Keypath("eee"), nil, fixture2},
-		{"root keypath, single set, float value", Keypath(nil), nil, Keypath(nil), nil, fixture5},
-		{"root keypath, single set, string value", Keypath(nil), nil, Keypath(nil), nil, fixture6},
-		{"root keypath, single set, bool value", Keypath(nil), nil, Keypath(nil), nil, fixture7},
+		{"root keypath, single set, map value", tree.Keypath(nil), nil, tree.Keypath("flox"), nil, fixture1},
+		{"root keypath, single set, map value 2", tree.Keypath(nil), nil, tree.Keypath("eee"), nil, fixture2},
+		{"root keypath, single set, float value", tree.Keypath(nil), nil, tree.Keypath(nil), nil, fixture5},
+		{"root keypath, single set, string value", tree.Keypath(nil), nil, tree.Keypath(nil), nil, fixture6},
+		{"root keypath, single set, bool value", tree.Keypath(nil), nil, tree.Keypath(nil), nil, fixture7},
 
-		{"non-root keypath, single set, map value", Keypath("foo/bar"), nil, Keypath(nil), nil, fixture1},
-		{"non-root keypath, single set, map value 2", Keypath("foo/bar"), nil, Keypath(nil), nil, fixture2},
-		{"non-root keypath, single set, float value", Keypath("foo/bar"), nil, Keypath(nil), nil, fixture5},
-		{"non-root keypath, single set, string value", Keypath("foo/bar"), nil, Keypath(nil), nil, fixture6},
-		{"non-root keypath, single set, bool value", Keypath("foo/bar"), nil, Keypath(nil), nil, fixture7},
+		{"non-root keypath, single set, map value", tree.Keypath("foo/bar"), nil, tree.Keypath(nil), nil, fixture1},
+		{"non-root keypath, single set, map value 2", tree.Keypath("foo/bar"), nil, tree.Keypath(nil), nil, fixture2},
+		{"non-root keypath, single set, float value", tree.Keypath("foo/bar"), nil, tree.Keypath(nil), nil, fixture5},
+		{"non-root keypath, single set, string value", tree.Keypath("foo/bar"), nil, tree.Keypath(nil), nil, fixture6},
+		{"non-root keypath, single set, bool value", tree.Keypath("foo/bar"), nil, tree.Keypath(nil), nil, fixture7},
 	}
 
 	for _, test := range tests {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
-			state := NewMemoryNode().(*MemoryNode)
+			state := tree.NewMemoryNode().(*tree.MemoryNode)
 
 			err := state.Set(test.setKeypath, test.setRange, test.fixture.input)
 			require.NoError(T, err)
@@ -221,39 +222,39 @@ func TestMemoryNode_Delete(T *testing.T) {
 func TestMemoryNode_Iterator(T *testing.T) {
 	tests := []struct {
 		name        string
-		setKeypath  Keypath
-		iterKeypath Keypath
+		setKeypath  tree.Keypath
+		iterKeypath tree.Keypath
 		fixture     fixture
 	}{
-		{"root set, root iter, map value", Keypath(nil), Keypath(nil), fixture1},
-		{"root set, root iter, map value 2", Keypath(nil), Keypath(nil), fixture2},
-		{"root set, root iter, float value", Keypath(nil), Keypath(nil), fixture5},
-		{"root set, root iter, string value", Keypath(nil), Keypath(nil), fixture6},
-		{"root set, root iter, bool value", Keypath(nil), Keypath(nil), fixture7},
+		{"root set, root iter, map value", tree.Keypath(nil), tree.Keypath(nil), fixture1},
+		{"root set, root iter, map value 2", tree.Keypath(nil), tree.Keypath(nil), fixture2},
+		{"root set, root iter, float value", tree.Keypath(nil), tree.Keypath(nil), fixture5},
+		{"root set, root iter, string value", tree.Keypath(nil), tree.Keypath(nil), fixture6},
+		{"root set, root iter, bool value", tree.Keypath(nil), tree.Keypath(nil), fixture7},
 
-		{"non-root set, root iter, map value", Keypath("foo/bar"), Keypath(nil), fixture1},
-		{"non-root set, root iter, map value 2", Keypath("foo/bar"), Keypath(nil), fixture2},
-		{"non-root set, root iter, float value", Keypath("foo/bar"), Keypath(nil), fixture5},
-		{"non-root set, root iter, string value", Keypath("foo/bar"), Keypath(nil), fixture6},
-		{"non-root set, root iter, bool value", Keypath("foo/bar"), Keypath(nil), fixture7},
+		{"non-root set, root iter, map value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture1},
+		{"non-root set, root iter, map value 2", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture2},
+		{"non-root set, root iter, float value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture5},
+		{"non-root set, root iter, string value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture6},
+		{"non-root set, root iter, bool value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture7},
 
-		{"root set, non-root iter, map value", Keypath(nil), Keypath("flox"), fixture1},
-		{"root set, non-root iter, map value 2", Keypath(nil), Keypath("flox"), fixture2},
-		{"root set, non-root iter, float value", Keypath(nil), Keypath("flox"), fixture5},
-		{"root set, non-root iter, string value", Keypath(nil), Keypath("flox"), fixture6},
-		{"root set, non-root iter, bool value", Keypath(nil), Keypath("flox"), fixture7},
+		{"root set, non-root iter, map value", tree.Keypath(nil), tree.Keypath("flox"), fixture1},
+		{"root set, non-root iter, map value 2", tree.Keypath(nil), tree.Keypath("flox"), fixture2},
+		{"root set, non-root iter, float value", tree.Keypath(nil), tree.Keypath("flox"), fixture5},
+		{"root set, non-root iter, string value", tree.Keypath(nil), tree.Keypath("flox"), fixture6},
+		{"root set, non-root iter, bool value", tree.Keypath(nil), tree.Keypath("flox"), fixture7},
 
-		{"non-root set, non-root iter, map value", Keypath("foo/bar"), Keypath("flox"), fixture1},
-		{"non-root set, non-root iter, map value 2", Keypath("foo/bar"), Keypath("flox"), fixture2},
-		{"non-root set, non-root iter, float value", Keypath("foo/bar"), Keypath("flox"), fixture5},
-		{"non-root set, non-root iter, string value", Keypath("foo/bar"), Keypath("flox"), fixture6},
-		{"non-root set, non-root iter, bool value", Keypath("foo/bar"), Keypath("flox"), fixture7},
+		{"non-root set, non-root iter, map value", tree.Keypath("foo/bar"), tree.Keypath("flox"), fixture1},
+		{"non-root set, non-root iter, map value 2", tree.Keypath("foo/bar"), tree.Keypath("flox"), fixture2},
+		{"non-root set, non-root iter, float value", tree.Keypath("foo/bar"), tree.Keypath("flox"), fixture5},
+		{"non-root set, non-root iter, string value", tree.Keypath("foo/bar"), tree.Keypath("flox"), fixture6},
+		{"non-root set, non-root iter, bool value", tree.Keypath("foo/bar"), tree.Keypath("flox"), fixture7},
 	}
 
 	for _, test := range tests {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
-			state := NewMemoryNode()
+			state := tree.NewMemoryNode()
 			state.Set(test.setKeypath, nil, test.fixture.input)
 
 			setKeypathOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
@@ -266,7 +267,7 @@ func TestMemoryNode_Iterator(T *testing.T) {
 			var i int
 			for iter.Rewind(); iter.Valid(); iter.Next() {
 				node := iter.Node()
-				require.Equal(T, expected[i].keypath, node.Keypath())
+				require.Equal(T, expected[i].keypath, node.tree.Keypath())
 				i++
 			}
 			require.Equal(T, len(expected), i)
@@ -278,39 +279,39 @@ func TestMemoryNode_Iterator(T *testing.T) {
 func TestMemoryNode_ChildIterator(T *testing.T) {
 	tests := []struct {
 		name        string
-		setKeypath  Keypath
-		iterKeypath Keypath
+		setKeypath  tree.Keypath
+		iterKeypath tree.Keypath
 		fixture     fixture
 	}{
-		{"root set, root iter, map value", Keypath(nil), Keypath(nil), fixture1},
-		{"root set, root iter, map value 2", Keypath(nil), Keypath(nil), fixture2},
-		{"root set, root iter, float value", Keypath(nil), Keypath(nil), fixture5},
-		{"root set, root iter, string value", Keypath(nil), Keypath(nil), fixture6},
-		{"root set, root iter, bool value", Keypath(nil), Keypath(nil), fixture7},
+		{"root set, root iter, map value", tree.Keypath(nil), tree.Keypath(nil), fixture1},
+		{"root set, root iter, map value 2", tree.Keypath(nil), tree.Keypath(nil), fixture2},
+		{"root set, root iter, float value", tree.Keypath(nil), tree.Keypath(nil), fixture5},
+		{"root set, root iter, string value", tree.Keypath(nil), tree.Keypath(nil), fixture6},
+		{"root set, root iter, bool value", tree.Keypath(nil), tree.Keypath(nil), fixture7},
 
-		{"non-root set, root iter, map value", Keypath("foo/bar"), Keypath(nil), fixture1},
-		{"non-root set, root iter, map value 2", Keypath("foo/bar"), Keypath(nil), fixture2},
-		{"non-root set, root iter, float value", Keypath("foo/bar"), Keypath(nil), fixture5},
-		{"non-root set, root iter, string value", Keypath("foo/bar"), Keypath(nil), fixture6},
-		{"non-root set, root iter, bool value", Keypath("foo/bar"), Keypath(nil), fixture7},
+		{"non-root set, root iter, map value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture1},
+		{"non-root set, root iter, map value 2", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture2},
+		{"non-root set, root iter, float value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture5},
+		{"non-root set, root iter, string value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture6},
+		{"non-root set, root iter, bool value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture7},
 
-		{"root set, non-root iter, map value", Keypath(nil), Keypath("flox"), fixture1},
-		{"root set, non-root iter, map value 2", Keypath(nil), Keypath("flox"), fixture2},
-		{"root set, non-root iter, float value", Keypath(nil), Keypath("flox"), fixture5},
-		{"root set, non-root iter, string value", Keypath(nil), Keypath("flox"), fixture6},
-		{"root set, non-root iter, bool value", Keypath(nil), Keypath("flox"), fixture7},
+		{"root set, non-root iter, map value", tree.Keypath(nil), tree.Keypath("flox"), fixture1},
+		{"root set, non-root iter, map value 2", tree.Keypath(nil), tree.Keypath("flox"), fixture2},
+		{"root set, non-root iter, float value", tree.Keypath(nil), tree.Keypath("flox"), fixture5},
+		{"root set, non-root iter, string value", tree.Keypath(nil), tree.Keypath("flox"), fixture6},
+		{"root set, non-root iter, bool value", tree.Keypath(nil), tree.Keypath("flox"), fixture7},
 
-		{"non-root set, non-root iter, map value", Keypath("foo/bar"), Keypath("flox"), fixture1},
-		{"non-root set, non-root iter, map value 2", Keypath("foo/bar"), Keypath("flox"), fixture2},
-		{"non-root set, non-root iter, float value", Keypath("foo/bar"), Keypath("flox"), fixture5},
-		{"non-root set, non-root iter, string value", Keypath("foo/bar"), Keypath("flox"), fixture6},
-		{"non-root set, non-root iter, bool value", Keypath("foo/bar"), Keypath("flox"), fixture7},
+		{"non-root set, non-root iter, map value", tree.Keypath("foo/bar"), tree.Keypath("flox"), fixture1},
+		{"non-root set, non-root iter, map value 2", tree.Keypath("foo/bar"), tree.Keypath("flox"), fixture2},
+		{"non-root set, non-root iter, float value", tree.Keypath("foo/bar"), tree.Keypath("flox"), fixture5},
+		{"non-root set, non-root iter, string value", tree.Keypath("foo/bar"), tree.Keypath("flox"), fixture6},
+		{"non-root set, non-root iter, bool value", tree.Keypath("foo/bar"), tree.Keypath("flox"), fixture7},
 	}
 
 	for _, test := range tests {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
-			state := NewMemoryNode()
+			state := tree.NewMemoryNode()
 			state.Set(test.setKeypath, nil, test.fixture.input)
 
 			setKeypathOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
@@ -323,7 +324,7 @@ func TestMemoryNode_ChildIterator(T *testing.T) {
 			var i int
 			for iter.Rewind(); iter.Valid(); iter.Next() {
 				node := iter.Node()
-				require.Equal(T, expected[i].keypath, node.Keypath())
+				require.Equal(T, expected[i].keypath, node.tree.Keypath())
 				i++
 			}
 			require.Equal(T, len(expected), i)
@@ -335,40 +336,40 @@ func TestMemoryNode_ChildIterator(T *testing.T) {
 func TestMemoryNode_DepthFirstIterator(T *testing.T) {
 	tests := []struct {
 		name        string
-		setKeypath  Keypath
-		iterKeypath Keypath
+		setKeypath  tree.Keypath
+		iterKeypath tree.Keypath
 		fixture     fixture
 	}{
-		{"root set, root iter, map value", Keypath(nil), Keypath(nil), fixture1},
-		{"root set, root iter, map value 2", Keypath(nil), Keypath(nil), fixture2},
-		{"root set, root iter, float value", Keypath(nil), Keypath(nil), fixture5},
-		{"root set, root iter, string value", Keypath(nil), Keypath(nil), fixture6},
-		{"root set, root iter, bool value", Keypath(nil), Keypath(nil), fixture7},
+		{"root set, root iter, map value", tree.Keypath(nil), tree.Keypath(nil), fixture1},
+		{"root set, root iter, map value 2", tree.Keypath(nil), tree.Keypath(nil), fixture2},
+		{"root set, root iter, float value", tree.Keypath(nil), tree.Keypath(nil), fixture5},
+		{"root set, root iter, string value", tree.Keypath(nil), tree.Keypath(nil), fixture6},
+		{"root set, root iter, bool value", tree.Keypath(nil), tree.Keypath(nil), fixture7},
 
-		{"non-root set, root iter, map value", Keypath("foo/bar"), Keypath(nil), fixture1},
-		{"non-root set, root iter, map value 2", Keypath("foo/bar"), Keypath(nil), fixture2},
-		{"non-root set, root iter, float value", Keypath("foo/bar"), Keypath(nil), fixture5},
-		{"non-root set, root iter, string value", Keypath("foo/bar"), Keypath(nil), fixture6},
-		{"non-root set, root iter, bool value", Keypath("foo/bar"), Keypath(nil), fixture7},
+		{"non-root set, root iter, map value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture1},
+		{"non-root set, root iter, map value 2", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture2},
+		{"non-root set, root iter, float value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture5},
+		{"non-root set, root iter, string value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture6},
+		{"non-root set, root iter, bool value", tree.Keypath("foo/bar"), tree.Keypath(nil), fixture7},
 
-		{"root set, non-root iter, map value", Keypath(nil), Keypath("flox"), fixture1},
-		{"root set, non-root iter, map value 2", Keypath(nil), Keypath("eee"), fixture2},
-		{"root set, non-root iter, float value", Keypath(nil), Keypath("flox"), fixture5},
-		{"root set, non-root iter, string value", Keypath(nil), Keypath("flox"), fixture6},
-		{"root set, non-root iter, bool value", Keypath(nil), Keypath("flox"), fixture7},
+		{"root set, non-root iter, map value", tree.Keypath(nil), tree.Keypath("flox"), fixture1},
+		{"root set, non-root iter, map value 2", tree.Keypath(nil), tree.Keypath("eee"), fixture2},
+		{"root set, non-root iter, float value", tree.Keypath(nil), tree.Keypath("flox"), fixture5},
+		{"root set, non-root iter, string value", tree.Keypath(nil), tree.Keypath("flox"), fixture6},
+		{"root set, non-root iter, bool value", tree.Keypath(nil), tree.Keypath("flox"), fixture7},
 
-		{"non-root set, non-root iter, map value", Keypath("foo/bar"), Keypath("foo/bar/flox"), fixture1},
-		{"non-root set, non-root iter, map value 2", Keypath("foo/bar"), Keypath("foo/bar/eee"), fixture2},
-		{"non-root set, non-root iter, float value", Keypath("foo/bar"), Keypath("foo/bar"), fixture5},
-		{"non-root set, non-root iter, string value", Keypath("foo/bar"), Keypath("foo/bar"), fixture6},
-		{"non-root set, non-root iter, bool value", Keypath("foo/bar"), Keypath("foo/bar"), fixture7},
-		{"non-root set, non-root iter, nonexistent value", Keypath("foo/bar"), Keypath("foo/bar/asdf"), fixture7},
+		{"non-root set, non-root iter, map value", tree.Keypath("foo/bar"), tree.Keypath("foo/bar/flox"), fixture1},
+		{"non-root set, non-root iter, map value 2", tree.Keypath("foo/bar"), tree.Keypath("foo/bar/eee"), fixture2},
+		{"non-root set, non-root iter, float value", tree.Keypath("foo/bar"), tree.Keypath("foo/bar"), fixture5},
+		{"non-root set, non-root iter, string value", tree.Keypath("foo/bar"), tree.Keypath("foo/bar"), fixture6},
+		{"non-root set, non-root iter, bool value", tree.Keypath("foo/bar"), tree.Keypath("foo/bar"), fixture7},
+		{"non-root set, non-root iter, nonexistent value", tree.Keypath("foo/bar"), tree.Keypath("foo/bar/asdf"), fixture7},
 	}
 
 	for _, test := range tests {
 		test := test
 		T.Run(test.name, func(T *testing.T) {
-			state := NewMemoryNode()
+			state := tree.NewMemoryNode()
 			state.Set(test.setKeypath, nil, test.fixture.input)
 
 			prefixOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
@@ -382,7 +383,7 @@ func TestMemoryNode_DepthFirstIterator(T *testing.T) {
 			var i int
 			for iter.Rewind(); iter.Valid(); iter.Next() {
 				node := iter.Node()
-				require.Equal(T, expected[i].keypath, node.Keypath())
+				require.Equal(T, expected[i].keypath, node.tree.Keypath())
 				i++
 			}
 			require.Equal(T, len(expected), i)
@@ -392,20 +393,20 @@ func TestMemoryNode_DepthFirstIterator(T *testing.T) {
 }
 
 func BenchmarkDepthFirstIterator(b *testing.B) {
-	t := NewMemoryNode()
-	t.Set(Keypath("foo/bar/xyzzy"), nil, []interface{}{1, 2, 3})
-	t.Set(Keypath("foo/hello"), nil, "hey there")
-	t.Set(Keypath("bling/blang"), nil, map[string]interface{}{"name": "bryn", "age": 33})
+	t := tree.NewMemoryNode()
+	t.Set(tree.Keypath("foo/bar/xyzzy"), nil, []interface{}{1, 2, 3})
+	t.Set(tree.Keypath("foo/hello"), nil, "hey there")
+	t.Set(tree.Keypath("bling/blang"), nil, map[string]interface{}{"name": "bryn", "age": 33})
 	iter := t.DepthFirstIterator(nil, false, 0)
 	for n := 0; n < b.N; n++ {
-		a := []Keypath{}
+		a := []tree.Keypath{}
 		for {
 			iter.Next()
 			node := iter.Node()
 			if node == nil {
 				break
 			}
-			a = append(a, node.(*MemoryNode).keypath)
+			a = append(a, node.(*tree.MemoryNode).keypath)
 		}
 	}
 }
@@ -480,27 +481,27 @@ func walkTree(tree interface{}, fn func(keypath []string, val interface{}) error
 }
 
 func TestMemoryNode_CopyToMemory(T *testing.T) {
-	//state := NewMemoryNode(NodeTypeMap).(*MemoryNode)
+	//state := tree.NewMemoryNode(NodeTypeMap).(*tree.MemoryNode)
 	//
 	//_, err := state.Set(nil, nil, testVal1)
 	//require.NoError(T, err)
 	//
-	//expectedKeypaths := []Keypath{
-	//    Keypath("flox"),
-	//    Keypath("flox").PushIndex(0),
-	//    Keypath("flox").PushIndex(1),
-	//    Keypath("flox").PushIndex(1).Push(Keypath("yup")),
-	//    Keypath("flox").PushIndex(1).Push(Keypath("hey")),
-	//    Keypath("flox").PushIndex(2),
+	//expectedKeypaths := []tree.Keypath{
+	//    tree.Keypath("flox"),
+	//    tree.Keypath("flox").PushIndex(0),
+	//    tree.Keypath("flox").PushIndex(1),
+	//    tree.Keypath("flox").PushIndex(1).Push(tree.Keypath("yup")),
+	//    tree.Keypath("flox").PushIndex(1).Push(tree.Keypath("hey")),
+	//    tree.Keypath("flox").PushIndex(2),
 	//}
 	//
 	//sort.Slice(expectedKeypaths, func(i, j int) bool { return bytes.Compare(expectedKeypaths[i], expectedKeypaths[j]) < 0 })
 	//
 	//err = state.View(func(node *DBNode) error {
-	//    copied, err := node.NodeAt(Keypath("flox")).CopyToMemory(nil)
+	//    copied, err := node.NodeAt(tree.Keypath("flox")).CopyToMemory(nil)
 	//    require.NoError(T, err)
 	//
-	//    memnode := copied.(*MemoryNode)
+	//    memnode := copied.(*tree.MemoryNode)
 	//    for i := range memnode.keypaths {
 	//        require.Equal(T, expectedKeypaths[i], memnode.keypaths[i])
 	//    }
@@ -510,16 +511,16 @@ func TestMemoryNode_CopyToMemory(T *testing.T) {
 }
 
 func TestMemoryNode_CopyToMemory_AtKeypath(T *testing.T) {
-	node := NewMemoryNode()
+	node := tree.NewMemoryNode()
 	err := node.Set(nil, nil, fixture1.input)
 	require.NoError(T, err)
 
-	copied, err := node.NodeAt(Keypath("asdf"), nil).CopyToMemory(nil, nil)
+	copied, err := node.NodeAt(tree.Keypath("asdf"), nil).CopyToMemory(nil, nil)
 	require.NoError(T, err)
 
-	expected := filterFixtureOutputsWithPrefix(Keypath("asdf"), fixture1.output...)
+	expected := filterFixtureOutputsWithPrefix(tree.Keypath("asdf"), fixture1.output...)
 
-	memnode := copied.(*MemoryNode)
+	memnode := copied.(*tree.MemoryNode)
 	for i, kp := range memnode.keypaths {
 		require.Equal(T, expected[i].keypath, kp)
 		require.Equal(T, expected[i].nodeType, memnode.nodeTypes[string(kp)])

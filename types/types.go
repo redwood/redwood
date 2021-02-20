@@ -89,7 +89,7 @@ func AddressFromBytes(bs []byte) Address {
 }
 
 func (a Address) IsZero() bool {
-	return [20]byte(a) == [20]byte{}
+	return a == Address{}
 }
 
 func (a Address) Bytes() []byte {
