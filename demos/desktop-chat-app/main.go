@@ -476,4 +476,14 @@ var replCommands = map[string]struct {
 			return nil
 		},
 	},
+	"addpeer": {
+		"list all known peers",
+		func(ctx context.Context, args []string, host rw.Host) error {
+			if len(args) < 2 {
+				return errors.New("requires two arguments: addpeer <transport> <dial addr>")
+			}
+			host.AddPeer(redwood.PeerDialInfo{args[0], args[1]})
+			return nil
+		},
+	},
 }
