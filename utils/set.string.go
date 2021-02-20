@@ -65,6 +65,18 @@ func (s StringSet) Copy() StringSet {
 	return set
 }
 
+func (s StringSet) Equal(other StringSet) bool {
+	if len(s) != len(other) {
+		return false
+	}
+	for x := range s {
+		if !other.Contains(x) {
+			return false
+		}
+	}
+	return true
+}
+
 func (s StringSet) MarshalYAML() (interface{}, error) {
 	return s.Slice(), nil
 }
