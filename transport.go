@@ -30,6 +30,8 @@ type Peer interface {
 	EnsureConnected(ctx context.Context) error
 	Close() error
 
+	AnnouncePeers(ctx context.Context, peerDialInfos []PeerDialInfo) error
+
 	// Transactions
 	Subscribe(ctx context.Context, stateURI string) (ReadableSubscription, error)
 	Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error
