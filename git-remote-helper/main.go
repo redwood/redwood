@@ -17,19 +17,19 @@ import (
 	"sync"
 	"time"
 
+	git "github.com/brynbellomy/git2go"
 	"github.com/pkg/errors"
 
 	"redwood.dev"
+	"redwood.dev/crypto"
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
 
 // @@TODO: read keys from config
-
-// @@TODO: read keys from config
-var sigkeys = func() *redwood.SigningKeypair {
-	sigkeys, err := redwood.GenerateSigningKeypair()
+var sigkeys = func() *crypto.SigningKeypair {
+	sigkeys, err := crypto.GenerateSigningKeypair()
 	if err != nil {
 		panic(err)
 	}
@@ -67,7 +67,7 @@ func main() {
 		die(err)
 	}
 
-	client, err := redwood.NewHTTPClient("http://"+host, sigkeys, false)
+	client, err := redwood.NewHTTPClient("http://"+host, sigkeys, nil, false)
 	if err != nil {
 		die(err)
 	}
@@ -84,7 +84,7 @@ func main() {
 	}
 }
 
-func speakGit(r io.Reader, w io.Writer, client redwood.HTTPClient) error {
+func speakGit(r io.Reader, w io.Writer, client *redwood.HTTPClient) error {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		text := scanner.Text()
@@ -156,7 +156,7 @@ func speakGit(r io.Reader, w io.Writer, client redwood.HTTPClient) error {
 	return scanner.Err()
 }
 
-func getRefs(client redwood.HTTPClient) ([]string, error) {
+func getRefs(client *redwood.HTTPClient) ([]string, error) {
 	stateReader, _, _, err := client.Get(StateURI, nil, RootKeypath.Push(tree.Keypath("refs/heads")), nil, true)
 	if err != nil {
 		return nil, err
@@ -205,7 +205,7 @@ type Commit struct {
 	Files *tree.MemoryNode `json:"files"`
 }
 
-func fetch(client redwood.HTTPClient, headCommitHash string) error {
+func fetch(client *redwood.HTTPClient, headCommitHash string) error {
 	odb, err := repo.Odb()
 	if err != nil {
 		return errors.WithStack(err)
@@ -254,7 +254,7 @@ func fetch(client redwood.HTTPClient, headCommitHash string) error {
 	return nil
 }
 
-func fetchCommit(commitHash string, commit Commit, client redwood.HTTPClient, odb *git.Odb, refs *sync.Map) (err error) {
+func fetchCommit(commitHash string, commit Commit, client *redwood.HTTPClient, odb *git.Odb, refs *sync.Map) (err error) {
 	defer annotate(&err, "fetchCommit")
 
 	logf("commit: %v", commitHash)
@@ -418,7 +418,7 @@ func fetchCommit(commitHash string, commit Commit, client redwood.HTTPClient, od
 	return err
 }
 
-func push(srcRefName string, destRefName string, client redwood.HTTPClient) error {
+func push(srcRefName string, destRefName string, client *redwood.HTTPClient) error {
 	force := strings.HasPrefix(srcRefName, "+")
 	if force {
 		srcRefName = srcRefName[1:]
@@ -460,7 +460,7 @@ func push(srcRefName string, destRefName string, client redwood.HTTPClient) erro
 	return pushRef(destRefName, headCommitId, client)
 }
 
-func pushRef(destRefName string, commitId *git.Oid, client redwood.HTTPClient) error {
+func pushRef(destRefName string, commitId *git.Oid, client *redwood.HTTPClient) error {
 	branchKeypath := RootKeypath.Push(tree.Keypath(destRefName))
 
 	parentID, err := types.IDFromHex(commitId.String())
@@ -489,10 +489,10 @@ func pushRef(destRefName string, commitId *git.Oid, client redwood.HTTPClient) e
 		}},
 	}
 
-	return client.Put(tx)
+	return client.Put(context.Background(), tx, nil)
 }
 
-func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient) error {
+func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClient) error {
 	commit, err := repo.LookupCommit(commitId)
 	if err != nil {
 		return errors.WithStack(err)
@@ -694,7 +694,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client redwood.HTTPClient
 			Val:     fileTree,
 		})
 
-		err = client.Put(tx)
+		err = client.Put(context.Background(), tx, nil)
 	}()
 
 	select {

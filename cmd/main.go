@@ -18,6 +18,7 @@ import (
 	"github.com/urfave/cli"
 
 	rw "redwood.dev"
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/tree"
 )
@@ -116,12 +117,17 @@ func run(configPath string, gui bool, dev bool) error {
 		return err
 	}
 
-	signingKeypair, err := rw.SigningKeypairFromHDMnemonic(config.Node.HDMnemonicPhrase, rw.DefaultHDDerivationPath)
+	signingKeypair, err := crypto.SigningKeypairFromHDMnemonic(config.Node.HDMnemonicPhrase, crypto.DefaultHDDerivationPath)
 	if err != nil {
 		return err
 	}
 
-	encryptingKeypair, err := rw.GenerateEncryptingKeypair()
+	encryptingKeypair, err := crypto.GenerateEncryptingKeypair()
+	if err != nil {
+		return err
+	}
+
+	peerDB, err := tree.NewDBTree(filepath.Join(config.Node.DataRoot, "peers"))
 	if err != nil {
 		return err
 	}
@@ -129,7 +135,7 @@ func run(configPath string, gui bool, dev bool) error {
 	var (
 		txStore       = rw.NewBadgerTxStore(config.TxDBRoot())
 		refStore      = rw.NewRefStore(config.RefDataRoot())
-		peerStore     = rw.NewPeerStore()
+		peerStore     = rw.NewPeerStore(peerDB)
 		controllerHub = rw.NewControllerHub(config.StateDBRoot(), txStore, refStore)
 	)
 
@@ -148,11 +154,21 @@ func run(configPath string, gui bool, dev bool) error {
 	var transports []rw.Transport
 
 	if config.P2PTransport.Enabled {
+		var bootstrapPeers []string
+		for _, bp := range config.Node.BootstrapPeers {
+			if bp.Transport != "libp2p" {
+				continue
+			}
+			bootstrapPeers = append(bootstrapPeers, bp.DialAddresses...)
+		}
+
 		libp2pTransport, err := rw.NewLibp2pTransport(
 			signingKeypair.Address(),
 			config.P2PTransport.ListenPort,
+			config.P2PTransport.ReachableAt,
 			config.P2PTransport.KeyFile,
 			encryptingKeypair,
+			bootstrapPeers,
 			controllerHub,
 			refStore,
 			peerStore,
@@ -172,6 +188,7 @@ func run(configPath string, gui bool, dev bool) error {
 
 		httpTransport, err := rw.NewHTTPTransport(
 			config.HTTPTransport.ListenHost,
+			config.HTTPTransport.ReachableAt,
 			config.HTTPTransport.DefaultStateURI,
 			controllerHub,
 			refStore,
@@ -200,9 +217,9 @@ func run(configPath string, gui bool, dev bool) error {
 	}
 
 	if config.HTTPRPC.Enabled {
-		httpRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), config.HTTPRPC.ListenHost, host)
+		httpRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), host)
 
-		err = httpRPC.Start()
+		err = rw.StartHTTPRPC(httpRPC, config.HTTPRPC)
 		if err != nil {
 			return err
 		}
@@ -212,7 +229,7 @@ func run(configPath string, gui bool, dev bool) error {
 	for _, bootstrapPeer := range config.Node.BootstrapPeers {
 		bootstrapPeer := bootstrapPeer
 		go func() {
-			app.Info(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
+			app.Infof(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
 			for _, dialAddr := range bootstrapPeer.DialAddresses {
 				host.AddPeer(rw.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr})
 			}
@@ -228,7 +245,7 @@ func run(configPath string, gui bool, dev bool) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			sub, err := host.Subscribe(ctx, stateURI, 0, nil)
+			sub, err := host.Subscribe(ctx, stateURI, rw.SubscriptionType_Txs, nil, nil)
 			if err != nil {
 				app.Errorf("error subscribing to %v: %v", stateURI, err)
 				continue

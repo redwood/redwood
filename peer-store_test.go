@@ -1,14 +1,12 @@
 package redwood_test
 
 import (
-	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"redwood.dev"
 	"redwood.dev/testutils"
-	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
@@ -75,14 +73,16 @@ func TestPeerStore_DB(t *testing.T) {
 	require.Len(t, pds, 3)
 
 	expected := []redwood.PeerDetails{pd1, pd2, pd3}
-	sort.Slice(expected, func(i, j int) bool {
-		hash_i := types.HashBytes([]byte(expected[i].DialInfo().TransportName + ":" + expected[i].DialInfo().DialAddr)).Hex()
-		hash_j := types.HashBytes([]byte(expected[j].DialInfo().TransportName + ":" + expected[j].DialInfo().DialAddr)).Hex()
-		return hash_i < hash_j
-	})
-
-	for i := range pds {
-		requirePeerDetailsEqual(t, expected[i], pds[i])
+	expectedMap := map[redwood.PeerDialInfo]redwood.PeerDetails{
+		pd1.DialInfo(): pd1,
+		pd2.DialInfo(): pd2,
+		pd3.DialInfo(): pd3,
+	}
+	for _, x := range expected {
+		expectedMap[x.DialInfo()] = x
+	}
+	for _, pd := range pds {
+		requirePeerDetailsEqual(t, expectedMap[pd.DialInfo()], pd)
 	}
 }
 

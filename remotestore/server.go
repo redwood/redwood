@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
-	rw "redwood.dev"
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/types"
 )
@@ -145,7 +145,7 @@ func (s *server) Authenticate(authSrv RemoteStore_AuthenticateServer) error {
 		return errors.New("protocol error")
 	}
 
-	pubkey, err := rw.RecoverSigningPubkey(types.HashBytes(challenge), sig.Signature)
+	pubkey, err := crypto.RecoverSigningPubkey(types.HashBytes(challenge), sig.Signature)
 	if err != nil {
 		return err
 	}

@@ -4,9 +4,9 @@ require (
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20191023202215-f096da5361bb // indirect
 	github.com/brynbellomy/ginkgo-reporter v0.0.0-20160306174404-9bf14cb7c4ae // indirect
-	github.com/brynbellomy/git2go v0.0.0-20200611034043-ace2967af09c
+	github.com/brynbellomy/git2go v0.0.0-20210223020543-1b73664dc577
 	github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d
-    github.com/brynbellomy/go-structomancer v1.0.3
+	github.com/brynbellomy/go-structomancer v1.0.3
 	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae
 	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/btcsuite/btcutil v0.0.0-20190425235716-9e5f4b9a998d

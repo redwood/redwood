@@ -23,6 +23,7 @@ type (
 	SigningPrivateKey interface {
 		SignHash(data types.Hash) ([]byte, error)
 		Bytes() []byte
+		Hex() string
 		String() string
 	}
 

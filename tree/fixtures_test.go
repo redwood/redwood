@@ -39,16 +39,16 @@ var (
 	testVal1Output = []fixtureOutput{
 		{tree.Keypath(nil), tree.NodeTypeMap, testVal1},
 		{tree.Keypath("asdf"), tree.NodeTypeSlice, S{"1234", float64(987.2), uint64(333)}},
-		{tree.Keypath("asdf").Push(EncodeSliceIndex(0)), tree.NodeTypeValue, "1234"},
-		{tree.Keypath("asdf").Push(EncodeSliceIndex(1)), tree.NodeTypeValue, float64(987.2)},
-		{tree.Keypath("asdf").Push(EncodeSliceIndex(2)), tree.NodeTypeValue, uint64(333)},
+		{tree.Keypath("asdf").Push(tree.EncodeSliceIndex(0)), tree.NodeTypeValue, "1234"},
+		{tree.Keypath("asdf").Push(tree.EncodeSliceIndex(1)), tree.NodeTypeValue, float64(987.2)},
+		{tree.Keypath("asdf").Push(tree.EncodeSliceIndex(2)), tree.NodeTypeValue, uint64(333)},
 		{tree.Keypath("flo"), tree.NodeTypeValue, float64(321)},
 		{tree.Keypath("flox"), tree.NodeTypeSlice, S{uint64(65), M{"yup": "yes", "hey": uint64(321)}, "jkjkjkj"}},
-		{tree.Keypath("flox").Push(EncodeSliceIndex(0)), tree.NodeTypeValue, uint64(65)},
-		{tree.Keypath("flox").Push(EncodeSliceIndex(1)), tree.NodeTypeMap, M{"yup": "yes", "hey": uint64(321)}},
-		{tree.Keypath("flox").Push(EncodeSliceIndex(1)).Push(tree.Keypath("hey")), tree.NodeTypeValue, uint64(321)},
-		{tree.Keypath("flox").Push(EncodeSliceIndex(1)).Push(tree.Keypath("yup")), tree.NodeTypeValue, "yes"},
-		{tree.Keypath("flox").Push(EncodeSliceIndex(2)), tree.NodeTypeValue, "jkjkjkj"},
+		{tree.Keypath("flox").Push(tree.EncodeSliceIndex(0)), tree.NodeTypeValue, uint64(65)},
+		{tree.Keypath("flox").Push(tree.EncodeSliceIndex(1)), tree.NodeTypeMap, M{"yup": "yes", "hey": uint64(321)}},
+		{tree.Keypath("flox").Push(tree.EncodeSliceIndex(1)).Push(tree.Keypath("hey")), tree.NodeTypeValue, uint64(321)},
+		{tree.Keypath("flox").Push(tree.EncodeSliceIndex(1)).Push(tree.Keypath("yup")), tree.NodeTypeValue, "yes"},
+		{tree.Keypath("flox").Push(tree.EncodeSliceIndex(2)), tree.NodeTypeValue, "jkjkjkj"},
 		{tree.Keypath("floxxx"), tree.NodeTypeValue, "asdf123"},
 		{tree.Keypath("hello"), tree.NodeTypeMap, M{"xyzzy": uint64(33)}},
 		{tree.Keypath("hello/xyzzy"), tree.NodeTypeValue, uint64(33)},
@@ -66,10 +66,10 @@ var (
 	testVal2Output = []fixtureOutput{
 		{tree.Keypath(nil), tree.NodeTypeMap, testVal2},
 		{tree.Keypath("eee"), tree.NodeTypeSlice, S{M{"qqqq": S{"fjfjjfjf", uint64(123321)}}}},
-		{tree.Keypath("eee").Push(EncodeSliceIndex(0)), tree.NodeTypeMap, M{"qqqq": S{"fjfjjfjf", uint64(123321)}}},
-		{tree.Keypath("eee").Push(EncodeSliceIndex(0)).Push(tree.Keypath("qqqq")), tree.NodeTypeSlice, S{"fjfjjfjf", uint64(123321)}},
-		{tree.Keypath("eee").Push(EncodeSliceIndex(0)).Push(tree.Keypath("qqqq")).Push(EncodeSliceIndex(0)), tree.NodeTypeValue, "fjfjjfjf"},
-		{tree.Keypath("eee").Push(EncodeSliceIndex(0)).Push(tree.Keypath("qqqq")).Push(EncodeSliceIndex(1)), tree.NodeTypeValue, uint64(123321)},
+		{tree.Keypath("eee").Push(tree.EncodeSliceIndex(0)), tree.NodeTypeMap, M{"qqqq": S{"fjfjjfjf", uint64(123321)}}},
+		{tree.Keypath("eee").Push(tree.EncodeSliceIndex(0)).Push(tree.Keypath("qqqq")), tree.NodeTypeSlice, S{"fjfjjfjf", uint64(123321)}},
+		{tree.Keypath("eee").Push(tree.EncodeSliceIndex(0)).Push(tree.Keypath("qqqq")).Push(tree.EncodeSliceIndex(0)), tree.NodeTypeValue, "fjfjjfjf"},
+		{tree.Keypath("eee").Push(tree.EncodeSliceIndex(0)).Push(tree.Keypath("qqqq")).Push(tree.EncodeSliceIndex(1)), tree.NodeTypeValue, uint64(123321)},
 		{tree.Keypath("ooooooo"), tree.NodeTypeValue, uint64(332211)},
 	}
 	fixture2 = fixture{testVal2, testVal2Output}
@@ -82,12 +82,12 @@ var (
 	}
 	testVal3Output = []fixtureOutput{
 		{tree.Keypath(nil), tree.NodeTypeSlice, testVal3},
-		{tree.Keypath(EncodeSliceIndex(0)), tree.NodeTypeValue, uint64(8383)},
-		{tree.Keypath(EncodeSliceIndex(1)), tree.NodeTypeMap, M{"9999": "hi", "vvvv": "yeah"}},
-		{tree.Keypath(EncodeSliceIndex(1)).Push(tree.Keypath("9999")), tree.NodeTypeValue, "hi"},
-		{tree.Keypath(EncodeSliceIndex(1)).Push(tree.Keypath("vvvv")), tree.NodeTypeValue, "yeah"},
-		{tree.Keypath(EncodeSliceIndex(2)), tree.NodeTypeValue, float64(321.23)},
-		{tree.Keypath(EncodeSliceIndex(3)), tree.NodeTypeValue, "hello"},
+		{tree.Keypath(tree.EncodeSliceIndex(0)), tree.NodeTypeValue, uint64(8383)},
+		{tree.Keypath(tree.EncodeSliceIndex(1)), tree.NodeTypeMap, M{"9999": "hi", "vvvv": "yeah"}},
+		{tree.Keypath(tree.EncodeSliceIndex(1)).Push(tree.Keypath("9999")), tree.NodeTypeValue, "hi"},
+		{tree.Keypath(tree.EncodeSliceIndex(1)).Push(tree.Keypath("vvvv")), tree.NodeTypeValue, "yeah"},
+		{tree.Keypath(tree.EncodeSliceIndex(2)), tree.NodeTypeValue, float64(321.23)},
+		{tree.Keypath(tree.EncodeSliceIndex(3)), tree.NodeTypeValue, "hello"},
 	}
 	fixture3 = fixture{testVal3, testVal3Output}
 
@@ -240,12 +240,4 @@ func debugPrintFixtureOutputs(outs []fixtureOutput) {
 	for _, out := range outs {
 		fmt.Println(out.keypath)
 	}
-}
-
-func mustEncodeGoValue(x interface{}) []byte {
-	enc, err := encodeGoValue(x)
-	if err != nil {
-		panic(err)
-	}
-	return enc
 }

@@ -16,11 +16,5 @@ jobs:
             - name: Download Go vendor packages
               run: go mod download
             - name: Run tests
-              run: go test -v ./...
-            - name: Store logs artifacts on failure
-              if: failure()
-              uses: actions/upload-artifact@v1
-              with:
-                  name: ${{ matrix.platform }}_logs
-                  path: ./output.txt
+              run: go test -v --tags static ./...
 

@@ -1,4 +1,4 @@
-package nelson
+package nelson_test
 
 import (
 	"io"
@@ -21,6 +21,6 @@ func (m *refResolverMock) StateAtVersion(stateURI string, version *types.ID) (tr
 	return state, nil
 }
 
-func (m *refResolverMock) RefObjectReader(refHash types.Hash) (io.ReadCloser, int64, error) {
+func (m *refResolverMock) RefObjectReader(refID types.RefID) (io.ReadCloser, int64, error) {
 	return m.refObjectReader, m.refObjectLength, nil
 }

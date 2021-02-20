@@ -10,9 +10,7 @@ import (
 
 	rw "redwood.dev"
 	"redwood.dev/ctx"
-	"redwood.dev/demos/demoutils"
 	"redwood.dev/types"
-	"redwood.dev/utils"
 )
 
 type app struct {
@@ -30,8 +28,8 @@ func main() {
 	})
 
 	// Make two Go hosts that will communicate with one another over libp2p
-	host1 := demoutils.MakeHost("fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19", 21231, "somegitprovider.org/gitdemo", "cookiesecret1", "server1.crt", "server1.key")
-	host2 := demoutils.MakeHost("deadbeef5b740a0b7ed4c22149cadbaddeadbeefd6b3fe8d5817ac83deadbeef", 21241, "somegitprovider.org/gitdemo", "cookiesecret2", "server2.crt", "server2.key")
+	var host1 rw.Host
+	var host2 rw.Host
 
 	err := host1.Start()
 	if err != nil {
@@ -53,24 +51,27 @@ func main() {
 	)
 
 	// Connect the two peers using libp2p
-	libp2pTransport := host1.Transport("libp2p").(interface{ Libp2pPeerID() string })
-	host2.AddPeer(host2.Ctx(), "libp2p", utils.NewStringSet([]string{"/ip4/0.0.0.0/tcp/21231/p2p/" + libp2pTransport.Libp2pPeerID()}))
+	type libp2pPeerIDer interface {
+		Libp2pPeerID() string
+	}
+	libp2pTransport := host1.Transport("libp2p").(libp2pPeerIDer)
+	host2.AddPeer(rw.PeerDialInfo{"libp2p", "/ip4/0.0.0.0/tcp/21231/p2p/" + libp2pTransport.Libp2pPeerID()})
 
 	time.Sleep(2 * time.Second)
 
 	// Both consumers subscribe to the StateURI
 	ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
 	go func() {
-		anySucceeded, _ := host2.Subscribe(ctx, "somegitprovider.org/gitdemo")
-		if !anySucceeded {
-			panic("host2 could not subscribe")
+		_, err := host2.Subscribe(ctx, "somegitprovider.org/gitdemo", rw.SubscriptionType_Txs, nil, nil)
+		if err != nil {
+			panic(err)
 		}
 	}()
 
 	go func() {
-		anySucceeded, _ := host1.Subscribe(ctx, "somegitprovider.org/gitdemo")
-		if !anySucceeded {
-			panic("host1 could not subscribe")
+		_, err := host1.Subscribe(ctx, "somegitprovider.org/gitdemo", rw.SubscriptionType_Txs, nil, nil)
+		if err != nil {
+			panic(err)
 		}
 	}()
 

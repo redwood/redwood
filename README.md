@@ -1,6 +1,8 @@
 
 # 🌲 Redwood
 
+![Build status](https://github.com/brynbellomy/redwood/actions/workflows/go_tests.yml/badge.svg?branch=develop)
+
 Redwood is a **highly-configurable, distributed, realtime database** that manages a state tree shared among many peers.  Imagine something like a Redux store, but distributed across all users of an application, that offers offline editing and is resilient to poor connectivity.
 
 Redwood is also an **application server**.  Developers can store and update assets (HTML, Javascript, images) directly in the state tree.  For many types of applications, you may not need a separate backend server at all.
