@@ -1,0 +1,26 @@
+name: CI
+
+on: [push]
+
+jobs:
+    go_tests:
+        name: Go tests
+        strategy:
+            fail-fast: false
+            matrix:
+                platform: [ubuntu-latest, macos-latest, windows-latest]
+        runs-on: ${{ matrix.platform }}
+        steps:
+            - name: Checkout the repo
+              uses: actions/checkout@v2
+            - name: Download Go vendor packages
+              run: go mod download
+            - name: Run tests
+              run: go test -v ./...
+            - name: Store logs artifacts on failure
+              if: failure()
+              uses: actions/upload-artifact@v1
+              with:
+                  name: ${{ matrix.platform }}_logs
+                  path: ./output.txt
+
