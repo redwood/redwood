@@ -380,6 +380,7 @@ type PeerDetails interface {
 	LastContact() time.Time
 	LastFailure() time.Time
 	Failures() uint64
+	Ready() bool
 }
 
 type peerDetails struct {
@@ -479,4 +480,10 @@ func (p *peerDetails) Failures() uint64 {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
 	return p.failures
+}
+
+func (p *peerDetails) Ready() bool {
+	p.peerStore.muPeers.RLock()
+	defer p.peerStore.muPeers.RUnlock()
+	return uint64(time.Now().Sub(p.lastFailure)/time.Second) >= p.failures
 }

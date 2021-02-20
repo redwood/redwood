@@ -8,11 +8,14 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 
+	"redwood.dev/ctx"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type peerPool struct {
+	ctx.Logger
+
 	chPeers         chan Peer
 	chPeerAvailable chan struct{}
 	chNeedNewPeer   chan struct{}
@@ -42,6 +45,7 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 	close(chProviders)
 
 	p := &peerPool{
+		Logger:          ctx.NewLogger("peer pool"),
 		chPeerAvailable: make(chan struct{}, concurrentConns),
 		chPeers:         make(chan Peer, concurrentConns),
 		chNeedNewPeer:   make(chan struct{}, concurrentConns),
@@ -55,7 +59,7 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 		}),
 	}
 
-	// This goroutine does two things:
+	// Searcher:
 	//   - Adds peers to the `peers` map as they're received from the `fnGetPeers` channel
 	//   - If the transports stop searching before `.Close()` is called, the search is reinitiated
 	go func() {
@@ -83,6 +87,8 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 		}
 	}()
 
+	// Provider:
+	//   - Fulfills requests for peers as peers become available
 	go func() {
 		defer close(p.chPeers)
 
@@ -135,7 +141,7 @@ func (p *peerPool) addPeerToPool(peer Peer) {
 	defer p.peersMu.Unlock()
 
 	if _, exists := p.peers[peer.DialInfo()]; !exists {
-		log.Debugf("[peer pool] found peer %v", peer.DialInfo())
+		p.Debugf("[peer pool] found peer %v", peer.DialInfo())
 
 		p.peers[peer.DialInfo()] = struct {
 			peer  Peer
@@ -154,18 +160,18 @@ func (p *peerPool) nextAvailablePeer() Peer {
 	p.peersMu.Lock()
 	defer p.peersMu.Unlock()
 
-	for _, p := range p.peers {
-		if p.state != peerState_Unknown {
-			log.Debugf("skipping peer: not ready (%v, %v)", p.peer.DialInfo(), p.state)
+	for _, peer := range p.peers {
+		if peer.state != peerState_Unknown {
+			p.Debugf("skipping peer: not ready (%v, %v)", peer.peer.DialInfo(), peer.state)
 			continue
-		} else if uint64(time.Now().Sub(p.peer.LastFailure())/time.Second) < p.peer.Failures() {
-			log.Debugf("skipping peer: failures=%v lastFailure=%vs", p.peer.Failures(), time.Now().Sub(p.peer.LastFailure())/time.Second)
+		} else if !peer.peer.Ready() {
+			p.Debugf("skipping peer: failures=%v lastFailure=%v", peer.peer.Failures(), time.Now().Sub(peer.peer.LastFailure()))
 			continue
-		} else if p.peer.Address() == (types.Address{}) {
-			log.Debugf("skipping peer: unverified (%v: %v)", p.peer.DialInfo().TransportName, p.peer.DialInfo().DialAddr)
+		} else if peer.peer.Address() == (types.Address{}) {
+			p.Debugf("skipping peer: unverified (%v: %v)", peer.peer.DialInfo().TransportName, peer.peer.DialInfo().DialAddr)
 			continue
 		}
-		return p.peer
+		return peer.peer
 	}
 	return nil
 }
@@ -174,7 +180,7 @@ func (p *peerPool) restartSearch(ctx context.Context) {
 	var err error
 	p.chProviders, err = p.fnGetPeers(ctx)
 	if err != nil {
-		log.Warnf("[peer pool] error finding peers: %v", err)
+		p.Warnf("[peer pool] error finding peers: %v", err)
 		// @@TODO: exponential backoff
 	}
 }
@@ -196,8 +202,8 @@ func (p *peerPool) GetPeer() (Peer, error) {
 				return nil, errors.New("connection closed")
 			}
 
-			if uint64(time.Now().Sub(peer.LastFailure())/time.Second) < peer.Failures() {
-				log.Warnf("skipping peer: failures=%v lastFailure=%vs", peer.Failures(), time.Now().Sub(peer.LastFailure())/time.Second)
+			if !peer.Ready() {
+				p.Warnf("skipping peer: failures=%v lastFailure=%v", peer.Failures(), time.Now().Sub(peer.LastFailure()))
 				p.ReturnPeer(peer, false)
 				continue
 			}
