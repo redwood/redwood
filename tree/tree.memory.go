@@ -225,6 +225,8 @@ func (n *MemoryNode) NodeInfo(relKeypath Keypath) (NodeType, ValueType, uint64, 
 		switch v := val.(type) {
 		case string:
 			return NodeTypeValue, ValueTypeString, uint64(len(v)), nil
+		case []byte:
+			return NodeTypeValue, ValueTypeBytes, uint64(len(v)), nil
 		case float64:
 			return NodeTypeValue, ValueTypeFloat, 0, nil
 		case uint64:
@@ -617,6 +619,14 @@ func (n *MemoryNode) Delete(keypath Keypath, rng *Range) error {
 				}
 				startIdx, endIdx := rng.IndicesForLength(uint64(len(s)))
 				n.values[string(absKeypath)] = s[:startIdx] + s[endIdx:]
+				return nil
+
+			} else if b, isBytes := n.values[string(absKeypath)].([]byte); isBytes {
+				if !rng.ValidForLength(uint64(len(s))) {
+					return ErrInvalidRange
+				}
+				startIdx, endIdx := rng.IndicesForLength(uint64(len(s)))
+				n.values[string(absKeypath)] = append(b[:startIdx], b[endIdx:]...)
 				return nil
 
 			} else {
