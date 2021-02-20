@@ -11,6 +11,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"redwood.dev/crypto"
 	"redwood.dev/utils"
 )
 
@@ -75,7 +76,7 @@ func DefaultConfig(appName string) Config {
 		panic(err)
 	}
 
-	hdMnemonicPhrase, err := GenerateMnemonic()
+	hdMnemonicPhrase, err := crypto.GenerateMnemonic()
 	if err != nil {
 		panic(err)
 	}

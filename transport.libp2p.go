@@ -33,6 +33,7 @@ import (
 	multihash "github.com/multiformats/go-multihash"
 	"github.com/pkg/errors"
 
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -51,7 +52,7 @@ type libp2pTransport struct {
 	*metrics.BandwidthCounter
 
 	address types.Address
-	enckeys *EncryptingKeypair
+	enckeys *crypto.EncryptingKeypair
 
 	host          Host
 	controllerHub ControllerHub
@@ -71,7 +72,7 @@ func NewLibp2pTransport(
 	port uint,
 	reachableAt string,
 	keyfilePath string,
-	enckeys *EncryptingKeypair,
+	enckeys *crypto.EncryptingKeypair,
 	controllerHub ControllerHub,
 	refStore RefStore,
 	peerStore PeerStore,
@@ -179,8 +180,7 @@ func (ds *notifyingDatastore) Put(k dstore.Key, v []byte) error {
 	if err != nil {
 		return err
 	}
-
-	fmt.Println("FUCK", key, string(value))
+	ctx.NewLogger("libp2p datastore").Debugf("key=%v value=%v", key, string(value))
 	return nil
 }
 
@@ -353,7 +353,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			return
 		}
 		bs, err := t.enckeys.OpenMessageFrom(
-			EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
+			crypto.EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
 			encryptedTx.EncryptedPayload,
 		)
 		if err != nil {
@@ -980,7 +980,7 @@ func (sub *libp2pReadableSubscription) Read() (_ *SubscriptionMsg, err error) {
 			return nil, errors.Errorf("Private message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 		}
 		bs, err := sub.t.enckeys.OpenMessageFrom(
-			EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
+			crypto.EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
 			encryptedTx.EncryptedPayload,
 		)
 		if err != nil {

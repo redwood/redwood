@@ -28,6 +28,7 @@ import (
 	"go.uber.org/multierr"
 	"golang.org/x/net/publicsuffix"
 
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
@@ -41,8 +42,8 @@ type httpTransport struct {
 	defaultStateURI string
 	ownURL          string
 	listenAddr      string
-	sigkeys         *SigningKeypair
-	enckeys         *EncryptingKeypair
+	sigkeys         *crypto.SigningKeypair
+	enckeys         *crypto.EncryptingKeypair
 	cookieSecret    [32]byte
 	tlsCertFilename string
 	tlsKeyFilename  string
@@ -63,8 +64,8 @@ func NewHTTPTransport(
 	controllerHub ControllerHub,
 	refStore RefStore,
 	peerStore PeerStore,
-	sigkeys *SigningKeypair,
-	enckeys *EncryptingKeypair,
+	sigkeys *crypto.SigningKeypair,
+	enckeys *crypto.EncryptingKeypair,
 	cookieSecret [32]byte,
 	tlsCertFilename, tlsKeyFilename string,
 	devMode bool,
@@ -328,7 +329,7 @@ func (t *httpTransport) serveChallengeIdentityCheckResponse(w http.ResponseWrite
 		return
 	}
 
-	sigpubkey, err := RecoverSigningPubkey(types.HashBytes(challenge), sig)
+	sigpubkey, err := crypto.RecoverSigningPubkey(types.HashBytes(challenge), sig)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -730,7 +731,7 @@ func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Reques
 	}
 
 	bs, err := t.enckeys.OpenMessageFrom(
-		EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
+		crypto.EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
 		encryptedTx.EncryptedPayload,
 	)
 	if err != nil {
@@ -899,7 +900,7 @@ func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, addr
 	}
 
 	// @@TODO: remove .From entirely
-	pubkey, err := RecoverSigningPubkey(tx.Hash(), sig)
+	pubkey, err := crypto.RecoverSigningPubkey(tx.Hash(), sig)
 	if err != nil {
 		http.Error(w, "bad signature", http.StatusBadRequest)
 		return
@@ -1367,7 +1368,10 @@ func (s *httpReadableSubscription) Read() (_ *SubscriptionMsg, err error) {
 			return nil, errors.New("no encrypted tx sent by http peer")
 		}
 
-		bs, err = s.peer.t.enckeys.OpenMessageFrom(EncryptingPublicKeyFromBytes(msg.EncryptedTx.SenderPublicKey), msg.EncryptedTx.EncryptedPayload)
+		bs, err = s.peer.t.enckeys.OpenMessageFrom(
+			crypto.EncryptingPublicKeyFromBytes(msg.EncryptedTx.SenderPublicKey),
+			msg.EncryptedTx.EncryptedPayload,
+		)
 		if err != nil {
 			return nil, err
 		}

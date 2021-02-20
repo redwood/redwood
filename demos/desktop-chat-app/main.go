@@ -22,6 +22,7 @@ import (
 	"github.com/webview/webview"
 
 	rw "redwood.dev"
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/tree"
 )
@@ -120,12 +121,12 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 		return err
 	}
 
-	signingKeypair, err := rw.SigningKeypairFromHDMnemonic(config.Node.HDMnemonicPhrase, rw.DefaultHDDerivationPath)
+	signingKeypair, err := crypto.SigningKeypairFromHDMnemonic(config.Node.HDMnemonicPhrase, crypto.DefaultHDDerivationPath)
 	if err != nil {
 		return err
 	}
 
-	encryptingKeypair, err := rw.GenerateEncryptingKeypair()
+	encryptingKeypair, err := crypto.GenerateEncryptingKeypair()
 	if err != nil {
 		return err
 	}

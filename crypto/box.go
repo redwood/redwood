@@ -1,4 +1,4 @@
-package redwood
+package crypto
 
 import (
 	"crypto/rand"
@@ -16,6 +16,7 @@ type (
 	EncryptingPrivateKey interface {
 		SealMessageFor(recipientPubKey EncryptingPublicKey, msg []byte) ([]byte, error)
 		OpenMessageFrom(senderPublicKey EncryptingPublicKey, msgEncrypted []byte) ([]byte, error)
+		Bytes() []byte
 	}
 
 	EncryptingPublicKey interface {
@@ -62,6 +63,18 @@ func EncryptingPublicKeyFromHex(s string) (EncryptingPublicKey, error) {
 	return &pk, nil
 }
 
+func (pubkey *encryptingPublicKey) Bytes() []byte {
+	bs := make([]byte, ENCRYPTING_KEY_LENGTH)
+	copy(bs, (*pubkey)[:])
+	return bs
+}
+
+func EncryptingPrivateKeyFromBytes(bs []byte) EncryptingPrivateKey {
+	var pk encryptingPrivateKey
+	copy(pk[:], bs)
+	return &pk
+}
+
 func EncryptingPrivateKeyFromHex(s string) (EncryptingPrivateKey, error) {
 	bs, err := hex.DecodeString(s)
 	if err != nil {
@@ -73,22 +86,10 @@ func EncryptingPrivateKeyFromHex(s string) (EncryptingPrivateKey, error) {
 	return &pk, nil
 }
 
-func (pubkey *encryptingPublicKey) Bytes() []byte {
+func (privkey *encryptingPrivateKey) Bytes() []byte {
 	bs := make([]byte, ENCRYPTING_KEY_LENGTH)
-	copy(bs, (*pubkey)[:])
+	copy(bs, (*privkey)[:])
 	return bs
-}
-
-func (pubkey *encryptingPublicKey) UnmarshalText(bs []byte) error {
-	if len(bs) != len(pubkey) {
-		return errors.New("EncryptingPublicKey#UnmarshalText: wrong length")
-	}
-	copy((*pubkey)[:], bs)
-	return nil
-}
-
-func (pubkey *encryptingPublicKey) MarshalText() ([]byte, error) {
-	return pubkey.Bytes(), nil
 }
 
 func (privkey *encryptingPrivateKey) SealMessageFor(recipientPubKey EncryptingPublicKey, msg []byte) ([]byte, error) {

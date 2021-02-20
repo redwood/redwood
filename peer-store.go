@@ -6,6 +6,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -14,7 +15,7 @@ import (
 
 type PeerStore interface {
 	AddDialInfos(dialInfos []PeerDialInfo)
-	AddVerifiedCredentials(dialInfo PeerDialInfo, address types.Address, sigpubkey SigningPublicKey, encpubkey EncryptingPublicKey)
+	AddVerifiedCredentials(dialInfo PeerDialInfo, address types.Address, sigpubkey crypto.SigningPublicKey, encpubkey crypto.EncryptingPublicKey)
 	UnverifiedPeers() []PeerDetails
 	Peers() []PeerDetails
 	AllDialInfos() []PeerDialInfo
@@ -118,8 +119,8 @@ func (s *peerStore) AddDialInfos(dialInfos []PeerDialInfo) {
 func (s *peerStore) AddVerifiedCredentials(
 	dialInfo PeerDialInfo,
 	address types.Address,
-	sigpubkey SigningPublicKey,
-	encpubkey EncryptingPublicKey,
+	sigpubkey crypto.SigningPublicKey,
+	encpubkey crypto.EncryptingPublicKey,
 ) {
 	s.muPeers.Lock()
 	defer s.muPeers.Unlock()
@@ -306,7 +307,7 @@ func (s *peerStore) fetchPeerDetails(dialInfo PeerDialInfo) (*peerDetails, error
 }
 
 func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDetails, error) {
-	sigpubkey, err := SigningPublicKeyFromBytes([]byte(pd.Sigpubkey))
+	sigpubkey, err := crypto.SigningPublicKeyFromBytes([]byte(pd.Sigpubkey))
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +326,7 @@ func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDet
 		dialInfo:    pd.DialInfo,
 		address:     types.AddressFromBytes([]byte(pd.Address)),
 		sigpubkey:   sigpubkey,
-		encpubkey:   EncryptingPublicKeyFromBytes([]byte(pd.Sigpubkey)),
+		encpubkey:   crypto.EncryptingPublicKeyFromBytes(pd.Encpubkey),
 		stateURIs:   stateURIs,
 		lastContact: time.Unix(0, int64(pd.LastContact)),
 		lastFailure: time.Unix(0, int64(pd.LastFailure)),
@@ -370,7 +371,7 @@ func (s *peerStore) savePeerDetails(peerDetails *peerDetails) error {
 type PeerDetails interface {
 	Address() types.Address
 	DialInfo() PeerDialInfo
-	PublicKeys() (SigningPublicKey, EncryptingPublicKey)
+	PublicKeys() (crypto.SigningPublicKey, crypto.EncryptingPublicKey)
 	AddStateURI(stateURI string)
 	RemoveStateURI(stateURI string)
 	StateURIs() utils.StringSet
@@ -385,8 +386,8 @@ type peerDetails struct {
 	peerStore   *peerStore
 	dialInfo    PeerDialInfo
 	address     types.Address
-	sigpubkey   SigningPublicKey
-	encpubkey   EncryptingPublicKey
+	sigpubkey   crypto.SigningPublicKey
+	encpubkey   crypto.EncryptingPublicKey
 	stateURIs   utils.StringSet
 	lastContact time.Time
 	lastFailure time.Time
@@ -418,7 +419,7 @@ func (p *peerDetails) Address() types.Address {
 	return p.address
 }
 
-func (p *peerDetails) PublicKeys() (SigningPublicKey, EncryptingPublicKey) {
+func (p *peerDetails) PublicKeys() (crypto.SigningPublicKey, crypto.EncryptingPublicKey) {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
 	return p.sigpubkey, p.encpubkey

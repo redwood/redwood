@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -29,7 +30,7 @@ type Host interface {
 	Transport(name string) Transport
 	Controllers() ControllerHub
 	Address() types.Address
-	ChallengePeerIdentity(ctx context.Context, peer Peer) (SigningPublicKey, EncryptingPublicKey, error)
+	ChallengePeerIdentity(ctx context.Context, peer Peer) (crypto.SigningPublicKey, crypto.EncryptingPublicKey, error)
 
 	Peers() []PeerDetails
 	ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan Peer
@@ -50,8 +51,8 @@ type host struct {
 
 	config *Config
 
-	signingKeypair    *SigningKeypair
-	encryptingKeypair *EncryptingKeypair
+	signingKeypair    *crypto.SigningKeypair
+	encryptingKeypair *crypto.EncryptingKeypair
 
 	readableSubscriptions   map[string]*multiReaderSubscription // map[stateURI]
 	readableSubscriptionsMu sync.RWMutex
@@ -77,8 +78,8 @@ var (
 )
 
 func NewHost(
-	signingKeypair *SigningKeypair,
-	encryptingKeypair *EncryptingKeypair,
+	signingKeypair *crypto.SigningKeypair,
+	encryptingKeypair *crypto.EncryptingKeypair,
 	transports []Transport,
 	controllerHub ControllerHub,
 	refStore RefStore,
@@ -661,7 +662,7 @@ func (h *host) Unsubscribe(stateURI string) error {
 	return nil
 }
 
-func (h *host) ChallengePeerIdentity(ctx context.Context, peer Peer) (_ SigningPublicKey, _ EncryptingPublicKey, err error) {
+func (h *host) ChallengePeerIdentity(ctx context.Context, peer Peer) (_ crypto.SigningPublicKey, _ crypto.EncryptingPublicKey, err error) {
 	defer withStack(&err)
 
 	err = peer.EnsureConnected(ctx)
@@ -684,11 +685,11 @@ func (h *host) ChallengePeerIdentity(ctx context.Context, peer Peer) (_ SigningP
 		return nil, nil, err
 	}
 
-	sigpubkey, err := RecoverSigningPubkey(types.HashBytes(challengeMsg), resp.Signature)
+	sigpubkey, err := crypto.RecoverSigningPubkey(types.HashBytes(challengeMsg), resp.Signature)
 	if err != nil {
 		return nil, nil, err
 	}
-	encpubkey := EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey)
+	encpubkey := crypto.EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey)
 
 	h.peerStore.AddVerifiedCredentials(peer.DialInfo(), sigpubkey.Address(), sigpubkey, encpubkey)
 

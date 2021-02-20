@@ -20,19 +20,20 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/publicsuffix"
 
+	"redwood.dev/crypto"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
 
 type HTTPClient struct {
 	dialAddr  string
-	sigkeys   *SigningKeypair
-	enckeys   *EncryptingKeypair
+	sigkeys   *crypto.SigningKeypair
+	enckeys   *crypto.EncryptingKeypair
 	cookieJar http.CookieJar
 	tls       bool
 }
 
-func NewHTTPClient(dialAddr string, sigkeys *SigningKeypair, enckeys *EncryptingKeypair, tls bool) (*HTTPClient, error) {
+func NewHTTPClient(dialAddr string, sigkeys *crypto.SigningKeypair, enckeys *crypto.EncryptingKeypair, tls bool) (*HTTPClient, error) {
 	cookieJar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
@@ -243,7 +244,7 @@ func (c *HTTPClient) Get(stateURI string, version *types.ID, keypath tree.Keypat
 	return resp.Body, int64(contentLength), parents, nil
 }
 
-func (c *HTTPClient) Put(ctx context.Context, tx *Tx, recipientEncPubkey EncryptingPublicKey) error {
+func (c *HTTPClient) Put(ctx context.Context, tx *Tx, recipientEncPubkey crypto.EncryptingPublicKey) error {
 	if len(tx.Sig) == 0 {
 		sig, err := c.sigkeys.SignHash(tx.Hash())
 		if err != nil {
