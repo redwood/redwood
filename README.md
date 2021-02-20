@@ -14,7 +14,7 @@ Its flexibility allows developers to use a single, simple programming model to c
 
 ## 🧬 The Braid protocol
 
-Redwood is part of the [Braid project](https://braid.news), and uses the Braid protocol to synchronize updates over regular HTTP.  [Braid is currently working through the IETF's RFC process to have its extensions to HTTP standardized](https://github.com/braid-work/braid-spec)  (see IETF draft spec here: <https://datatracker.ietf.org/doc/html/draft-toomim-httpbis-braid-http>)
+Redwood is part of the [Braid project](https://braid.org), and uses the Braid protocol to synchronize updates over regular HTTP.  [Braid is currently working through the IETF's RFC process to have its extensions to HTTP standardized](https://github.com/braid-org/braid-spec)  (see IETF draft spec here: <https://datatracker.ietf.org/doc/html/draft-toomim-httpbis-braid-http>)
 
 ## 🧮 Demos
 
@@ -47,7 +47,7 @@ Keep an eye on our [Github project board](https://github.com/brynbellomy/redwood
     - Lua
     - WASM (forthcoming)
 - **Asset storage:** Assets like HTML and Javascript files can be stored in the state tree as well.  The state tree _is_ your application.  See the included demos for examples.
-- **Transports:** Redwood implements several transports, including [libp2p](https://libp2p.io), [Braid-over-HTTP](https://braid.news), and [WebRTC](https://webrtc.org/).
+- **Transports:** Redwood implements several transports, including [libp2p](https://libp2p.io), [Braid-over-HTTP](https://braid.org), and [WebRTC](https://webrtc.org/).
     - The Go nodes communicate with one another over libp2p or HTTP (configurable)
     - The browser nodes communicate with one another over WebRTC
     - The browser nodes communicate with the Go nodes over HTTP
