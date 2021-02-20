@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"github.com/webview/webview"
+	"redwood.dev"
 
 	rw "redwood.dev"
 	"redwood.dev/crypto"
@@ -158,12 +159,21 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 	var transports []rw.Transport
 
 	if config.P2PTransport.Enabled {
+		var bootstrapPeers []string
+		for _, bp := range config.Node.BootstrapPeers {
+			if bp.Transport != "libp2p" {
+				continue
+			}
+			bootstrapPeers = append(bootstrapPeers, bp.DialAddresses...)
+		}
+
 		libp2pTransport, err := rw.NewLibp2pTransport(
 			signingKeypair.Address(),
 			config.P2PTransport.ListenPort,
 			config.P2PTransport.ReachableAt,
 			config.P2PTransport.KeyFile,
 			encryptingKeypair,
+			bootstrapPeers,
 			controllerHub,
 			refStore,
 			peerStore,
