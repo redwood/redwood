@@ -20,6 +20,7 @@ type PeerStore interface {
 	AllDialInfos() []PeerDialInfo
 	PeerWithDialInfo(dialInfo PeerDialInfo) *peerDetails
 	PeersWithAddress(address types.Address) []PeerDetails
+	PeersFromTransport(transportName string) []PeerDetails
 	PeersFromTransportWithAddress(transportName string, address types.Address) []PeerDetails
 	PeersServingStateURI(stateURI string) []PeerDetails
 	IsKnownPeer(dialInfo PeerDialInfo) bool
@@ -202,8 +203,21 @@ func (s *peerStore) PeersWithAddress(address types.Address) []PeerDetails {
 
 	var peers []PeerDetails
 	if _, exists := s.peersWithAddress[address]; exists {
-		for _, peer := range s.peersWithAddress[address] {
-			peers = append(peers, peer)
+		for _, peerDetails := range s.peersWithAddress[address] {
+			peers = append(peers, peerDetails)
+		}
+	}
+	return peers
+}
+
+func (s *peerStore) PeersFromTransport(transportName string) []PeerDetails {
+	s.muPeers.RLock()
+	defer s.muPeers.RUnlock()
+
+	var peers []PeerDetails
+	for dialInfo, peerDetails := range s.peers {
+		if dialInfo.TransportName == transportName {
+			peers = append(peers, peerDetails)
 		}
 	}
 	return peers
@@ -215,9 +229,9 @@ func (s *peerStore) PeersFromTransportWithAddress(transport string, address type
 
 	var peers []PeerDetails
 	if _, exists := s.peersWithAddress[address]; exists {
-		for dialInfo, peer := range s.peersWithAddress[address] {
+		for dialInfo, peerDetails := range s.peersWithAddress[address] {
 			if dialInfo.TransportName == transport {
-				peers = append(peers, peer)
+				peers = append(peers, peerDetails)
 			}
 		}
 	}
