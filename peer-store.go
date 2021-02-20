@@ -264,6 +264,10 @@ func (s *peerStore) IsKnownPeer(dialInfo PeerDialInfo) bool {
 	return false
 }
 
+func (s *peerStore) dialInfoHash(dialInfo PeerDialInfo) string {
+	return types.HashBytes([]byte(dialInfo.TransportName + ":" + dialInfo.DialAddr)).Hex()
+}
+
 func (s *peerStore) fetchAllPeerDetails() ([]*peerDetails, error) {
 	state := s.state.State(false)
 	defer state.Close()
@@ -295,7 +299,7 @@ func (s *peerStore) fetchPeerDetails(dialInfo PeerDialInfo) (*peerDetails, error
 	state := s.state.State(false)
 	defer state.Close()
 
-	dialInfoHash := types.HashBytes([]byte(dialInfo.TransportName + ":" + dialInfo.DialAddr)).Hex()
+	dialInfoHash := s.dialInfoHash(dialInfo)
 	peerKeypath := tree.Keypath("peers").Pushs(dialInfoHash)
 
 	var pd peerDetailsCodec
@@ -324,7 +328,7 @@ func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDet
 	return &peerDetails{
 		peerStore:   s,
 		dialInfo:    pd.DialInfo,
-		address:     types.AddressFromBytes([]byte(pd.Address)),
+		address:     types.AddressFromBytes(pd.Address),
 		sigpubkey:   sigpubkey,
 		encpubkey:   crypto.EncryptingPublicKeyFromBytes(pd.Encpubkey),
 		stateURIs:   stateURIs,
@@ -343,22 +347,22 @@ func (s *peerStore) savePeerDetails(peerDetails *peerDetails) error {
 	state := s.state.State(true)
 	defer state.Close()
 
-	dialInfoHash := types.HashBytes([]byte(peerDetails.dialInfo.TransportName + ":" + peerDetails.dialInfo.DialAddr)).Hex()
+	dialInfoHash := s.dialInfoHash(peerDetails.dialInfo)
 	peerKeypath := tree.Keypath("peers").Pushs(dialInfoHash)
 
 	pdc := peerDetailsCodec{
 		DialInfo:    peerDetails.dialInfo,
-		Address:     string(peerDetails.address.Bytes()),
+		Address:     peerDetails.address.Bytes(),
 		StateURIs:   stateURIs,
 		LastContact: uint64(peerDetails.lastContact.UTC().UnixNano()),
 		LastFailure: uint64(peerDetails.lastFailure.UTC().UnixNano()),
 		Failures:    peerDetails.failures,
 	}
 	if peerDetails.sigpubkey != nil {
-		pdc.Sigpubkey = string(peerDetails.sigpubkey.Bytes())
+		pdc.Sigpubkey = peerDetails.sigpubkey.Bytes()
 	}
 	if peerDetails.encpubkey != nil {
-		pdc.Encpubkey = string(peerDetails.encpubkey.Bytes())
+		pdc.Encpubkey = peerDetails.encpubkey.Bytes()
 	}
 
 	err := state.Set(peerKeypath, nil, pdc)
@@ -397,9 +401,9 @@ type peerDetails struct {
 
 type peerDetailsCodec struct {
 	DialInfo    PeerDialInfo  `tree:"dialInfo"`
-	Address     string        `tree:"address"`
-	Sigpubkey   string        `tree:"sigpubkey"`
-	Encpubkey   string        `tree:"encpubkey"`
+	Address     []byte        `tree:"address"`
+	Sigpubkey   []byte        `tree:"sigpubkey"`
+	Encpubkey   []byte        `tree:"encpubkey"`
 	StateURIs   []interface{} `tree:"stateURIs"`
 	LastContact uint64        `tree:"lastContact"`
 	LastFailure uint64        `tree:"lastFailure"`
@@ -455,11 +459,13 @@ func (p *peerDetails) StateURIs() utils.StringSet {
 func (p *peerDetails) UpdateConnStats(success bool) {
 	p.peerStore.muPeers.Lock()
 	defer p.peerStore.muPeers.Unlock()
+	now := time.Now()
 	if success {
-		p.lastContact = time.Now()
+		p.lastContact = now
 		p.failures = 0
 	} else {
-		p.lastFailure = time.Now()
+		p.lastContact = now
+		p.lastFailure = now
 		p.failures++
 	}
 }
