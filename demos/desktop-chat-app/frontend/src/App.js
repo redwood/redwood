@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import styled from 'styled-components'
 
 import ServerBar from './components/Sidebar/ServerBar'
@@ -57,7 +57,45 @@ const SHeaderBar = styled(HeaderBar)`
     width: 100%;
 `
 
+function Login(props) {
+  const mnemonicInput = useRef(null)
+
+  const login = async (event) => {
+    event.preventDefault()
+    let resp = await (await fetch('http://localhost:54231/api/login', {
+      method: 'POST',
+      headers: {
+          'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        mnemonic: mnemonicInput.current.value,
+      }),
+    })).json()
+
+
+    props.setIsLoggedIn(true)
+
+    console.log(resp)
+  }
+
+  return (
+    <form onSubmit={login}>
+      <label>Mnemonic <input ref={mnemonicInput} placeholder="Mnemonic..." /></label>
+      <button type="submit">Login</button>
+    </form>
+  )
+}
+
 function App() {
+  const [isLoggedin, setIsLoggedIn] = useState(null)
+
+  // if (true) {
+  //   return <Login
+  //     isLoggedin={isLoggedin}
+  //     setIsLoggedIn={setIsLoggedIn}
+  //   />
+  // }
+
     return (
         <Layout>
             <SServerBar verticalPadding={serverBarVerticalPadding} />

@@ -3,6 +3,10 @@ Node:
         ripple until rookie hurt gasp amazing high above ginger stick adult blur sheriff
         evil
     BootstrapPeers: []
+    SubscribedStateURIs:
+      - chat.local/servers
+      - test/registry
+      - test/chat
     MaxPeersPerSubscription: 4
     DataRoot: ./node2_data
     DevMode: true
@@ -11,11 +15,16 @@ P2PTransport:
     KeyFile: ./node2_data/p2pkey
     ListenAddr: 0.0.0.0
     ListenPort: 21231
+    ReachableAt: ""
 HTTPTransport:
     Enabled: true
     ListenHost: :8080
     CookieSecret: !!binary DE1R42irslrK+oKH+gicyIZDLqKUW93uMTBx1sWZLNY=
     DefaultStateURI: ""
+    ReachableAt: ""
 HTTPRPC:
     Enabled: true
     ListenHost: :8081
+    Whitelist:
+        Enabled: false
+        PermittedAddrs: []

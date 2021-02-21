@@ -5,23 +5,17 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 
 	// "github.com/gorilla/websocket"
 	"github.com/markbates/pkger"
-
-	rw "redwood.dev"
 )
 
-func startAPI(host rw.Host, port uint) {
-	http.HandleFunc("/ws", serveWs(host))
+func startAPI(port uint) {
+	http.HandleFunc("/api/login", loginUser)
+	http.HandleFunc("/api/logout", logoutUser)
+	http.HandleFunc("/ws", serveWs)
 	http.HandleFunc("/", serveHome)
-
-	pkger.Walk("/frontend/build", func(path string, info os.FileInfo, err error) error {
-		host.Infof(0, "Serving %v", path)
-		return nil
-	})
 
 	err := http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
 	if err != nil {
@@ -29,9 +23,20 @@ func startAPI(host rw.Host, port uint) {
 	}
 }
 
+func loginUser(w http.ResponseWriter, r *http.Request) {
+	app = &appType{}
+	run("./node2.redwoodrc", false, true, 54321)
+	fmt.Fprintf(w, "WORKED!")
+}
+
+func logoutUser(w http.ResponseWriter, r *http.Request) {
+	app.Close()
+	fmt.Fprintf(w, "WORKED!")
+}
+
 func serveHome(w http.ResponseWriter, r *http.Request) {
 	path := filepath.Join("/frontend/build", r.URL.Path)
-
+	fmt.Println("PATH: ", path)
 	switch filepath.Ext(path) {
 	case ".html":
 		w.Header().Add("Content-Type", "text/html")

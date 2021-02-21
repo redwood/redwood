@@ -2,6 +2,7 @@ package redwood
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -149,7 +150,10 @@ func (h *host) Start() error {
 		nil,
 		nil,
 		// on shutdown
-		func() {},
+		func() {
+			fmt.Println("Closing peer connections")
+			h.processPeersTask.Close()
+		},
 	)
 }
 
@@ -222,12 +226,14 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 			}
 		}
 	}()
-
+	exit := false
 	for _, tpt := range h.transports {
 		innerCh, err := tpt.ProvidersOfStateURI(ctx, stateURI)
 		if err != nil {
 			h.Warnf("error fetching providers of State-URI %v on transport %v: %v", stateURI, tpt.Name(), err)
-			continue
+			// continue
+			exit = true
+			break
 		}
 
 		wg.Add(1)
@@ -261,6 +267,10 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 			}
 		}()
 
+	}
+
+	if exit {
+		return nil
 	}
 
 	go func() {

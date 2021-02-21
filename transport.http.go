@@ -105,6 +105,7 @@ func NewHTTPTransport(
 }
 
 func (t *httpTransport) Start() error {
+	srv := &http.Server{}
 	return t.CtxStart(
 		// on startup
 		func() error {
@@ -120,10 +121,10 @@ func (t *httpTransport) Start() error {
 
 			// Update our node's info in the peer store
 			t.peerStore.AddDialInfos([]PeerDialInfo{{t.Name(), t.ownURL}})
-
+			fmt.Println("Starting Server")
 			go func() {
 				if !t.devMode {
-					srv := &http.Server{
+					srv = &http.Server{
 						Addr:      t.listenAddr,
 						Handler:   UnrestrictedCors(t),
 						TLSConfig: &tls.Config{},
@@ -134,13 +135,13 @@ func (t *httpTransport) Start() error {
 						panic("http transport failed to start")
 					}
 				} else {
-					srv := &http.Server{
+					srv = &http.Server{
 						Addr:    t.listenAddr,
 						Handler: UnrestrictedCors(t),
 					}
 					err := srv.ListenAndServe()
 					if err != nil {
-						panic(fmt.Sprintf("http transport failed to start: %+v", err.Error()))
+						fmt.Sprintf("http transport failed to start: %+v", err.Error())
 					}
 				}
 			}()
@@ -150,7 +151,13 @@ func (t *httpTransport) Start() error {
 		nil,
 		nil,
 		// on shutdown
-		nil,
+		func() {
+			err := srv.Shutdown(context.Background())
+
+			if err != nil {
+				fmt.Println(err)
+			}
+		},
 	)
 }
 
@@ -961,6 +968,7 @@ func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, stateURI string
 	providers, err := t.tryFetchProvidersFromAuthoritativeHost(stateURI)
 	if err != nil {
 		t.Warnf("could not fetch providers of state URI '%v' from authoritative host: %v", stateURI, err)
+		return nil, err
 	}
 
 	u, err := url.Parse("http://" + stateURI)

@@ -116,22 +116,20 @@ func (c *Client) writePump() {
 }
 
 // serveWs handles websocket requests from the peer.
-func serveWs(host redwood.Host) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		stateURI := r.URL.Query().Get("state_uri")
+func serveWs(w http.ResponseWriter, r *http.Request) {
+	stateURI := r.URL.Query().Get("state_uri")
 
-		sub, err := host.Subscribe(context.Background(), stateURI, redwood.SubscriptionType_States|redwood.SubscriptionType_Txs, nil, nil)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		client := &Client{sub: sub, conn: conn}
-		client.writePump()
+	sub, err := host.Subscribe(context.Background(), stateURI, redwood.SubscriptionType_States|redwood.SubscriptionType_Txs, nil, nil)
+	if err != nil {
+		log.Println(err)
+		return
 	}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	client := &Client{sub: sub, conn: conn}
+	client.writePump()
 }

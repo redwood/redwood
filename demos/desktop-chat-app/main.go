@@ -28,9 +28,18 @@ import (
 	"redwood.dev/tree"
 )
 
-var app = struct {
+var app *appType
+var host rw.Host
+
+type appType struct {
 	ctx.Context
-}{}
+	db *tree.DBTree
+}
+
+func (a *appType) Close() {
+	a.db.Close()
+	a.CtxStop("shutdown", nil)
+}
 
 func main() {
 	cliApp := cli.NewApp()
@@ -64,11 +73,14 @@ func main() {
 	}
 
 	cliApp.Action = func(c *cli.Context) error {
-		configPath := c.String("config")
-		enablePprof := c.Bool("pprof")
-		dev := c.Bool("dev")
+		// configPath := c.String("config")
+		// enablePprof := c.Bool("pprof")
+		// dev := c.Bool("dev")
 		port := c.Uint("port")
-		return run(configPath, enablePprof, dev, port)
+		// return run(configPath, enablePprof, dev, port)
+		go startGUI(port)
+		startAPI(port)
+		return nil
 	}
 
 	err = cliApp.Run(os.Args)
@@ -133,6 +145,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 	}
 
 	peerDB, err := tree.NewDBTree(filepath.Join(config.Node.DataRoot, "peers"))
+	app.db = peerDB
 	if err != nil {
 		return err
 	}
@@ -211,7 +224,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 		transports = append(transports, httpTransport)
 	}
 
-	host, err := rw.NewHost(signingKeypair, encryptingKeypair, transports, controllerHub, refStore, peerStore, config)
+	host, err = rw.NewHost(signingKeypair, encryptingKeypair, transports, controllerHub, refStore, peerStore, config)
 	if err != nil {
 		return err
 	}
@@ -220,6 +233,11 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 	if err != nil {
 		panic(err)
 	}
+
+	pkger.Walk("/frontend/build", func(path string, info os.FileInfo, err error) error {
+		host.Infof(0, "Serving %v", path)
+		return nil
+	})
 
 	if config.HTTPRPC.Enabled {
 		rwRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), host)
@@ -271,8 +289,7 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 
 	initializeLocalState(host)
 
-	go startGUI(port)
-	go startAPI(host, port)
+	// go startAPI(host, port)
 	go inputLoop(host)
 	app.AttachInterruptHandler()
 	app.CtxWait()
