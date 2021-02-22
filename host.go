@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -19,8 +20,8 @@ import (
 
 type Host interface {
 	ctx.Logger
-	Ctx() *ctx.Context
 	Start() error
+	Close()
 
 	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
 	Subscribe(ctx context.Context, stateURI string, subscriptionType SubscriptionType, keypath tree.Keypath, fetchHistoryOpts *FetchHistoryOpts) (ReadableSubscription, error)
@@ -44,6 +45,7 @@ type Host interface {
 	HandleFetchHistoryRequest(stateURI string, opts FetchHistoryOpts, writeSub WritableSubscription) error
 	HandleWritableSubscriptionOpened(writeSub WritableSubscription, fetchHistoryOpts *FetchHistoryOpts)
 	HandleWritableSubscriptionClosed(writeSub WritableSubscription)
+	HandleReadableSubscriptionClosed(stateURI string)
 	HandleTxReceived(tx Tx, peer Peer)
 	HandleAckReceived(stateURI string, txID types.ID, peer Peer)
 	HandleChallengeIdentity(challengeMsg types.ChallengeMsg, peer Peer) error
@@ -51,7 +53,9 @@ type Host interface {
 }
 
 type host struct {
-	*ctx.Context
+	ctx.Logger
+	chStop chan struct{}
+	chDone chan struct{}
 
 	config *Config
 
@@ -92,7 +96,9 @@ func NewHost(
 		transportsMap[tpt.Name()] = tpt
 	}
 	h := &host{
-		Context:               &ctx.Context{},
+		Logger:                ctx.NewLogger("host"),
+		chStop:                make(chan struct{}),
+		chDone:                make(chan struct{}),
 		transports:            transportsMap,
 		controllerHub:         controllerHub,
 		readableSubscriptions: make(map[string]*multiReaderSubscription),
@@ -107,54 +113,88 @@ func NewHost(
 	return h, nil
 }
 
-func (h *host) Ctx() *ctx.Context {
-	return h.Context
+func (h *host) Start() error {
+	h.SetLogLabel("host")
+
+	// Set up the peer store
+	h.peerStore.OnNewUnverifiedPeer(h.handleNewUnverifiedPeer)
+	h.processPeersTask = utils.NewPeriodicTask(10*time.Second, h.processPeers)
+
+	// Set up the controller Hub
+	h.controllerHub.OnNewState(h.handleNewState)
+	err := h.controllerHub.Start()
+	if err != nil {
+		return err
+	}
+
+	// Set up the ref store
+	h.refStore.OnRefsNeeded(h.handleRefsNeeded)
+
+	// Set up the transports
+	for _, transport := range h.transports {
+		transport.SetHost(h)
+		err := transport.Start()
+		if err != nil {
+			return err
+		}
+	}
+
+	go h.periodicallyFetchMissingRefs()
+
+	return nil
 }
 
-func (h *host) Start() error {
-	return h.CtxStart(
-		// on startup
-		func() error {
-			h.SetLogLabel("host")
+func (h *host) Close() {
+	close(h.chStop)
 
-			// Set up the peer store
-			h.peerStore.OnNewUnverifiedPeer(h.handleNewUnverifiedPeer)
-			h.processPeersTask = utils.NewPeriodicTask(10*time.Second, h.processPeers)
+	fmt.Println("Closing HOST")
+	h.processPeersTask.Close()
+	fmt.Println("Closing HOST 2")
 
-			// Set up the controller Hub
-			h.controllerHub.OnNewState(h.handleNewState)
-
-			h.CtxAddChild(h.controllerHub.Ctx(), nil)
-			err := h.controllerHub.Start()
-			if err != nil {
-				return err
+	var writableSubs []WritableSubscription
+	func() {
+		h.writableSubscriptionsMu.Lock()
+		defer h.writableSubscriptionsMu.Unlock()
+		for _, subs := range h.writableSubscriptions {
+			for sub := range subs {
+				writableSubs = append(writableSubs, sub)
 			}
+		}
+	}()
+	fmt.Println("Closing HOST 4")
+	for _, sub := range writableSubs {
+		err := sub.Close()
+		if err != nil {
+			h.Errorf("error closing writable subscription: %v", err)
+		}
+	}
+	fmt.Println("Closing HOST 5")
 
-			// Set up the ref store
-			h.refStore.OnRefsNeeded(h.handleRefsNeeded)
+	var readableSubs []*multiReaderSubscription
+	func() {
+		h.readableSubscriptionsMu.Lock()
+		defer h.readableSubscriptionsMu.Unlock()
+		for _, sub := range h.readableSubscriptions {
+			readableSubs = append(readableSubs, sub)
+		}
+	}()
+	fmt.Println("Closing HOST 6")
+	for _, sub := range readableSubs {
+		err := sub.Close()
+		if err != nil {
+			h.Errorf("error closing readable subscription: %v", err)
+		}
+	}
 
-			// Set up the transports
-			for _, transport := range h.transports {
-				transport.SetHost(h)
-				h.CtxAddChild(transport.Ctx(), nil)
-				err := transport.Start()
-				if err != nil {
-					return err
-				}
-			}
+	fmt.Println("Closing HOST 7")
+	h.controllerHub.Close()
+	fmt.Println("Closing HOST 3")
 
-			go h.periodicallyFetchMissingRefs()
+	for _, tpt := range h.transports {
+		tpt.Close()
+	}
 
-			return nil
-		},
-		nil,
-		nil,
-		// on shutdown
-		func() {
-			fmt.Println("Closing peer connections")
-			h.processPeersTask.Close()
-		},
-	)
+	fmt.Println("HOST has closed")
 }
 
 func (h *host) Peers() []PeerDetails {
@@ -218,7 +258,7 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 			}
 
 			select {
-			case <-h.Ctx().Done():
+			case <-h.chStop:
 				return
 			case <-ctx.Done():
 				return
@@ -226,14 +266,12 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 			}
 		}
 	}()
-	exit := false
+
 	for _, tpt := range h.transports {
 		innerCh, err := tpt.ProvidersOfStateURI(ctx, stateURI)
 		if err != nil {
 			h.Warnf("error fetching providers of State-URI %v on transport %v: %v", stateURI, tpt.Name(), err)
-			// continue
-			exit = true
-			break
+			continue
 		}
 
 		wg.Add(1)
@@ -241,7 +279,7 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 			defer wg.Done()
 			for {
 				select {
-				case <-h.Ctx().Done():
+				case <-h.chStop:
 					return
 				case <-ctx.Done():
 					return
@@ -257,7 +295,7 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 					peer.AddStateURI(stateURI)
 
 					select {
-					case <-h.Ctx().Done():
+					case <-h.chStop:
 						return
 					case <-ctx.Done():
 						return
@@ -267,10 +305,6 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 			}
 		}()
 
-	}
-
-	if exit {
-		return nil
 	}
 
 	go func() {
@@ -296,7 +330,7 @@ func (h *host) ProvidersOfRef(ctx context.Context, refID types.RefID) <-chan Pee
 			defer wg.Done()
 			for {
 				select {
-				case <-h.Ctx().Done():
+				case <-h.chStop:
 					return
 				case <-ctx.Done():
 					return
@@ -306,7 +340,7 @@ func (h *host) ProvidersOfRef(ctx context.Context, refID types.RefID) <-chan Pee
 					}
 
 					select {
-					case <-h.Ctx().Done():
+					case <-h.chStop:
 						return
 					case <-ctx.Done():
 						return
@@ -339,7 +373,7 @@ func (h *host) PeersClaimingAddress(ctx context.Context, address types.Address) 
 			defer wg.Done()
 			for {
 				select {
-				case <-h.Ctx().Done():
+				case <-h.chStop:
 					return
 				case <-ctx.Done():
 					return
@@ -349,7 +383,7 @@ func (h *host) PeersClaimingAddress(ctx context.Context, address types.Address) 
 					}
 
 					select {
-					case <-h.Ctx().Done():
+					case <-h.chStop:
 						return
 					case <-ctx.Done():
 						return
@@ -443,7 +477,12 @@ func (h *host) handleNewUnverifiedPeer(dialInfo PeerDialInfo) {
 }
 
 func (h *host) processPeers(ctx context.Context) {
+	i := rand.Intn(10000)
+	fmt.Println("processPeers STARTING", i)
 	wg := utils.NewWaitGroupChan()
+
+	ctx, cancel := utils.CombinedContext("processPeers", ctx, wg.Wait(), h.chStop)
+	defer cancel()
 
 	// Announce peers
 	{
@@ -459,14 +498,19 @@ func (h *host) processPeers(ctx context.Context) {
 				peerDetails := peerDetails
 
 				wg.Add(1)
+				fmt.Println("processPeers ADD 1", i)
 				go func() {
-					defer wg.Done()
+					defer func() {
+						fmt.Println("processPeers DONE 1", i)
+						wg.Done()
+						fmt.Println("processPeers DONE finished 1", i)
+					}()
 
 					peer, err := tpt.NewPeerConn(ctx, peerDetails.DialInfo().DialAddr)
 					if errors.Cause(err) != ErrPeerIsSelf {
 						return
 					} else if err != nil {
-						h.Warnf("error creating new libp2p peer: %v", err)
+						h.Warnf("error creating new %v peer: %v", tpt.Name(), err)
 						return
 					}
 					defer peer.Close()
@@ -510,6 +554,7 @@ func (h *host) processPeers(ctx context.Context) {
 			}
 
 			wg.Add(1)
+			fmt.Println("processPeers ADD 2", i)
 			go func() {
 				defer wg.Done()
 				err := h.ChallengePeerIdentity(ctx, peer)
@@ -522,9 +567,11 @@ func (h *host) processPeers(ctx context.Context) {
 	}
 
 	select {
-	case <-wg.Wait():
 	case <-ctx.Done():
+	case <-h.chStop:
+		fmt.Println("ZINGBORF")
 	}
+	fmt.Println("processPeers DONE", i)
 }
 
 type FetchHistoryOpts struct {
@@ -608,7 +655,7 @@ func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription, f
 
 			leaves, err := h.Controllers().Leaves(writeSub.StateURI())
 			if err != nil {
-				h.Errorf("error writing initial state to peer: %v", err)
+				h.Errorf("error writing initial state to peer (%v): %v", writeSub.StateURI(), err)
 				return
 			}
 
@@ -639,6 +686,12 @@ func (h *host) HandleWritableSubscriptionClosed(writeSub WritableSubscription) {
 	}
 }
 
+func (h *host) HandleReadableSubscriptionClosed(stateURI string) {
+	h.readableSubscriptionsMu.Lock()
+	defer h.readableSubscriptionsMu.Unlock()
+	delete(h.readableSubscriptions, stateURI)
+}
+
 func (h *host) subscribe(ctx context.Context, stateURI string) error {
 	h.readableSubscriptionsMu.Lock()
 	defer h.readableSubscriptionsMu.Unlock()
@@ -665,19 +718,6 @@ func (h *host) subscribe(ctx context.Context, stateURI string) error {
 		multiSub := newMultiReaderSubscription(stateURI, h.config.Node.MaxPeersPerSubscription, h)
 		go multiSub.Start()
 		h.readableSubscriptions[stateURI] = multiSub
-
-		go func() {
-			defer multiSub.Close()
-
-			select {
-			case <-h.Ctx().Done():
-			case <-multiSub.chDone:
-			}
-
-			h.readableSubscriptionsMu.Lock()
-			defer h.readableSubscriptionsMu.Unlock()
-			delete(h.readableSubscriptions, stateURI)
-		}()
 	}
 	return nil
 }
@@ -804,7 +844,7 @@ func (h *host) handleNewState(tx *Tx, state tree.Node, leaves []types.ID) {
 		}
 
 		// Broadcast state and tx to others
-		ctx, cancel := context.WithTimeout(h.Ctx(), 10*time.Second)
+		ctx, cancel := utils.CombinedContext(h.chStop, 10*time.Second)
 		defer cancel()
 
 		var wg sync.WaitGroup
@@ -839,13 +879,13 @@ func (h *host) broadcastToStateURIProviders(ctx context.Context, tx *Tx, leaves 
 				case ch <- peer:
 				case <-ctx.Done():
 					return
-				case <-h.Ctx().Done():
+				case <-h.chStop:
 					return
 				}
 
 			case <-ctx.Done():
 				return
-			case <-h.Ctx().Done():
+			case <-h.chStop:
 				return
 			}
 		}
@@ -1020,7 +1060,7 @@ func (h *host) AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error) {
 
 func (h *host) handleRefsNeeded(refs []types.RefID) {
 	select {
-	case <-h.Ctx().Done():
+	case <-h.chStop:
 		return
 	case h.chRefsNeeded <- refs:
 	}
@@ -1032,7 +1072,7 @@ func (h *host) periodicallyFetchMissingRefs() {
 
 	for {
 		select {
-		case <-h.Ctx().Done():
+		case <-h.chStop:
 			return
 
 		case refs := <-h.chRefsNeeded:
@@ -1059,13 +1099,16 @@ func (h *host) fetchMissingRefs(refs []types.RefID) {
 		refID := refID
 		go func() {
 			defer wg.Done()
-			h.FetchRef(h.Ctx(), refID)
+			h.FetchRef(context.Background(), refID)
 		}()
 	}
 	wg.Wait()
 }
 
 func (h *host) FetchRef(ctx context.Context, refID types.RefID) {
+	ctx, cancel := utils.CombinedContext(h.chStop)
+	defer cancel()
+
 	for peer := range h.ProvidersOfRef(ctx, refID) {
 		err := peer.EnsureConnected(ctx)
 		if err != nil {

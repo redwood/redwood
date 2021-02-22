@@ -10,40 +10,38 @@ import (
 )
 
 type badgerTxStore struct {
-	*ctx.Context
+	ctx.Logger
 	db         *badger.DB
 	dbFilename string
 }
 
 func NewBadgerTxStore(dbFilename string) TxStore {
 	return &badgerTxStore{
-		Context:    &ctx.Context{},
+		Logger:     ctx.NewLogger("txstore"),
 		dbFilename: dbFilename,
 	}
 }
 
 func (p *badgerTxStore) Start() error {
-	return p.CtxStart(
-		// on startup
-		func() error {
-			p.SetLogLabel("txstore")
-			p.Infof(0, "opening txstore at %v", p.dbFilename)
-			opts := badger.DefaultOptions(p.dbFilename)
-			opts.Logger = nil
-			db, err := badger.Open(opts)
-			if err != nil {
-				return err
-			}
-			p.db = db
-			return nil
-		},
-		nil,
-		nil,
-		// on shutdown
-		func() {
-			p.db.Close()
-		},
-	)
+	p.Infof(0, "opening txstore at %v", p.dbFilename)
+	opts := badger.DefaultOptions(p.dbFilename)
+	opts.Logger = nil
+	db, err := badger.Open(opts)
+	if err != nil {
+		return err
+	}
+	p.db = db
+	return nil
+}
+
+func (s *badgerTxStore) Close() {
+	if s.db != nil {
+		s.Debugf("closing txstore")
+		err := s.db.Close()
+		if err != nil {
+			s.Errorf("could not close txstore: %v", err)
+		}
+	}
 }
 
 func makeTxKey(stateURI string, txID types.ID) []byte {

@@ -5,14 +5,13 @@ import (
 
 	"github.com/pkg/errors"
 
-	"redwood.dev/ctx"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
 
 type Transport interface {
-	Ctx() *ctx.Context
 	Start() error
+	Close()
 	Name() string
 
 	SetHost(host Host)

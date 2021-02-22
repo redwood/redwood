@@ -38,7 +38,8 @@ import (
 )
 
 type httpTransport struct {
-	*ctx.Context
+	ctx.Logger
+	chStop chan struct{}
 
 	controllerHub   ControllerHub
 	defaultStateURI string
@@ -49,6 +50,9 @@ type httpTransport struct {
 	tlsKeyFilename  string
 	cookieJar       http.CookieJar
 	devMode         bool
+
+	srv        *http.Server
+	httpClient *utils.HTTPClient
 
 	pendingAuthorizations map[types.ID][]byte
 
@@ -86,7 +90,8 @@ func NewHTTPTransport(
 	}
 
 	t := &httpTransport{
-		Context:               &ctx.Context{},
+		Logger:                ctx.NewLogger("http"),
+		chStop:                make(chan struct{}),
 		controllerHub:         controllerHub,
 		listenAddr:            listenAddr,
 		defaultStateURI:       defaultStateURI,
@@ -94,6 +99,7 @@ func NewHTTPTransport(
 		tlsCertFilename:       tlsCertFilename,
 		tlsKeyFilename:        tlsKeyFilename,
 		devMode:               devMode,
+		httpClient:            utils.MakeHTTPClient(10*time.Second, 30*time.Second),
 		cookieJar:             jar,
 		pendingAuthorizations: make(map[types.ID][]byte),
 		ownURL:                ownURL,
@@ -105,60 +111,63 @@ func NewHTTPTransport(
 }
 
 func (t *httpTransport) Start() error {
-	srv := &http.Server{}
-	return t.CtxStart(
-		// on startup
-		func() error {
-			t.SetLogLabel("http")
-			t.Infof(0, "opening http transport at %v", t.listenAddr)
+	t.SetLogLabel("http")
+	t.Infof(0, "opening http transport at %v", t.listenAddr)
 
-			if t.cookieSecret == [32]byte{} {
-				_, err := rand.Read(t.cookieSecret[:])
-				if err != nil {
-					return err
-				}
+	if t.cookieSecret == [32]byte{} {
+		_, err := rand.Read(t.cookieSecret[:])
+		if err != nil {
+			return err
+		}
+	}
+
+	// Update our node's info in the peer store
+	t.peerStore.AddDialInfos([]PeerDialInfo{{t.Name(), t.ownURL}})
+	fmt.Println("Starting Server")
+	go func() {
+		if !t.devMode {
+			t.srv = &http.Server{
+				Addr:      t.listenAddr,
+				Handler:   UnrestrictedCors(t),
+				TLSConfig: &tls.Config{},
 			}
-
-			// Update our node's info in the peer store
-			t.peerStore.AddDialInfos([]PeerDialInfo{{t.Name(), t.ownURL}})
-			fmt.Println("Starting Server")
-			go func() {
-				if !t.devMode {
-					srv = &http.Server{
-						Addr:      t.listenAddr,
-						Handler:   UnrestrictedCors(t),
-						TLSConfig: &tls.Config{},
-					}
-					err := srv.ListenAndServeTLS(t.tlsCertFilename, t.tlsKeyFilename)
-					if err != nil {
-						fmt.Printf("%+v\n", err.Error())
-						panic("http transport failed to start")
-					}
-				} else {
-					srv = &http.Server{
-						Addr:    t.listenAddr,
-						Handler: UnrestrictedCors(t),
-					}
-					err := srv.ListenAndServe()
-					if err != nil {
-						fmt.Sprintf("http transport failed to start: %+v", err.Error())
-					}
-				}
-			}()
-
-			return nil
-		},
-		nil,
-		nil,
-		// on shutdown
-		func() {
-			err := srv.Shutdown(context.Background())
-
+			err := t.srv.ListenAndServeTLS(t.tlsCertFilename, t.tlsKeyFilename)
 			if err != nil {
-				fmt.Println(err)
+				fmt.Printf("%+v\n", err.Error())
+				panic("http transport failed to start")
 			}
-		},
-	)
+		} else {
+			t.srv = &http.Server{
+				Addr:    t.listenAddr,
+				Handler: UnrestrictedCors(t),
+			}
+			err := t.srv.ListenAndServe()
+			if err != nil {
+				fmt.Sprintf("http transport failed to start: %+v", err.Error())
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (t *httpTransport) Close() {
+	fmt.Println("HTTP CLOSE")
+	close(t.chStop)
+
+	// Non-graceful
+	err := t.srv.Close()
+	if err != nil {
+		t.Errorf("error closing http server: %v", err)
+	}
+	// Graceful
+	// err = t.srv.Shutdown(context.Background())
+	// if err != nil {
+	//  fmt.Println(err)
+	// }
+
+	t.httpClient.Close()
+	fmt.Println("HTTP CLOSED")
 }
 
 func (t *httpTransport) Name() string {
@@ -1003,7 +1012,15 @@ func (t *httpTransport) tryFetchProvidersFromAuthoritativeHost(stateURI string) 
 
 	u.Path = path.Join(u.Path, "providers")
 
-	resp, err := httpClient.Get(u.String())
+	ctx, cancel := utils.CombinedContext(10*time.Second, t.chStop)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := t.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -1155,7 +1172,7 @@ func (t *httpTransport) doRequest(req *http.Request) (*http.Response, error) {
 	altSvcHeader := t.makeAltSvcHeader(t.peerStore.AllDialInfos())
 	req.Header.Set("Alt-Svc", altSvcHeader)
 
-	resp, err := httpClient.Do(req)
+	resp, err := t.httpClient.Do(req)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -1240,7 +1257,7 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 func (p *httpPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := utils.CombinedContext(ctx, 10*time.Second, p.t.chStop)
 	defer cancel()
 
 	if p.DialInfo().DialAddr == "" {
@@ -1291,7 +1308,7 @@ func (p *httpPeer) Ack(stateURI string, txID types.ID) (err error) {
 		return errors.WithStack(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := utils.CombinedContext(10*time.Second, p.t.chStop)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "ACK", p.DialInfo().DialAddr, bytes.NewReader(txIDBytes))
@@ -1317,7 +1334,7 @@ func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := utils.CombinedContext(10*time.Second, p.t.chStop)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "AUTHORIZE", p.DialInfo().DialAddr, nil)
@@ -1383,6 +1400,9 @@ func (p *httpPeer) AnnouncePeers(ctx context.Context, peerDialInfos []PeerDialIn
 		p.t.Warn("peer has no DialAddr")
 		return nil
 	}
+
+	ctx, cancel := utils.CombinedContext(ctx, 10*time.Second, p.t.chStop)
+	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "HEAD", p.DialInfo().DialAddr, nil)
 	if err != nil {

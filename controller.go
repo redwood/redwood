@@ -17,8 +17,8 @@ import (
 )
 
 type Controller interface {
-	Ctx() *ctx.Context
 	Start() error
+	Close()
 
 	AddTx(tx *Tx, force bool) error
 	HaveTx(txID types.ID) (bool, error)
@@ -35,9 +35,11 @@ type Controller interface {
 }
 
 type controller struct {
-	*ctx.Context
+	ctx.Logger
+	chStop chan struct{}
 
-	stateURI string
+	stateURI        string
+	stateDBRootPath string
 
 	controllerHub ControllerHub
 	txStore       TxStore
@@ -68,66 +70,76 @@ func NewController(
 	txStore TxStore,
 	refStore RefStore,
 ) (Controller, error) {
-	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(stateURI)
-	states, err := tree.NewVersionedDBTree(filepath.Join(stateDBRootPath, stateURIClean))
-	if err != nil {
-		return nil, err
-	}
-
-	indices, err := tree.NewVersionedDBTree(filepath.Join(stateDBRootPath, stateURIClean+"_indices"))
-	if err != nil {
-		return nil, err
-	}
-
 	c := &controller{
-		Context:       &ctx.Context{},
-		stateURI:      stateURI,
-		controllerHub: controllerHub,
-		txStore:       txStore,
-		refStore:      refStore,
-		behaviorTree:  newBehaviorTree(),
-		states:        states,
-		indices:       indices,
+		Logger:          ctx.NewLogger("controller"),
+		chStop:          make(chan struct{}),
+		stateURI:        stateURI,
+		stateDBRootPath: stateDBRootPath,
+		controllerHub:   controllerHub,
+		txStore:         txStore,
+		refStore:        refStore,
+		behaviorTree:    newBehaviorTree(),
 	}
-	c.mempool = NewMempool(c.processMempoolTx)
 	return c, nil
 }
 
-func (c *controller) Start() error {
-	return c.CtxStart(
-		// on startup,
-		func() error {
-			c.SetLogLabel("controller")
+func (c *controller) Start() (err error) {
+	defer func() {
+		if err != nil {
+			c.Close()
+		}
+	}()
 
-			// Add root resolver
-			c.behaviorTree.addResolver(tree.Keypath(nil), &dumbResolver{})
+	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(c.stateURI)
+	states, err := tree.NewVersionedDBTree(filepath.Join(c.stateDBRootPath, stateURIClean))
+	if err != nil {
+		return err
+	}
+	c.states = states
 
-			// Start mempool
-			c.CtxAddChild(c.mempool.Ctx(), nil)
-			err := c.mempool.Start()
-			if err != nil {
-				return err
-			}
+	indices, err := tree.NewVersionedDBTree(filepath.Join(c.stateDBRootPath, stateURIClean+"_indices"))
+	if err != nil {
+		return err
+	}
+	c.indices = indices
 
-			// Listen for new refs
-			c.refStore.OnRefsSaved(c.mempool.ForceReprocess)
+	// Add root resolver
+	c.behaviorTree.addResolver(tree.Keypath(nil), &dumbResolver{})
 
-			return nil
-		},
-		nil,
-		nil,
-		// on shutdown
-		func() {
-			err := c.states.Close()
-			if err != nil {
-				c.Errorf("error closing state db: %v", err)
-			}
-			err = c.indices.Close()
-			if err != nil {
-				c.Errorf("error closing index db: %v", err)
-			}
-		},
-	)
+	// Start mempool
+	c.mempool = NewMempool(c.processMempoolTx)
+	err = c.mempool.Start()
+	if err != nil {
+		return err
+	}
+
+	// Listen for new refs
+	c.refStore.OnRefsSaved(c.mempool.ForceReprocess)
+
+	return nil
+}
+
+func (c *controller) Close() {
+	close(c.chStop)
+
+	if c.mempool != nil {
+		c.mempool.Close()
+	}
+
+	if c.states != nil {
+		c.Warnf("XYZZY closing controller db: %v", c.stateURI)
+		err := c.states.Close()
+		if err != nil {
+			c.Errorf("error closing state db: %v", err)
+		}
+	}
+
+	if c.indices != nil {
+		err := c.indices.Close()
+		if err != nil {
+			c.Errorf("error closing index db: %v", err)
+		}
+	}
 }
 
 func (c *controller) StateAtVersion(version *types.ID) tree.Node {

@@ -11,6 +11,8 @@ import (
 	"github.com/markbates/pkger"
 )
 
+var chLoggedOut = make(chan struct{}, 1)
+
 func startAPI(port uint) {
 	http.HandleFunc("/api/login", loginUser)
 	http.HandleFunc("/api/logout", logoutUser)
@@ -24,12 +26,15 @@ func startAPI(port uint) {
 }
 
 func loginUser(w http.ResponseWriter, r *http.Request) {
-	app = &appType{}
-	run("./node2.redwoodrc", false, true, 54321)
+	app.Start()
 	fmt.Fprintf(w, "WORKED!")
 }
 
 func logoutUser(w http.ResponseWriter, r *http.Request) {
+	select {
+	case chLoggedOut <- struct{}{}:
+	default:
+	}
 	app.Close()
 	fmt.Fprintf(w, "WORKED!")
 }

@@ -1,10 +1,12 @@
 package redwood
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/log"
 
 	"redwood.dev/crypto"
 	"redwood.dev/ctx"
@@ -446,6 +448,8 @@ func (p *peerDetails) PublicKeys(addr types.Address) (crypto.SigningPublicKey, c
 }
 
 func (p *peerDetails) DialInfo() PeerDialInfo {
+	fmt.Println("DIAL INFO p", p)
+	fmt.Println("DIAL INFO p.peerStore", p.peerStore)
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
 	return p.dialInfo

@@ -57,6 +57,8 @@ func (c *Client) writePump() {
 			}
 			select {
 			case chSub <- *msg:
+			case <-app.chLoggedOut:
+				return
 			case <-chKill:
 				return
 			}
@@ -67,6 +69,9 @@ func (c *Client) writePump() {
 		defer close(chKill)
 		for {
 			select {
+			case <-app.chLoggedOut:
+				return
+
 			case msg, ok := <-chSub:
 				if !ok {
 					return
@@ -119,7 +124,7 @@ func (c *Client) writePump() {
 func serveWs(w http.ResponseWriter, r *http.Request) {
 	stateURI := r.URL.Query().Get("state_uri")
 
-	sub, err := host.Subscribe(context.Background(), stateURI, redwood.SubscriptionType_States|redwood.SubscriptionType_Txs, nil, nil)
+	sub, err := app.host.Subscribe(context.Background(), stateURI, redwood.SubscriptionType_States|redwood.SubscriptionType_Txs, nil, nil)
 	if err != nil {
 		log.Println(err)
 		return

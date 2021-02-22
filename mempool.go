@@ -5,58 +5,73 @@ import (
 
 	"redwood.dev/ctx"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type Mempool interface {
-	Ctx() *ctx.Context
 	Start() error
-
+	Close()
 	Add(tx *Tx)
 	Get() *txSortedSet
 	ForceReprocess()
 }
 
 type mempool struct {
-	*ctx.Context
+	ctx.Logger
+	chStop chan struct{}
+	chDone chan struct{}
 
 	sync.RWMutex
 	txs   *txSortedSet
 	chAdd chan *Tx
 
-	processMempoolWorkQueue WorkQueue
+	processMempoolWorkQueue *utils.Mailbox
 	processCallback         func(tx *Tx) processTxOutcome
 }
 
-func NewMempool(processCallback func(tx *Tx) processTxOutcome) Mempool {
-	mp := &mempool{
-		Context:         &ctx.Context{},
-		txs:             newTxSortedSet(),
-		chAdd:           make(chan *Tx, 100),
-		processCallback: processCallback,
+func NewMempool(processCallback func(tx *Tx) processTxOutcome) *mempool {
+	return &mempool{
+		Logger:                  ctx.NewLogger("mempool"),
+		chStop:                  make(chan struct{}),
+		chDone:                  make(chan struct{}),
+		txs:                     newTxSortedSet(),
+		chAdd:                   make(chan *Tx, 100),
+		processMempoolWorkQueue: utils.NewMailbox(1),
+		processCallback:         processCallback,
 	}
-
-	mp.processMempoolWorkQueue = NewWorkQueue(1, mp.processMempool)
-
-	return mp
 }
 
 func (m *mempool) Start() error {
-	return m.CtxStart(
-		// on startup
-		func() error {
-			m.SetLogLabel("mempool")
+	go func() {
+		defer close(m.chDone)
+		for {
+			select {
+			case <-m.chStop:
+				return
+			case <-m.processMempoolWorkQueue.Notify():
+				for {
+					x := m.processMempoolWorkQueue.Retrieve()
+					if x == nil {
+						break
+					}
+					switch tx := x.(type) {
+					case *Tx:
+						m.txs.add(tx)
+					case struct{}:
+					}
+				}
+				m.processMempool()
+			}
+		}
+	}()
 
-			go m.mempoolLoop()
+	return nil
+}
 
-			return nil
-		},
-		nil,
-		nil,
-		// on shutdown
-		func() {
-			m.processMempoolWorkQueue.Stop()
-		},
-	)
+func (m *mempool) Close() {
+	m.Debugf("stopping mempool")
+	close(m.chStop)
+	<-m.chDone
 }
 
 func (m *mempool) Get() *txSortedSet {
@@ -64,28 +79,11 @@ func (m *mempool) Get() *txSortedSet {
 }
 
 func (m *mempool) Add(tx *Tx) {
-	select {
-	case <-m.Context.Done():
-		return
-	case m.chAdd <- tx:
-	}
-}
-
-func (m *mempool) mempoolLoop() {
-	for {
-		select {
-		case <-m.Context.Done():
-			return
-
-		case tx := <-m.chAdd:
-			m.txs.add(tx)
-			m.processMempoolWorkQueue.Enqueue()
-		}
-	}
+	m.processMempoolWorkQueue.Deliver(tx)
 }
 
 func (m *mempool) ForceReprocess() {
-	m.processMempoolWorkQueue.Enqueue()
+	m.processMempoolWorkQueue.Deliver(struct{}{})
 }
 
 type processTxOutcome int
@@ -101,10 +99,22 @@ func (m *mempool) processMempool() {
 
 	var retry []*Tx
 	for {
+		select {
+		case <-m.chStop:
+			return
+		default:
+		}
+
 		var anySucceeded bool
 		retry = nil
 
 		for _, tx := range txs {
+			select {
+			case <-m.chStop:
+				return
+			default:
+			}
+
 			outcome := m.processCallback(tx)
 
 			switch outcome {

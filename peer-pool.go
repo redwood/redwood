@@ -2,6 +2,7 @@ package redwood
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -200,6 +201,9 @@ func (p *peerPool) GetPeer() (Peer, error) {
 			if !open {
 				return nil, errors.New("connection closed")
 			}
+			if peer == nil {
+				panic("yup peer is nil")
+			}
 
 			if !peer.Ready() {
 				p.Warnf("skipping peer: failures=%v lastFailure=%v", peer.Failures(), time.Now().Sub(peer.LastFailure()))
@@ -210,7 +214,7 @@ func (p *peerPool) GetPeer() (Peer, error) {
 			return peer, nil
 
 		case <-p.chStop:
-			return nil, nil
+			return nil, errors.New("shutting down")
 		}
 	}
 }
@@ -245,6 +249,11 @@ func (p *peerPool) ReturnPeer(peer Peer, strike bool) {
 func (p *peerPool) setPeerState(peer Peer, state peerState) {
 	p.peersMu.Lock()
 	defer p.peersMu.Unlock()
+
+	fmt.Println("PEER POOL p", p)
+	fmt.Println("PEER POOL p.peers", p.peers)
+	fmt.Println("PEER POOL peer", peer)
+	fmt.Println("PEER POOL peer.DialInfo()", peer.DialInfo())
 
 	peerInfo := p.peers[peer.DialInfo()]
 	peerInfo.state = state
