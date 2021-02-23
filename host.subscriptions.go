@@ -2,7 +2,6 @@ package redwood
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -378,13 +377,8 @@ func (s *multiReaderSubscription) Start() {
 
 func (s *multiReaderSubscription) Close() error {
 	s.peerPool.Close()
-
-	fmt.Println("MULTIREADER CLOSE 1", s.stateURI)
 	s.host.HandleReadableSubscriptionClosed(s.stateURI)
-	fmt.Println("MULTIREADER CLOSE 2", s.stateURI)
 	close(s.chStop)
-	fmt.Println("MULTIREADER CLOSE 3", s.stateURI)
 	<-s.chDone
-	fmt.Println("MULTIREADER CLOSE 4", s.stateURI)
 	return nil
 }

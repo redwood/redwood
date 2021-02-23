@@ -1,3 +1,5 @@
+// +build !headless
+
 package main
 
 import (
@@ -7,7 +9,6 @@ import (
 	"net/http"
 	"path/filepath"
 
-	// "github.com/gorilla/websocket"
 	"github.com/markbates/pkger"
 )
 
@@ -26,7 +27,12 @@ func startAPI(port uint) {
 }
 
 func loginUser(w http.ResponseWriter, r *http.Request) {
-	app.Start()
+	app.configPath = "./node2.redwoodrc"
+	app.devMode = true
+	err := app.Start()
+	if err != nil {
+		panic(err)
+	}
 	fmt.Fprintf(w, "WORKED!")
 }
 

@@ -8,6 +8,61 @@ import (
 	"redwood.dev/utils"
 )
 
+func TestWaitGroupChan(t *testing.T) {
+	t.Run("releases only after sufficiently many calls to Done()", func(t *testing.T) {
+		wg := utils.NewWaitGroupChan()
+		defer wg.Close()
+
+		wg.Add(5)
+
+		select {
+		case <-wg.Wait():
+			t.Fatal("ended too soon")
+		case <-time.After(1 * time.Second):
+		}
+
+		wg.Done()
+
+		select {
+		case <-wg.Wait():
+			t.Fatal("ended too soon")
+		case <-time.After(1 * time.Second):
+		}
+
+		wg.Done()
+
+		select {
+		case <-wg.Wait():
+			t.Fatal("ended too soon")
+		case <-time.After(1 * time.Second):
+		}
+
+		wg.Done()
+
+		select {
+		case <-wg.Wait():
+			t.Fatal("ended too soon")
+		case <-time.After(1 * time.Second):
+		}
+
+		wg.Done()
+
+		select {
+		case <-wg.Wait():
+			t.Fatal("ended too soon")
+		case <-time.After(1 * time.Second):
+		}
+
+		wg.Done()
+
+		select {
+		case <-wg.Wait():
+		case <-time.After(1 * time.Second):
+			t.Fatal("did not end")
+		}
+	})
+}
+
 func TestCombinedContext(t *testing.T) {
 	t.Run("cancels when an inner context is canceled", func(t *testing.T) {
 		innerCtx, innerCancel := context.WithCancel(context.Background())

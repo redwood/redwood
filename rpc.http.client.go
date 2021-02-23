@@ -104,11 +104,11 @@ func (c *HTTPRPCClient) Subscribe(args RPCSubscribeArgs) error {
 
 func (c *HTTPRPCClient) Identities() ([]RPCIdentity, error) {
 	var resp RPCIdentitiesResponse
-	return resp.Identities, c.client.Call("RPC.Identities", nil, &resp)
+	return resp.Identities, c.rpcClient.Call("RPC.Identities", nil, &resp)
 }
 
 func (c *HTTPRPCClient) NewIdentity(args RPCNewIdentityArgs) error {
-	return c.client.Call("RPC.NewIdentity", args, nil)
+	return c.rpcClient.Call("RPC.NewIdentity", args, nil)
 }
 
 func (c *HTTPRPCClient) AddPeer(args RPCAddPeerArgs) error {

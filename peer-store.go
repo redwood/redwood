@@ -1,12 +1,10 @@
 package redwood
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/common/log"
 
 	"redwood.dev/crypto"
 	"redwood.dev/ctx"
@@ -286,8 +284,6 @@ func (s *peerStore) fetchAllPeerDetails() ([]*peerDetails, error) {
 	state := s.state.State(false)
 	defer state.Close()
 
-	state.DebugPrint(log.Warnf, true, 0)
-
 	keypath := tree.Keypath("peers")
 
 	var pdCodecs map[string]peerDetailsCodec
@@ -448,8 +444,6 @@ func (p *peerDetails) PublicKeys(addr types.Address) (crypto.SigningPublicKey, c
 }
 
 func (p *peerDetails) DialInfo() PeerDialInfo {
-	fmt.Println("DIAL INFO p", p)
-	fmt.Println("DIAL INFO p.peerStore", p.peerStore)
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
 	return p.dialInfo

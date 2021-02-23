@@ -735,7 +735,7 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 							return
 						}
 
-						err = t.dht.Provide(ctxInner, c, true)
+						err = t.dht.Provide(ctx, c, true)
 						if err != nil && err != kbucket.ErrLookupFailure {
 							t.Errorf(`announce: could not dht.Provide pubkey: %v`, err)
 						}

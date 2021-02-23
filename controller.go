@@ -127,7 +127,6 @@ func (c *controller) Close() {
 	}
 
 	if c.states != nil {
-		c.Warnf("XYZZY closing controller db: %v", c.stateURI)
 		err := c.states.Close()
 		if err != nil {
 			c.Errorf("error closing state db: %v", err)

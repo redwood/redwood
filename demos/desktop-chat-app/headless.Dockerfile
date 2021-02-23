@@ -10,6 +10,9 @@ ADD nelson/*.go /app/nelson/
 ADD ctx/*.go /app/ctx/
 ADD types/*.go /app/types/
 ADD tree/*.go /app/tree/
+ADD utils/*.go /app/utils/
+ADD cloud/*.go /app/cloud/
+ADD crypto/*.go /app/crypto/
 WORKDIR /app
 RUN go get -d
 

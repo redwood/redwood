@@ -4,21 +4,23 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/brynbellomy/klog"
 	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
-	"github.com/webview/webview"
-	"redwood.dev"
 
-	rw "redwood.dev"
-	"redwood.dev/crypto"
+	"redwood.dev"
 	"redwood.dev/ctx"
+	"redwood.dev/identity"
 	"redwood.dev/tree"
 )
 
@@ -29,29 +31,43 @@ var app = &appType{
 }
 
 type appType struct {
-	ctx.Logger
-	refStore      rw.RefStore
-	txStore       rw.TxStore
-	host          rw.Host
-	peerDB        *tree.DBTree
-	httpRPCServer *HTTPRPCServer
+	startStopMu   sync.Mutex
+	started       bool
+	refStore      redwood.RefStore
+	txStore       redwood.TxStore
+	keyStore      identity.KeyStore
+	host          redwood.Host
+	db            *tree.DBTree
+	httpRPCServer *http.Server
 	chLoggedOut   chan struct{}
 
 	// These are set once on startup and never change
+	ctx.Logger
 	configPath string
 	devMode    bool
 }
 
-func (app *appType) Start() error {
+func (app *appType) Start() (err error) {
+	app.startStopMu.Lock()
+	defer app.startStopMu.Unlock()
+	if app.started {
+		return errors.New("already started")
+	}
+	defer func() {
+		if err == nil {
+			app.started = true
+		}
+	}()
+
 	app.chLoggedOut = make(chan struct{})
 
-	config, err := rw.ReadConfigAtPath("redwood-webview", app.configPath)
+	config, err := redwood.ReadConfigAtPath("redwood-webview", app.configPath)
 	if os.IsNotExist(err) {
 		err := os.MkdirAll(filepath.Dir(app.configPath), 0777|os.ModeDir)
 		if err != nil {
 			return err
 		}
-		config, err = rw.ReadConfigAtPath("redwood-webview", app.configPath)
+		config, err = redwood.ReadConfigAtPath("redwood-webview", app.configPath)
 		if err != nil {
 			return err
 		}
@@ -63,33 +79,25 @@ func (app *appType) Start() error {
 		config.Node.DevMode = true
 	}
 
-	err = ensureDataDirs(config)
+	err = app.ensureDataDirs(config)
 	if err != nil {
 		return err
 	}
 
-	signingKeypair, err := crypto.SigningKeypairFromHDMnemonic(config.Node.HDMnemonicPhrase, crypto.DefaultHDDerivationPath)
+	db, err := tree.NewDBTree(filepath.Join(config.Node.DataRoot, "peers"))
 	if err != nil {
 		return err
 	}
-
-	encryptingKeypair, err := crypto.GenerateEncryptingKeypair()
-	if err != nil {
-		return err
-	}
-
-	peerDB, err := tree.NewDBTree(filepath.Join(config.Node.DataRoot, "peers"))
-	if err != nil {
-		return err
-	}
-	app.peerDB = peerDB
+	app.db = db
 
 	var (
-		txStore       = rw.NewBadgerTxStore(config.TxDBRoot())
-		refStore      = rw.NewRefStore(config.RefDataRoot())
-		peerStore     = rw.NewPeerStore(peerDB)
-		controllerHub = rw.NewControllerHub(config.StateDBRoot(), txStore, refStore)
+		txStore       = redwood.NewBadgerTxStore(config.TxDBRoot())
+		keyStore      = identity.NewBadgerKeyStore(db, identity.DefaultScryptParams)
+		refStore      = redwood.NewRefStore(config.RefDataRoot())
+		peerStore     = redwood.NewPeerStore(db)
+		controllerHub = redwood.NewControllerHub(config.StateDBRoot(), txStore, refStore)
 	)
+	app.keyStore = keyStore
 
 	err = refStore.Start()
 	if err != nil {
@@ -103,7 +111,7 @@ func (app *appType) Start() error {
 	}
 	app.txStore = txStore
 
-	var transports []rw.Transport
+	var transports []redwood.Transport
 
 	if config.P2PTransport.Enabled {
 		var bootstrapPeers []string
@@ -114,14 +122,13 @@ func (app *appType) Start() error {
 			bootstrapPeers = append(bootstrapPeers, bp.DialAddresses...)
 		}
 
-		libp2pTransport, err := rw.NewLibp2pTransport(
-			signingKeypair.Address(),
+		libp2pTransport, err := redwood.NewLibp2pTransport(
 			config.P2PTransport.ListenPort,
 			config.P2PTransport.ReachableAt,
 			config.P2PTransport.KeyFile,
-			encryptingKeypair,
 			bootstrapPeers,
 			controllerHub,
+			keyStore,
 			refStore,
 			peerStore,
 		)
@@ -138,15 +145,14 @@ func (app *appType) Start() error {
 		var cookieSecret [32]byte
 		copy(cookieSecret[:], []byte(config.HTTPTransport.CookieSecret))
 
-		httpTransport, err := rw.NewHTTPTransport(
+		httpTransport, err := redwood.NewHTTPTransport(
 			config.HTTPTransport.ListenHost,
 			config.HTTPTransport.ReachableAt,
 			config.HTTPTransport.DefaultStateURI,
 			controllerHub,
+			keyStore,
 			refStore,
 			peerStore,
-			signingKeypair,
-			encryptingKeypair,
 			cookieSecret,
 			tlsCertFilename,
 			tlsKeyFilename,
@@ -158,7 +164,7 @@ func (app *appType) Start() error {
 		transports = append(transports, httpTransport)
 	}
 
-	app.host, err = rw.NewHost(signingKeypair, encryptingKeypair, transports, controllerHub, refStore, peerStore, config)
+	app.host, err = redwood.NewHost(transports, controllerHub, keyStore, refStore, peerStore, config)
 	if err != nil {
 		return err
 	}
@@ -169,19 +175,18 @@ func (app *appType) Start() error {
 	}
 
 	pkger.Walk("/frontend/build", func(path string, info os.FileInfo, err error) error {
-		fmt.Printf("IS NIL? app.Logger = %v\n", app.Logger)
 		app.Infof(0, "Serving %v", path)
 		return nil
 	})
 
 	if config.HTTPRPC.Enabled {
-		rwRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), app.host)
-		app.httpRPCServer = &HTTPRPCServer{rwRPC, signingKeypair}
-
-		err = rw.StartHTTPRPC(app.httpRPCServer, config.HTTPRPC)
+		rwRPC := redwood.NewHTTPRPCServer(app.host)
+		rpc := &HTTPRPCServer{rwRPC, keyStore}
+		app.httpRPCServer, err = redwood.StartHTTPRPC(rpc, config.HTTPRPC)
 		if err != nil {
 			return err
 		}
+		app.Infof(0, "http rpc server listening on %v", config.HTTPRPC.ListenHost)
 	}
 
 	for _, bootstrapPeer := range config.Node.BootstrapPeers {
@@ -189,7 +194,7 @@ func (app *appType) Start() error {
 		go func() {
 			app.Infof(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
 			for _, dialAddr := range bootstrapPeer.DialAddresses {
-				app.host.AddPeer(rw.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr})
+				app.host.AddPeer(redwood.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr})
 			}
 		}()
 	}
@@ -210,48 +215,58 @@ func (app *appType) Start() error {
 		}
 	}()
 
-	klog.Info(rw.PrettyJSON(config))
+	klog.Info(redwood.PrettyJSON(config))
+	klog.Flush()
 
-	go app.initializeLocalState()
-
-	// go startAPI(host, port)
 	go app.inputLoop()
-	// app.AttachInterruptHandler()
-	// app.CtxWait()
+	app.initializeLocalState()
+
 	return nil
 }
 
-func (a *appType) Close() {
-	a.refStore.Close()
-	a.refStore = nil
+func (app *appType) Close() {
+	app.startStopMu.Lock()
+	defer app.startStopMu.Unlock()
+	if !app.started {
+		fmt.Println("NOT STARTED")
+		return
+	}
+	app.started = false
 
-	a.txStore.Close()
-	a.txStore = nil
+	if app.httpRPCServer != nil {
+		err := app.httpRPCServer.Close()
+		if err != nil {
+			fmt.Println("error closing HTTP RPC server:", err)
+		}
+	}
 
-	// a.httpRPC.Close()
+	app.refStore.Close()
+	app.refStore = nil
 
-	a.host.Close()
-	a.host = nil
+	app.txStore.Close()
+	app.txStore = nil
 
-	a.peerDB.Close()
-	a.peerDB = nil
+	app.host.Close()
+	app.host = nil
+
+	app.db.Close()
+	app.db = nil
 }
 
-func (a *appType) initializeLocalState() {
-	// pkger.Include("./sync9.js")
+func (app *appType) initializeLocalState() {
 	f, err := pkger.Open("/sync9.js")
 	if err != nil {
 		panic(err)
 	}
 	defer f.Close()
 
-	_, _, err = a.host.AddRef(f)
+	_, _, err = app.host.AddRef(f)
 	if err != nil {
 		panic(err)
 	}
 
-	state, err := a.host.StateAtVersion("chat.local/servers", nil)
-	if err != nil && errors.Cause(err) != rw.ErrNoController {
+	state, err := app.host.StateAtVersion("chat.local/servers", nil)
+	if err != nil && errors.Cause(err) != redwood.ErrNoController {
 		panic(err)
 	} else if err == nil {
 		defer state.Close()
@@ -268,10 +283,10 @@ func (a *appType) initializeLocalState() {
 
 	type M = map[string]interface{}
 
-	err = a.host.SendTx(context.Background(), rw.Tx{
+	err = app.host.SendTx(context.Background(), redwood.Tx{
 		StateURI: "chat.local/servers",
-		ID:       rw.GenesisTxID,
-		Patches: []rw.Patch{{
+		ID:       redwood.GenesisTxID,
+		Patches: []redwood.Patch{{
 			Val: M{
 				"Merge-Type": M{
 					"Content-Type": "resolver/dumb",
@@ -280,7 +295,7 @@ func (a *appType) initializeLocalState() {
 				"Validator": M{
 					"Content-Type": "validator/permissions",
 					"value": M{
-						a.host.Address().Hex(): M{
+						"*": M{
 							"^.*$": M{
 								"write": true,
 							},
@@ -296,17 +311,7 @@ func (a *appType) initializeLocalState() {
 	}
 }
 
-func startGUI(port uint) {
-	debug := true
-	w := webview.New(debug)
-	defer w.Destroy()
-	w.SetTitle("Minimal webview example")
-	w.SetSize(800, 600, webview.HintNone)
-	w.Navigate(fmt.Sprintf("http://localhost:%v/index.html", port))
-	w.Run()
-}
-
-func ensureDataDirs(config *rw.Config) error {
+func (a *appType) ensureDataDirs(config *redwood.Config) error {
 	err := os.MkdirAll(config.RefDataRoot(), 0777|os.ModeDir)
 	if err != nil {
 		return err
@@ -324,7 +329,41 @@ func ensureDataDirs(config *rw.Config) error {
 	return nil
 }
 
-func (a *appType) inputLoop() {
+func (app *appType) waitForCtrlC() {
+	sigInbox := make(chan os.Signal, 1)
+
+	signal.Notify(sigInbox, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+
+	count := 0
+	firstTime := int64(0)
+
+	for range sigInbox {
+		count++
+		curTime := time.Now().Unix()
+
+		// Prevent un-terminated ^c character in terminal
+		fmt.Println()
+
+		if count == 1 {
+			firstTime = curTime
+
+			go func() {
+				app.Close()
+				klog.Flush()
+				fmt.Println("shutdown complete")
+				os.Exit(-1)
+			}()
+		} else {
+			if curTime > firstTime+3 {
+				fmt.Println("\nReceived interrupt before graceful shutdown, terminating...")
+				klog.Flush()
+				os.Exit(-1)
+			}
+		}
+	}
+}
+
+func (app *appType) inputLoop() {
 	fmt.Println("Type \"help\" for a list of commands.")
 	fmt.Println()
 
@@ -378,11 +417,11 @@ func (a *appType) inputLoop() {
 
 var replCommands = map[string]struct {
 	HelpText string
-	Handler  func(args []string, host rw.Host) error
+	Handler  func(args []string, host redwood.Host) error
 }{
 	"stateuris": {
 		"list all known state URIs",
-		func(args []string, host rw.Host) error {
+		func(args []string, host redwood.Host) error {
 			stateURIs, err := host.Controllers().KnownStateURIs()
 			if err != nil {
 				return err
@@ -399,7 +438,7 @@ var replCommands = map[string]struct {
 	},
 	"state": {
 		"print the current state tree",
-		func(args []string, host rw.Host) error {
+		func(args []string, host redwood.Host) error {
 			if len(args) < 1 {
 				return errors.New("missing argument: state URI")
 			}
@@ -412,7 +451,7 @@ var replCommands = map[string]struct {
 			var keypath tree.Keypath
 			var rng *tree.Range
 			if len(args) > 1 {
-				_, keypath, rng, err = rw.ParsePatchPath([]byte(args[1]))
+				_, keypath, rng, err = redwood.ParsePatchPath([]byte(args[1]))
 				if err != nil {
 					return err
 				}
@@ -420,13 +459,13 @@ var replCommands = map[string]struct {
 			app.Debugf("stateURI: %v / keypath: %v / range: %v", stateURI, keypath, rng)
 			state = state.NodeAt(keypath, rng)
 			state.DebugPrint(app.Debugf, false, 0)
-			fmt.Println(rw.PrettyJSON(state))
+			fmt.Println(redwood.PrettyJSON(state))
 			return nil
 		},
 	},
 	"peers": {
 		"list all known peers",
-		func(args []string, host rw.Host) error {
+		func(args []string, host redwood.Host) error {
 			for _, peer := range host.Peers() {
 				fmt.Println("- ", peer.Addresses(), peer.DialInfo(), peer.LastContact())
 			}
@@ -435,7 +474,7 @@ var replCommands = map[string]struct {
 	},
 	"addpeer": {
 		"list all known peers",
-		func(args []string, host rw.Host) error {
+		func(args []string, host redwood.Host) error {
 			if len(args) < 2 {
 				return errors.New("requires two arguments: addpeer <transport> <dial addr>")
 			}

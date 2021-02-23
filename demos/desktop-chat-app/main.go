@@ -8,22 +8,21 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"os/signal"
 	"runtime"
-	"syscall"
 	"time"
 
 	"github.com/brynbellomy/klog"
 	"github.com/urfave/cli"
+	"github.com/webview/webview"
 
-	rw "redwood.dev"
+	"redwood.dev"
 )
 
 func main() {
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
-	configPath, err := rw.DefaultConfigPath("redwood-webview")
+	configPath, err := redwood.DefaultConfigPath("redwood-webview")
 	if err != nil {
 		app.Error(err)
 		os.Exit(1)
@@ -61,8 +60,6 @@ func main() {
 		})
 		klog.Flush()
 
-		// configPath := c.String("config")
-
 		if c.Bool("pprof") {
 			go func() {
 				http.ListenAndServe(":6060", nil)
@@ -70,15 +67,12 @@ func main() {
 			runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
 		}
 
-		// dev := c.Bool("dev")
 		port := c.Uint("port")
-		// return run(configPath, enablePprof, dev, port)
 		// go startGUI(port)
-		startAPI(port)
+		go startAPI(port)
+		app.waitForCtrlC()
 		return nil
 	}
-
-	go waitForCtrlC()
 
 	err = cliApp.Run(os.Args)
 	if err != nil {
@@ -87,35 +81,12 @@ func main() {
 	}
 }
 
-func waitForCtrlC() {
-	sigInbox := make(chan os.Signal, 1)
-
-	signal.Notify(sigInbox, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
-
-	count := 0
-	firstTime := int64(0)
-
-	//timer := time.NewTimer(30 * time.Second)
-
-	for range sigInbox {
-		count++
-		curTime := time.Now().Unix()
-
-		// Prevent un-terminated ^c character in terminal
-		fmt.Println()
-
-		if count == 1 {
-			firstTime = curTime
-
-			if app != nil {
-				app.Close()
-			}
-			os.Exit(-1)
-		} else {
-			if curTime > firstTime+3 {
-				fmt.Println("\nReceived interrupt before graceful shutdown, terminating...")
-				os.Exit(-1)
-			}
-		}
-	}
+func startGUI(port uint) {
+	debug := true
+	w := webview.New(debug)
+	defer w.Destroy()
+	w.SetTitle("Minimal webview example")
+	w.SetSize(800, 600, webview.HintNone)
+	w.Navigate(fmt.Sprintf("http://localhost:%v/index.html", port))
+	w.Run()
 }

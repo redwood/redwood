@@ -123,7 +123,6 @@ func (t *httpTransport) Start() error {
 
 	// Update our node's info in the peer store
 	t.peerStore.AddDialInfos([]PeerDialInfo{{t.Name(), t.ownURL}})
-	fmt.Println("Starting Server")
 	go func() {
 		if !t.devMode {
 			t.srv = &http.Server{
@@ -152,7 +151,6 @@ func (t *httpTransport) Start() error {
 }
 
 func (t *httpTransport) Close() {
-	fmt.Println("HTTP CLOSE")
 	close(t.chStop)
 
 	// Non-graceful
@@ -167,7 +165,6 @@ func (t *httpTransport) Close() {
 	// }
 
 	t.httpClient.Close()
-	fmt.Println("HTTP CLOSED")
 }
 
 func (t *httpTransport) Name() string {
@@ -1020,7 +1017,7 @@ func (t *httpTransport) tryFetchProvidersFromAuthoritativeHost(stateURI string) 
 		return nil, err
 	}
 
-	resp, err := t.httpClient.Do(req)
+	resp, err := t.doRequest(req)
 	if err != nil {
 		return nil, err
 	}

@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"reflect"
 	"sync/atomic"
@@ -36,10 +35,14 @@ func NewPeriodicTask(interval time.Duration, taskFn func(ctx context.Context)) *
 		defer ticker.Stop()
 
 		for {
-			fmt.Println("PeriodicTask loop", i)
+			select {
+			case <-task.chStop:
+				return
+			default:
+			}
+
 			select {
 			case <-ticker.C:
-				fmt.Println("PeriodicTask ticker", i)
 				task.Enqueue()
 
 			case <-task.mailbox.Notify():
@@ -56,7 +59,6 @@ func NewPeriodicTask(interval time.Duration, taskFn func(ctx context.Context)) *
 				}
 
 			case <-task.chStop:
-				fmt.Println("PeriodicTask GOT STOP", i)
 				return
 			}
 		}
@@ -70,10 +72,8 @@ func (task *PeriodicTask) Enqueue() {
 }
 
 func (task *PeriodicTask) Close() {
-	fmt.Println("PeriodicTask CLOSE", task.i)
 	close(task.chStop)
 	<-task.chDone
-	fmt.Println("PeriodicTask CLOSED", task.i)
 }
 
 // ContextFromChan creates a context that finishes when the provided channel
@@ -93,30 +93,58 @@ func ContextFromChan(chStop <-chan struct{}) (context.Context, context.CancelFun
 // WaitGroupChan creates a channel that closes when the provided sync.WaitGroup is done.
 type WaitGroupChan struct {
 	i         int
-	chAdd     chan int
+	x         int
+	chAdd     chan wgAdd
 	chWait    chan struct{}
-	waitCalls uint64
+	chCtxDone <-chan struct{}
+	chStop    chan struct{}
+	waitCalls uint32
 }
 
-func NewWaitGroupChan() WaitGroupChan {
-	wg := WaitGroupChan{
-		chAdd:  make(chan int),
+type wgAdd struct {
+	i   int
+	err chan string
+}
+
+func NewWaitGroupChan(ctx context.Context) *WaitGroupChan {
+	wg := &WaitGroupChan{
+		chAdd:  make(chan wgAdd),
 		chWait: make(chan struct{}),
+		chStop: make(chan struct{}),
+	}
+	if ctx != nil {
+		wg.chCtxDone = ctx.Done()
 	}
 
 	go func() {
-		defer close(wg.chWait)
+		var done bool
 		for {
 			select {
-			case i := <-wg.chAdd:
-				wg.i += i
-				if wg.i < 0 {
-					panic("")
-				} else if wg.i == 0 && atomic.LoadUint64(&wg.waitCalls) > 0 {
+			case <-wg.chCtxDone:
+				if !done {
+					close(wg.chWait)
+				}
+				return
+			case <-wg.chStop:
+				if !done {
+					close(wg.chWait)
+				}
+				return
+			case wgAdd := <-wg.chAdd:
+				if done {
+					wgAdd.err <- "WaitGroupChan already finished. Do you need to add a bounding wg.Add(1) and wg.Done()?"
 					return
 				}
-
-				// case
+				wg.i += wgAdd.i
+				if wg.i < 0 {
+					wgAdd.err <- "called Done() too many times"
+					close(wg.chWait)
+					return
+				} else if wg.i == 0 {
+					done = true
+					close(wg.chWait)
+				}
+				wgAdd.err <- ""
 			}
 		}
 	}()
@@ -124,24 +152,42 @@ func NewWaitGroupChan() WaitGroupChan {
 	return wg
 }
 
-func (wg WaitGroupChan) Add(i int) {
+func (wg *WaitGroupChan) Close() {
+	close(wg.chStop)
+}
+
+func (wg *WaitGroupChan) Add(i int) {
+	if atomic.LoadUint32(&wg.waitCalls) > 0 {
+		panic("cannot call Add() after Wait()")
+	}
+	ch := make(chan string)
 	select {
-	case <-wg.chWait:
-		panic("")
-	case wg.chAdd <- i:
+	case <-wg.chCtxDone:
+	case <-wg.chStop:
+	case wg.chAdd <- wgAdd{i, ch}:
+		err := <-ch
+		if err != "" {
+			panic(err)
+		}
 	}
 }
 
-func (wg WaitGroupChan) Done() {
+func (wg *WaitGroupChan) Done() {
+	ch := make(chan string)
 	select {
+	case <-wg.chCtxDone:
+	case <-wg.chStop:
 	case <-wg.chWait:
-		panic("")
-	case wg.chAdd <- -1:
+	case wg.chAdd <- wgAdd{-1, ch}:
+		err := <-ch
+		if err != "" {
+			panic(err)
+		}
 	}
 }
 
-func (wg WaitGroupChan) Wait() <-chan struct{} {
-	atomic.AddUint64(&wg.waitCalls, 1)
+func (wg *WaitGroupChan) Wait() <-chan struct{} {
+	atomic.StoreUint32(&wg.waitCalls, 1)
 	return wg.chWait
 }
 
@@ -155,17 +201,12 @@ func CombinedContext(signals ...interface{}) (context.Context, context.CancelFun
 	}
 	signals = append(signals, ctx)
 
-	var label string
-
 	var cases []reflect.SelectCase
 	var cancel2 context.CancelFunc
 	for _, signal := range signals {
 		var ch reflect.Value
 
 		switch sig := signal.(type) {
-		case string:
-			label = sig
-			continue
 		case context.Context:
 			ch = reflect.ValueOf(sig.Done())
 		case <-chan struct{}:
@@ -187,11 +228,7 @@ func CombinedContext(signals ...interface{}) (context.Context, context.CancelFun
 		if cancel2 != nil {
 			defer cancel2()
 		}
-		fmt.Println("COMBINED CTX waiting", label)
 		_, _, _ = reflect.Select(cases)
-		if label != "" {
-			fmt.Println("COMBINED CTX done", label)
-		}
 	}()
 
 	// return ctx, cancel

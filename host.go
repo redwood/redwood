@@ -2,9 +2,7 @@ package redwood
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -147,9 +145,7 @@ func (h *host) Start() error {
 func (h *host) Close() {
 	close(h.chStop)
 
-	fmt.Println("Closing HOST")
 	h.processPeersTask.Close()
-	fmt.Println("Closing HOST 2")
 
 	var writableSubs []WritableSubscription
 	func() {
@@ -161,14 +157,12 @@ func (h *host) Close() {
 			}
 		}
 	}()
-	fmt.Println("Closing HOST 4")
 	for _, sub := range writableSubs {
 		err := sub.Close()
 		if err != nil {
 			h.Errorf("error closing writable subscription: %v", err)
 		}
 	}
-	fmt.Println("Closing HOST 5")
 
 	var readableSubs []*multiReaderSubscription
 	func() {
@@ -178,7 +172,6 @@ func (h *host) Close() {
 			readableSubs = append(readableSubs, sub)
 		}
 	}()
-	fmt.Println("Closing HOST 6")
 	for _, sub := range readableSubs {
 		err := sub.Close()
 		if err != nil {
@@ -186,15 +179,11 @@ func (h *host) Close() {
 		}
 	}
 
-	fmt.Println("Closing HOST 7")
 	h.controllerHub.Close()
-	fmt.Println("Closing HOST 3")
 
 	for _, tpt := range h.transports {
 		tpt.Close()
 	}
-
-	fmt.Println("HOST has closed")
 }
 
 func (h *host) Peers() []PeerDetails {
@@ -231,11 +220,16 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 		return ch
 	}
 
+	ctx, cancel := utils.CombinedContext(ctx, h.chStop)
+
 	var (
 		ch          = make(chan Peer)
-		wg          sync.WaitGroup
+		wg          = utils.NewWaitGroupChan(ctx)
 		alreadySent sync.Map
 	)
+
+	wg.Add(1)
+	defer wg.Done()
 
 	wg.Add(1)
 	go func() {
@@ -258,8 +252,6 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 			}
 
 			select {
-			case <-h.chStop:
-				return
 			case <-ctx.Done():
 				return
 			case ch <- peer:
@@ -279,8 +271,6 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 			defer wg.Done()
 			for {
 				select {
-				case <-h.chStop:
-					return
 				case <-ctx.Done():
 					return
 				case peer, open := <-innerCh:
@@ -295,8 +285,6 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 					peer.AddStateURI(stateURI)
 
 					select {
-					case <-h.chStop:
-						return
 					case <-ctx.Done():
 						return
 					case ch <- peer:
@@ -304,12 +292,13 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 				}
 			}
 		}()
-
 	}
 
 	go func() {
 		defer close(ch)
-		wg.Wait()
+		defer cancel()
+		defer wg.Close()
+		<-wg.Wait()
 	}()
 
 	return ch
@@ -477,12 +466,13 @@ func (h *host) handleNewUnverifiedPeer(dialInfo PeerDialInfo) {
 }
 
 func (h *host) processPeers(ctx context.Context) {
-	i := rand.Intn(10000)
-	fmt.Println("processPeers STARTING", i)
-	wg := utils.NewWaitGroupChan()
-
-	ctx, cancel := utils.CombinedContext("processPeers", ctx, wg.Wait(), h.chStop)
+	ctx, cancel := utils.CombinedContext(ctx, h.chStop)
 	defer cancel()
+
+	wg := utils.NewWaitGroupChan(ctx)
+	defer wg.Close()
+
+	wg.Add(1)
 
 	// Announce peers
 	{
@@ -498,16 +488,13 @@ func (h *host) processPeers(ctx context.Context) {
 				peerDetails := peerDetails
 
 				wg.Add(1)
-				fmt.Println("processPeers ADD 1", i)
 				go func() {
-					defer func() {
-						fmt.Println("processPeers DONE 1", i)
-						wg.Done()
-						fmt.Println("processPeers DONE finished 1", i)
-					}()
+					defer wg.Done()
 
 					peer, err := tpt.NewPeerConn(ctx, peerDetails.DialInfo().DialAddr)
 					if errors.Cause(err) != ErrPeerIsSelf {
+						return
+					} else if errors.Cause(err) == ErrPeerIsSelf {
 						return
 					} else if err != nil {
 						h.Warnf("error creating new %v peer: %v", tpt.Name(), err)
@@ -554,9 +541,10 @@ func (h *host) processPeers(ctx context.Context) {
 			}
 
 			wg.Add(1)
-			fmt.Println("processPeers ADD 2", i)
 			go func() {
 				defer wg.Done()
+				defer peer.Close()
+
 				err := h.ChallengePeerIdentity(ctx, peer)
 				if err != nil {
 					h.Errorf("error verifying peer identity (%v): %v ", peer.DialInfo(), err)
@@ -565,13 +553,8 @@ func (h *host) processPeers(ctx context.Context) {
 			}()
 		}
 	}
-
-	select {
-	case <-ctx.Done():
-	case <-h.chStop:
-		fmt.Println("ZINGBORF")
-	}
-	fmt.Println("processPeers DONE", i)
+	wg.Done()
+	<-wg.Wait()
 }
 
 type FetchHistoryOpts struct {

@@ -21,14 +21,155 @@ import (
 	"redwood.dev/types"
 )
 
-type HTTPRPCService interface {
-	ctx.Logger
-	CtxStart(onStartup func() error, onAboutToStop func(), onChildAboutToStop func(inChild ctx.Ctx), onStopping func()) error
+func StartHTTPRPC(svc interface{}, config *HTTPRPCConfig) (*http.Server, error) {
+	if config == nil || !config.Enabled {
+		return nil, nil
+	}
+
+	httpServer := &http.Server{
+		Addr: config.ListenHost,
+	}
+
+	go func() {
+		server := rpc.NewServer()
+		server.RegisterCodec(json2.NewCodec(), "application/json")
+		server.RegisterService(svc, "RPC")
+
+		httpServer.Handler = server
+		if config.Whitelist.Enabled {
+			httpServer.Handler = NewWhitelistMiddleware(config.Whitelist.PermittedAddrs, server)
+		}
+		httpServer.Handler = UnrestrictedCors(httpServer.Handler)
+
+		httpServer.ListenAndServe()
+	}()
+
+	return httpServer, nil
 }
 
-type WhitelistConfig struct {
-	Enabled        bool            `yaml:"Enabled"`
-	PermittedAddrs []types.Address `yaml:"PermittedAddrs"`
+type HTTPRPCServer struct {
+	ctx.Logger
+	host Host
+}
+
+func NewHTTPRPCServer(host Host) *HTTPRPCServer {
+	return &HTTPRPCServer{
+		Logger: ctx.NewLogger("http rpc"),
+		host:   host,
+	}
+}
+
+type (
+	RPCSubscribeArgs struct {
+		StateURI string
+		Txs      bool
+		States   bool
+		Keypath  string
+	}
+	RPCSubscribeResponse struct{}
+)
+
+func (s *HTTPRPCServer) Subscribe(r *http.Request, args *RPCSubscribeArgs, resp *RPCSubscribeResponse) error {
+	if args.StateURI == "" {
+		return errors.New("missing StateURI")
+	}
+
+	ctx, _ := context.WithTimeout(context.Background(), 15*time.Second)
+
+	var subscriptionType SubscriptionType
+	if args.Txs {
+		subscriptionType |= SubscriptionType_Txs
+	}
+	if args.States {
+		subscriptionType |= SubscriptionType_States
+	}
+
+	sub, err := s.host.Subscribe(ctx, args.StateURI, subscriptionType, tree.Keypath(args.Keypath), nil)
+	if err != nil {
+		return errors.Wrap(err, "error subscribing to "+args.StateURI)
+	}
+	sub.Close()
+	return nil
+}
+
+type (
+	RPCIdentitiesArgs     struct{}
+	RPCIdentitiesResponse struct {
+		Identities []RPCIdentity
+	}
+	RPCIdentity struct {
+		Address types.Address
+		Public  bool
+	}
+)
+
+func (s *HTTPRPCServer) Identities(r *http.Request, args *RPCIdentitiesArgs, resp *RPCIdentitiesResponse) error {
+	identities, err := s.host.Identities()
+	if err != nil {
+		return err
+	}
+	for _, identity := range identities {
+		resp.Identities = append(resp.Identities, RPCIdentity{identity.Address(), identity.Public})
+	}
+	return nil
+}
+
+type (
+	RPCNewIdentityArgs struct {
+		Public bool
+	}
+	RPCNewIdentityResponse struct {
+		Address types.Address
+	}
+)
+
+func (s *HTTPRPCServer) NewIdentity(r *http.Request, args *RPCNewIdentityArgs, resp *RPCNewIdentityResponse) error {
+	identity, err := s.host.NewIdentity(args.Public)
+	if err != nil {
+		return err
+	}
+	resp.Address = identity.Address()
+	return nil
+}
+
+type (
+	RPCAddPeerArgs struct {
+		TransportName string
+		DialAddr      string
+	}
+	RPCAddPeerResponse struct{}
+)
+
+func (s *HTTPRPCServer) AddPeer(r *http.Request, args *RPCAddPeerArgs, resp *RPCAddPeerResponse) error {
+	s.host.AddPeer(PeerDialInfo{TransportName: args.TransportName, DialAddr: args.DialAddr})
+	return nil
+}
+
+type (
+	RPCKnownStateURIsArgs     struct{}
+	RPCKnownStateURIsResponse struct {
+		StateURIs []string
+	}
+)
+
+func (s *HTTPRPCServer) KnownStateURIs(r *http.Request, args *RPCKnownStateURIsArgs, resp *RPCKnownStateURIsResponse) error {
+	stateURIs, err := s.host.Controllers().KnownStateURIs()
+	if err != nil {
+		return err
+	}
+	resp.StateURIs = stateURIs
+	return nil
+}
+
+type (
+	RPCSendTxArgs struct {
+		Tx Tx
+	}
+	RPCSendTxResponse struct{}
+)
+
+func (s *HTTPRPCServer) SendTx(r *http.Request, args *RPCSendTxArgs, resp *RPCSendTxResponse) error {
+	return s.host.SendTx(context.Background(), args.Tx)
 }
 
 type whitelistMiddleware struct {
@@ -37,6 +178,11 @@ type whitelistMiddleware struct {
 	jwtSecret               []byte
 	pendingAuthorizations   map[string]struct{}
 	pendingAuthorizationsMu sync.Mutex
+}
+
+type WhitelistConfig struct {
+	Enabled        bool            `yaml:"Enabled"`
+	PermittedAddrs []types.Address `yaml:"PermittedAddrs"`
 }
 
 func NewWhitelistMiddleware(permittedAddrs []types.Address, nextHandler http.Handler) *whitelistMiddleware {
@@ -174,162 +320,4 @@ func (mw *whitelistMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 		mw.nextHandler.ServeHTTP(w, r)
 	}
-}
-
-func StartHTTPRPC(svc HTTPRPCService, config *HTTPRPCConfig) error {
-	if config == nil || !config.Enabled {
-		return nil
-	}
-	return svc.CtxStart(
-		// on startup
-		func() error {
-			svc.SetLogLabel("rpc")
-			svc.Infof(0, "rpc server listening on %v", config.ListenHost)
-
-			go func() {
-				server := rpc.NewServer()
-				server.RegisterCodec(json2.NewCodec(), "application/json")
-				server.RegisterService(svc, "RPC")
-
-				var handler http.Handler = server
-				if config.Whitelist.Enabled {
-					handler = NewWhitelistMiddleware(config.Whitelist.PermittedAddrs, server)
-				}
-				handler = UnrestrictedCors(handler)
-
-				http.ListenAndServe(config.ListenHost, handler)
-			}()
-
-			return nil
-		},
-		nil,
-		nil,
-		// on shutdown
-		nil,
-	)
-}
-
-type HTTPRPCServer struct {
-	*ctx.Context
-	host Host
-}
-
-func NewHTTPRPCServer(host Host) *HTTPRPCServer {
-	return &HTTPRPCServer{
-		Context: &ctx.Context{},
-		host:    host,
-	}
-}
-
-type (
-	RPCSubscribeArgs struct {
-		StateURI string
-		Txs      bool
-		States   bool
-		Keypath  string
-	}
-	RPCSubscribeResponse struct{}
-)
-
-func (s *HTTPRPCServer) Subscribe(r *http.Request, args *RPCSubscribeArgs, resp *RPCSubscribeResponse) error {
-	if args.StateURI == "" {
-		return errors.New("missing StateURI")
-	}
-
-	ctx, _ := context.WithTimeout(context.Background(), 15*time.Second)
-
-	var subscriptionType SubscriptionType
-	if args.Txs {
-		subscriptionType |= SubscriptionType_Txs
-	}
-	if args.States {
-		subscriptionType |= SubscriptionType_States
-	}
-
-	sub, err := s.host.Subscribe(ctx, args.StateURI, subscriptionType, tree.Keypath(args.Keypath), nil)
-	if err != nil {
-		return errors.Wrap(err, "error subscribing to "+args.StateURI)
-	}
-	sub.Close()
-	return nil
-}
-
-type (
-	RPCIdentitiesArgs     struct{}
-	RPCIdentitiesResponse struct {
-		Identities []RPCIdentity
-	}
-	RPCIdentity struct {
-		Address types.Address
-		Public  bool
-	}
-)
-
-func (s *HTTPRPCServer) Identities(r *http.Request, args *RPCIdentitiesArgs, resp *RPCIdentitiesResponse) error {
-	identities, err := s.host.Identities()
-	if err != nil {
-		return err
-	}
-	for _, identity := range identities {
-		resp.Identities = append(resp.Identities, RPCIdentity{identity.Address(), identity.Public})
-	}
-	return nil
-}
-
-type (
-	RPCNewIdentityArgs struct {
-		Public bool
-	}
-	RPCNewIdentityResponse struct {
-		Address types.Address
-	}
-)
-
-func (s *HTTPRPCServer) NewIdentity(r *http.Request, args *RPCNewIdentityArgs, resp *RPCNewIdentityResponse) error {
-	identity, err := s.host.NewIdentity(args.Public)
-	if err != nil {
-		return err
-	}
-	resp.Address = identity.Address()
-	return nil
-}
-
-type (
-	RPCAddPeerArgs struct {
-		TransportName string
-		DialAddr      string
-	}
-	RPCAddPeerResponse struct{}
-)
-
-func (s *HTTPRPCServer) AddPeer(r *http.Request, args *RPCAddPeerArgs, resp *RPCAddPeerResponse) error {
-	s.host.AddPeer(PeerDialInfo{TransportName: args.TransportName, DialAddr: args.DialAddr})
-	return nil
-}
-
-type (
-	RPCKnownStateURIsArgs     struct{}
-	RPCKnownStateURIsResponse struct {
-		StateURIs []string
-	}
-)
-
-func (s *HTTPRPCServer) KnownStateURIs(r *http.Request, args *RPCKnownStateURIsArgs, resp *RPCKnownStateURIsResponse) error {
-	stateURIs, err := s.host.Controllers().KnownStateURIs()
-	if err != nil {
-		return err
-	}
-	resp.StateURIs = stateURIs
-	return nil
-}
-
-type (
-	RPCSendTxArgs struct {
-		Tx Tx
-	}
-	RPCSendTxResponse struct{}
-)
-
-func (s *HTTPRPCServer) SendTx(r *http.Request, args *RPCSendTxArgs, resp *RPCSendTxResponse) error {
-	return s.host.SendTx(context.Background(), args.Tx)
 }
