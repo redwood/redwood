@@ -8,7 +8,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
-	rw "redwood.dev"
+	"redwood.dev"
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/types"
 )
@@ -17,16 +18,16 @@ type client struct {
 	*ctx.Context
 	host       string
 	address    types.Address
-	sigprivkey rw.SigningPrivateKey
+	sigprivkey crypto.SigningPrivateKey
 	client     RemoteStoreClient
 	conn       *grpc.ClientConn
 	jwt        string
 }
 
-// client should conform to rw.Store
-var _ rw.Store = (*client)(nil)
+// client should conform to redwood.TxStore
+var _ redwood.TxStore = (*client)(nil)
 
-func NewClient(host string, address types.Address, sigprivkey rw.SigningPrivateKey) rw.Store {
+func NewClient(host string, address types.Address, sigprivkey crypto.SigningPrivateKey) *client {
 	return &client{
 		Context:    &ctx.Context{},
 		host:       host,
@@ -118,7 +119,7 @@ func (c *client) Authenticate() error {
 	return nil
 }
 
-func (c *client) AddTx(tx *rw.Tx) error {
+func (c *client) AddTx(tx *redwood.Tx) error {
 	// @@TODO: don't use json
 	txBytes, err := json.Marshal(tx)
 	if err != nil {
@@ -139,22 +140,9 @@ func (c *client) AddTx(tx *rw.Tx) error {
 	return nil
 }
 
-func (c *client) RemoveTx(txHash rw.Hash) error {
-	_, err := c.client.RemoveTx(context.TODO(), &RemoveTxRequest{TxHash: txHash[:]})
-	return err
-}
-
-func (c *client) FetchTx(txHash rw.Hash) (*rw.Tx, error) {
-	resp, err := c.client.FetchTx(context.TODO(), &FetchTxRequest{TxHash: txHash[:]})
-	if err != nil {
-		return nil, err
-	}
-	return c.decodeTx(resp.TxBytes)
-}
-
-func (c *client) AllTxs() rw.TxIterator {
+func (c *client) AllTxsForStateURI(stateURI string, fromTxID types.ID) redwood.TxIterator {
 	txIter := &txIterator{
-		ch:       make(chan *rw.Tx),
+		ch:       make(chan *redwood.Tx),
 		chCancel: make(chan struct{}),
 	}
 
@@ -188,19 +176,27 @@ func (c *client) AllTxs() rw.TxIterator {
 	return txIter
 }
 
-func (c *client) decodeTx(txBytes []byte) (*rw.Tx, error) {
-	var tx rw.Tx
+func (c *client) FetchTx(stateURI string, txID types.ID) (*redwood.Tx, error) { panic("unimplemented") }
+func (c *client) TxExists(stateURI string, txID types.ID) (bool, error)       { panic("unimplemented") }
+func (c *client) RemoveTx(stateURI string, txID types.ID) error               { panic("unimplemented") }
+func (c *client) KnownStateURIs() ([]string, error)                           { panic("unimplemented") }
+func (c *client) MarkLeaf(stateURI string, txID types.ID) error               { panic("unimplemented") }
+func (c *client) UnmarkLeaf(stateURI string, txID types.ID) error             { panic("unimplemented") }
+func (c *client) Leaves(stateURI string) ([]types.ID, error)                  { panic("unimplemented") }
+
+func (c *client) decodeTx(txBytes []byte) (*redwood.Tx, error) {
+	var tx redwood.Tx
 	err := json.Unmarshal(txBytes, &tx)
 	return &tx, err
 }
 
 type txIterator struct {
-	ch       chan *rw.Tx
+	ch       chan *redwood.Tx
 	chCancel chan struct{}
 	err      error
 }
 
-func (i *txIterator) Next() *rw.Tx {
+func (i *txIterator) Next() *redwood.Tx {
 	select {
 	case tx := <-i.ch:
 		return tx

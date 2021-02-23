@@ -40,12 +40,15 @@ github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6r
 github.com/brynbellomy/ginkgo-reporter v0.0.0-20160306174404-9bf14cb7c4ae h1:GWGo+Fo5QyqbeEnQrOoRZcLQSReg+7n07CtynSxWwk4=
 github.com/brynbellomy/ginkgo-reporter v0.0.0-20160306174404-9bf14cb7c4ae/go.mod h1:6MDsFO0MznmCRIEQ3XuCueBzJTf9uii2Dwog4y/B1XA=
 github.com/brynbellomy/git2go v0.0.0-20200611034043-ace2967af09c/go.mod h1:1/Eu1xGrlzTutwe0OyDCL5NnG1Yu4C9mWx64+Zhzadg=
+github.com/brynbellomy/git2go v0.0.0-20210223020543-1b73664dc577 h1:0i03FGZy9NQDR8UEWd8rhIw5TqtQGBM+rHDkdQVnw+E=
+github.com/brynbellomy/git2go v0.0.0-20210223020543-1b73664dc577/go.mod h1:1/Eu1xGrlzTutwe0OyDCL5NnG1Yu4C9mWx64+Zhzadg=
 github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d h1:4k4FHSGVV+1iOw9FRjHD4RK/ybXLJjaMS+o51UqxAN4=
 github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d/go.mod h1:sSvVVQ2xz/klz5ycbK8j29ee7eIPgRIgnxSyMynB7Xo=
 github.com/brynbellomy/go-structomancer v1.0.1 h1:gbXmDM/aELs0zHQj07u/OXnF85/YWZVqQqgEJ+PhMkI=
 github.com/brynbellomy/go-structomancer v1.0.1/go.mod h1:BLBqmko0HzmRBpCfPAwa6Mop/HI1nff7tOxMLYYcHNs=
 github.com/brynbellomy/go-structomancer v1.0.2 h1:utoeCc3oWfjq1Z8eP/b75ZwwqXRCCf91QfgE4nveNc4=
 github.com/brynbellomy/go-structomancer v1.0.2/go.mod h1:ksDiqWcC0cdNSgSCeza3WdV5ffC9gkkKk1EXEakqrPM=
+github.com/brynbellomy/go-structomancer v1.0.3/go.mod h1:ksDiqWcC0cdNSgSCeza3WdV5ffC9gkkKk1EXEakqrPM=
 github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae h1:FO8VxsnMvWNRzx3vGjBmS2kotWl9f455Yj0H+9k01zk=
 github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae/go.mod h1:ZecQZYfGLYeVNx5ooyrBwTVsXx+7mi7bpuQLgTxClfQ=
 github.com/btcsuite/btcd v0.0.0-20190213025234-306aecffea32 h1:qkOC5Gd33k54tobS36cXdAzJbeHaduLtnLQQwNoIi78=

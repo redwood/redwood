@@ -8,7 +8,7 @@ import (
 	"redwood.dev/tree"
 )
 
-func TestMemoryNode_Set(T *testing.T) {
+func TestMemoryNode_Set(t *testing.T) {
 	tests := []struct {
 		name       string
 		setKeypath tree.Keypath
@@ -31,39 +31,39 @@ func TestMemoryNode_Set(T *testing.T) {
 
 	for _, test := range tests {
 		test := test
-		T.Run(test.name, func(T *testing.T) {
+		t.Run(test.name, func(t *testing.T) {
 			state := tree.NewMemoryNode().NodeAt(test.atKeypath, nil).(*tree.MemoryNode)
 
 			err := state.Set(test.setKeypath, test.rng, test.fixture.input)
-			require.NoError(T, err)
+			require.NoError(t, err)
 
 			prefixOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
 			expectedNodesFromSetKeypath := len(prefixOutputs)
 
-			expectedNumValues := countNodesOfType(NodeTypeValue, test.fixture.output)
-			expectedNumSlices := countNodesOfType(NodeTypeSlice, test.fixture.output)
-			expectedNumMaps := countNodesOfType(NodeTypeMap, test.fixture.output) + expectedNodesFromSetKeypath
+			expectedNumValues := countNodesOfType(tree.NodeTypeValue, test.fixture.output)
+			expectedNumSlices := countNodesOfType(tree.NodeTypeSlice, test.fixture.output)
+			expectedNumMaps := countNodesOfType(tree.NodeTypeMap, test.fixture.output) + expectedNodesFromSetKeypath
 			expectedNumNodes := expectedNumValues + expectedNumSlices + expectedNumMaps
-			require.Equal(T, expectedNumValues, len(state.values))
-			require.Equal(T, expectedNumNodes, len(state.nodeTypes))
-			require.Equal(T, expectedNumNodes, len(state.keypaths))
+			require.Equal(t, expectedNumValues, len(state.Values()))
+			require.Equal(t, expectedNumNodes, len(state.NodeTypes()))
+			require.Equal(t, expectedNumNodes, len(state.Keypaths()))
 
 			expected := prefixFixtureOutputs(test.setKeypath, test.fixture.output)
 			expected = append(prefixOutputs, expected...)
 
-			for i, kp := range state.keypaths {
-				require.Equal(T, expected[i].keypath, kp)
-				require.Equal(T, expected[i].nodeType, state.nodeTypes[string(kp)])
-				if state.nodeTypes[string(kp)] == NodeTypeValue {
-					require.Equal(T, expected[i].value, state.values[string(kp)])
+			for i, kp := range state.Keypaths() {
+				require.Equal(t, expected[i].keypath, kp)
+				require.Equal(t, expected[i].nodeType, state.NodeTypes()[string(kp)])
+				if state.NodeTypes()[string(kp)] == tree.NodeTypeValue {
+					require.Equal(t, expected[i].value, state.Values()[string(kp)])
 				}
 			}
 		})
 	}
 }
 
-func TestMemoryNode_SetNode(T *testing.T) {
-	T.Run("inner tree.MemoryNode", func(T *testing.T) {
+func TestMemoryNode_SetNode(t *testing.T) {
+	t.Run("inner tree.MemoryNode", func(t *testing.T) {
 		state := tree.NewMemoryNode().(*tree.MemoryNode)
 		innerNode := tree.NewMemoryNode().(*tree.MemoryNode)
 
@@ -72,19 +72,19 @@ func TestMemoryNode_SetNode(T *testing.T) {
 			"two":   M{"two a": false, "two b": nil},
 			"three": "hello",
 		})
-		require.NoError(T, err)
+		require.NoError(t, err)
 
 		err = innerNode.Set(tree.Keypath("bar"), nil, M{
 			"baz": M{
 				"xyzzy": "zork",
 			},
 		})
-		require.NoError(T, err)
+		require.NoError(t, err)
 
 		err = state.Set(tree.Keypath("foo/two"), nil, innerNode)
-		require.NoError(T, err)
+		require.NoError(t, err)
 
-		require.Len(T, state.keypaths, 5)
+		require.Len(t, state.Keypaths(), 5)
 
 		expected := M{
 			"foo": M{
@@ -101,14 +101,14 @@ func TestMemoryNode_SetNode(T *testing.T) {
 		}
 
 		received, exists, err := state.Value(nil, nil)
-		require.NoError(T, err)
-		require.True(T, exists)
-		require.Equal(T, expected, received)
+		require.NoError(t, err)
+		require.True(t, exists)
+		require.Equal(t, expected, received)
 	})
 }
 
-func TestMemoryNode_ParentNodeFor(T *testing.T) {
-	T.Run("non-root node", func(T *testing.T) {
+func TestMemoryNode_ParentNodeFor(t *testing.T) {
+	t.Run("non-root node", func(t *testing.T) {
 		state := tree.NewMemoryNode().(*tree.MemoryNode)
 		innerNode := tree.NewMemoryNode().(*tree.MemoryNode)
 
@@ -117,25 +117,25 @@ func TestMemoryNode_ParentNodeFor(T *testing.T) {
 			"two":   M{"two a": false, "two b": nil},
 			"three": "hello",
 		})
-		require.NoError(T, err)
+		require.NoError(t, err)
 
 		err = innerNode.Set(tree.Keypath("bar"), nil, M{
 			"baz": M{
 				"xyzzy": "zork",
 			},
 		})
-		require.NoError(T, err)
+		require.NoError(t, err)
 
 		err = state.Set(tree.Keypath("foo/two"), nil, innerNode)
-		require.NoError(T, err)
+		require.NoError(t, err)
 
 		node, keypath := state.ParentNodeFor(tree.Keypath("foo/two/bar/baz/xyzzy"))
-		require.Equal(T, tree.Keypath("bar/baz/xyzzy"), keypath)
+		require.Equal(t, tree.Keypath("bar/baz/xyzzy"), keypath)
 		memNode := node.(*tree.MemoryNode)
-		require.Equal(T, innerNode.keypaths, memNode.keypaths)
+		require.Equal(t, innerNode.Keypaths(), memNode.Keypaths())
 	})
 
-	T.Run("root node", func(T *testing.T) {
+	t.Run("root node", func(t *testing.T) {
 		state := tree.NewMemoryNode().(*tree.MemoryNode)
 		innerNode := tree.NewMemoryNode().(*tree.MemoryNode)
 
@@ -144,26 +144,26 @@ func TestMemoryNode_ParentNodeFor(T *testing.T) {
 			"two":   M{"two a": false, "two b": nil},
 			"three": "hello",
 		})
-		require.NoError(T, err)
+		require.NoError(t, err)
 
 		err = innerNode.Set(tree.Keypath("bar"), nil, M{
 			"baz": M{
 				"xyzzy": "zork",
 			},
 		})
-		require.NoError(T, err)
+		require.NoError(t, err)
 
 		err = state.Set(nil, nil, innerNode)
-		require.NoError(T, err)
+		require.NoError(t, err)
 
 		node, keypath := state.ParentNodeFor(tree.Keypath("bar/baz/xyzzy"))
-		require.Equal(T, tree.Keypath("bar/baz/xyzzy"), keypath)
+		require.Equal(t, tree.Keypath("bar/baz/xyzzy"), keypath)
 		memNode := node.(*tree.MemoryNode)
-		require.Equal(T, innerNode.keypaths, memNode.keypaths)
+		require.Equal(t, innerNode.Keypaths(), memNode.Keypaths())
 	})
 }
 
-func TestMemoryNode_Delete(T *testing.T) {
+func TestMemoryNode_Delete(t *testing.T) {
 	tests := []struct {
 		name          string
 		setKeypath    tree.Keypath
@@ -187,39 +187,39 @@ func TestMemoryNode_Delete(T *testing.T) {
 
 	for _, test := range tests {
 		test := test
-		T.Run(test.name, func(T *testing.T) {
+		t.Run(test.name, func(t *testing.T) {
 			state := tree.NewMemoryNode().(*tree.MemoryNode)
 
 			err := state.Set(test.setKeypath, test.setRange, test.fixture.input)
-			require.NoError(T, err)
+			require.NoError(t, err)
 
 			err = state.Delete(test.deleteKeypath, test.deleteRange)
-			require.NoError(T, err)
+			require.NoError(t, err)
 
 			remainingOutputs := removeFixtureOutputsWithPrefix(test.deleteKeypath, test.fixture.output...)
 
-			// expectedNumValues := countNodesOfType(NodeTypeValue, remainingOutputs)
-			// expectedNumSlices := countNodesOfType(NodeTypeSlice, remainingOutputs)
-			// expectedNumMaps := countNodesOfType(NodeTypeMap, remainingOutputs) + test.deleteKeypath.NumParts()
+			// expectedNumValues := countNodesOfType(tree.NodeTypeValue, remainingOutputs)
+			// expectedNumSlices := countNodesOfType(tree.NodeTypeSlice, remainingOutputs)
+			// expectedNumMaps := countNodesOfType(tree.NodeTypeMap, remainingOutputs) + test.deleteKeypath.NumParts()
 			// expectedNumNodes := expectedNumValues + expectedNumSlices + expectedNumMaps
-			// require.Equal(T, expectedNumValues, len(state.values))
-			// require.Equal(T, expectedNumNodes, len(state.nodeTypes))
-			// require.Equal(T, expectedNumNodes, len(state.keypaths))
+			// require.Equal(t, expectedNumValues, len(state.Values()))
+			// require.Equal(t, expectedNumNodes, len(state.NodeTypes()))
+			// require.Equal(t, expectedNumNodes, len(state.Keypaths()))
 
 			setKeypathOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
 			expected := append(setKeypathOutputs, remainingOutputs...)
-			for i, kp := range state.keypaths {
-				require.Equal(T, expected[i].keypath, kp)
-				require.Equal(T, expected[i].nodeType, state.nodeTypes[string(kp)])
-				if state.nodeTypes[string(kp)] == NodeTypeValue {
-					require.Equal(T, expected[i].value, state.values[string(kp)])
+			for i, kp := range state.Keypaths() {
+				require.Equal(t, expected[i].keypath, kp)
+				require.Equal(t, expected[i].nodeType, state.NodeTypes()[string(kp)])
+				if state.NodeTypes()[string(kp)] == tree.NodeTypeValue {
+					require.Equal(t, expected[i].value, state.Values()[string(kp)])
 				}
 			}
 		})
 	}
 }
 
-func TestMemoryNode_Iterator(T *testing.T) {
+func TestMemoryNode_Iterator(t *testing.T) {
 	tests := []struct {
 		name        string
 		setKeypath  tree.Keypath
@@ -253,7 +253,7 @@ func TestMemoryNode_Iterator(T *testing.T) {
 
 	for _, test := range tests {
 		test := test
-		T.Run(test.name, func(T *testing.T) {
+		t.Run(test.name, func(t *testing.T) {
 			state := tree.NewMemoryNode()
 			state.Set(test.setKeypath, nil, test.fixture.input)
 
@@ -267,16 +267,16 @@ func TestMemoryNode_Iterator(T *testing.T) {
 			var i int
 			for iter.Rewind(); iter.Valid(); iter.Next() {
 				node := iter.Node()
-				require.Equal(T, expected[i].keypath, node.tree.Keypath())
+				require.Equal(t, expected[i].keypath, node.Keypath())
 				i++
 			}
-			require.Equal(T, len(expected), i)
+			require.Equal(t, len(expected), i)
 
 		})
 	}
 }
 
-func TestMemoryNode_ChildIterator(T *testing.T) {
+func TestMemoryNode_ChildIterator(t *testing.T) {
 	tests := []struct {
 		name        string
 		setKeypath  tree.Keypath
@@ -310,7 +310,7 @@ func TestMemoryNode_ChildIterator(T *testing.T) {
 
 	for _, test := range tests {
 		test := test
-		T.Run(test.name, func(T *testing.T) {
+		t.Run(test.name, func(t *testing.T) {
 			state := tree.NewMemoryNode()
 			state.Set(test.setKeypath, nil, test.fixture.input)
 
@@ -324,16 +324,16 @@ func TestMemoryNode_ChildIterator(T *testing.T) {
 			var i int
 			for iter.Rewind(); iter.Valid(); iter.Next() {
 				node := iter.Node()
-				require.Equal(T, expected[i].keypath, node.tree.Keypath())
+				require.Equal(t, expected[i].keypath, node.Keypath())
 				i++
 			}
-			require.Equal(T, len(expected), i)
+			require.Equal(t, len(expected), i)
 
 		})
 	}
 }
 
-func TestMemoryNode_DepthFirstIterator(T *testing.T) {
+func TestMemoryNode_DepthFirstIterator(t *testing.T) {
 	tests := []struct {
 		name        string
 		setKeypath  tree.Keypath
@@ -368,7 +368,7 @@ func TestMemoryNode_DepthFirstIterator(T *testing.T) {
 
 	for _, test := range tests {
 		test := test
-		T.Run(test.name, func(T *testing.T) {
+		t.Run(test.name, func(t *testing.T) {
 			state := tree.NewMemoryNode()
 			state.Set(test.setKeypath, nil, test.fixture.input)
 
@@ -383,10 +383,10 @@ func TestMemoryNode_DepthFirstIterator(T *testing.T) {
 			var i int
 			for iter.Rewind(); iter.Valid(); iter.Next() {
 				node := iter.Node()
-				require.Equal(T, expected[i].keypath, node.tree.Keypath())
+				require.Equal(t, expected[i].keypath, node.Keypath())
 				i++
 			}
-			require.Equal(T, len(expected), i)
+			require.Equal(t, len(expected), i)
 
 		})
 	}
@@ -406,7 +406,7 @@ func BenchmarkDepthFirstIterator(b *testing.B) {
 			if node == nil {
 				break
 			}
-			a = append(a, node.(*tree.MemoryNode).keypath)
+			a = append(a, node.(*tree.MemoryNode).Keypath())
 		}
 	}
 }
@@ -480,11 +480,11 @@ func walkTree(tree interface{}, fn func(keypath []string, val interface{}) error
 	return nil
 }
 
-func TestMemoryNode_CopyToMemory(T *testing.T) {
-	//state := tree.NewMemoryNode(NodeTypeMap).(*tree.MemoryNode)
+func TestMemoryNode_CopyToMemory(t *testing.T) {
+	//state := tree.NewMemoryNode(tree.NodeTypeMap).(*tree.MemoryNode)
 	//
 	//_, err := state.Set(nil, nil, testVal1)
-	//require.NoError(T, err)
+	//require.NoError(t, err)
 	//
 	//expectedKeypaths := []tree.Keypath{
 	//    tree.Keypath("flox"),
@@ -499,34 +499,34 @@ func TestMemoryNode_CopyToMemory(T *testing.T) {
 	//
 	//err = state.View(func(node *DBNode) error {
 	//    copied, err := node.NodeAt(tree.Keypath("flox")).CopyToMemory(nil)
-	//    require.NoError(T, err)
+	//    require.NoError(t, err)
 	//
 	//    memnode := copied.(*tree.MemoryNode)
-	//    for i := range memnode.keypaths {
-	//        require.Equal(T, expectedKeypaths[i], memnode.keypaths[i])
+	//    for i := range memnode.Keypaths() {
+	//        require.Equal(t, expectedKeypaths[i], memnode.Keypaths()[i])
 	//    }
 	//    return nil
 	//})
-	//require.NoError(T, err)
+	//require.NoError(t, err)
 }
 
-func TestMemoryNode_CopyToMemory_AtKeypath(T *testing.T) {
+func TestMemoryNode_CopyToMemory_AtKeypath(t *testing.T) {
 	node := tree.NewMemoryNode()
 	err := node.Set(nil, nil, fixture1.input)
-	require.NoError(T, err)
+	require.NoError(t, err)
 
 	copied, err := node.NodeAt(tree.Keypath("asdf"), nil).CopyToMemory(nil, nil)
-	require.NoError(T, err)
+	require.NoError(t, err)
 
 	expected := filterFixtureOutputsWithPrefix(tree.Keypath("asdf"), fixture1.output...)
 
 	memnode := copied.(*tree.MemoryNode)
-	for i, kp := range memnode.keypaths {
-		require.Equal(T, expected[i].keypath, kp)
-		require.Equal(T, expected[i].nodeType, memnode.nodeTypes[string(kp)])
-		if memnode.nodeTypes[string(kp)] == NodeTypeSlice || memnode.nodeTypes[string(kp)] == NodeTypeMap {
-			require.Equal(T, len(expected[i].value.([]interface{})), memnode.contentLengths[string(kp)])
+	for i, kp := range memnode.Keypaths() {
+		require.Equal(t, expected[i].keypath, kp)
+		require.Equal(t, expected[i].nodeType, memnode.NodeTypes()[string(kp)])
+		if memnode.NodeTypes()[string(kp)] == tree.NodeTypeSlice || memnode.NodeTypes()[string(kp)] == tree.NodeTypeMap {
+			require.Equal(t, uint64(len(expected[i].value.([]interface{}))), memnode.ContentLengths()[string(kp)])
 		}
 	}
-	require.NoError(T, err)
+	require.NoError(t, err)
 }

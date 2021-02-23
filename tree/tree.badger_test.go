@@ -2,7 +2,6 @@ package tree_test
 
 import (
 	"fmt"
-	"math/rand"
 	"testing"
 
 	"github.com/dgraph-io/badger/v2"
@@ -51,8 +50,8 @@ func TestVersionedDBTree_Value_MapWithRange(t *testing.T) {
 			},
 		}},
 		{0, 0, M{}},
-		{5, 5, ErrInvalidRange},
-		{6, 6, ErrInvalidRange},
+		{5, 5, tree.ErrInvalidRange},
+		{6, 6, tree.ErrInvalidRange},
 		{-2, 0, M{
 			"floxxx": "asdf123",
 			"hello": M{
@@ -114,7 +113,7 @@ func TestVersionedDBTree_Value_SliceWithRange(t *testing.T) {
 			float64(321.23),
 		}},
 		{0, 0, S{}},
-		{4, 4, ErrInvalidRange},
+		{4, 4, tree.ErrInvalidRange},
 		{-2, 0, S{
 			float64(321.23),
 			"hello",
@@ -153,8 +152,6 @@ func TestDBNode_Set_NoRange(t *testing.T) {
 
 		state := db.StateAtVersion(nil, true)
 
-		fmt.Println("============")
-
 		err := state.Set(tree.Keypath("data/flox"), nil, S{"a", "b", "c", "d"})
 		require.NoError(t, err)
 
@@ -163,7 +160,6 @@ func TestDBNode_Set_NoRange(t *testing.T) {
 
 		state = db.StateAtVersion(nil, false)
 		defer state.Close()
-		state.DebugPrint(debugPrint, true, 0)
 
 		val, exists, err := state.Value(tree.Keypath("data/flox"), nil)
 		require.NoError(t, err)
@@ -355,7 +351,7 @@ func TestVersionedDBTree_Set_Range_String(t *testing.T) {
 	defer db.DeleteDB()
 	v := types.RandomID()
 
-	err = db.Update(&v, func(tx *DBNode) error {
+	err := update(db, &v, func(tx *tree.DBNode) error {
 		err := tx.Set(tree.Keypath("foo/string"), nil, "abcdefgh")
 		require.NoError(t, err)
 		return nil
@@ -371,8 +367,8 @@ func TestVersionedDBTree_Set_Range_String(t *testing.T) {
 	require.Equal(t, "abcdefgh", str)
 	state.Close()
 
-	err = db.Update(&v, func(tx *DBNode) error {
-		err := tx.Set(tree.Keypath("foo/string"), &db.Range{3, 6}, "xx")
+	err = update(db, &v, func(tx *tree.DBNode) error {
+		err := tx.Set(tree.Keypath("foo/string"), &tree.Range{3, 6}, "xx")
 		require.NoError(t, err)
 		return nil
 	})
@@ -467,7 +463,6 @@ func TestDBNode_Delete_NoRange(t *testing.T) {
 		require.NoError(t, err)
 
 		state = db.StateAtVersion(nil, false)
-		state.DebugPrint(debugPrint, true, 0)
 
 		expected := append(
 			makeSetKeypathFixtureOutputs(tree.Keypath("data")),
@@ -480,7 +475,7 @@ func TestDBNode_Delete_NoRange(t *testing.T) {
 
 		i := 0
 		for iter.Rewind(); iter.Valid(); iter.Next() {
-			require.Equal(t, expected[i].keypath, iter.Node().tree.Keypath())
+			require.Equal(t, expected[i].keypath, iter.Node().Keypath())
 			i++
 		}
 	})
@@ -513,10 +508,10 @@ func TestVersionedDBTree_CopyToMemory(t *testing.T) {
 				expected := filterFixtureOutputsWithPrefix(test.keypath, fixture1.output...)
 				expected = removeFixtureOutputPrefixes(test.keypath, expected...)
 
-				memnode := copied.(*MemoryNode)
-				require.Equal(t, len(expected), len(memnode.keypaths))
-				for i := range memnode.keypaths {
-					require.Equal(t, expected[i].keypath, memnode.keypaths[i])
+				memnode := copied.(*tree.MemoryNode)
+				require.Equal(t, len(expected), len(memnode.Keypaths()))
+				for i := range memnode.Keypaths() {
+					require.Equal(t, expected[i].keypath, memnode.Keypaths()[i])
 				}
 			})
 		}
@@ -538,10 +533,10 @@ func TestVersionedDBTree_CopyToMemory(t *testing.T) {
 				expected := filterFixtureOutputsWithPrefix(test.keypath, fixture1.output...)
 				expected = removeFixtureOutputPrefixes(test.keypath, expected...)
 
-				memnode := copied.(*MemoryNode)
-				require.Equal(t, len(expected), len(memnode.keypaths))
-				for i := range memnode.keypaths {
-					require.Equal(t, expected[i].keypath, memnode.keypaths[i])
+				memnode := copied.(*tree.MemoryNode)
+				require.Equal(t, len(expected), len(memnode.Keypaths()))
+				for i := range memnode.Keypaths() {
+					require.Equal(t, expected[i].keypath, memnode.Keypaths()[i])
 				}
 			})
 		}
@@ -599,7 +594,7 @@ func TestDBNode_Iterator(t *testing.T) {
 			var i int
 			for iter.Rewind(); iter.Valid(); iter.Next() {
 				node := iter.Node()
-				require.Equal(t, expected[i].keypath, node.tree.Keypath())
+				require.Equal(t, expected[i].keypath, node.Keypath())
 				i++
 			}
 			require.Equal(t, len(expected), i)
@@ -632,53 +627,53 @@ func TestDBNode_ReusableIterator(t *testing.T) {
 
 	iter.Rewind()
 	require.True(t, iter.Valid())
-	require.Equal(t, tree.Keypath("foo"), iter.Node().tree.Keypath())
+	require.Equal(t, tree.Keypath("foo"), iter.Node().Keypath())
 
 	iter.Next()
 	require.True(t, iter.Valid())
-	require.Equal(t, tree.Keypath("foo/aaa"), iter.Node().tree.Keypath())
+	require.Equal(t, tree.Keypath("foo/aaa"), iter.Node().Keypath())
 
 	iter.Next()
 	require.True(t, iter.Valid())
-	require.Equal(t, tree.Keypath("foo/bbb"), iter.Node().tree.Keypath())
+	require.Equal(t, tree.Keypath("foo/bbb"), iter.Node().Keypath())
 
 	iter.Next()
 	require.True(t, iter.Valid())
-	require.Equal(t, tree.Keypath("foo/ccc"), iter.Node().tree.Keypath())
+	require.Equal(t, tree.Keypath("foo/ccc"), iter.Node().Keypath())
 
 	{
 		reusableIter := iter.Node().Iterator(tree.Keypath("111"), true, 10)
-		require.IsType(t, &reusableIterator{}, reusableIter)
+		require.IsType(t, &tree.ReusableIterator{}, reusableIter)
 
 		reusableIter.Rewind()
 		require.True(t, reusableIter.Valid())
-		require.Equal(t, tree.Keypath("foo/ccc/111"), reusableIter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ccc/111"), reusableIter.Node().Keypath())
 
 		reusableIter.Next()
 		require.True(t, reusableIter.Valid())
-		require.Equal(t, tree.Keypath("foo/ccc/111/a"), reusableIter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ccc/111/a"), reusableIter.Node().Keypath())
 
 		reusableIter.Next()
 		require.True(t, reusableIter.Valid())
-		require.Equal(t, tree.Keypath("foo/ccc/111/b"), reusableIter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ccc/111/b"), reusableIter.Node().Keypath())
 
 		reusableIter.Next()
 		require.True(t, reusableIter.Valid())
-		require.Equal(t, tree.Keypath("foo/ccc/111/c"), reusableIter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ccc/111/c"), reusableIter.Node().Keypath())
 
 		reusableIter.Next()
 		require.False(t, reusableIter.Valid())
 
 		require.True(t, iter.Valid())
-		require.Equal(t, tree.Keypath("foo/ccc"), iter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ccc"), iter.Node().Keypath())
 
 		reusableIter.Close()
 
-		require.Equal(t, []byte("foo/ccc"), iter.(*dbIterator).iter.Item().Key()[33:])
+		require.Equal(t, []byte("foo/ccc"), iter.(*tree.DBIterator).BadgerIter().Item().Key()[33:])
 
 		iter.Next()
 		require.True(t, iter.Valid())
-		require.Equal(t, tree.Keypath("foo/ccc/111"), iter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ccc/111"), iter.Node().Keypath())
 	}
 }
 
@@ -732,7 +727,7 @@ func TestDBNode_ChildIterator(t *testing.T) {
 			var i int
 			for iter.Rewind(); iter.Valid(); iter.Next() {
 				node := iter.Node()
-				require.Equal(t, expected[i].keypath, node.tree.Keypath())
+				require.Equal(t, expected[i].keypath, node.Keypath())
 				i++
 			}
 			require.Equal(t, len(expected), i)
@@ -765,41 +760,41 @@ func TestDBNode_ReusableChildIterator(t *testing.T) {
 
 	iter.Rewind()
 	require.True(t, iter.Valid())
-	require.Equal(t, tree.Keypath("foo/aaa"), iter.Node().tree.Keypath())
+	require.Equal(t, tree.Keypath("foo/aaa"), iter.Node().Keypath())
 
 	iter.Next()
 	require.True(t, iter.Valid())
-	require.Equal(t, tree.Keypath("foo/bbb"), iter.Node().tree.Keypath())
+	require.Equal(t, tree.Keypath("foo/bbb"), iter.Node().Keypath())
 
 	iter.Next()
 	require.True(t, iter.Valid())
-	require.Equal(t, tree.Keypath("foo/ccc"), iter.Node().tree.Keypath())
+	require.Equal(t, tree.Keypath("foo/ccc"), iter.Node().Keypath())
 
 	{
 		reusableIter := iter.Node().Iterator(tree.Keypath("111"), true, 10)
-		require.IsType(t, &reusableIterator{}, reusableIter)
+		require.IsType(t, &tree.ReusableIterator{}, reusableIter)
 
 		reusableIter.Rewind()
 		require.True(t, reusableIter.Valid())
-		require.Equal(t, tree.Keypath("foo/ccc/111"), reusableIter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ccc/111"), reusableIter.Node().Keypath())
 
 		reusableIter.Next()
 		require.True(t, reusableIter.Valid())
-		require.Equal(t, tree.Keypath("foo/ccc/111/a"), reusableIter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ccc/111/a"), reusableIter.Node().Keypath())
 
 		reusableIter.Next()
 		require.True(t, reusableIter.Valid())
-		require.Equal(t, tree.Keypath("foo/ccc/111/b"), reusableIter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ccc/111/b"), reusableIter.Node().Keypath())
 
 		reusableIter.Next()
 		require.True(t, reusableIter.Valid())
-		require.Equal(t, tree.Keypath("foo/ccc/111/c"), reusableIter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ccc/111/c"), reusableIter.Node().Keypath())
 
 		reusableIter.Next()
 		require.False(t, reusableIter.Valid())
 
 		require.True(t, iter.Valid())
-		require.Equal(t, tree.Keypath("foo/ccc"), iter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ccc"), iter.Node().Keypath())
 
 		reusableIter.Close()
 
@@ -807,7 +802,7 @@ func TestDBNode_ReusableChildIterator(t *testing.T) {
 
 		iter.Next()
 		require.True(t, iter.Valid())
-		require.Equal(t, tree.Keypath("foo/ddd"), iter.Node().tree.Keypath())
+		require.Equal(t, tree.Keypath("foo/ddd"), iter.Node().Keypath())
 	}
 }
 
@@ -863,7 +858,7 @@ func TestDBNode_DepthFirstIterator(t *testing.T) {
 			var i int
 			for iter.Rewind(); iter.Valid(); iter.Next() {
 				node := iter.Node()
-				require.Equal(t, expected[i].keypath, node.tree.Keypath())
+				require.Equal(t, expected[i].keypath, node.Keypath())
 				i++
 			}
 			require.Equal(t, len(expected), i)
@@ -873,36 +868,34 @@ func TestDBNode_DepthFirstIterator(t *testing.T) {
 }
 
 func TestVersionedDBTree_CopyVersion(t *testing.T) {
-	i := rand.Int()
-	tree, err := NewVersionedDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i))
-	require.NoError(t, err)
-	defer tree.DeleteDB()
+	db := testutils.SetupVersionedDBTree(t)
+	defer db.DeleteDB()
 
 	srcVersion := types.RandomID()
 	dstVersion := types.RandomID()
 
-	err = tree.Update(&srcVersion, func(tx *DBNode) error {
+	err := update(db, &srcVersion, func(tx *tree.DBNode) error {
 		err := tx.Set(nil, nil, fixture1.input)
 		require.NoError(t, err)
 		return nil
 	})
 	require.NoError(t, err)
 
-	err = tree.CopyVersion(dstVersion, srcVersion)
+	err = db.CopyVersion(dstVersion, srcVersion)
 	require.NoError(t, err)
 
-	srcVal, exists, err := tree.StateAtVersion(&srcVersion, false).Value(nil, nil)
+	srcVal, exists, err := db.StateAtVersion(&srcVersion, false).Value(nil, nil)
 	require.NoError(t, err)
 	require.True(t, exists)
 	require.Equal(t, srcVal, fixture1.input)
 
-	dstVal, exists, err := tree.StateAtVersion(&dstVersion, false).Value(nil, nil)
+	dstVal, exists, err := db.StateAtVersion(&dstVersion, false).Value(nil, nil)
 	require.NoError(t, err)
 	require.True(t, exists)
 	require.Equal(t, dstVal, fixture1.input)
 
 	var count int
-	err = tree.db.View(func(txn *badger.Txn) error {
+	err = db.BadgerDB().View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = true
 		iter := txn.NewIterator(opts)
@@ -925,7 +918,7 @@ func TestVersionedDBTree_CopyVersion(t *testing.T) {
 //  require.NoError(t, err)
 //  defer tree.DeleteDB()
 
-//  err = tree.Update(func(tx *DBNode) error {
+//  err = update(tree, func(tx *tree.DBNode) error {
 //      _, err := tx.Set(nil, nil, testVal1)
 //      require.NoError(t, err)
 //      return nil
@@ -966,8 +959,8 @@ func TestVersionedDBTree_CopyVersion(t *testing.T) {
 //  require.NoError(t, err)
 
 //  memnode := copied.(*MemoryNode)
-//  for i := range memnode.keypaths {
-//      require.Equal(t, expectedKeypaths[i], memnode.keypaths[i])
+//  for i := range memnode.Keypaths() {
+//      require.Equal(t, expectedKeypaths[i], memnode.Keypaths()[i])
 //  }
 // }
 
@@ -985,7 +978,7 @@ func TestVersionedDBTree_CopyVersion(t *testing.T) {
 //    encodeGoValue()
 //}
 
-//func debugPrint(t *testing.T, tree *DBNode) {
+//func debugPrint(t *testing.T, tree *tree.DBNode) {
 //    keypaths, values, err := tree.Contents(nil, nil)
 //    require.NoError(t, err)
 //
@@ -1000,13 +993,13 @@ func TestVersionedDBTree_CopyVersion(t *testing.T) {
 //    fmt.Println(prettyJSON(v))
 //}
 
-func (t *VersionedDBTree) View(v *types.ID, fn func(*DBNode) error) error {
+func view(t *tree.VersionedDBTree, v *types.ID, fn func(*tree.DBNode) error) error {
 	state := t.StateAtVersion(v, false)
 	defer state.Close()
 	return fn(state)
 }
 
-func (t *VersionedDBTree) Update(v *types.ID, fn func(*DBNode) error) error {
+func update(t *tree.VersionedDBTree, v *types.ID, fn func(*tree.DBNode) error) error {
 	state := t.StateAtVersion(v, true)
 	defer state.Close()
 
