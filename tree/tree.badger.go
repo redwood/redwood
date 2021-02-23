@@ -525,6 +525,16 @@ func (tx *DBNode) Scan(into interface{}) error {
 		*dest = x
 		return nil
 
+	case *[]byte:
+		x, is, err := tx.BytesValue(nil)
+		if err != nil {
+			return err
+		} else if !is {
+			return makeScanError(tx, dest)
+		}
+		*dest = x
+		return nil
+
 	case *bool:
 		x, is, err := tx.BoolValue(nil)
 		if err != nil {
@@ -664,6 +674,8 @@ func (tx *DBNode) Length() (uint64, error) {
 		switch valueType {
 		case ValueTypeString:
 			return length, nil
+		case ValueTypeBytes:
+			return length, nil
 		default:
 			return 0, nil
 		}
@@ -722,7 +734,7 @@ func (tx *DBNode) setRangeString(absKeypath Keypath, rng *Range, encodedVal []by
 	nodeType, valueType, length, data, err := decodeNode(encodedVal)
 	if err != nil {
 		return err
-	} else if valueType != ValueTypeString {
+	} else if valueType != ValueTypeString && valueType != ValueTypeBytes {
 		return errors.Wrapf(ErrRangeOverNonSlice, "(keypath: %v, %v, %v)", absKeypath, nodeType, valueType)
 	} else if !rng.ValidForLength(length) {
 		return errors.WithStack(ErrInvalidRange)
@@ -733,7 +745,11 @@ func (tx *DBNode) setRangeString(absKeypath Keypath, rng *Range, encodedVal []by
 	newLen := 2 + length - rng.Size() + uint64(len(spliceVal))
 	newVal := make([]byte, newLen)
 	newVal[0] = 'v'
-	newVal[1] = 's'
+	if valueType == ValueTypeString {
+		newVal[1] = 's'
+	} else {
+		newVal[1] = 'z'
+	}
 	copy(newVal[2:], oldVal[:startIdx])
 	copy(newVal[2+startIdx:], []byte(spliceVal))
 	copy(newVal[2+startIdx+uint64(len(spliceVal)):], oldVal[endIdx:])
@@ -1067,7 +1083,7 @@ func (tx *DBNode) Delete(relKeypath Keypath, rng *Range) (err error) {
 	// If it's a simple NodeTypeValue, handle it without iteration
 	if rootNodeType == NodeTypeValue {
 		if rng != nil {
-			if valueType != ValueTypeString {
+			if valueType != ValueTypeString && valueType != ValueTypeBytes {
 				return errors.Wrapf(ErrRangeOverNonSlice, "(keypath: %v, %v, %v)", rootKeypath, rootNodeType, valueType)
 			} else if !rng.ValidForLength(length) {
 				return ErrInvalidRange
@@ -1079,12 +1095,22 @@ func (tx *DBNode) Delete(relKeypath Keypath, rng *Range) (err error) {
 			}
 
 			startIdx, endIdx := rng.IndicesForLength(length)
-			s := v.(string)
-			s = s[:startIdx] + s[endIdx:]
 
-			// @@TODO: add a "modified" field to the diff?
-			// tx.diff.Remove(tx.rmKeyPrefix(rootKeypath))
-			return tx.Set(rootKeypath, nil, s)
+			if valueType == ValueTypeString {
+				s := v.(string)
+				s = s[:startIdx] + s[endIdx:]
+
+				// @@TODO: add a "modified" field to the diff?
+				// tx.diff.Remove(tx.rmKeyPrefix(rootKeypath))
+				return tx.Set(rootKeypath, nil, s)
+			} else {
+				s := v.([]byte)
+				s = append(s[:startIdx], s[endIdx:]...)
+
+				// @@TODO: add a "modified" field to the diff?
+				// tx.diff.Remove(tx.rmKeyPrefix(rootKeypath))
+				return tx.Set(rootKeypath, nil, s)
+			}
 		}
 
 		tx.diff.Remove(tx.rmKeyPrefix(rootKeypath))
@@ -1715,6 +1741,14 @@ func encodeNode(nodeType NodeType, valueType ValueType, length uint64, value int
 			copy(encoded[2:], []byte(v))
 			return encoded, nil
 
+		case ValueTypeBytes:
+			v := value.([]byte)
+			encoded := make([]byte, 2+len(v))
+			encoded[0] = 'v'
+			encoded[1] = 'z'
+			copy(encoded[2:], v)
+			return encoded, nil
+
 		case ValueTypeNil:
 			encoded := []byte("v0")
 			return encoded, nil
@@ -1751,6 +1785,8 @@ func encodeGoValue(nodeValue interface{}) ([]byte, error) {
 		return encodeNode(NodeTypeValue, ValueTypeFloat, 0, nv)
 	case string:
 		return encodeNode(NodeTypeValue, ValueTypeString, 0, nv)
+	case []byte:
+		return encodeNode(NodeTypeValue, ValueTypeBytes, 0, nv)
 	case nil:
 		return encodeNode(NodeTypeValue, ValueTypeNil, 0, nv)
 	default:
@@ -1786,6 +1822,8 @@ func decodeNode(val []byte) (NodeType, ValueType, uint64, []byte, error) {
 			return NodeTypeValue, ValueTypeFloat, 0, val[2:], nil
 		case 's':
 			return NodeTypeValue, ValueTypeString, uint64(len(val[2:])), val[2:], nil
+		case 'z':
+			return NodeTypeValue, ValueTypeBytes, uint64(len(val[2:])), val[2:], nil
 		case '0':
 			return NodeTypeValue, ValueTypeNil, 0, nil, nil
 		default:
@@ -1867,6 +1905,16 @@ func decodeGoValue(nodeType NodeType, valueType ValueType, length uint64, rng *R
 				return string(data[startIdx:endIdx]), nil
 			}
 			return string(data), nil
+
+		case ValueTypeBytes:
+			if rng != nil {
+				if !rng.ValidForLength(length) {
+					return nil, errors.WithStack(ErrInvalidRange)
+				}
+				startIdx, endIdx := rng.IndicesForLength(length)
+				return data[startIdx:endIdx], nil
+			}
+			return data, nil
 
 		case ValueTypeNil:
 			return nil, nil

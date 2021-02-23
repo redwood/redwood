@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/rpc/v2/json2"
 	"github.com/pkg/errors"
 
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -106,7 +107,7 @@ func (mw *whitelistMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request)
 				return
 			}
 
-			sigpubkey, err := RecoverSigningPubkey(types.HashBytes(challenge), sig)
+			sigpubkey, err := crypto.RecoverSigningPubkey(types.HashBytes(challenge), sig)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return

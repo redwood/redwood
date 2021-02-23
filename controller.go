@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
@@ -276,7 +277,7 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 		}
 	}
 
-	sigPubKey, err := RecoverSigningPubkey(tx.Hash(), tx.Sig)
+	sigPubKey, err := crypto.RecoverSigningPubkey(tx.Hash(), tx.Sig)
 	if err != nil {
 		return errors.Wrap(ErrInvalidSignature, err.Error())
 	} else if sigPubKey.VerifySignature(tx.Hash(), tx.Sig) == false {

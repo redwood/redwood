@@ -28,6 +28,7 @@ import (
 	"go.uber.org/multierr"
 	"golang.org/x/net/publicsuffix"
 
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
@@ -41,8 +42,8 @@ type httpTransport struct {
 	defaultStateURI string
 	ownURL          string
 	listenAddr      string
-	sigkeys         *SigningKeypair
-	enckeys         *EncryptingKeypair
+	sigkeys         *crypto.SigningKeypair
+	enckeys         *crypto.EncryptingKeypair
 	cookieSecret    [32]byte
 	tlsCertFilename string
 	tlsKeyFilename  string
@@ -63,8 +64,8 @@ func NewHTTPTransport(
 	controllerHub ControllerHub,
 	refStore RefStore,
 	peerStore PeerStore,
-	sigkeys *SigningKeypair,
-	enckeys *EncryptingKeypair,
+	sigkeys *crypto.SigningKeypair,
+	enckeys *crypto.EncryptingKeypair,
 	cookieSecret [32]byte,
 	tlsCertFilename, tlsKeyFilename string,
 	devMode bool,
@@ -211,11 +212,8 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Peer discovery
 	{
 		// On every incoming request, advertise other peers via the Alt-Svc header
-		var others []string
-		for _, tuple := range t.peerStore.AllDialInfos() {
-			others = append(others, fmt.Sprintf(`%s="%s"`, tuple.TransportName, tuple.DialAddr))
-		}
-		w.Header().Set("Alt-Svc", strings.Join(others, ", "))
+		altSvcHeader := t.makeAltSvcHeader(t.peerStore.AllDialInfos())
+		w.Header().Set("Alt-Svc", altSvcHeader)
 
 		// Similarly, if other peers give us Alt-Svc headers, track them
 		t.storeAltSvcHeaderPeers(r.Header)
@@ -328,7 +326,7 @@ func (t *httpTransport) serveChallengeIdentityCheckResponse(w http.ResponseWrite
 		return
 	}
 
-	sigpubkey, err := RecoverSigningPubkey(types.HashBytes(challenge), sig)
+	sigpubkey, err := crypto.RecoverSigningPubkey(types.HashBytes(challenge), sig)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -730,7 +728,7 @@ func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Reques
 	}
 
 	bs, err := t.enckeys.OpenMessageFrom(
-		EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
+		crypto.EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
 		encryptedTx.EncryptedPayload,
 	)
 	if err != nil {
@@ -899,7 +897,7 @@ func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, addr
 	}
 
 	// @@TODO: remove .From entirely
-	pubkey, err := RecoverSigningPubkey(tx.Hash(), sig)
+	pubkey, err := crypto.RecoverSigningPubkey(tx.Hash(), sig)
 	if err != nil {
 		http.Error(w, "bad signature", http.StatusBadRequest)
 		return
@@ -909,6 +907,14 @@ func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, addr
 
 	peer := t.makePeerWithAddress(w, nil, address)
 	go t.host.HandleTxReceived(tx, peer)
+}
+
+func (t *httpTransport) makeAltSvcHeader(peerDialInfos []PeerDialInfo) string {
+	var others []string
+	for _, tuple := range peerDialInfos {
+		others = append(others, fmt.Sprintf(`%s="%s"`, tuple.TransportName, tuple.DialAddr))
+	}
+	return strings.Join(others, ", ")
 }
 
 func parseRawParam(r *http.Request) (bool, error) {
@@ -943,7 +949,7 @@ func (t *httpTransport) SetHost(h Host) {
 }
 
 func (t *httpTransport) NewPeerConn(ctx context.Context, dialAddr string) (Peer, error) {
-	if strings.HasPrefix(dialAddr, "localhost") {
+	if dialAddr == t.ownURL || strings.HasPrefix(dialAddr, "localhost") {
 		return nil, errors.WithStack(ErrPeerIsSelf)
 	}
 	return t.makePeer(nil, nil, dialAddr), nil
@@ -1122,6 +1128,30 @@ func (t *httpTransport) makePeerWithAddress(writer io.Writer, flusher http.Flush
 	return peer
 }
 
+func (t *httpTransport) doRequest(req *http.Request) (*http.Response, error) {
+	altSvcHeader := t.makeAltSvcHeader(t.peerStore.AllDialInfos())
+	req.Header.Set("Alt-Svc", altSvcHeader)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	t.storeAltSvcHeaderPeers(resp.Header)
+
+	if resp.StatusCode != 200 {
+		defer resp.Body.Close()
+		bs, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			err = errors.Wrapf(err, "error reading response body")
+			err2 := errors.Errorf("http request errored: (%v) %v", resp.StatusCode, resp.Status)
+			return resp, multierr.Append(err, err2)
+		}
+		return resp, errors.Errorf("http request errored: (%v) %v: %v", resp.StatusCode, resp.Status, string(bs))
+	}
+	return resp, nil
+}
+
 type httpPeer struct {
 	PeerDetails
 
@@ -1169,9 +1199,9 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 	var client http.Client
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "error subscribing to peer (%v) (state URI: %v)", p.DialInfo().DialAddr, stateURI)
 	} else if resp.StatusCode != 200 {
-		return nil, errors.Errorf("error GETting peer: (%v) %v", resp.StatusCode, resp.Status)
+		return nil, errors.Wrapf(err, "error subscribing to peer (%v) (state URI: %v)", p.DialInfo().DialAddr, stateURI)
 	}
 
 	p.t.storeAltSvcHeaderPeers(resp.Header)
@@ -1190,11 +1220,9 @@ func (p *httpPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []ty
 	requestContext, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	if tx.IsPrivate() {
-		if p.DialInfo().DialAddr == "" {
-			p.t.Warn("peer has no DialAddr")
-			return nil
-		}
+	if p.DialInfo().DialAddr == "" {
+		p.t.Warn("peer has no DialAddr")
+		return nil
 	}
 
 	_, peerEncPubkey := p.PublicKeys()
@@ -1203,23 +1231,11 @@ func (p *httpPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []ty
 		return errors.WithStack(err)
 	}
 
-	resp, err := httpClient.Do(req)
+	resp, err := p.t.doRequest(req)
 	if err != nil {
-		return errors.WithStack(err)
+		return errors.Wrapf(err, "error PUTting tx to peer (%v)", p.DialInfo().DialAddr)
 	}
 	defer resp.Body.Close()
-
-	p.t.storeAltSvcHeaderPeers(resp.Header)
-
-	if resp.StatusCode != 200 {
-		bs, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			err = errors.Wrapf(err, "error reading response body")
-			err2 := errors.Errorf("error PUTting to peer %v: (%v) %v", p.DialInfo().DialAddr, resp.StatusCode, resp.Status)
-			return multierr.Append(err, err2)
-		}
-		return errors.Errorf("error PUTting to peer %v: (%v) %v: %v", p.DialInfo().DialAddr, resp.StatusCode, resp.Status, string(bs))
-	}
 	return nil
 }
 
@@ -1243,18 +1259,13 @@ func (p *httpPeer) Ack(stateURI string, txID types.ID) (err error) {
 	if err != nil {
 		return err
 	}
-
 	req.Header.Set("State-URI", stateURI)
 
-	resp, err := httpClient.Do(req)
+	resp, err := p.t.doRequest(req)
 	if err != nil {
-		return err
-	} else if resp.StatusCode != 200 {
-		return errors.Errorf("error ACKing to peer: (%v) %v", resp.StatusCode, resp.Status)
+		return errors.Wrapf(err, "error ACKing to peer (%v)", p.DialInfo().DialAddr)
 	}
 	defer resp.Body.Close()
-
-	p.t.storeAltSvcHeaderPeers(resp.Header)
 	return nil
 }
 
@@ -1276,15 +1287,10 @@ func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error
 	}
 	req.Header.Set("Challenge", hex.EncodeToString(challengeMsg))
 
-	resp, err := httpClient.Do(req)
+	resp, err := p.t.doRequest(req)
 	if err != nil {
-		return err
-	} else if resp.StatusCode != 200 {
-		return errors.Errorf("error verifying peer address: (%v) %v", resp.StatusCode, resp.Status)
+		return errors.Wrapf(err, "error verifying peer address (%v)", p.DialInfo().DialAddr)
 	}
-
-	p.t.storeAltSvcHeaderPeers(resp.Header)
-
 	p.stream.ReadCloser = resp.Body
 	return nil
 }
@@ -1331,6 +1337,27 @@ func (p *httpPeer) ReceiveRefPacket() (FetchRefResponseBody, error) {
 	return FetchRefResponseBody{}, types.ErrUnimplemented
 }
 
+func (p *httpPeer) AnnouncePeers(ctx context.Context, peerDialInfos []PeerDialInfo) (err error) {
+	defer func() { p.UpdateConnStats(err == nil) }()
+
+	if p.DialInfo().DialAddr == "" {
+		p.t.Warn("peer has no DialAddr")
+		return nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "HEAD", p.DialInfo().DialAddr, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := p.t.doRequest(req)
+	if err != nil {
+		return errors.Wrapf(err, "error announcing peers to peer (%v)", p.DialInfo().DialAddr)
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
 func (p *httpPeer) Close() error {
 	if p.stream.ReadCloser != nil {
 		return p.stream.ReadCloser.Close()
@@ -1367,7 +1394,10 @@ func (s *httpReadableSubscription) Read() (_ *SubscriptionMsg, err error) {
 			return nil, errors.New("no encrypted tx sent by http peer")
 		}
 
-		bs, err = s.peer.t.enckeys.OpenMessageFrom(EncryptingPublicKeyFromBytes(msg.EncryptedTx.SenderPublicKey), msg.EncryptedTx.EncryptedPayload)
+		bs, err = s.peer.t.enckeys.OpenMessageFrom(
+			crypto.EncryptingPublicKeyFromBytes(msg.EncryptedTx.SenderPublicKey),
+			msg.EncryptedTx.EncryptedPayload,
+		)
 		if err != nil {
 			return nil, err
 		}

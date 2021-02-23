@@ -79,6 +79,7 @@ type ValueType uint8
 const (
 	ValueTypeInvalid ValueType = iota
 	ValueTypeString
+	ValueTypeBytes
 	ValueTypeUint
 	ValueTypeInt
 	ValueTypeFloat
@@ -90,6 +91,8 @@ func (vt ValueType) String() string {
 	switch vt {
 	case ValueTypeString:
 		return "String"
+	case ValueTypeBytes:
+		return "Bytes"
 	case ValueTypeUint:
 		return "Uint"
 	case ValueTypeInt:

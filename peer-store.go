@@ -6,6 +6,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -14,12 +15,13 @@ import (
 
 type PeerStore interface {
 	AddDialInfos(dialInfos []PeerDialInfo)
-	AddVerifiedCredentials(dialInfo PeerDialInfo, address types.Address, sigpubkey SigningPublicKey, encpubkey EncryptingPublicKey)
+	AddVerifiedCredentials(dialInfo PeerDialInfo, address types.Address, sigpubkey crypto.SigningPublicKey, encpubkey crypto.EncryptingPublicKey)
 	UnverifiedPeers() []PeerDetails
 	Peers() []PeerDetails
 	AllDialInfos() []PeerDialInfo
 	PeerWithDialInfo(dialInfo PeerDialInfo) *peerDetails
 	PeersWithAddress(address types.Address) []PeerDetails
+	PeersFromTransport(transportName string) []PeerDetails
 	PeersFromTransportWithAddress(transportName string, address types.Address) []PeerDetails
 	PeersServingStateURI(stateURI string) []PeerDetails
 	IsKnownPeer(dialInfo PeerDialInfo) bool
@@ -117,8 +119,8 @@ func (s *peerStore) AddDialInfos(dialInfos []PeerDialInfo) {
 func (s *peerStore) AddVerifiedCredentials(
 	dialInfo PeerDialInfo,
 	address types.Address,
-	sigpubkey SigningPublicKey,
-	encpubkey EncryptingPublicKey,
+	sigpubkey crypto.SigningPublicKey,
+	encpubkey crypto.EncryptingPublicKey,
 ) {
 	s.muPeers.Lock()
 	defer s.muPeers.Unlock()
@@ -202,8 +204,21 @@ func (s *peerStore) PeersWithAddress(address types.Address) []PeerDetails {
 
 	var peers []PeerDetails
 	if _, exists := s.peersWithAddress[address]; exists {
-		for _, peer := range s.peersWithAddress[address] {
-			peers = append(peers, peer)
+		for _, peerDetails := range s.peersWithAddress[address] {
+			peers = append(peers, peerDetails)
+		}
+	}
+	return peers
+}
+
+func (s *peerStore) PeersFromTransport(transportName string) []PeerDetails {
+	s.muPeers.RLock()
+	defer s.muPeers.RUnlock()
+
+	var peers []PeerDetails
+	for dialInfo, peerDetails := range s.peers {
+		if dialInfo.TransportName == transportName {
+			peers = append(peers, peerDetails)
 		}
 	}
 	return peers
@@ -215,9 +230,9 @@ func (s *peerStore) PeersFromTransportWithAddress(transport string, address type
 
 	var peers []PeerDetails
 	if _, exists := s.peersWithAddress[address]; exists {
-		for dialInfo, peer := range s.peersWithAddress[address] {
+		for dialInfo, peerDetails := range s.peersWithAddress[address] {
 			if dialInfo.TransportName == transport {
-				peers = append(peers, peer)
+				peers = append(peers, peerDetails)
 			}
 		}
 	}
@@ -247,6 +262,10 @@ func (s *peerStore) IsKnownPeer(dialInfo PeerDialInfo) bool {
 		}
 	}
 	return false
+}
+
+func (s *peerStore) dialInfoHash(dialInfo PeerDialInfo) string {
+	return types.HashBytes([]byte(dialInfo.TransportName + ":" + dialInfo.DialAddr)).Hex()
 }
 
 func (s *peerStore) fetchAllPeerDetails() ([]*peerDetails, error) {
@@ -280,7 +299,7 @@ func (s *peerStore) fetchPeerDetails(dialInfo PeerDialInfo) (*peerDetails, error
 	state := s.state.State(false)
 	defer state.Close()
 
-	dialInfoHash := types.HashBytes([]byte(dialInfo.TransportName + ":" + dialInfo.DialAddr)).Hex()
+	dialInfoHash := s.dialInfoHash(dialInfo)
 	peerKeypath := tree.Keypath("peers").Pushs(dialInfoHash)
 
 	var pd peerDetailsCodec
@@ -292,7 +311,7 @@ func (s *peerStore) fetchPeerDetails(dialInfo PeerDialInfo) (*peerDetails, error
 }
 
 func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDetails, error) {
-	sigpubkey, err := SigningPublicKeyFromBytes([]byte(pd.Sigpubkey))
+	sigpubkey, err := crypto.SigningPublicKeyFromBytes([]byte(pd.Sigpubkey))
 	if err != nil {
 		return nil, err
 	}
@@ -309,9 +328,9 @@ func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDet
 	return &peerDetails{
 		peerStore:   s,
 		dialInfo:    pd.DialInfo,
-		address:     types.AddressFromBytes([]byte(pd.Address)),
+		address:     types.AddressFromBytes(pd.Address),
 		sigpubkey:   sigpubkey,
-		encpubkey:   EncryptingPublicKeyFromBytes([]byte(pd.Sigpubkey)),
+		encpubkey:   crypto.EncryptingPublicKeyFromBytes(pd.Encpubkey),
 		stateURIs:   stateURIs,
 		lastContact: time.Unix(0, int64(pd.LastContact)),
 		lastFailure: time.Unix(0, int64(pd.LastFailure)),
@@ -328,22 +347,22 @@ func (s *peerStore) savePeerDetails(peerDetails *peerDetails) error {
 	state := s.state.State(true)
 	defer state.Close()
 
-	dialInfoHash := types.HashBytes([]byte(peerDetails.dialInfo.TransportName + ":" + peerDetails.dialInfo.DialAddr)).Hex()
+	dialInfoHash := s.dialInfoHash(peerDetails.dialInfo)
 	peerKeypath := tree.Keypath("peers").Pushs(dialInfoHash)
 
 	pdc := peerDetailsCodec{
 		DialInfo:    peerDetails.dialInfo,
-		Address:     string(peerDetails.address.Bytes()),
+		Address:     peerDetails.address.Bytes(),
 		StateURIs:   stateURIs,
 		LastContact: uint64(peerDetails.lastContact.UTC().UnixNano()),
 		LastFailure: uint64(peerDetails.lastFailure.UTC().UnixNano()),
 		Failures:    peerDetails.failures,
 	}
 	if peerDetails.sigpubkey != nil {
-		pdc.Sigpubkey = string(peerDetails.sigpubkey.Bytes())
+		pdc.Sigpubkey = peerDetails.sigpubkey.Bytes()
 	}
 	if peerDetails.encpubkey != nil {
-		pdc.Encpubkey = string(peerDetails.encpubkey.Bytes())
+		pdc.Encpubkey = peerDetails.encpubkey.Bytes()
 	}
 
 	err := state.Set(peerKeypath, nil, pdc)
@@ -356,7 +375,7 @@ func (s *peerStore) savePeerDetails(peerDetails *peerDetails) error {
 type PeerDetails interface {
 	Address() types.Address
 	DialInfo() PeerDialInfo
-	PublicKeys() (SigningPublicKey, EncryptingPublicKey)
+	PublicKeys() (crypto.SigningPublicKey, crypto.EncryptingPublicKey)
 	AddStateURI(stateURI string)
 	RemoveStateURI(stateURI string)
 	StateURIs() utils.StringSet
@@ -365,14 +384,15 @@ type PeerDetails interface {
 	LastContact() time.Time
 	LastFailure() time.Time
 	Failures() uint64
+	Ready() bool
 }
 
 type peerDetails struct {
 	peerStore   *peerStore
 	dialInfo    PeerDialInfo
 	address     types.Address
-	sigpubkey   SigningPublicKey
-	encpubkey   EncryptingPublicKey
+	sigpubkey   crypto.SigningPublicKey
+	encpubkey   crypto.EncryptingPublicKey
 	stateURIs   utils.StringSet
 	lastContact time.Time
 	lastFailure time.Time
@@ -381,9 +401,9 @@ type peerDetails struct {
 
 type peerDetailsCodec struct {
 	DialInfo    PeerDialInfo  `tree:"dialInfo"`
-	Address     string        `tree:"address"`
-	Sigpubkey   string        `tree:"sigpubkey"`
-	Encpubkey   string        `tree:"encpubkey"`
+	Address     []byte        `tree:"address"`
+	Sigpubkey   []byte        `tree:"sigpubkey"`
+	Encpubkey   []byte        `tree:"encpubkey"`
 	StateURIs   []interface{} `tree:"stateURIs"`
 	LastContact uint64        `tree:"lastContact"`
 	LastFailure uint64        `tree:"lastFailure"`
@@ -404,7 +424,7 @@ func (p *peerDetails) Address() types.Address {
 	return p.address
 }
 
-func (p *peerDetails) PublicKeys() (SigningPublicKey, EncryptingPublicKey) {
+func (p *peerDetails) PublicKeys() (crypto.SigningPublicKey, crypto.EncryptingPublicKey) {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
 	return p.sigpubkey, p.encpubkey
@@ -439,11 +459,13 @@ func (p *peerDetails) StateURIs() utils.StringSet {
 func (p *peerDetails) UpdateConnStats(success bool) {
 	p.peerStore.muPeers.Lock()
 	defer p.peerStore.muPeers.Unlock()
+	now := time.Now()
 	if success {
-		p.lastContact = time.Now()
+		p.lastContact = now
 		p.failures = 0
 	} else {
-		p.lastFailure = time.Now()
+		p.lastContact = now
+		p.lastFailure = now
 		p.failures++
 	}
 }
@@ -464,4 +486,10 @@ func (p *peerDetails) Failures() uint64 {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
 	return p.failures
+}
+
+func (p *peerDetails) Ready() bool {
+	p.peerStore.muPeers.RLock()
+	defer p.peerStore.muPeers.RUnlock()
+	return uint64(time.Now().Sub(p.lastFailure)/time.Second) >= p.failures
 }

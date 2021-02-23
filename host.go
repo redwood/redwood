@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -29,7 +30,7 @@ type Host interface {
 	Transport(name string) Transport
 	Controllers() ControllerHub
 	Address() types.Address
-	ChallengePeerIdentity(ctx context.Context, peer Peer) (SigningPublicKey, EncryptingPublicKey, error)
+	ChallengePeerIdentity(ctx context.Context, peer Peer) (crypto.SigningPublicKey, crypto.EncryptingPublicKey, error)
 
 	Peers() []PeerDetails
 	ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan Peer
@@ -50,8 +51,8 @@ type host struct {
 
 	config *Config
 
-	signingKeypair    *SigningKeypair
-	encryptingKeypair *EncryptingKeypair
+	signingKeypair    *crypto.SigningKeypair
+	encryptingKeypair *crypto.EncryptingKeypair
 
 	readableSubscriptions   map[string]*multiReaderSubscription // map[stateURI]
 	readableSubscriptionsMu sync.RWMutex
@@ -60,7 +61,7 @@ type host struct {
 	peerSeenTxs             map[PeerDialInfo]map[string]map[types.ID]bool // map[PeerDialInfo]map[stateURI]map[tx.ID]
 	peerSeenTxsMu           sync.RWMutex
 
-	verifyPeersWorker WorkQueue
+	processPeersTask *utils.PeriodicTask
 
 	controllerHub ControllerHub
 	transports    map[string]Transport
@@ -77,8 +78,8 @@ var (
 )
 
 func NewHost(
-	signingKeypair *SigningKeypair,
-	encryptingKeypair *EncryptingKeypair,
+	signingKeypair *crypto.SigningKeypair,
+	encryptingKeypair *crypto.EncryptingKeypair,
 	transports []Transport,
 	controllerHub ControllerHub,
 	refStore RefStore,
@@ -118,7 +119,7 @@ func (h *host) Start() error {
 
 			// Set up the peer store
 			h.peerStore.OnNewUnverifiedPeer(h.handleNewUnverifiedPeer)
-			h.verifyPeersWorker = NewWorkQueue(1, h.verifyPeers)
+			h.processPeersTask = utils.NewPeriodicTask(10*time.Second, h.processPeers)
 
 			// Set up the controller Hub
 			h.controllerHub.OnNewState(h.handleNewState)
@@ -143,7 +144,6 @@ func (h *host) Start() error {
 			}
 
 			go h.periodicallyFetchMissingRefs()
-			go h.periodicallyVerifyPeers()
 
 			return nil
 		},
@@ -422,58 +422,96 @@ func (h *host) txSeenByPeer(peer Peer, stateURI string, txID types.ID) bool {
 
 func (h *host) AddPeer(dialInfo PeerDialInfo) {
 	h.peerStore.AddDialInfos([]PeerDialInfo{dialInfo})
-	h.verifyPeersWorker.Enqueue()
-}
-
-func (h *host) periodicallyVerifyPeers() {
-	for {
-		h.verifyPeersWorker.Enqueue()
-		time.Sleep(10 * time.Second)
-	}
+	h.processPeersTask.Enqueue()
 }
 
 func (h *host) handleNewUnverifiedPeer(dialInfo PeerDialInfo) {
-	h.verifyPeersWorker.Enqueue()
+	h.processPeersTask.Enqueue()
 }
 
-func (h *host) verifyPeers() {
-	unverifiedPeers := h.peerStore.UnverifiedPeers()
+func (h *host) processPeers(ctx context.Context) {
+	wg := utils.NewWaitGroupChan()
 
-	var wg sync.WaitGroup
-	wg.Add(len(unverifiedPeers))
+	// Announce peers
+	{
+		allDialInfos := h.peerStore.AllDialInfos()
 
-	for _, unverifiedPeer := range unverifiedPeers {
-		unverifiedPeer := unverifiedPeer
-		go func() {
-			defer wg.Done()
+		for _, tpt := range h.transports {
+			for _, peerDetails := range h.peerStore.PeersFromTransport(tpt.Name()) {
+				if peerDetails.DialInfo().TransportName != tpt.Name() {
+					continue
+				}
 
+				tpt := tpt
+				peerDetails := peerDetails
+
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+
+					peer, err := tpt.NewPeerConn(ctx, peerDetails.DialInfo().DialAddr)
+					if errors.Cause(err) != ErrPeerIsSelf {
+						return
+					} else if err != nil {
+						h.Warnf("error creating new libp2p peer: %v", err)
+						return
+					}
+					defer peer.Close()
+
+					err = peer.EnsureConnected(ctx)
+					if err != nil {
+						return
+					}
+
+					peer.AnnouncePeers(ctx, allDialInfos)
+					if err != nil {
+						// t.Errorf("error writing to peer: %+v", err)
+					}
+				}()
+			}
+		}
+	}
+
+	// Verify unverified peers
+	{
+		unverifiedPeers := h.peerStore.UnverifiedPeers()
+
+		for _, unverifiedPeer := range unverifiedPeers {
 			transport := h.Transport(unverifiedPeer.DialInfo().TransportName)
 			if transport == nil {
 				// Unsupported transport
-				return
+				continue
 			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
 
 			peer, err := transport.NewPeerConn(ctx, unverifiedPeer.DialInfo().DialAddr)
 			if errors.Cause(err) == ErrPeerIsSelf {
-				return
+				continue
 			} else if errors.Cause(err) == types.ErrConnection {
-				return
+				continue
 			} else if err != nil {
 				h.Warnf("could not get peer at %v %v: %v", unverifiedPeer.DialInfo().TransportName, unverifiedPeer.DialInfo().DialAddr, err)
-				return
+				continue
+			} else if !peer.Ready() {
+				h.Debugf("skipping peer %v: failures=%v lastFailure=%vs", peer.DialInfo(), peer.Failures(), time.Now().Sub(peer.LastFailure()))
+				continue
 			}
 
-			_, _, err = h.ChallengePeerIdentity(ctx, peer)
-			if err != nil {
-				h.Errorf("error verifying peer identity: %v ", err)
-				return
-			}
-		}()
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, _, err := h.ChallengePeerIdentity(ctx, peer)
+				if err != nil {
+					h.Errorf("error verifying peer identity (%v): %v ", peer.DialInfo(), err)
+					return
+				}
+			}()
+		}
 	}
-	wg.Wait()
+
+	select {
+	case <-wg.Wait():
+	case <-ctx.Done():
+	}
 }
 
 type FetchHistoryOpts struct {
@@ -661,7 +699,7 @@ func (h *host) Unsubscribe(stateURI string) error {
 	return nil
 }
 
-func (h *host) ChallengePeerIdentity(ctx context.Context, peer Peer) (_ SigningPublicKey, _ EncryptingPublicKey, err error) {
+func (h *host) ChallengePeerIdentity(ctx context.Context, peer Peer) (_ crypto.SigningPublicKey, _ crypto.EncryptingPublicKey, err error) {
 	defer withStack(&err)
 
 	err = peer.EnsureConnected(ctx)
@@ -684,11 +722,11 @@ func (h *host) ChallengePeerIdentity(ctx context.Context, peer Peer) (_ SigningP
 		return nil, nil, err
 	}
 
-	sigpubkey, err := RecoverSigningPubkey(types.HashBytes(challengeMsg), resp.Signature)
+	sigpubkey, err := crypto.RecoverSigningPubkey(types.HashBytes(challengeMsg), resp.Signature)
 	if err != nil {
 		return nil, nil, err
 	}
-	encpubkey := EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey)
+	encpubkey := crypto.EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey)
 
 	h.peerStore.AddVerifiedCredentials(peer.DialInfo(), sigpubkey.Address(), sigpubkey, encpubkey)
 

@@ -1,21 +1,23 @@
-package tree
+package tree_test
 
 import (
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"redwood.dev/tree"
 )
 
 func TestKeypathShift(T *testing.T) {
 	tests := []struct {
-		input        Keypath
-		expectedTop  Keypath
-		expectedRest Keypath
+		input        tree.Keypath
+		expectedTop  tree.Keypath
+		expectedRest tree.Keypath
 	}{
-		{Keypath("foo/bar/baz"), Keypath("foo"), Keypath("bar/baz")},
-		{Keypath("foo"), Keypath("foo"), nil},
-		{Keypath(""), Keypath(""), nil},
+		{tree.Keypath("foo/bar/baz"), tree.Keypath("foo"), tree.Keypath("bar/baz")},
+		{tree.Keypath("foo"), tree.Keypath("foo"), nil},
+		{tree.Keypath(""), tree.Keypath(""), nil},
 		{nil, nil, nil},
 	}
 
@@ -28,13 +30,13 @@ func TestKeypathShift(T *testing.T) {
 
 func TestKeypathUnshift(T *testing.T) {
 	tests := []struct {
-		input    Keypath
-		extra    Keypath
-		expected Keypath
+		input    tree.Keypath
+		extra    tree.Keypath
+		expected tree.Keypath
 	}{
-		{Keypath("bar/baz"), Keypath("foo"), Keypath("foo/bar/baz")},
-		{Keypath(""), Keypath("foo"), Keypath("foo")},
-		{nil, Keypath("foo"), Keypath("foo")},
+		{tree.Keypath("bar/baz"), tree.Keypath("foo"), tree.Keypath("foo/bar/baz")},
+		{tree.Keypath(""), tree.Keypath("foo"), tree.Keypath("foo")},
+		{nil, tree.Keypath("foo"), tree.Keypath("foo")},
 		{nil, nil, nil},
 	}
 
@@ -46,13 +48,13 @@ func TestKeypathUnshift(T *testing.T) {
 
 func TestKeypathPop(T *testing.T) {
 	tests := []struct {
-		input        Keypath
-		expectedTop  Keypath
-		expectedRest Keypath
+		input        tree.Keypath
+		expectedTop  tree.Keypath
+		expectedRest tree.Keypath
 	}{
-		{Keypath("foo/bar/baz"), Keypath("baz"), Keypath("foo/bar")},
-		{Keypath("foo"), Keypath("foo"), nil},
-		{Keypath(""), Keypath(""), nil},
+		{tree.Keypath("foo/bar/baz"), tree.Keypath("baz"), tree.Keypath("foo/bar")},
+		{tree.Keypath("foo"), tree.Keypath("foo"), nil},
+		{tree.Keypath(""), tree.Keypath(""), nil},
 		{nil, nil, nil},
 	}
 
@@ -65,13 +67,13 @@ func TestKeypathPop(T *testing.T) {
 
 func TestKeypathPush(T *testing.T) {
 	tests := []struct {
-		input    Keypath
-		extra    Keypath
-		expected Keypath
+		input    tree.Keypath
+		extra    tree.Keypath
+		expected tree.Keypath
 	}{
-		{Keypath("foo/bar"), Keypath("baz"), Keypath("foo/bar/baz")},
-		{Keypath(""), Keypath("foo"), Keypath("foo")},
-		{nil, Keypath("foo"), Keypath("foo")},
+		{tree.Keypath("foo/bar"), tree.Keypath("baz"), tree.Keypath("foo/bar/baz")},
+		{tree.Keypath(""), tree.Keypath("foo"), tree.Keypath("foo")},
+		{nil, tree.Keypath("foo"), tree.Keypath("foo")},
 		{nil, nil, nil},
 	}
 
@@ -83,20 +85,20 @@ func TestKeypathPush(T *testing.T) {
 
 func TestKeypathPart(T *testing.T) {
 	tests := []struct {
-		input    Keypath
+		input    tree.Keypath
 		idx      int
-		expected Keypath
+		expected tree.Keypath
 	}{
-		{Keypath("foo/bar/baz/xyzzy"), 1, Keypath("bar")},
-		{Keypath("foo/bar/baz/xyzzy"), 2, Keypath("baz")},
-		{Keypath("foo/bar/baz/xyzzy"), -1, Keypath("xyzzy")},
-		{Keypath("foo/slice").Push(EncodeSliceIndex(123)), 2, EncodeSliceIndex(123)},
-		{Keypath("foo/slice").Push(EncodeSliceIndex(123)).Push(Keypath("xyzzy")), 3, Keypath("xyzzy")},
-		{Keypath("foo"), -1, Keypath("foo")},
-		{Keypath("foo"), 0, Keypath("foo")},
-		{Keypath(""), 0, Keypath("")},
-		{Keypath(""), 1, nil},
-		{Keypath(""), -1, Keypath("")},
+		{tree.Keypath("foo/bar/baz/xyzzy"), 1, tree.Keypath("bar")},
+		{tree.Keypath("foo/bar/baz/xyzzy"), 2, tree.Keypath("baz")},
+		{tree.Keypath("foo/bar/baz/xyzzy"), -1, tree.Keypath("xyzzy")},
+		{tree.Keypath("foo/slice").Push(EncodeSliceIndex(123)), 2, EncodeSliceIndex(123)},
+		{tree.Keypath("foo/slice").Push(EncodeSliceIndex(123)).Push(tree.Keypath("xyzzy")), 3, tree.Keypath("xyzzy")},
+		{tree.Keypath("foo"), -1, tree.Keypath("foo")},
+		{tree.Keypath("foo"), 0, tree.Keypath("foo")},
+		{tree.Keypath(""), 0, tree.Keypath("")},
+		{tree.Keypath(""), 1, nil},
+		{tree.Keypath(""), -1, tree.Keypath("")},
 		{nil, 0, nil},
 		{nil, 1, nil},
 		{nil, -1, nil},
@@ -114,12 +116,12 @@ func TestKeypathPart(T *testing.T) {
 
 func TestKeypathParts(T *testing.T) {
 	tests := []struct {
-		input    Keypath
-		expected []Keypath
+		input    tree.Keypath
+		expected []tree.Keypath
 	}{
-		{Keypath("foo/bar"), []Keypath{Keypath("foo"), Keypath("bar")}},
-		{Keypath("foo"), []Keypath{Keypath("foo")}},
-		{Keypath(""), nil},
+		{tree.Keypath("foo/bar"), []tree.Keypath{tree.Keypath("foo"), tree.Keypath("bar")}},
+		{tree.Keypath("foo"), []tree.Keypath{tree.Keypath("foo")}},
+		{tree.Keypath(""), nil},
 		{nil, nil},
 	}
 
@@ -131,19 +133,19 @@ func TestKeypathParts(T *testing.T) {
 
 func TestKeypathStartsWith(T *testing.T) {
 	tests := []struct {
-		input    Keypath
-		prefix   Keypath
+		input    tree.Keypath
+		prefix   tree.Keypath
 		expected bool
 	}{
-		{Keypath("fo"), Keypath("foo"), false},
-		{Keypath("foo"), Keypath("foo"), true},
-		{Keypath("foo/bar"), Keypath("foo"), true},
-		{Keypath("foo/bar"), Keypath(nil), true},
-		{Keypath("foo/bar"), Keypath("foo/bar"), true},
-		{Keypath("foo/bar/baz"), Keypath("foo/bar"), true},
-		{Keypath("foo/barx"), Keypath("foo/bar"), false},
-		{Keypath("foox/bar"), Keypath("foo"), false},
-		//{Keypath(""), nil},
+		{tree.Keypath("fo"), tree.Keypath("foo"), false},
+		{tree.Keypath("foo"), tree.Keypath("foo"), true},
+		{tree.Keypath("foo/bar"), tree.Keypath("foo"), true},
+		{tree.Keypath("foo/bar"), tree.Keypath(nil), true},
+		{tree.Keypath("foo/bar"), tree.Keypath("foo/bar"), true},
+		{tree.Keypath("foo/bar/baz"), tree.Keypath("foo/bar"), true},
+		{tree.Keypath("foo/barx"), tree.Keypath("foo/bar"), false},
+		{tree.Keypath("foox/bar"), tree.Keypath("foo"), false},
+		//{tree.Keypath(""), nil},
 		//{nil, nil},
 	}
 

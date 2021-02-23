@@ -1,4 +1,4 @@
-package redwood
+package crypto
 
 import (
 	"crypto/ecdsa"
@@ -30,6 +30,7 @@ type (
 		VerifySignature(hash types.Hash, signature []byte) bool
 		Address() types.Address
 		Bytes() []byte
+		Hex() string
 		String() string
 	}
 
@@ -58,8 +59,12 @@ func (pubkey *signingPublicKey) Bytes() []byte {
 	return crypto.FromECDSAPub(pubkey.PublicKey)
 }
 
-func (pubkey *signingPublicKey) String() string {
+func (pubkey *signingPublicKey) Hex() string {
 	return hex.EncodeToString(pubkey.Bytes())
+}
+
+func (pubkey *signingPublicKey) String() string {
+	return pubkey.Hex()
 }
 
 func (pubkey *signingPublicKey) UnmarshalText(bs []byte) error {
@@ -85,6 +90,10 @@ func (privkey *signingPrivateKey) SignHash(hash types.Hash) ([]byte, error) {
 
 func (privkey *signingPrivateKey) Bytes() []byte {
 	return crypto.FromECDSA(privkey.PrivateKey)
+}
+
+func (privkey *signingPrivateKey) Hex() string {
+	return hex.EncodeToString(privkey.Bytes())
 }
 
 func (privkey *signingPrivateKey) String() string {

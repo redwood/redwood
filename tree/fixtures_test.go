@@ -1,13 +1,11 @@
-package tree
+package tree_test
 
 import (
 	"bytes"
 	"fmt"
-	"math/rand"
 	"sort"
-	"testing"
 
-	"github.com/stretchr/testify/require"
+	"redwood.dev/tree"
 )
 
 type fixture struct {
@@ -16,8 +14,8 @@ type fixture struct {
 }
 
 type fixtureOutput struct {
-	keypath  Keypath
-	nodeType NodeType
+	keypath  tree.Keypath
+	nodeType tree.NodeType
 	value    interface{}
 }
 
@@ -39,21 +37,21 @@ var (
 		},
 	}
 	testVal1Output = []fixtureOutput{
-		{Keypath(nil), NodeTypeMap, testVal1},
-		{Keypath("asdf"), NodeTypeSlice, S{"1234", float64(987.2), uint64(333)}},
-		{Keypath("asdf").Push(EncodeSliceIndex(0)), NodeTypeValue, "1234"},
-		{Keypath("asdf").Push(EncodeSliceIndex(1)), NodeTypeValue, float64(987.2)},
-		{Keypath("asdf").Push(EncodeSliceIndex(2)), NodeTypeValue, uint64(333)},
-		{Keypath("flo"), NodeTypeValue, float64(321)},
-		{Keypath("flox"), NodeTypeSlice, S{uint64(65), M{"yup": "yes", "hey": uint64(321)}, "jkjkjkj"}},
-		{Keypath("flox").Push(EncodeSliceIndex(0)), NodeTypeValue, uint64(65)},
-		{Keypath("flox").Push(EncodeSliceIndex(1)), NodeTypeMap, M{"yup": "yes", "hey": uint64(321)}},
-		{Keypath("flox").Push(EncodeSliceIndex(1)).Push(Keypath("hey")), NodeTypeValue, uint64(321)},
-		{Keypath("flox").Push(EncodeSliceIndex(1)).Push(Keypath("yup")), NodeTypeValue, "yes"},
-		{Keypath("flox").Push(EncodeSliceIndex(2)), NodeTypeValue, "jkjkjkj"},
-		{Keypath("floxxx"), NodeTypeValue, "asdf123"},
-		{Keypath("hello"), NodeTypeMap, M{"xyzzy": uint64(33)}},
-		{Keypath("hello/xyzzy"), NodeTypeValue, uint64(33)},
+		{tree.Keypath(nil), tree.NodeTypeMap, testVal1},
+		{tree.Keypath("asdf"), tree.NodeTypeSlice, S{"1234", float64(987.2), uint64(333)}},
+		{tree.Keypath("asdf").Push(EncodeSliceIndex(0)), tree.NodeTypeValue, "1234"},
+		{tree.Keypath("asdf").Push(EncodeSliceIndex(1)), tree.NodeTypeValue, float64(987.2)},
+		{tree.Keypath("asdf").Push(EncodeSliceIndex(2)), tree.NodeTypeValue, uint64(333)},
+		{tree.Keypath("flo"), tree.NodeTypeValue, float64(321)},
+		{tree.Keypath("flox"), tree.NodeTypeSlice, S{uint64(65), M{"yup": "yes", "hey": uint64(321)}, "jkjkjkj"}},
+		{tree.Keypath("flox").Push(EncodeSliceIndex(0)), tree.NodeTypeValue, uint64(65)},
+		{tree.Keypath("flox").Push(EncodeSliceIndex(1)), tree.NodeTypeMap, M{"yup": "yes", "hey": uint64(321)}},
+		{tree.Keypath("flox").Push(EncodeSliceIndex(1)).Push(tree.Keypath("hey")), tree.NodeTypeValue, uint64(321)},
+		{tree.Keypath("flox").Push(EncodeSliceIndex(1)).Push(tree.Keypath("yup")), tree.NodeTypeValue, "yes"},
+		{tree.Keypath("flox").Push(EncodeSliceIndex(2)), tree.NodeTypeValue, "jkjkjkj"},
+		{tree.Keypath("floxxx"), tree.NodeTypeValue, "asdf123"},
+		{tree.Keypath("hello"), tree.NodeTypeMap, M{"xyzzy": uint64(33)}},
+		{tree.Keypath("hello/xyzzy"), tree.NodeTypeValue, uint64(33)},
 	}
 	fixture1 = fixture{testVal1, testVal1Output}
 
@@ -66,13 +64,13 @@ var (
 		},
 	}
 	testVal2Output = []fixtureOutput{
-		{Keypath(nil), NodeTypeMap, testVal2},
-		{Keypath("eee"), NodeTypeSlice, S{M{"qqqq": S{"fjfjjfjf", uint64(123321)}}}},
-		{Keypath("eee").Push(EncodeSliceIndex(0)), NodeTypeMap, M{"qqqq": S{"fjfjjfjf", uint64(123321)}}},
-		{Keypath("eee").Push(EncodeSliceIndex(0)).Push(Keypath("qqqq")), NodeTypeSlice, S{"fjfjjfjf", uint64(123321)}},
-		{Keypath("eee").Push(EncodeSliceIndex(0)).Push(Keypath("qqqq")).Push(EncodeSliceIndex(0)), NodeTypeValue, "fjfjjfjf"},
-		{Keypath("eee").Push(EncodeSliceIndex(0)).Push(Keypath("qqqq")).Push(EncodeSliceIndex(1)), NodeTypeValue, uint64(123321)},
-		{Keypath("ooooooo"), NodeTypeValue, uint64(332211)},
+		{tree.Keypath(nil), tree.NodeTypeMap, testVal2},
+		{tree.Keypath("eee"), tree.NodeTypeSlice, S{M{"qqqq": S{"fjfjjfjf", uint64(123321)}}}},
+		{tree.Keypath("eee").Push(EncodeSliceIndex(0)), tree.NodeTypeMap, M{"qqqq": S{"fjfjjfjf", uint64(123321)}}},
+		{tree.Keypath("eee").Push(EncodeSliceIndex(0)).Push(tree.Keypath("qqqq")), tree.NodeTypeSlice, S{"fjfjjfjf", uint64(123321)}},
+		{tree.Keypath("eee").Push(EncodeSliceIndex(0)).Push(tree.Keypath("qqqq")).Push(EncodeSliceIndex(0)), tree.NodeTypeValue, "fjfjjfjf"},
+		{tree.Keypath("eee").Push(EncodeSliceIndex(0)).Push(tree.Keypath("qqqq")).Push(EncodeSliceIndex(1)), tree.NodeTypeValue, uint64(123321)},
+		{tree.Keypath("ooooooo"), tree.NodeTypeValue, uint64(332211)},
 	}
 	fixture2 = fixture{testVal2, testVal2Output}
 
@@ -83,13 +81,13 @@ var (
 		"hello",
 	}
 	testVal3Output = []fixtureOutput{
-		{Keypath(nil), NodeTypeSlice, testVal3},
-		{Keypath(EncodeSliceIndex(0)), NodeTypeValue, uint64(8383)},
-		{Keypath(EncodeSliceIndex(1)), NodeTypeMap, M{"9999": "hi", "vvvv": "yeah"}},
-		{Keypath(EncodeSliceIndex(1)).Push(Keypath("9999")), NodeTypeValue, "hi"},
-		{Keypath(EncodeSliceIndex(1)).Push(Keypath("vvvv")), NodeTypeValue, "yeah"},
-		{Keypath(EncodeSliceIndex(2)), NodeTypeValue, float64(321.23)},
-		{Keypath(EncodeSliceIndex(3)), NodeTypeValue, "hello"},
+		{tree.Keypath(nil), tree.NodeTypeSlice, testVal3},
+		{tree.Keypath(EncodeSliceIndex(0)), tree.NodeTypeValue, uint64(8383)},
+		{tree.Keypath(EncodeSliceIndex(1)), tree.NodeTypeMap, M{"9999": "hi", "vvvv": "yeah"}},
+		{tree.Keypath(EncodeSliceIndex(1)).Push(tree.Keypath("9999")), tree.NodeTypeValue, "hi"},
+		{tree.Keypath(EncodeSliceIndex(1)).Push(tree.Keypath("vvvv")), tree.NodeTypeValue, "yeah"},
+		{tree.Keypath(EncodeSliceIndex(2)), tree.NodeTypeValue, float64(321.23)},
+		{tree.Keypath(EncodeSliceIndex(3)), tree.NodeTypeValue, "hello"},
 	}
 	fixture3 = fixture{testVal3, testVal3Output}
 
@@ -106,19 +104,19 @@ var (
 	}
 
 	testVal5       = float64(123.443)
-	testVal5Output = []fixtureOutput{{Keypath(nil), NodeTypeValue, testVal5}}
+	testVal5Output = []fixtureOutput{{tree.Keypath(nil), tree.NodeTypeValue, testVal5}}
 	fixture5       = fixture{testVal5, testVal5Output}
 
 	testVal6       = "asdfasdf"
-	testVal6Output = []fixtureOutput{{Keypath(nil), NodeTypeValue, testVal6}}
+	testVal6Output = []fixtureOutput{{tree.Keypath(nil), tree.NodeTypeValue, testVal6}}
 	fixture6       = fixture{testVal6, testVal6Output}
 
 	testVal7       = true
-	testVal7Output = []fixtureOutput{{Keypath(nil), NodeTypeValue, testVal7}}
+	testVal7Output = []fixtureOutput{{tree.Keypath(nil), tree.NodeTypeValue, testVal7}}
 	fixture7       = fixture{testVal7, testVal7Output}
 
 	testVal8       = S{}
-	testVal8Output = []fixtureOutput{{Keypath(nil), NodeTypeSlice, testVal8}}
+	testVal8Output = []fixtureOutput{{tree.Keypath(nil), tree.NodeTypeSlice, testVal8}}
 	fixture8       = fixture{testVal8, testVal8Output}
 
 	fixtures = []fixture{
@@ -130,7 +128,7 @@ var (
 	}
 )
 
-func countNodesOfType(nodeType NodeType, outs []fixtureOutput) int {
+func countNodesOfType(nodeType tree.NodeType, outs []fixtureOutput) int {
 	i := 0
 	for _, out := range outs {
 		if out.nodeType == nodeType {
@@ -140,7 +138,7 @@ func countNodesOfType(nodeType NodeType, outs []fixtureOutput) int {
 	return i
 }
 
-func combineFixtureOutputs(keypathPrefix Keypath, fixtures ...fixture) []fixtureOutput {
+func combineFixtureOutputs(keypathPrefix tree.Keypath, fixtures ...fixture) []fixtureOutput {
 	outs := []fixtureOutput{}
 	for _, f := range fixtures {
 		for _, out := range f.output {
@@ -151,7 +149,7 @@ func combineFixtureOutputs(keypathPrefix Keypath, fixtures ...fixture) []fixture
 	return outs
 }
 
-func prefixFixtureOutputs(keypathPrefix Keypath, outs []fixtureOutput) []fixtureOutput {
+func prefixFixtureOutputs(keypathPrefix tree.Keypath, outs []fixtureOutput) []fixtureOutput {
 	newOuts := []fixtureOutput{}
 	for _, out := range outs {
 		newOuts = append(newOuts, fixtureOutput{keypath: keypathPrefix.Push(out.keypath), nodeType: out.nodeType, value: out.value})
@@ -160,25 +158,25 @@ func prefixFixtureOutputs(keypathPrefix Keypath, outs []fixtureOutput) []fixture
 	return newOuts
 }
 
-func makeSetKeypathFixtureOutputs(setKeypath Keypath) []fixtureOutput {
+func makeSetKeypathFixtureOutputs(setKeypath tree.Keypath) []fixtureOutput {
 	if setKeypath.NumParts() == 0 {
 		return nil
 	}
-	var current Keypath
+	var current tree.Keypath
 	var outs []fixtureOutput
-	setKeypathParts := append([]Keypath{nil}, setKeypath.Parts()...)
+	setKeypathParts := append([]tree.Keypath{nil}, setKeypath.Parts()...)
 	setKeypathParts = setKeypathParts[:len(setKeypathParts)-1] // Remove the last item -- it's added by the test fixture
 	for _, part := range setKeypathParts {
 		current = current.Push(part)
 		outs = append(outs, fixtureOutput{
 			keypath:  current,
-			nodeType: NodeTypeMap,
+			nodeType: tree.NodeTypeMap,
 		})
 	}
 	return outs
 }
 
-func filterFixtureOutputsWithPrefix(prefix Keypath, outs ...fixtureOutput) []fixtureOutput {
+func filterFixtureOutputsWithPrefix(prefix tree.Keypath, outs ...fixtureOutput) []fixtureOutput {
 	var newOuts []fixtureOutput
 	for _, out := range outs {
 		if out.keypath.StartsWith(prefix) {
@@ -188,7 +186,7 @@ func filterFixtureOutputsWithPrefix(prefix Keypath, outs ...fixtureOutput) []fix
 	return newOuts
 }
 
-func filterFixtureOutputsToDirectDescendantsOf(prefix Keypath, outs ...fixtureOutput) []fixtureOutput {
+func filterFixtureOutputsToDirectDescendantsOf(prefix tree.Keypath, outs ...fixtureOutput) []fixtureOutput {
 	var newOuts []fixtureOutput
 	for _, out := range outs {
 		if out.keypath.StartsWith(prefix) && out.keypath.NumParts() == prefix.NumParts()+1 {
@@ -198,7 +196,7 @@ func filterFixtureOutputsToDirectDescendantsOf(prefix Keypath, outs ...fixtureOu
 	return newOuts
 }
 
-func removeFixtureOutputsWithPrefix(prefix Keypath, outs ...fixtureOutput) []fixtureOutput {
+func removeFixtureOutputsWithPrefix(prefix tree.Keypath, outs ...fixtureOutput) []fixtureOutput {
 	var newOuts []fixtureOutput
 	for _, out := range outs {
 		if !out.keypath.StartsWith(prefix) {
@@ -208,7 +206,7 @@ func removeFixtureOutputsWithPrefix(prefix Keypath, outs ...fixtureOutput) []fix
 	return newOuts
 }
 
-func removeFixtureOutputPrefixes(prefix Keypath, outs ...fixtureOutput) []fixtureOutput {
+func removeFixtureOutputPrefixes(prefix tree.Keypath, outs ...fixtureOutput) []fixtureOutput {
 	var newOuts []fixtureOutput
 	for _, out := range outs {
 		if !out.keypath.StartsWith(prefix) {
@@ -218,7 +216,7 @@ func removeFixtureOutputPrefixes(prefix Keypath, outs ...fixtureOutput) []fixtur
 				newOuts = append(newOuts, out)
 			} else {
 				if len(prefix) == len(out.keypath) {
-					newOuts = append(newOuts, fixtureOutput{keypath: Keypath(nil), nodeType: out.nodeType, value: out.value})
+					newOuts = append(newOuts, fixtureOutput{keypath: tree.Keypath(nil), nodeType: out.nodeType, value: out.value})
 				} else {
 					newKeypath := out.keypath.Copy()
 					newKeypath = newKeypath[len(prefix)+1:]
@@ -250,10 +248,4 @@ func mustEncodeGoValue(x interface{}) []byte {
 		panic(err)
 	}
 	return enc
-}
-
-func mustNewVersionedDBTree(T *testing.T) *VersionedDBTree {
-	tree, err := NewVersionedDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", rand.Int()))
-	require.NoError(T, err)
-	return tree
 }

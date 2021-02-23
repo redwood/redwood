@@ -20,8 +20,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"github.com/webview/webview"
+	"redwood.dev"
 
 	rw "redwood.dev"
+	"redwood.dev/crypto"
 	"redwood.dev/ctx"
 	"redwood.dev/tree"
 )
@@ -120,12 +122,12 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 		return err
 	}
 
-	signingKeypair, err := rw.SigningKeypairFromHDMnemonic(config.Node.HDMnemonicPhrase, rw.DefaultHDDerivationPath)
+	signingKeypair, err := crypto.SigningKeypairFromHDMnemonic(config.Node.HDMnemonicPhrase, crypto.DefaultHDDerivationPath)
 	if err != nil {
 		return err
 	}
 
-	encryptingKeypair, err := rw.GenerateEncryptingKeypair()
+	encryptingKeypair, err := crypto.GenerateEncryptingKeypair()
 	if err != nil {
 		return err
 	}
@@ -157,12 +159,21 @@ func run(configPath string, enablePprof bool, dev bool, port uint) error {
 	var transports []rw.Transport
 
 	if config.P2PTransport.Enabled {
+		var bootstrapPeers []string
+		for _, bp := range config.Node.BootstrapPeers {
+			if bp.Transport != "libp2p" {
+				continue
+			}
+			bootstrapPeers = append(bootstrapPeers, bp.DialAddresses...)
+		}
+
 		libp2pTransport, err := rw.NewLibp2pTransport(
 			signingKeypair.Address(),
 			config.P2PTransport.ListenPort,
 			config.P2PTransport.ReachableAt,
 			config.P2PTransport.KeyFile,
 			encryptingKeypair,
+			bootstrapPeers,
 			controllerHub,
 			refStore,
 			peerStore,
@@ -462,6 +473,16 @@ var replCommands = map[string]struct {
 			for _, peer := range host.Peers() {
 				fmt.Println("- ", peer.Address(), peer.DialInfo(), peer.LastContact())
 			}
+			return nil
+		},
+	},
+	"addpeer": {
+		"list all known peers",
+		func(ctx context.Context, args []string, host rw.Host) error {
+			if len(args) < 2 {
+				return errors.New("requires two arguments: addpeer <transport> <dial addr>")
+			}
+			host.AddPeer(redwood.PeerDialInfo{args[0], args[1]})
 			return nil
 		},
 	},

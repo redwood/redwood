@@ -8,11 +8,12 @@ import (
 
 	"redwood.dev"
 	"redwood.dev/cloud"
+	"redwood.dev/crypto"
 )
 
 type HTTPRPCServer struct {
 	*redwood.HTTPRPCServer
-	signingKeypair *redwood.SigningKeypair
+	signingKeypair *crypto.SigningKeypair
 }
 
 type (

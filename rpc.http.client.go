@@ -7,6 +7,7 @@ import (
 
 	"github.com/powerman/rpc-codec/jsonrpc2"
 
+	"redwood.dev/crypto"
 	"redwood.dev/types"
 )
 
@@ -37,7 +38,7 @@ func (c *HTTPRPCClient) Close() error {
 	return c.client.Close()
 }
 
-func (c *HTTPRPCClient) Authorize(signingKeypair *SigningKeypair) error {
+func (c *HTTPRPCClient) Authorize(signingKeypair *crypto.SigningKeypair) error {
 	req, err := http.NewRequest("AUTHORIZE", c.dialAddr, nil)
 	if err != nil {
 		return err
