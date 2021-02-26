@@ -18,6 +18,7 @@ import (
 
 	"redwood.dev/ctx"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type RefStore interface {
@@ -180,7 +181,7 @@ func (s *refStore) objectBySHA3(sha3Hash types.Hash) (io.ReadCloser, int64, erro
 func (s *refStore) StoreObject(reader io.ReadCloser) (sha1Hash types.Hash, sha3Hash types.Hash, err error) {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
-	defer annotate(&err, "refStore.StoreObject")
+	defer utils.Annotate(&err, "refStore.StoreObject")
 
 	err = s.ensureRootPath()
 	if err != nil {

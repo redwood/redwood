@@ -244,7 +244,7 @@ func (c *HTTPClient) Get(stateURI string, version *types.ID, keypath tree.Keypat
 	return resp.Body, int64(contentLength), parents, nil
 }
 
-func (c *HTTPClient) Put(ctx context.Context, tx *Tx, recipientEncPubkey crypto.EncryptingPublicKey) error {
+func (c *HTTPClient) Put(ctx context.Context, tx *Tx, recipientAddress types.Address, recipientEncPubkey crypto.EncryptingPublicKey) error {
 	if len(tx.Sig) == 0 {
 		sig, err := c.sigkeys.SignHash(tx.Hash())
 		if err != nil {
@@ -253,7 +253,7 @@ func (c *HTTPClient) Put(ctx context.Context, tx *Tx, recipientEncPubkey crypto.
 		tx.Sig = sig
 	}
 
-	req, err := PutRequestFromTx(ctx, tx, c.dialAddr, c.enckeys, recipientEncPubkey)
+	req, err := PutRequestFromTx(ctx, tx, c.dialAddr, c.enckeys, recipientAddress, recipientEncPubkey)
 	if err != nil {
 		return errors.WithStack(err)
 	}

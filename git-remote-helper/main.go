@@ -25,6 +25,7 @@ import (
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 // @@TODO: read keys from config
@@ -255,7 +256,7 @@ func fetch(client *redwood.HTTPClient, headCommitHash string) error {
 }
 
 func fetchCommit(commitHash string, commit Commit, client *redwood.HTTPClient, odb *git.Odb, refs *sync.Map) (err error) {
-	defer annotate(&err, "fetchCommit")
+	defer utils.Annotate(&err, "fetchCommit")
 
 	logf("commit: %v", commitHash)
 
@@ -489,7 +490,7 @@ func pushRef(destRefName string, commitId *git.Oid, client *redwood.HTTPClient) 
 		}},
 	}
 
-	return client.Put(context.Background(), tx, nil)
+	return client.Put(context.Background(), tx, types.Address{}, nil)
 }
 
 func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClient) error {
@@ -694,7 +695,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 			Val:     fileTree,
 		})
 
-		err = client.Put(context.Background(), tx, nil)
+		err = client.Put(context.Background(), tx, types.Address{}, nil)
 	}()
 
 	select {
@@ -784,11 +785,5 @@ func setValueAtKeypath(x interface{}, keypath []string, val interface{}, clobber
 		asMap[keypath[len(keypath)-1]] = val
 	} else {
 		panic("bad")
-	}
-}
-
-func annotate(err *error, msg string, args ...interface{}) {
-	if *err != nil {
-		*err = errors.Wrapf(*err, msg, args...)
 	}
 }

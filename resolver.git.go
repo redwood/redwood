@@ -35,7 +35,7 @@ package redwood
 // 	parents []types.ID,
 // 	patches []Patch,
 // ) (err error) {
-// 	defer withStack(&err)
+// 	defer utils.WithStack(&err)
 
 // 	node := tree.NewMemoryNode()
 // 	for _, patch := range patches {
@@ -124,7 +124,7 @@ package redwood
 // 	repo *git.Repository,
 // 	odb *git.Odb,
 // ) (_ *git.Commit, err error) {
-// 	defer withStack(&err)
+// 	defer utils.WithStack(&err)
 
 // 	commitsWithSharedParent := make(map[git.Oid]struct{})
 
@@ -264,7 +264,7 @@ package redwood
 // }
 
 // func (r *gitResolver) createCommitFromNode(commitNode tree.Node, refName string, refStore RefStore, repo *git.Repository, odb *git.Odb) (_ *git.Commit, err error) {
-// 	defer withStack(&err)
+// 	defer utils.WithStack(&err)
 
 // 	numParents, err := commitNode.NodeAt(tree.Keypath("parents"), nil).Length()
 // 	if err != nil {

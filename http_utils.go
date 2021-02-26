@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+
 	"redwood.dev/crypto"
+	"redwood.dev/types"
 )
 
 // Creates an *http.Request representing the given Tx that follows the Braid-HTTP
@@ -19,6 +21,7 @@ func PutRequestFromTx(
 	tx *Tx,
 	dialAddr string,
 	senderEncKeypair *crypto.EncryptingKeypair,
+	recipientAddress types.Address,
 	recipientEncPubkey crypto.EncryptingPublicKey,
 ) (*http.Request, error) {
 	if tx.IsPrivate() {
@@ -40,6 +43,7 @@ func PutRequestFromTx(
 			TxID:             tx.ID,
 			EncryptedPayload: encryptedTxBytes,
 			SenderPublicKey:  senderEncKeypair.EncryptingPublicKey.Bytes(),
+			RecipientAddress: recipientAddress,
 		})
 		if err != nil {
 			return nil, errors.WithStack(err)

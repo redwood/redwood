@@ -10,6 +10,7 @@ import (
 
 	"redwood.dev/crypto"
 	"redwood.dev/ctx"
+	"redwood.dev/identity"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -29,8 +30,10 @@ type Host interface {
 	AddPeer(dialInfo PeerDialInfo)
 	Transport(name string) Transport
 	Controllers() ControllerHub
-	Address() types.Address
-	ChallengePeerIdentity(ctx context.Context, peer Peer) (crypto.SigningPublicKey, crypto.EncryptingPublicKey, error)
+	ChallengePeerIdentity(ctx context.Context, peer Peer) error
+
+	Identities() ([]identity.Identity, error)
+	NewIdentity(public bool) (identity.Identity, error)
 
 	Peers() []PeerDetails
 	ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan Peer
@@ -51,9 +54,6 @@ type host struct {
 
 	config *Config
 
-	signingKeypair    *crypto.SigningKeypair
-	encryptingKeypair *crypto.EncryptingKeypair
-
 	readableSubscriptions   map[string]*multiReaderSubscription // map[stateURI]
 	readableSubscriptionsMu sync.RWMutex
 	writableSubscriptions   map[string]map[WritableSubscription]struct{} // map[stateURI]
@@ -67,6 +67,7 @@ type host struct {
 	transports    map[string]Transport
 	peerStore     PeerStore
 	refStore      RefStore
+	keyStore      identity.KeyStore
 
 	chRefsNeeded chan []types.RefID
 }
@@ -78,10 +79,9 @@ var (
 )
 
 func NewHost(
-	signingKeypair *crypto.SigningKeypair,
-	encryptingKeypair *crypto.EncryptingKeypair,
 	transports []Transport,
 	controllerHub ControllerHub,
+	keyStore identity.KeyStore,
 	refStore RefStore,
 	peerStore PeerStore,
 	config *Config,
@@ -94,13 +94,12 @@ func NewHost(
 		Context:               &ctx.Context{},
 		transports:            transportsMap,
 		controllerHub:         controllerHub,
-		signingKeypair:        signingKeypair,
-		encryptingKeypair:     encryptingKeypair,
 		readableSubscriptions: make(map[string]*multiReaderSubscription),
 		writableSubscriptions: make(map[string]map[WritableSubscription]struct{}),
 		peerSeenTxs:           make(map[PeerDialInfo]map[string]map[types.ID]bool),
 		peerStore:             peerStore,
 		refStore:              refStore,
+		keyStore:              keyStore,
 		chRefsNeeded:          make(chan []types.RefID, 100),
 		config:                config,
 	}
@@ -166,8 +165,12 @@ func (h *host) Controllers() ControllerHub {
 	return h.controllerHub
 }
 
-func (h *host) Address() types.Address {
-	return h.signingKeypair.Address()
+func (h *host) Identities() ([]identity.Identity, error) {
+	return h.keyStore.Identities()
+}
+
+func (h *host) NewIdentity(public bool) (identity.Identity, error) {
+	return h.keyStore.NewIdentity(public)
 }
 
 func (h *host) StateAtVersion(stateURI string, version *types.ID) (tree.Node, error) {
@@ -403,7 +406,7 @@ func (h *host) markTxSeenByPeer(peer Peer, stateURI string, txID types.ID) {
 func (h *host) txSeenByPeer(peer Peer, stateURI string, txID types.ID) bool {
 	// @@TODO: convert to LRU cache
 
-	if peer.Address() == (types.Address{}) {
+	if len(peer.Addresses()) == 0 {
 		return false
 	}
 
@@ -499,7 +502,7 @@ func (h *host) processPeers(ctx context.Context) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				_, _, err := h.ChallengePeerIdentity(ctx, peer)
+				err := h.ChallengePeerIdentity(ctx, peer)
 				if err != nil {
 					h.Errorf("error verifying peer identity (%v): %v ", peer.DialInfo(), err)
 					return
@@ -547,10 +550,15 @@ func (h *host) HandleFetchHistoryRequest(stateURI string, opts FetchHistoryOpts,
 		if isPrivate {
 			var isAllowed bool
 			if peer, isPeer := writeSub.(Peer); isPeer {
-				isAllowed, err = h.controllerHub.IsMember(tx.StateURI, peer.Address())
-				if err != nil {
-					h.Errorf("error determining if peer '%v' is a member of private state URI '%v': %v", peer.Address(), tx.StateURI, err)
-					return err
+				for _, addr := range peer.Addresses() {
+					isAllowed, err = h.controllerHub.IsMember(tx.StateURI, addr)
+					if err != nil {
+						h.Errorf("error determining if peer '%v' is a member of private state URI '%v': %v", addr, tx.StateURI, err)
+						return err
+					}
+					if isAllowed {
+						break
+					}
 				}
 			} else {
 				// In-process subscriptions are trusted
@@ -699,51 +707,62 @@ func (h *host) Unsubscribe(stateURI string) error {
 	return nil
 }
 
-func (h *host) ChallengePeerIdentity(ctx context.Context, peer Peer) (_ crypto.SigningPublicKey, _ crypto.EncryptingPublicKey, err error) {
-	defer withStack(&err)
+func (h *host) ChallengePeerIdentity(ctx context.Context, peer Peer) (err error) {
+	defer utils.WithStack(&err)
 
 	err = peer.EnsureConnected(ctx)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 
 	challengeMsg, err := types.GenerateChallengeMsg()
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 
-	err = peer.ChallengeIdentity(types.ChallengeMsg(challengeMsg))
+	err = peer.ChallengeIdentity(challengeMsg)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 
 	resp, err := peer.ReceiveChallengeIdentityResponse()
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 
-	sigpubkey, err := crypto.RecoverSigningPubkey(types.HashBytes(challengeMsg), resp.Signature)
-	if err != nil {
-		return nil, nil, err
+	for _, proof := range resp {
+		sigpubkey, err := crypto.RecoverSigningPubkey(types.HashBytes(challengeMsg), proof.Signature)
+		if err != nil {
+			return err
+		}
+		encpubkey := crypto.EncryptingPublicKeyFromBytes(proof.EncryptingPublicKey)
+
+		h.peerStore.AddVerifiedCredentials(peer.DialInfo(), sigpubkey.Address(), sigpubkey, encpubkey)
 	}
-	encpubkey := crypto.EncryptingPublicKeyFromBytes(resp.EncryptingPublicKey)
 
-	h.peerStore.AddVerifiedCredentials(peer.DialInfo(), sigpubkey.Address(), sigpubkey, encpubkey)
-
-	return sigpubkey, encpubkey, nil
+	return nil
 }
 
 func (h *host) HandleChallengeIdentity(challengeMsg types.ChallengeMsg, peer Peer) error {
 	defer peer.Close()
 
-	sig, err := h.signingKeypair.SignHash(types.HashBytes(challengeMsg))
+	publicIdentities, err := h.keyStore.PublicIdentities()
 	if err != nil {
 		return err
 	}
-	return peer.RespondChallengeIdentity(ChallengeIdentityResponse{
-		Signature:           sig,
-		EncryptingPublicKey: h.encryptingKeypair.EncryptingPublicKey.Bytes(),
-	})
+
+	var responses []ChallengeIdentityResponse
+	for _, identity := range publicIdentities {
+		sig, err := h.keyStore.SignHash(identity.Address(), types.HashBytes(challengeMsg))
+		if err != nil {
+			return err
+		}
+		responses = append(responses, ChallengeIdentityResponse{
+			Signature:           sig,
+			EncryptingPublicKey: identity.Encrypting.EncryptingPublicKey.Bytes(),
+		})
+	}
+	return peer.RespondChallengeIdentity(responses)
 }
 
 func (h *host) handleNewState(tx *Tx, state tree.Node, leaves []types.ID) {
@@ -822,9 +841,16 @@ func (h *host) broadcastToStateURIProviders(ctx context.Context, tx *Tx, leaves 
 		}
 	}()
 
+Outer:
 	for peer := range ch {
-		if h.txSeenByPeer(peer, tx.StateURI, tx.ID) || tx.From == peer.Address() { // @@TODO: do we always want to avoid broadcasting when `from == peer.address`?
-			continue
+		if h.txSeenByPeer(peer, tx.StateURI, tx.ID) {
+			continue Outer
+		}
+		// @@TODO: do we always want to avoid broadcasting when `from == peer.address`?
+		for _, addr := range peer.Addresses() {
+			if tx.From == addr {
+				continue Outer
+			}
 		}
 
 		wg.Add(1)
@@ -900,10 +926,15 @@ func (h *host) broadcastToWritableSubscribers(
 			if isPrivate {
 				var isAllowed bool
 				if peer, isPeer := writeSub.(Peer); isPeer {
-					isAllowed, err = h.controllerHub.IsMember(tx.StateURI, peer.Address())
-					if err != nil {
-						h.Errorf("error determining if peer '%v' is a member of private state URI '%v': %v", peer.Address(), tx.StateURI, err)
-						return
+					for _, addr := range peer.Addresses() {
+						isAllowed, err = h.controllerHub.IsMember(tx.StateURI, addr)
+						if err != nil {
+							h.Errorf("error determining if peer '%v' is a member of private state URI '%v': %v", addr, tx.StateURI, err)
+							return
+						}
+						if isAllowed {
+							break
+						}
 					}
 				} else {
 					// In-process subscriptions are trusted
@@ -941,7 +972,13 @@ func (h *host) SendTx(ctx context.Context, tx Tx) (err error) {
 	}()
 
 	if tx.From == (types.Address{}) {
-		tx.From = h.signingKeypair.Address()
+		publicIdentities, err := h.keyStore.PublicIdentities()
+		if err != nil {
+			return err
+		} else if len(publicIdentities) == 0 {
+			return errors.New("keystore has no public identities")
+		}
+		tx.From = publicIdentities[0].Address()
 	}
 
 	if len(tx.Parents) == 0 && tx.ID != GenesisTxID {
@@ -954,7 +991,7 @@ func (h *host) SendTx(ctx context.Context, tx Tx) (err error) {
 	}
 
 	if len(tx.Sig) == 0 {
-		err = h.SignTx(&tx)
+		tx.Sig, err = h.keyStore.SignHash(tx.From, tx.Hash())
 		if err != nil {
 			return err
 		}
@@ -965,12 +1002,6 @@ func (h *host) SendTx(ctx context.Context, tx Tx) (err error) {
 		return err
 	}
 	return nil
-}
-
-func (h *host) SignTx(tx *Tx) error {
-	var err error
-	tx.Sig, err = h.signingKeypair.SignHash(tx.Hash())
-	return err
 }
 
 func (h *host) AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error) {

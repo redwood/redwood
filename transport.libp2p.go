@@ -37,6 +37,7 @@ import (
 
 	"redwood.dev/crypto"
 	"redwood.dev/ctx"
+	"redwood.dev/identity"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -59,6 +60,7 @@ type libp2pTransport struct {
 
 	host          Host
 	controllerHub ControllerHub
+	keyStore      identity.KeyStore
 	refStore      RefStore
 	peerStore     PeerStore
 
@@ -71,13 +73,12 @@ const (
 )
 
 func NewLibp2pTransport(
-	addr types.Address,
 	port uint,
 	reachableAt string,
 	keyfilePath string,
-	enckeys *crypto.EncryptingKeypair,
 	bootstrapPeers []string,
 	controllerHub ControllerHub,
+	keyStore identity.KeyStore,
 	refStore RefStore,
 	peerStore PeerStore,
 ) (Transport, error) {
@@ -88,11 +89,10 @@ func NewLibp2pTransport(
 	t := &libp2pTransport{
 		Context:           &ctx.Context{},
 		port:              port,
-		address:           addr,
 		reachableAt:       reachableAt,
-		enckeys:           enckeys,
 		p2pKey:            p2pKey,
 		controllerHub:     controllerHub,
+		keyStore:          keyStore,
 		refStore:          refStore,
 		peerStore:         peerStore,
 		writeSubsByPeerID: make(map[peer.ID]map[netp2p.Stream]WritableSubscription),
@@ -182,25 +182,30 @@ func (t *libp2pTransport) Start() error {
 			t.libp2pHost.Network().Notify(t)
 
 			// Update our node's info in the peer store
-			myAddrs := utils.NewStringSet(nil)
+			myDialAddrs := utils.NewStringSet(nil)
 			for _, addr := range t.libp2pHost.Addrs() {
 				addrStr := addr.String()
-				myAddrs.Add(addrStr)
+				myDialAddrs.Add(addrStr)
 			}
 			if t.reachableAt != "" {
-				myAddrs.Add(fmt.Sprintf("%v/p2p/%v", t.reachableAt, t.Libp2pPeerID()))
+				myDialAddrs.Add(fmt.Sprintf("%v/p2p/%v", t.reachableAt, t.Libp2pPeerID()))
 			}
-			myAddrs = cleanLibp2pAddrs(myAddrs, t.peerID)
+			myDialAddrs = cleanLibp2pAddrs(myDialAddrs, t.peerID)
 
-			if len(myAddrs) > 0 {
-				host := t.host.(*host)
-				for addr := range myAddrs {
-					t.peerStore.AddVerifiedCredentials(
-						PeerDialInfo{TransportName: t.Name(), DialAddr: addr},
-						host.signingKeypair.SigningPublicKey.Address(),
-						host.signingKeypair.SigningPublicKey,
-						host.encryptingKeypair.EncryptingPublicKey,
-					)
+			if len(myDialAddrs) > 0 {
+				for dialAddr := range myDialAddrs {
+					identities, err := t.keyStore.Identities()
+					if err != nil {
+						return err
+					}
+					for _, identity := range identities {
+						t.peerStore.AddVerifiedCredentials(
+							PeerDialInfo{TransportName: t.Name(), DialAddr: dialAddr},
+							identity.Signing.SigningPublicKey.Address(),
+							identity.Signing.SigningPublicKey,
+							identity.Encrypting.EncryptingPublicKey,
+						)
+					}
 				}
 			}
 
@@ -437,7 +442,8 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			t.Errorf("Private message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
-		bs, err := t.enckeys.OpenMessageFrom(
+		bs, err := t.keyStore.OpenMessageFrom(
+			encryptedTx.RecipientAddress,
 			crypto.EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
 			encryptedTx.EncryptedPayload,
 		)
@@ -667,16 +673,31 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 			ctxInner, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)
 			defer cancel()
 
-			c, err := cidForString("addr:" + t.address.String())
+			identities, err := t.keyStore.Identities()
 			if err != nil {
 				t.Errorf("announce: error creating cid: %v", err)
 				return
 			}
+			var wg sync.WaitGroup
+			for _, identity := range identities {
+				identity := identity
 
-			err = t.dht.Provide(ctxInner, c, true)
-			if err != nil && err != kbucket.ErrLookupFailure {
-				t.Errorf(`announce: could not dht.Provide pubkey: %v`, err)
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					c, err := cidForString("addr:" + identity.Address().String())
+					if err != nil {
+						t.Errorf("announce: error creating cid: %v", err)
+						return
+					}
+
+					err = t.dht.Provide(ctxInner, c, true)
+					if err != nil && err != kbucket.ErrLookupFailure {
+						t.Errorf(`announce: could not dht.Provide pubkey: %v`, err)
+					}
+				}()
 			}
+			wg.Wait()
 		}()
 
 		time.Sleep(10 * time.Second)
@@ -830,9 +851,13 @@ func (peer *libp2pPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves
 			return errors.WithStack(err)
 		}
 
-		_, peerEncPubkey := peer.PublicKeys()
+		peerAddrs := types.OverlappingAddresses(tx.Recipients, peer.Addresses())
+		if len(peerAddrs) == 0 {
+			return errors.New("tx not intended for this peer")
+		}
+		peerSigPubkey, peerEncPubkey := peer.PublicKeys(peerAddrs[0])
 
-		encryptedTxBytes, err := peer.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
+		encryptedTxBytes, err := peer.t.keyStore.SealMessageFor(tx.From, peerEncPubkey, marshalledTx)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -841,6 +866,7 @@ func (peer *libp2pPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves
 			TxID:             tx.ID,
 			EncryptedPayload: encryptedTxBytes,
 			SenderPublicKey:  peer.t.enckeys.EncryptingPublicKey.Bytes(),
+			RecipientAddress: peerSigPubkey.Address(),
 		}
 		return peer.writeMsg(Msg{Type: MsgType_Private, Payload: etx})
 	}
@@ -860,21 +886,19 @@ func (p *libp2pPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) error {
 	return p.writeMsg(Msg{Type: MsgType_ChallengeIdentityRequest, Payload: challengeMsg})
 }
 
-func (p *libp2pPeer) ReceiveChallengeIdentityResponse() (ChallengeIdentityResponse, error) {
+func (p *libp2pPeer) ReceiveChallengeIdentityResponse() ([]ChallengeIdentityResponse, error) {
 	msg, err := p.readMsg()
 	if err != nil {
-		return ChallengeIdentityResponse{}, err
+		return nil, err
 	}
-
-	resp, ok := msg.Payload.(ChallengeIdentityResponse)
+	resp, ok := msg.Payload.([]ChallengeIdentityResponse)
 	if !ok {
-		return ChallengeIdentityResponse{}, ErrProtocol
+		return nil, ErrProtocol
 	}
-
 	return resp, nil
 }
 
-func (p *libp2pPeer) RespondChallengeIdentity(challengeIdentityResponse ChallengeIdentityResponse) error {
+func (p *libp2pPeer) RespondChallengeIdentity(challengeIdentityResponse []ChallengeIdentityResponse) error {
 	return p.writeMsg(Msg{Type: MsgType_ChallengeIdentityResponse, Payload: challengeIdentityResponse})
 }
 
@@ -1001,7 +1025,8 @@ func (sub *libp2pReadableSubscription) Read() (_ *SubscriptionMsg, err error) {
 		if !ok {
 			return nil, errors.Errorf("Private message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 		}
-		bs, err := sub.t.enckeys.OpenMessageFrom(
+		bs, err := sub.t.keyStore.OpenMessageFrom(
+			encryptedTx.RecipientAddress,
 			crypto.EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
 			encryptedTx.EncryptedPayload,
 		)
@@ -1302,7 +1327,7 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		msg.Payload = challenge
 
 	case MsgType_ChallengeIdentityResponse:
-		var resp ChallengeIdentityResponse
+		var resp []ChallengeIdentityResponse
 		err := json.Unmarshal([]byte(m.PayloadBytes), &resp)
 		if err != nil {
 			return err

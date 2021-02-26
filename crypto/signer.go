@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto/ecdsa"
 	"encoding/hex"
+	"fmt"
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcutil/hdkeychain"
@@ -149,9 +150,9 @@ func GenerateMnemonic() (string, error) {
 	return mnemonic, nil
 }
 
-var DefaultHDDerivationPath = "m/44'/60'/0'/0/0"
+var DefaultHDDerivationPathPrefix = accounts.DerivationPath{44, 60, 0, 0}
 
-func SigningKeypairFromHDMnemonic(mnemonic string, derivationPath string) (*SigningKeypair, error) {
+func SigningKeypairFromHDMnemonic(mnemonic string, accountIndex uint32) (*SigningKeypair, error) {
 	if mnemonic == "" {
 		return nil, errors.New("mnemonic is required")
 	} else if !bip39.IsMnemonicValid(mnemonic) {
@@ -165,7 +166,7 @@ func SigningKeypairFromHDMnemonic(mnemonic string, derivationPath string) (*Sign
 	if err != nil {
 		return nil, err
 	}
-	path, err := accounts.ParseDerivationPath(derivationPath)
+	path, err := accounts.ParseDerivationPath(fmt.Sprintf("m/44'/60'/0'/0/%d", accountIndex))
 	if err != nil {
 		return nil, err
 	}
@@ -173,14 +174,21 @@ func SigningKeypairFromHDMnemonic(mnemonic string, derivationPath string) (*Sign
 	if err != nil {
 		return nil, err
 	}
+
+	ecPrivKey, err := privKey.ECPrivKey()
+	if err != nil {
+		return nil, err
+	}
+	ecdsaPrivKey := ecPrivKey.ToECDSA()
+
 	return &SigningKeypair{
-		SigningPrivateKey: &signingPrivateKey{privKey},
-		SigningPublicKey:  &signingPublicKey{&privKey.PublicKey},
+		SigningPrivateKey: &signingPrivateKey{ecdsaPrivKey},
+		SigningPublicKey:  &signingPublicKey{&ecdsaPrivKey.PublicKey},
 	}, nil
 }
 
 // DerivePrivateKey derives the private key of the derivation path.
-func derivePrivateKey(masterKey *hdkeychain.ExtendedKey, path accounts.DerivationPath) (*ecdsa.PrivateKey, error) {
+func derivePrivateKey(masterKey *hdkeychain.ExtendedKey, path accounts.DerivationPath) (*hdkeychain.ExtendedKey, error) {
 	var err error
 	key := masterKey
 	for _, n := range path {
@@ -189,12 +197,5 @@ func derivePrivateKey(masterKey *hdkeychain.ExtendedKey, path accounts.Derivatio
 			return nil, err
 		}
 	}
-
-	privateKey, err := key.ECPrivKey()
-	privateKeyECDSA := privateKey.ToECDSA()
-	if err != nil {
-		return nil, err
-	}
-
-	return privateKeyECDSA, nil
+	return key, nil
 }

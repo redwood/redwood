@@ -18,6 +18,7 @@ import (
 
 	"redwood.dev/ctx"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type DBTree struct {
@@ -254,7 +255,7 @@ func (n *DBNode) Exists(keypath Keypath) (bool, error) {
 }
 
 func (tx *DBNode) Value(relKeypath Keypath, rng *Range) (_ interface{}, _ bool, err error) {
-	defer annotate(&err, "Value (keypath: %v, range: %v)", relKeypath, rng)
+	defer utils.Annotate(&err, "Value (keypath: %v, range: %v)", relKeypath, rng)
 
 	if rng == nil {
 		rng = tx.rng
@@ -284,7 +285,7 @@ func (tx *DBNode) Value(relKeypath Keypath, rng *Range) (_ interface{}, _ bool, 
 	if err != nil {
 		return nil, false, err
 	}
-	defer annotate(&err, "(root nodeType: %v, root valueType: %v, root length: %v, root data: %v)", rootNodeType, valueType, length, string(data))
+	defer utils.Annotate(&err, "(root nodeType: %v, root valueType: %v, root length: %v, root data: %v)", rootNodeType, valueType, length, string(data))
 
 	if rootNodeType == NodeTypeValue {
 		v, err := decodeGoValue(rootNodeType, valueType, length, rng, data)
@@ -510,87 +511,90 @@ func (tx *DBNode) SliceValue(keypath Keypath) ([]interface{}, bool, error) {
 
 func makeScanError(node *DBNode, dest interface{}) error {
 	nodeType, valueType, _, _ := node.NodeInfo(nil)
-	return errors.Wrapf(ErrWrongType, "cannot scan a (%s:%s) into a %T", nodeType, valueType, dest)
+	return errors.Wrapf(ErrWrongType, "cannot scan a (%s:%s) into a %T (keypath: %v)", nodeType, valueType, dest, node.Keypath())
 }
 
-func (tx *DBNode) Scan(into interface{}) error {
+func (node *DBNode) Scan(into interface{}) error {
 	switch dest := into.(type) {
+	case Scanner:
+		return dest.TreeScan(node)
+
 	case *string:
-		x, is, err := tx.StringValue(nil)
+		x, is, err := node.StringValue(nil)
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(tx, dest)
+			return makeScanError(node, dest)
 		}
 		*dest = x
 		return nil
 
 	case *[]byte:
-		x, is, err := tx.BytesValue(nil)
+		x, is, err := node.BytesValue(nil)
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(tx, dest)
+			return makeScanError(node, dest)
 		}
 		*dest = x
 		return nil
 
 	case *bool:
-		x, is, err := tx.BoolValue(nil)
+		x, is, err := node.BoolValue(nil)
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(tx, dest)
+			return makeScanError(node, dest)
 		}
 		*dest = x
 		return nil
 
 	case *uint64:
-		x, is, err := tx.UintValue(nil)
+		x, is, err := node.UintValue(nil)
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(tx, dest)
+			return makeScanError(node, dest)
 		}
 		*dest = x
 		return nil
 
 	case *int64:
-		x, is, err := tx.IntValue(nil)
+		x, is, err := node.IntValue(nil)
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(tx, dest)
+			return makeScanError(node, dest)
 		}
 		*dest = x
 		return nil
 
 	case *float64:
-		x, is, err := tx.FloatValue(nil)
+		x, is, err := node.FloatValue(nil)
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(tx, dest)
+			return makeScanError(node, dest)
 		}
 		*dest = x
 		return nil
 
 	case *map[string]interface{}:
-		x, is, err := tx.MapValue(nil)
+		x, is, err := node.MapValue(nil)
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(tx, dest)
+			return makeScanError(node, dest)
 		}
 		*dest = x
 		return nil
 
 	case *[]interface{}:
-		x, is, err := tx.SliceValue(nil)
+		x, is, err := node.SliceValue(nil)
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(tx, dest)
+			return makeScanError(node, dest)
 		}
 		*dest = x
 		return nil
@@ -603,8 +607,9 @@ func (tx *DBNode) Scan(into interface{}) error {
 				rval.Elem().Set(reflect.MakeMap(rval.Elem().Type()))
 			}
 			rval = rval.Elem()
+			keyType := rval.Type().Key()
 			elemType := rval.Type().Elem()
-			iter := tx.ChildIterator(nil, true, 10)
+			iter := node.ChildIterator(nil, true, 10)
 			defer iter.Close()
 
 			for iter.Rewind(); iter.Valid(); iter.Next() {
@@ -615,11 +620,18 @@ func (tx *DBNode) Scan(into interface{}) error {
 					return err
 				}
 				_, key := node.Keypath().Pop()
-				rval.SetMapIndex(reflect.ValueOf(string(key)), val.Elem())
+				rKey, err := convertKeypathToType(key, keyType)
+				if err != nil {
+					return err
+				}
+				rval.SetMapIndex(rKey, val.Elem())
 			}
 			return nil
 
 		} else if rval.Kind() == reflect.Ptr && rval.Elem().Kind() == reflect.Struct {
+			if rval.IsNil() {
+				rval.Set(reflect.New(rval.Elem().Type()))
+			}
 			z := structomancer.NewWithType(rval.Type(), StructTag)
 			for _, fieldName := range z.FieldNames() {
 				ptr, err := z.PointerToFieldV(rval, fieldName)
@@ -627,15 +639,88 @@ func (tx *DBNode) Scan(into interface{}) error {
 					return err
 				}
 
-				err = tx.NodeAt(Keypath(fieldName), nil).Scan(ptr.Interface())
+				err = node.NodeAt(Keypath(fieldName), nil).Scan(ptr.Interface())
 				if err != nil {
 					return err
 				}
 			}
 			return nil
+
+		} else if rval.Kind() == reflect.Ptr && rval.Elem().Kind() == reflect.Slice {
+			// Special-case []byte values
+			if rval.Elem().Type().Elem().Kind() == reflect.Uint8 {
+				bytes, exists, err := node.BytesValue(nil)
+				if err != nil {
+					return err
+				} else if !exists {
+					panic("this should be impossible")
+				}
+				rval.Elem().Set(reflect.ValueOf(bytes).Convert(rval.Elem().Type()))
+				return nil
+			}
+
+			if rval.Elem().IsNil() {
+				length, err := node.Length()
+				if err != nil {
+					return err
+				}
+				rval.Elem().Set(reflect.MakeSlice(rval.Elem().Type(), int(length), int(length)))
+			}
+			rval = rval.Elem()
+			elemType := rval.Type().Elem()
+			iter := node.ChildIterator(nil, true, 10)
+			defer iter.Close()
+
+			i := 0
+			for iter.Rewind(); iter.Valid(); iter.Next() {
+				node := iter.Node()
+				val := reflect.New(elemType)
+				err := node.Scan(val.Interface())
+				if err != nil {
+					return err
+				}
+				rval.Index(i).Set(val.Elem())
+				i++
+			}
+			return nil
+
+		} else if rval.Kind() == reflect.Ptr && rval.Elem().Kind() == reflect.Array {
+			if rval.IsNil() {
+				rval.Set(reflect.New(rval.Elem().Type()))
+			}
+			rval = rval.Elem()
+
+			// Special-case [XX]byte values
+			if rval.Type().Elem().Kind() == reflect.Uint8 {
+				bytes, exists, err := node.BytesValue(nil)
+				if err != nil {
+					return err
+				} else if !exists {
+					panic("this should be impossible: " + node.Keypath().String())
+				}
+				reflect.Copy(rval.Slice(0, rval.Len()), reflect.ValueOf(bytes))
+				return nil
+			}
+
+			elemType := rval.Type().Elem()
+			iter := node.ChildIterator(nil, true, 10)
+			defer iter.Close()
+
+			i := 0
+			for iter.Rewind(); iter.Valid(); iter.Next() {
+				node := iter.Node()
+				val := reflect.New(elemType)
+				err := node.Scan(val.Interface())
+				if err != nil {
+					return err
+				}
+				rval.Index(i).Set(val.Elem())
+				i++
+			}
+			return nil
 		}
 	}
-	return makeScanError(tx, into)
+	return makeScanError(node, into)
 }
 
 func (tx *DBNode) Length() (uint64, error) {
@@ -701,7 +786,7 @@ func (tx *DBNode) Set(relKeypath Keypath, rng *Range, val interface{}) error {
 		item, err := tx.tx.Get(tx.addKeyPrefix(absKeypath))
 		if err == badger.ErrKeyNotFound {
 			// @@TODO: ??
-			//return errors.WithStack(ErrRangeOverNonSlice)
+			return errors.WithStack(ErrRangeOverNonSlice)
 		} else if err != nil {
 			return errors.Errorf("error fetching keypath %v while setting range", absKeypath)
 		}
@@ -715,8 +800,10 @@ func (tx *DBNode) Set(relKeypath Keypath, rng *Range, val interface{}) error {
 		}
 
 		switch spliceVal := val.(type) {
+		case []byte:
+			return tx.setRangeBytes(absKeypath, rng, encodedVal, spliceVal)
 		case string:
-			return tx.setRangeString(absKeypath, rng, encodedVal, spliceVal)
+			return tx.setRangeBytes(absKeypath, rng, encodedVal, []byte(spliceVal))
 		case []interface{}:
 			return tx.setRangeSlice(absKeypath, rng, encodedVal, spliceVal)
 		default:
@@ -727,7 +814,7 @@ func (tx *DBNode) Set(relKeypath Keypath, rng *Range, val interface{}) error {
 	}
 }
 
-func (tx *DBNode) setRangeString(absKeypath Keypath, rng *Range, encodedVal []byte, spliceVal string) error {
+func (tx *DBNode) setRangeBytes(absKeypath Keypath, rng *Range, encodedVal []byte, spliceVal []byte) error {
 	if len(encodedVal) == 0 {
 		encodedVal = []byte("vs")
 	}
@@ -751,13 +838,13 @@ func (tx *DBNode) setRangeString(absKeypath Keypath, rng *Range, encodedVal []by
 		newVal[1] = 'z'
 	}
 	copy(newVal[2:], oldVal[:startIdx])
-	copy(newVal[2+startIdx:], []byte(spliceVal))
+	copy(newVal[2+startIdx:], spliceVal)
 	copy(newVal[2+startIdx+uint64(len(spliceVal)):], oldVal[endIdx:])
 	return tx.tx.Set(tx.addKeyPrefix(absKeypath), newVal)
 }
 
 func (tx *DBNode) setRangeSlice(absKeypath Keypath, rng *Range, encodedVal []byte, spliceVal []interface{}) (err error) {
-	defer annotate(&err, "setRangeSlice")
+	defer utils.Annotate(&err, "setRangeSlice")
 
 	nodeType, valueType, oldLen, _, err := decodeNode(encodedVal)
 	if err != nil {
@@ -1050,7 +1137,7 @@ func (tx *DBNode) setNode(absKeypath Keypath, node Node) error {
 }
 
 func (tx *DBNode) Delete(relKeypath Keypath, rng *Range) (err error) {
-	defer annotate(&err, "DBNode#Delete(%v, %v)", relKeypath, rng)
+	defer utils.Annotate(&err, "DBNode#Delete(%v, %v)", relKeypath, rng)
 
 	if rng == nil {
 		rng = tx.rng
@@ -1198,7 +1285,7 @@ func (tx *DBNode) ResetDiff() {
 }
 
 func (tx *DBNode) CopyToMemory(relKeypath Keypath, rng *Range) (n Node, err error) {
-	defer annotate(&err, "CopyToMemory (relKeypath: %v, range: %v)", relKeypath, rng)
+	defer utils.Annotate(&err, "CopyToMemory (relKeypath: %v, range: %v)", relKeypath, rng)
 
 	if rng == nil {
 		rng = tx.rng
@@ -1479,7 +1566,7 @@ func prettyJSON(x interface{}) string {
 }
 
 func (t *VersionedDBTree) BuildIndex(version *types.ID, keypath Keypath, node Node, indexName Keypath, indexer Indexer) (err error) {
-	defer annotate(&err, "BuildIndex")
+	defer utils.Annotate(&err, "BuildIndex")
 
 	// @@TODO: ensure NodeType is map or slice
 	// @@TODO: don't use a map[][] to count children, put it in Badger
@@ -1700,7 +1787,10 @@ func encodeNode(nodeType NodeType, valueType ValueType, length uint64, value int
 			}
 
 		case ValueTypeUint:
-			v := value.(uint64)
+			v, ok := value.(uint64)
+			if !ok {
+				v = toUint64(value)
+			}
 			encoded := make([]byte, 10)
 			encoded[0] = 'v'
 			encoded[1] = 'u'
@@ -1708,7 +1798,10 @@ func encodeNode(nodeType NodeType, valueType ValueType, length uint64, value int
 			return encoded, nil
 
 		case ValueTypeInt:
-			v := value.(int64)
+			v, ok := value.(int64)
+			if !ok {
+				v = toInt64(value)
+			}
 			encodedBuf := &bytes.Buffer{}
 			_, err := encodedBuf.Write([]byte("vi"))
 			if err != nil {
@@ -1721,7 +1814,10 @@ func encodeNode(nodeType NodeType, valueType ValueType, length uint64, value int
 			return encodedBuf.Bytes(), nil
 
 		case ValueTypeFloat:
-			v := value.(float64)
+			v, ok := value.(float64)
+			if !ok {
+				v = toFloat64(value)
+			}
 			encodedBuf := &bytes.Buffer{}
 			_, err := encodedBuf.Write([]byte("vf"))
 			if err != nil {
@@ -1761,6 +1857,45 @@ func encodeNode(nodeType NodeType, valueType ValueType, length uint64, value int
 	}
 }
 
+func toInt64(val interface{}) int64 {
+	switch v := val.(type) {
+	case int32:
+		return int64(v)
+	case int16:
+		return int64(v)
+	case int8:
+		return int64(v)
+	case int:
+		return int64(v)
+	default:
+		panic("not an int")
+	}
+}
+
+func toUint64(val interface{}) uint64 {
+	switch v := val.(type) {
+	case uint32:
+		return uint64(v)
+	case uint16:
+		return uint64(v)
+	case uint8:
+		return uint64(v)
+	case uint:
+		return uint64(v)
+	default:
+		panic("not a uint")
+	}
+}
+
+func toFloat64(val interface{}) float64 {
+	switch v := val.(type) {
+	case float32:
+		return float64(v)
+	default:
+		panic("not a float")
+	}
+}
+
 func renumberSliceIndexKeypath(rootKeypath, absKeypath Keypath, delta int64) (newAbsKeypath Keypath) {
 	relKeypath := absKeypath.RelativeTo(rootKeypath).Copy()
 	oldIdx := DecodeSliceIndex(relKeypath[:8])
@@ -1777,9 +1912,9 @@ func encodeGoValue(nodeValue interface{}) ([]byte, error) {
 		return encodeNode(NodeTypeSlice, 0, uint64(len(nv)), nil)
 	case bool:
 		return encodeNode(NodeTypeValue, ValueTypeBool, 0, nv)
-	case uint64:
+	case uint64, uint32, uint16, uint8, uint:
 		return encodeNode(NodeTypeValue, ValueTypeUint, 0, nv)
-	case int64:
+	case int64, int32, int16, int8, int:
 		return encodeNode(NodeTypeValue, ValueTypeInt, 0, nv)
 	case float64:
 		return encodeNode(NodeTypeValue, ValueTypeFloat, 0, nv)
@@ -1791,9 +1926,33 @@ func encodeGoValue(nodeValue interface{}) ([]byte, error) {
 		return encodeNode(NodeTypeValue, ValueTypeNil, 0, nv)
 	default:
 		rval := reflect.ValueOf(nodeValue)
-		if rval.Kind() == reflect.Struct {
+		switch {
+		case rval.Kind() == reflect.Struct:
 			z := structomancer.NewWithType(rval.Type(), StructTag)
 			return encodeNode(NodeTypeMap, 0, uint64(z.NumFields()), nil)
+
+		case rval.Kind() == reflect.Ptr && rval.Type().Elem().Kind() == reflect.Struct:
+			z := structomancer.NewWithType(rval.Type(), StructTag)
+			return encodeNode(NodeTypeMap, 0, uint64(z.NumFields()), nil)
+
+		case rval.Kind() == reflect.Map:
+			return encodeNode(NodeTypeMap, 0, uint64(rval.Len()), nil)
+
+		case rval.Kind() == reflect.Slice:
+			if rval.Type().Elem().Kind() == reflect.Uint8 {
+				bs := make([]byte, rval.Len())
+				reflect.Copy(reflect.ValueOf(bs), rval)
+				return encodeNode(NodeTypeValue, ValueTypeBytes, uint64(rval.Len()), bs)
+			}
+			return encodeNode(NodeTypeSlice, 0, uint64(rval.Len()), nil)
+
+		case rval.Kind() == reflect.Array:
+			if rval.Type().Elem().Kind() == reflect.Uint8 {
+				bs := make([]byte, rval.Len())
+				reflect.Copy(reflect.ValueOf(bs), rval) //.Slice(0, rval.Len()))
+				return encodeNode(NodeTypeValue, ValueTypeBytes, uint64(rval.Len()), bs)
+			}
+			return encodeNode(NodeTypeSlice, 0, uint64(rval.Len()), nil)
 		}
 		return nil, errors.Errorf("cannot encode Go value of type (%T)", nodeValue)
 	}

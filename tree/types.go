@@ -49,6 +49,14 @@ type Node interface {
 	innerNode(relKeypath Keypath) Node
 }
 
+type Scanner interface {
+	TreeScan(node Node) error
+}
+
+type Valuer interface {
+	TreeValue() (Node, error)
+}
+
 type NodeType uint8
 
 const (

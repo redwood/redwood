@@ -61,11 +61,13 @@ func NewPeerStore(state *tree.DBTree) *peerStore {
 		for _, pd := range pds {
 			s.peers[pd.dialInfo] = pd
 
-			if !pd.address.IsZero() {
-				if _, exists := s.peersWithAddress[pd.address]; !exists {
-					s.peersWithAddress[pd.address] = make(map[PeerDialInfo]*peerDetails)
+			if len(pd.addresses) > 0 {
+				for addr := range pd.addresses {
+					if _, exists := s.peersWithAddress[addr]; !exists {
+						s.peersWithAddress[addr] = make(map[PeerDialInfo]*peerDetails)
+					}
+					s.peersWithAddress[addr][pd.dialInfo] = pd
 				}
-				s.peersWithAddress[pd.address][pd.dialInfo] = pd
 
 			} else {
 				s.unverifiedPeers[pd.dialInfo] = struct{}{}
@@ -122,14 +124,16 @@ func (s *peerStore) AddVerifiedCredentials(
 	sigpubkey crypto.SigningPublicKey,
 	encpubkey crypto.EncryptingPublicKey,
 ) {
+	if address.IsZero() {
+		panic("cannot add verified peer without credentials")
+	}
+
 	s.muPeers.Lock()
 	defer s.muPeers.Unlock()
 
 	var pd *peerDetails
-	if address != (types.Address{}) {
-		if _, exists := s.peersWithAddress[address]; exists {
-			pd = s.peersWithAddress[address][dialInfo]
-		}
+	if _, exists := s.peersWithAddress[address]; exists {
+		pd = s.peersWithAddress[address][dialInfo]
 	}
 	if pd == nil {
 		if p, exists := s.peers[dialInfo]; exists {
@@ -141,9 +145,19 @@ func (s *peerStore) AddVerifiedCredentials(
 	}
 
 	pd.peerStore = s
-	pd.address = address
-	pd.sigpubkey = sigpubkey
-	pd.encpubkey = encpubkey
+	if pd.addresses == nil {
+		pd.addresses = utils.NewAddressSet(nil)
+	}
+	pd.addresses.Add(address)
+
+	if pd.sigpubkeys == nil {
+		pd.sigpubkeys = make(map[types.Address]crypto.SigningPublicKey)
+	}
+	if pd.encpubkeys == nil {
+		pd.encpubkeys = make(map[types.Address]crypto.EncryptingPublicKey)
+	}
+	pd.sigpubkeys[address] = sigpubkey
+	pd.encpubkeys[address] = encpubkey
 
 	if _, exists := s.peersWithAddress[address]; !exists {
 		s.peersWithAddress[address] = make(map[PeerDialInfo]*peerDetails)
@@ -154,9 +168,7 @@ func (s *peerStore) AddVerifiedCredentials(
 		s.peers[dialInfo] = pd
 	}
 
-	if pd.address != (types.Address{}) {
-		delete(s.unverifiedPeers, pd.dialInfo)
-	}
+	delete(s.unverifiedPeers, pd.dialInfo)
 
 	err := s.savePeerDetails(pd)
 	if err != nil {
@@ -311,27 +323,33 @@ func (s *peerStore) fetchPeerDetails(dialInfo PeerDialInfo) (*peerDetails, error
 }
 
 func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDetails, error) {
-	sigpubkey, err := crypto.SigningPublicKeyFromBytes([]byte(pd.Sigpubkey))
-	if err != nil {
-		return nil, err
-	}
-
-	stateURIs := utils.NewStringSet(nil)
-	for _, stateURI := range pd.StateURIs {
-		stateURIStr, ok := stateURI.(string)
-		if !ok {
-			return nil, errors.Errorf("could not unmarshal peerDetails.stateURIs: bad type (got %T, expected string)", stateURI)
+	sigpubkeys := make(map[types.Address]crypto.SigningPublicKey, len(pd.Sigpubkeys))
+	encpubkeys := make(map[types.Address]crypto.EncryptingPublicKey, len(pd.Encpubkeys))
+	for addrStr, bytes := range pd.Sigpubkeys {
+		addr, err := types.AddressFromHex(addrStr)
+		if err != nil {
+			return nil, err
 		}
-		stateURIs.Add(stateURIStr)
+		sigpubkeys[addr], err = crypto.SigningPublicKeyFromBytes(bytes)
+		if err != nil {
+			return nil, err
+		}
+	}
+	for addrStr, bytes := range pd.Encpubkeys {
+		addr, err := types.AddressFromHex(addrStr)
+		if err != nil {
+			return nil, err
+		}
+		encpubkeys[addr] = crypto.EncryptingPublicKeyFromBytes(bytes)
 	}
 
 	return &peerDetails{
 		peerStore:   s,
 		dialInfo:    pd.DialInfo,
-		address:     types.AddressFromBytes(pd.Address),
-		sigpubkey:   sigpubkey,
-		encpubkey:   crypto.EncryptingPublicKeyFromBytes(pd.Encpubkey),
-		stateURIs:   stateURIs,
+		addresses:   utils.NewAddressSet(pd.Addresses),
+		sigpubkeys:  sigpubkeys,
+		encpubkeys:  encpubkeys,
+		stateURIs:   utils.NewStringSet(pd.StateURIs),
 		lastContact: time.Unix(0, int64(pd.LastContact)),
 		lastFailure: time.Unix(0, int64(pd.LastFailure)),
 		failures:    pd.Failures,
@@ -339,30 +357,27 @@ func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDet
 }
 
 func (s *peerStore) savePeerDetails(peerDetails *peerDetails) error {
-	var stateURIs []interface{}
-	for stateURI := range peerDetails.stateURIs {
-		stateURIs = append(stateURIs, stateURI)
-	}
-
 	state := s.state.State(true)
 	defer state.Close()
 
 	dialInfoHash := s.dialInfoHash(peerDetails.dialInfo)
 	peerKeypath := tree.Keypath("peers").Pushs(dialInfoHash)
 
-	pdc := peerDetailsCodec{
+	pdc := &peerDetailsCodec{
 		DialInfo:    peerDetails.dialInfo,
-		Address:     peerDetails.address.Bytes(),
-		StateURIs:   stateURIs,
+		Addresses:   peerDetails.addresses.Slice(),
+		StateURIs:   peerDetails.stateURIs.Slice(),
 		LastContact: uint64(peerDetails.lastContact.UTC().UnixNano()),
 		LastFailure: uint64(peerDetails.lastFailure.UTC().UnixNano()),
 		Failures:    peerDetails.failures,
 	}
-	if peerDetails.sigpubkey != nil {
-		pdc.Sigpubkey = peerDetails.sigpubkey.Bytes()
+	pdc.Sigpubkeys = make(map[string][]byte, len(peerDetails.sigpubkeys))
+	for addr, key := range peerDetails.sigpubkeys {
+		pdc.Sigpubkeys[addr.Hex()] = key.Bytes()
 	}
-	if peerDetails.encpubkey != nil {
-		pdc.Encpubkey = peerDetails.encpubkey.Bytes()
+	pdc.Encpubkeys = make(map[string][]byte, len(peerDetails.encpubkeys))
+	for addr, key := range peerDetails.encpubkeys {
+		pdc.Encpubkeys[addr.Hex()] = key.Bytes()
 	}
 
 	err := state.Set(peerKeypath, nil, pdc)
@@ -373,9 +388,9 @@ func (s *peerStore) savePeerDetails(peerDetails *peerDetails) error {
 }
 
 type PeerDetails interface {
-	Address() types.Address
+	Addresses() []types.Address
 	DialInfo() PeerDialInfo
-	PublicKeys() (crypto.SigningPublicKey, crypto.EncryptingPublicKey)
+	PublicKeys(addr types.Address) (crypto.SigningPublicKey, crypto.EncryptingPublicKey)
 	AddStateURI(stateURI string)
 	RemoveStateURI(stateURI string)
 	StateURIs() utils.StringSet
@@ -390,9 +405,9 @@ type PeerDetails interface {
 type peerDetails struct {
 	peerStore   *peerStore
 	dialInfo    PeerDialInfo
-	address     types.Address
-	sigpubkey   crypto.SigningPublicKey
-	encpubkey   crypto.EncryptingPublicKey
+	addresses   utils.AddressSet
+	sigpubkeys  map[types.Address]crypto.SigningPublicKey
+	encpubkeys  map[types.Address]crypto.EncryptingPublicKey
 	stateURIs   utils.StringSet
 	lastContact time.Time
 	lastFailure time.Time
@@ -400,14 +415,14 @@ type peerDetails struct {
 }
 
 type peerDetailsCodec struct {
-	DialInfo    PeerDialInfo  `tree:"dialInfo"`
-	Address     []byte        `tree:"address"`
-	Sigpubkey   []byte        `tree:"sigpubkey"`
-	Encpubkey   []byte        `tree:"encpubkey"`
-	StateURIs   []interface{} `tree:"stateURIs"`
-	LastContact uint64        `tree:"lastContact"`
-	LastFailure uint64        `tree:"lastFailure"`
-	Failures    uint64        `tree:"failures"`
+	DialInfo    PeerDialInfo      `tree:"dialInfo"`
+	Addresses   []types.Address   `tree:"address"`
+	Sigpubkeys  map[string][]byte `tree:"sigpubkey"`
+	Encpubkeys  map[string][]byte `tree:"encpubkey"`
+	StateURIs   []string          `tree:"stateURIs"`
+	LastContact uint64            `tree:"lastContact"`
+	LastFailure uint64            `tree:"lastFailure"`
+	Failures    uint64            `tree:"failures"`
 }
 
 func newPeerDetails(peerStore *peerStore, dialInfo PeerDialInfo) *peerDetails {
@@ -418,16 +433,16 @@ func newPeerDetails(peerStore *peerStore, dialInfo PeerDialInfo) *peerDetails {
 	}
 }
 
-func (p *peerDetails) Address() types.Address {
+func (p *peerDetails) Addresses() []types.Address {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
-	return p.address
+	return p.addresses.Slice()
 }
 
-func (p *peerDetails) PublicKeys() (crypto.SigningPublicKey, crypto.EncryptingPublicKey) {
+func (p *peerDetails) PublicKeys(addr types.Address) (crypto.SigningPublicKey, crypto.EncryptingPublicKey) {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
-	return p.sigpubkey, p.encpubkey
+	return p.sigpubkeys[addr], p.encpubkeys[addr]
 }
 
 func (p *peerDetails) DialInfo() PeerDialInfo {

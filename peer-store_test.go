@@ -6,7 +6,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"redwood.dev"
+	"redwood.dev/crypto"
 	"redwood.dev/testutils"
+	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
@@ -20,12 +22,13 @@ func TestPeerStore_DB(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pds, 0)
 
+	addr1 := testutils.RandomAddress(t)
 	pd1 := redwood.NewPeerDetails(
 		p,
 		redwood.PeerDialInfo{TransportName: "http", DialAddr: "http://asdf.dev:1234"},
-		testutils.RandomAddress(t),
-		testutils.RandomSigningPublicKey(t),
-		testutils.RandomEncryptingPublicKey(t),
+		utils.NewAddressSet([]types.Address{addr1}),
+		map[types.Address]crypto.SigningPublicKey{addr1: testutils.RandomSigningPublicKey(t)},
+		map[types.Address]crypto.EncryptingPublicKey{addr1: testutils.RandomEncryptingPublicKey(t)},
 		utils.NewStringSet([]string{"asdf.dev/registry", "asdf.dev/users", "blah.org/foobar"}),
 		testutils.RandomTime(t),
 		testutils.RandomTime(t),
@@ -40,12 +43,13 @@ func TestPeerStore_DB(t *testing.T) {
 
 	requirePeerDetailsEqual(t, pd1, pds[0])
 
+	addr2 := testutils.RandomAddress(t)
 	pd2 := redwood.NewPeerDetails(
 		p,
 		redwood.PeerDialInfo{TransportName: "libp2p", DialAddr: "/ip4/123.456.789.12/tcp/21231/p2p/16Uiu2HAmBn4mSAKEErkYbCWhmgYLwYckRTb4RwDDRrQEFg6ewJAK"},
-		testutils.RandomAddress(t),
-		testutils.RandomSigningPublicKey(t),
-		testutils.RandomEncryptingPublicKey(t),
+		utils.NewAddressSet([]types.Address{addr2}),
+		map[types.Address]crypto.SigningPublicKey{addr2: testutils.RandomSigningPublicKey(t)},
+		map[types.Address]crypto.EncryptingPublicKey{addr2: testutils.RandomEncryptingPublicKey(t)},
 		utils.NewStringSet([]string{"foo.bar/blah", "hello.xyz/asdfasdf"}),
 		testutils.RandomTime(t),
 		testutils.RandomTime(t),
@@ -54,12 +58,13 @@ func TestPeerStore_DB(t *testing.T) {
 	err = p.SavePeerDetails(pd2)
 	require.NoError(t, err)
 
+	addr3 := testutils.RandomAddress(t)
 	pd3 := redwood.NewPeerDetails(
 		p,
 		redwood.PeerDialInfo{TransportName: "libp2p", DialAddr: "/dns4/redwood.dev/tcp/21231/p2p/16Uiu2HAmBn4mSAKEErkYbCWhmgYLwYckRTb4RwEcjaEeiFJKAdjDOF"},
-		testutils.RandomAddress(t),
-		testutils.RandomSigningPublicKey(t),
-		testutils.RandomEncryptingPublicKey(t),
+		utils.NewAddressSet([]types.Address{addr3}),
+		map[types.Address]crypto.SigningPublicKey{addr3: testutils.RandomSigningPublicKey(t)},
+		map[types.Address]crypto.EncryptingPublicKey{addr3: testutils.RandomEncryptingPublicKey(t)},
 		utils.NewStringSet([]string{"foo.bar/blah", "hello.xyz/asdfasdf", "foobar.xyz/xyzzy"}),
 		testutils.RandomTime(t),
 		testutils.RandomTime(t),
@@ -90,9 +95,9 @@ func requirePeerDetailsEqual(t *testing.T, pd1, pd2 redwood.PeerDetails) {
 	t.Helper()
 
 	require.Equal(t, pd1.DialInfo(), pd2.DialInfo())
-	require.Equal(t, pd1.Address(), pd2.Address())
-	sigpubkey1, encpubkey1 := pd1.PublicKeys()
-	sigpubkey2, encpubkey2 := pd2.PublicKeys()
+	require.Equal(t, pd1.Addresses()[0], pd2.Addresses()[0])
+	sigpubkey1, encpubkey1 := pd1.PublicKeys(pd1.Addresses()[0])
+	sigpubkey2, encpubkey2 := pd2.PublicKeys(pd2.Addresses()[0])
 	require.Equal(t, sigpubkey1, sigpubkey2)
 	require.Equal(t, encpubkey1, encpubkey2)
 	require.True(t, pd1.StateURIs().Equal(pd2.StateURIs()))

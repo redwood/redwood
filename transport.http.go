@@ -30,9 +30,11 @@ import (
 
 	"redwood.dev/crypto"
 	"redwood.dev/ctx"
+	"redwood.dev/identity"
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type httpTransport struct {
@@ -42,8 +44,6 @@ type httpTransport struct {
 	defaultStateURI string
 	ownURL          string
 	listenAddr      string
-	sigkeys         *crypto.SigningKeypair
-	enckeys         *crypto.EncryptingKeypair
 	cookieSecret    [32]byte
 	tlsCertFilename string
 	tlsKeyFilename  string
@@ -53,6 +53,7 @@ type httpTransport struct {
 	pendingAuthorizations map[types.ID][]byte
 
 	host      Host
+	keyStore  identity.KeyStore
 	refStore  RefStore
 	peerStore PeerStore
 }
@@ -62,10 +63,9 @@ func NewHTTPTransport(
 	reachableAt string,
 	defaultStateURI string,
 	controllerHub ControllerHub,
+	keyStore identity.KeyStore,
 	refStore RefStore,
 	peerStore PeerStore,
-	sigkeys *crypto.SigningKeypair,
-	enckeys *crypto.EncryptingKeypair,
 	cookieSecret [32]byte,
 	tlsCertFilename, tlsKeyFilename string,
 	devMode bool,
@@ -90,8 +90,6 @@ func NewHTTPTransport(
 		controllerHub:         controllerHub,
 		listenAddr:            listenAddr,
 		defaultStateURI:       defaultStateURI,
-		sigkeys:               sigkeys,
-		enckeys:               enckeys,
 		cookieSecret:          cookieSecret,
 		tlsCertFilename:       tlsCertFilename,
 		tlsKeyFilename:        tlsKeyFilename,
@@ -99,6 +97,7 @@ func NewHTTPTransport(
 		cookieJar:             jar,
 		pendingAuthorizations: make(map[types.ID][]byte),
 		ownURL:                ownURL,
+		keyStore:              keyStore,
 		refStore:              refStore,
 		peerStore:             peerStore,
 	}
@@ -727,7 +726,8 @@ func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Reques
 		panic(err)
 	}
 
-	bs, err := t.enckeys.OpenMessageFrom(
+	bs, err := t.keyStore.OpenMessageFrom(
+		encryptedTx.RecipientAddress,
 		crypto.EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
 		encryptedTx.EncryptedPayload,
 	)
@@ -956,7 +956,7 @@ func (t *httpTransport) NewPeerConn(ctx context.Context, dialAddr string) (Peer,
 }
 
 func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_ <-chan Peer, err error) {
-	defer withStack(&err)
+	defer utils.WithStack(&err)
 
 	providers, err := t.tryFetchProvidersFromAuthoritativeHost(stateURI)
 	if err != nil {
@@ -1051,7 +1051,12 @@ func (t *httpTransport) setSessionIDCookie(w http.ResponseWriter) (types.ID, err
 func (t *httpTransport) setSignedCookie(w http.ResponseWriter, name string, value []byte) error {
 	w.Header().Del("Set-Cookie")
 
-	sig, err := t.sigkeys.SignHash(types.HashBytes(append(value, t.cookieSecret[:]...)))
+	publicIdentity, err := t.keyStore.DefaultPublicIdentity()
+	if err != nil {
+		return err
+	}
+
+	sig, err := t.keyStore.SignHash(publicIdentity.Address(), types.HashBytes(append(value, t.cookieSecret[:]...)))
 	if err != nil {
 		return err
 	}
@@ -1083,7 +1088,17 @@ func (t *httpTransport) signedCookie(r *http.Request, name string) ([]byte, erro
 	sig, err := hex.DecodeString(parts[1])
 	if err != nil {
 		return nil, errors.Wrapf(ErrBadCookie, "cookie '%v' bad hex signature: %v", name, err)
-	} else if !t.sigkeys.VerifySignature(types.HashBytes(append(value, t.cookieSecret[:]...)), sig) {
+	}
+
+	publicIdentity, err := t.keyStore.DefaultPublicIdentity()
+	if err != nil {
+		return nil, err
+	}
+
+	valid, err := t.keyStore.VerifySignature(publicIdentity.Address(), types.HashBytes(append(value, t.cookieSecret[:]...)), sig)
+	if err != nil {
+		return nil, err
+	} else if !valid {
 		return nil, errors.Wrapf(ErrBadCookie, "cookie '%v' has invalid signature (value: %0x)", name, value)
 	}
 	return value, nil
@@ -1217,7 +1232,7 @@ func (p *httpPeer) Subscribe(ctx context.Context, stateURI string) (_ ReadableSu
 func (p *httpPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
-	requestContext, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	if p.DialInfo().DialAddr == "" {
@@ -1225,8 +1240,24 @@ func (p *httpPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []ty
 		return nil
 	}
 
-	_, peerEncPubkey := p.PublicKeys()
-	req, err := PutRequestFromTx(requestContext, tx, p.DialInfo().DialAddr, p.t.enckeys, peerEncPubkey)
+	identity, err := p.t.keyStore.IdentityWithAddress(tx.From)
+	if err != nil {
+		return err
+	}
+
+	var (
+		peerSigPubkey crypto.SigningPublicKey
+		peerEncPubkey crypto.EncryptingPublicKey
+	)
+	if tx.IsPrivate() {
+		peerAddrs := types.OverlappingAddresses(tx.Recipients, p.Addresses())
+		if len(peerAddrs) == 0 {
+			return errors.New("tx not intended for this peer")
+		}
+		peerSigPubkey, peerEncPubkey = p.PublicKeys(peerAddrs[0])
+	}
+
+	req, err := PutRequestFromTx(ctx, tx, p.DialInfo().DialAddr, identity.Encrypting, peerSigPubkey.Address(), peerEncPubkey)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -1270,7 +1301,7 @@ func (p *httpPeer) Ack(stateURI string, txID types.ID) (err error) {
 }
 
 func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error) {
-	defer withStack(&err)
+	defer utils.WithStack(&err)
 	defer func() { p.UpdateConnStats(err == nil) }()
 
 	if p.DialInfo().DialAddr == "" {
@@ -1295,18 +1326,18 @@ func (p *httpPeer) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error
 	return nil
 }
 
-func (p *httpPeer) ReceiveChallengeIdentityResponse() (_ ChallengeIdentityResponse, err error) {
+func (p *httpPeer) ReceiveChallengeIdentityResponse() (_ []ChallengeIdentityResponse, err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
-	var verifyResp ChallengeIdentityResponse
+	var verifyResp []ChallengeIdentityResponse
 	err = json.NewDecoder(p.stream.ReadCloser).Decode(&verifyResp)
 	if err != nil {
-		return ChallengeIdentityResponse{}, err
+		return nil, err
 	}
 	return verifyResp, nil
 }
 
-func (p *httpPeer) RespondChallengeIdentity(verifyAddressResponse ChallengeIdentityResponse) (err error) {
+func (p *httpPeer) RespondChallengeIdentity(verifyAddressResponse []ChallengeIdentityResponse) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
 	err = json.NewEncoder(p.stream.Writer).Encode(verifyAddressResponse)
@@ -1394,7 +1425,8 @@ func (s *httpReadableSubscription) Read() (_ *SubscriptionMsg, err error) {
 			return nil, errors.New("no encrypted tx sent by http peer")
 		}
 
-		bs, err = s.peer.t.enckeys.OpenMessageFrom(
+		bs, err = s.peer.t.keyStore.OpenMessageFrom(
+			msg.EncryptedTx.RecipientAddress,
 			crypto.EncryptingPublicKeyFromBytes(msg.EncryptedTx.SenderPublicKey),
 			msg.EncryptedTx.EncryptedPayload,
 		)
@@ -1439,9 +1471,28 @@ func (sub *httpWritableSubscription) Put(ctx context.Context, tx *Tx, state tree
 			return errors.WithStack(err)
 		}
 
-		_, peerEncPubkey := sub.PublicKeys()
+		peerAddrs := types.OverlappingAddresses(tx.Recipients, sub.Addresses())
+		if len(peerAddrs) == 0 {
+			return errors.New("tx not intended for this peer")
+		}
 
-		encryptedTxBytes, err := sub.t.enckeys.SealMessageFor(peerEncPubkey, marshalledTx)
+		peerSigPubkey, peerEncPubkey := sub.PublicKeys(peerAddrs[0])
+
+		var ownIdentity identity.Identity
+		for _, addr := range tx.Recipients {
+			ownIdentity, err = sub.t.keyStore.IdentityWithAddress(addr)
+			if err != nil {
+				return err
+			}
+			if ownIdentity != (identity.Identity{}) {
+				break
+			}
+		}
+		if ownIdentity == (identity.Identity{}) {
+			return errors.New("private tx Recipients field must contain own address")
+		}
+
+		encryptedTxBytes, err := sub.t.keyStore.SealMessageFor(ownIdentity.Address(), peerEncPubkey, marshalledTx)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -1449,7 +1500,8 @@ func (sub *httpWritableSubscription) Put(ctx context.Context, tx *Tx, state tree
 		etx := &EncryptedTx{
 			TxID:             tx.ID,
 			EncryptedPayload: encryptedTxBytes,
-			SenderPublicKey:  sub.t.enckeys.EncryptingPublicKey.Bytes(),
+			SenderPublicKey:  ownIdentity.Encrypting.EncryptingPublicKey.Bytes(),
+			RecipientAddress: peerSigPubkey.Address(),
 		}
 
 		msg = &SubscriptionMsg{EncryptedTx: etx, Leaves: leaves}

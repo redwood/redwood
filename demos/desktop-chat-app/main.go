@@ -471,7 +471,7 @@ var replCommands = map[string]struct {
 		"list all known peers",
 		func(ctx context.Context, args []string, host rw.Host) error {
 			for _, peer := range host.Peers() {
-				fmt.Println("- ", peer.Address(), peer.DialInfo(), peer.LastContact())
+				fmt.Println("- ", peer.Addresses(), peer.DialInfo(), peer.LastContact())
 			}
 			return nil
 		},

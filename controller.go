@@ -13,6 +13,7 @@ import (
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type Controller interface {
@@ -255,7 +256,7 @@ func (c *controller) processMempoolTx(tx *Tx) processTxOutcome {
 }
 
 func (c *controller) tryApplyTx(tx *Tx) (err error) {
-	defer annotate(&err, "stateURI=%v tx=%v", tx.StateURI, tx.ID.Pretty())
+	defer utils.Annotate(&err, "stateURI=%v tx=%v", tx.StateURI, tx.ID.Pretty())
 
 	//
 	// Validate the tx's intrinsics
@@ -745,7 +746,7 @@ func (c *controller) HaveTx(txID types.ID) (bool, error) {
 }
 
 func (c *controller) QueryIndex(version *types.ID, keypath tree.Keypath, indexName tree.Keypath, queryParam tree.Keypath, rng *tree.Range) (node tree.Node, err error) {
-	defer annotate(&err, "keypath=%v index=%v index_arg=%v rng=%v", keypath, indexName, queryParam, rng)
+	defer utils.Annotate(&err, "keypath=%v index=%v index_arg=%v rng=%v", keypath, indexName, queryParam, rng)
 
 	indexNode := c.indices.IndexAtVersion(version, keypath, indexName, false)
 

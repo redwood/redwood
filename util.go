@@ -35,18 +35,6 @@ var httpClient = func() *http.Client {
 	return &c
 }()
 
-func annotate(err *error, msg string, args ...interface{}) {
-	if *err != nil {
-		*err = errors.Wrapf(*err, msg, args...)
-	}
-}
-
-func withStack(err *error) {
-	if *err != nil {
-		*err = errors.WithStack(*err)
-	}
-}
-
 func combineErrors(errs []error) string {
 	var errStrings []string
 	for _, err := range errs {

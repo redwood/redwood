@@ -290,26 +290,56 @@ func TestDBNode_Scan(t *testing.T) {
 			Foo string `tree:"foo"`
 			Bar uint64 `tree:"bar"`
 		}
+		type CustomBytes []byte
+		type CustomByteArray [4]byte
 		type TestStruct struct {
-			Asdf       []interface{}          `tree:"asdf"`
-			Flo        float64                `tree:"flo"`
-			Flox       []interface{}          `tree:"flox"`
-			Floxx      string                 `tree:"floxx"`
-			Hello      map[string]interface{} `tree:"hello"`
-			SomeStruct SomeStruct             `tree:"someStruct"`
+			Slice           []SomeStruct                        `tree:"slice"`
+			Array           [3]SomeStruct                       `tree:"array"`
+			Flo             float64                             `tree:"flo"`
+			Flox            []interface{}                       `tree:"flox"`
+			Floxx           string                              `tree:"floxx"`
+			Bytes           []byte                              `tree:"bytes"`
+			CustomBytes     CustomBytes                         `tree:"customBytes"`
+			ByteArray       [3]byte                             `tree:"byteArray"`
+			CustomByteArray CustomByteArray                     `tree:"customByteArray"`
+			Map             map[string]interface{}              `tree:"map"`
+			TypedMap        map[uint32]string                   `tree:"typedMap"`
+			TypedMap2       map[CustomByteArray]CustomByteArray `tree:"typedMap2"`
+			SomeStruct      SomeStruct                          `tree:"someStruct"`
 		}
 
 		expected := TestStruct{
-			Asdf: S{"1234", float64(987.2), uint64(333)},
-			Flo:  321,
+			Slice: []SomeStruct{
+				{"oof", 987},
+				{"ofo", 654},
+			},
+			Array: [3]SomeStruct{
+				{"one", 3},
+				{"two", 2},
+				{"three", 1},
+			},
+			Flo: 321,
 			Flox: S{
 				uint64(65),
 				M{"yup": "yes", "hey": uint64(321)},
 				"jkjkjkj",
 			},
-			Floxx: "asdf123",
-			Hello: M{
+			Floxx:           "asdf123",
+			Bytes:           []byte("the bytes"),
+			CustomBytes:     CustomBytes("custom bytes"),
+			ByteArray:       [3]byte{0x9, 0x5, 0x7},
+			CustomByteArray: CustomByteArray{0x7, 0x5, 0x9, 0x8},
+			Map: M{
 				"xyzzy": uint64(33),
+				"ewok":  true,
+			},
+			TypedMap: map[uint32]string{
+				321: "zork",
+				123: "kroz",
+			},
+			TypedMap2: map[CustomByteArray]CustomByteArray{
+				CustomByteArray{6, 2, 4, 1}:     CustomByteArray{12, 14, 16, 18},
+				CustomByteArray{61, 21, 41, 11}: CustomByteArray{16, 12, 14, 11},
 			},
 			SomeStruct: SomeStruct{
 				Foo: "fooooo",
@@ -318,16 +348,37 @@ func TestDBNode_Scan(t *testing.T) {
 		}
 
 		fixture := M{
-			"asdf": S{"1234", float64(987.2), uint64(333)},
-			"flo":  float64(321),
+			"slice": S{
+				M{"foo": "oof", "bar": uint64(987)},
+				M{"foo": "ofo", "bar": uint64(654)},
+			},
+			"array": S{
+				M{"foo": "one", "bar": uint64(3)},
+				M{"foo": "two", "bar": uint64(2)},
+				M{"foo": "three", "bar": uint64(1)},
+			},
+			"flo": float64(321),
 			"flox": S{
 				uint64(65),
 				M{"yup": "yes", "hey": uint64(321)},
 				"jkjkjkj",
 			},
-			"floxx": "asdf123",
-			"hello": M{
+			"floxx":           "asdf123",
+			"bytes":           []byte("the bytes"),
+			"customBytes":     []byte("custom bytes"),
+			"byteArray":       []byte{9, 5, 7},
+			"customByteArray": []byte{7, 5, 9, 8},
+			"map": M{
 				"xyzzy": uint64(33),
+				"ewok":  true,
+			},
+			"typedMap": map[uint32]string{
+				321: "zork",
+				123: "kroz",
+			},
+			"typedMap2": map[string][]byte{
+				string([]byte{6, 2, 4, 1}):     []byte{12, 14, 16, 18},
+				string([]byte{61, 21, 41, 11}): []byte{16, 12, 14, 11},
 			},
 			"someStruct": M{
 				"foo": "fooooo",
@@ -339,6 +390,8 @@ func TestDBNode_Scan(t *testing.T) {
 		defer db.DeleteDB()
 
 		state := db.State(false)
+		defer state.Close()
+
 		var got TestStruct
 		err := state.NodeAt(tree.Keypath("data"), nil).Scan(&got)
 		require.NoError(t, err)

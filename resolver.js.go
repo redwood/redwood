@@ -13,6 +13,7 @@ import (
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type jsResolver struct {
@@ -25,7 +26,7 @@ type jsResolver struct {
 var _ Resolver = (*jsResolver)(nil)
 
 func NewJSResolver(config tree.Node, internalState map[string]interface{}) (_ Resolver, err error) {
-	defer annotate(&err, "NewJSResolver")
+	defer utils.Annotate(&err, "NewJSResolver")
 
 	// srcval, exists, err := nelson.GetValueRecursive(config, tree.Keypath("src"), nil)
 	srcval, exists, err := config.Value(tree.Keypath("src"), nil)
@@ -72,7 +73,7 @@ func (r *jsResolver) InternalState() map[string]interface{} {
 }
 
 func (r *jsResolver) ResolveState(state tree.Node, refStore RefStore, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) (err error) {
-	defer annotate(&err, "jsResolver.ResolveState")
+	defer utils.Annotate(&err, "jsResolver.ResolveState")
 
 	convertedPatches := make([]interface{}, len(patches))
 	for i, patch := range patches {
