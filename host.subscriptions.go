@@ -2,6 +2,7 @@ package redwood
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -305,74 +306,78 @@ func (s *multiReaderSubscription) Start() {
 			return s.host.ProvidersOfStateURI(ctx, s.stateURI), nil
 		},
 	)
-	defer s.peerPool.Close()
 
-	var wgClose sync.WaitGroup
-	wgClose.Add(1)
-	defer func() {
-		wgClose.Done()
-		wgClose.Wait()
-		close(s.chDone)
-	}()
-
-	for {
-		select {
-		case <-s.chStop:
-			return
-		default:
-		}
-
-		time.Sleep(1 * time.Second)
-		peer, err := s.peerPool.GetPeer()
-		if err != nil {
-			log.Errorf("error getting peer from pool: %v", err)
-			// @@TODO: exponential backoff
-			continue
-		}
-
-		err = peer.EnsureConnected(context.TODO())
-		if err != nil {
-			s.host.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
-			s.peerPool.ReturnPeer(peer, false)
-			continue
-		}
-
-		peerSub, err := peer.Subscribe(context.TODO(), s.stateURI)
-		if err != nil {
-			s.host.Errorf("error subscribing to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
-			s.peerPool.ReturnPeer(peer, false)
-			continue
-		}
-
-		wgClose.Add(1)
-		go func() {
-			defer wgClose.Done()
-			defer s.peerPool.ReturnPeer(peer, false)
-			defer peerSub.Close()
-
-			for {
-				select {
-				case <-s.chStop:
-					return
-				default:
-				}
-
-				msg, err := peerSub.Read()
-				if err != nil {
-					s.host.Errorf("error reading: %v", err)
-					return
-				} else if msg.Tx == nil {
-					s.host.Error("error: peer sent empty subscription message")
-					return
-				}
-
-				s.host.HandleTxReceived(*msg.Tx, peer)
-			}
+	go func() {
+		var wgClose sync.WaitGroup
+		defer func() {
+			wgClose.Wait()
+			close(s.chDone)
 		}()
-	}
+
+		for {
+			select {
+			case <-s.chStop:
+				return
+			default:
+			}
+
+			time.Sleep(1 * time.Second)
+			peer, err := s.peerPool.GetPeer()
+			if err != nil {
+				log.Errorf("error getting peer from pool: %v", err)
+				// @@TODO: exponential backoff
+				continue
+			}
+			if reflect.ValueOf(peer).IsNil() {
+				panic("peer is nil")
+			}
+
+			wgClose.Add(1)
+			go func() {
+				defer wgClose.Done()
+				defer s.peerPool.ReturnPeer(peer, false)
+
+				err = peer.EnsureConnected(context.TODO())
+				if err != nil {
+					s.host.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
+					s.peerPool.ReturnPeer(peer, false)
+					return
+				}
+
+				peerSub, err := peer.Subscribe(context.TODO(), s.stateURI)
+				if err != nil {
+					s.host.Errorf("error subscribing to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
+					s.peerPool.ReturnPeer(peer, false)
+					return
+				}
+				defer peerSub.Close()
+
+				for {
+					select {
+					case <-s.chStop:
+						return
+					default:
+					}
+
+					msg, err := peerSub.Read()
+					if err != nil {
+						s.host.Errorf("error reading: %v", err)
+						return
+					} else if msg.Tx == nil {
+						s.host.Error("error: peer sent empty subscription message")
+						return
+					}
+
+					s.host.HandleTxReceived(*msg.Tx, peer)
+				}
+			}()
+		}
+	}()
 }
 
 func (s *multiReaderSubscription) Close() error {
+	s.peerPool.Close()
+	s.host.HandleReadableSubscriptionClosed(s.stateURI)
 	close(s.chStop)
 	<-s.chDone
 	return nil

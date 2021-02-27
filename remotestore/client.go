@@ -15,7 +15,7 @@ import (
 )
 
 type client struct {
-	*ctx.Context
+	ctx.Logger
 	host       string
 	address    types.Address
 	sigprivkey crypto.SigningPrivateKey
@@ -29,7 +29,7 @@ var _ redwood.TxStore = (*client)(nil)
 
 func NewClient(host string, address types.Address, sigprivkey crypto.SigningPrivateKey) *client {
 	return &client{
-		Context:    &ctx.Context{},
+		Logger:     ctx.NewLogger("vault client"),
 		host:       host,
 		address:    address,
 		client:     nil,
@@ -40,39 +40,31 @@ func NewClient(host string, address types.Address, sigprivkey crypto.SigningPriv
 }
 
 func (c *client) Start() error {
-	return c.CtxStart(
-		// on startup,
-		func() error {
-			c.SetLogLabel(c.address.Pretty() + " store:remote")
-			c.Infof(0, "opening remote store at %v", c.host)
+	c.Infof(0, "opening remote store at %v", c.host)
 
-			// handshaker := newGrpcHandshaker(nil, c.sigprivkey)
+	// handshaker := newGrpcHandshaker(nil, c.sigprivkey)
 
-			conn, err := grpc.Dial(c.host,
-				UnaryClientJWT(c),
-				StreamClientJWT(c),
-				grpc.WithInsecure(),
-			)
-			if err != nil {
-				c.Errorf("error opening remote store: %v", err)
-				return errors.WithStack(err)
-			}
-
-			c.client = NewRemoteStoreClient(conn)
-			c.conn = conn
-
-			err = c.Authenticate()
-			return err
-		},
-		nil,
-		nil,
-		// on shutdown
-		func() {
-			if c.conn != nil {
-				c.conn.Close()
-			}
-		},
+	conn, err := grpc.Dial(c.host,
+		UnaryClientJWT(c),
+		StreamClientJWT(c),
+		grpc.WithInsecure(),
 	)
+	if err != nil {
+		c.Errorf("error opening remote store: %v", err)
+		return errors.WithStack(err)
+	}
+
+	c.client = NewRemoteStoreClient(conn)
+	c.conn = conn
+
+	err = c.Authenticate()
+	return err
+}
+
+func (c *client) Close() {
+	if c.conn != nil {
+		c.conn.Close()
+	}
 }
 
 func (c *client) Authenticate() error {

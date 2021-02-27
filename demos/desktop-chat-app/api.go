@@ -1,27 +1,25 @@
+// +build !headless
+
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 
-	// "github.com/gorilla/websocket"
 	"github.com/markbates/pkger"
-
-	rw "redwood.dev"
 )
 
-func startAPI(host rw.Host, port uint) {
-	http.HandleFunc("/ws", serveWs(host))
-	http.HandleFunc("/", serveHome)
+var chLoggedOut = make(chan struct{}, 1)
 
-	pkger.Walk("/frontend/build", func(path string, info os.FileInfo, err error) error {
-		host.Infof(0, "Serving %v", path)
-		return nil
-	})
+func startAPI(port uint) {
+	http.HandleFunc("/api/login", loginUser)
+	http.HandleFunc("/api/logout", logoutUser)
+	http.HandleFunc("/ws", serveWs)
+	http.HandleFunc("/", serveHome)
 
 	err := http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
 	if err != nil {
@@ -29,9 +27,39 @@ func startAPI(host rw.Host, port uint) {
 	}
 }
 
+func loginUser(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	var loginRequest struct {
+		Password string `json:"password"`
+	}
+	err := json.NewDecoder(r.Body).Decode(&loginRequest)
+	if err != nil {
+		panic(err)
+	}
+
+	app.password = loginRequest.Password
+	app.configPath = "./node2.redwoodrc"
+	app.devMode = true
+	err := app.Start()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Fprintf(w, "WORKED!")
+}
+
+func logoutUser(w http.ResponseWriter, r *http.Request) {
+	select {
+	case chLoggedOut <- struct{}{}:
+	default:
+	}
+	app.Close()
+	fmt.Fprintf(w, "WORKED!")
+}
+
 func serveHome(w http.ResponseWriter, r *http.Request) {
 	path := filepath.Join("/frontend/build", r.URL.Path)
-
+	fmt.Println("PATH: ", path)
 	switch filepath.Ext(path) {
 	case ".html":
 		w.Header().Add("Content-Type", "text/html")

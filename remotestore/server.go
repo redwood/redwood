@@ -17,7 +17,7 @@ import (
 )
 
 type server struct {
-	*ctx.Context
+	ctx.Logger
 	listenNetwork    string
 	listenHost       string
 	grpc             *grpc.Server
@@ -33,7 +33,7 @@ func NewServer(listenNetwork, listenHost, dbPath string, allowedAddresses []type
 	}
 
 	return &server{
-		Context:          &ctx.Context{},
+		Logger:           ctx.NewLogger("vault server"),
 		listenNetwork:    listenNetwork,
 		listenHost:       listenHost,
 		grpc:             nil,
@@ -44,52 +44,39 @@ func NewServer(listenNetwork, listenHost, dbPath string, allowedAddresses []type
 }
 
 func (s *server) Start() error {
-	return s.CtxStart(
-		// on startup,
-		func() error {
-			// s.SetLogLabel(s.address.Pretty() + " store:badger")
-			s.Infof(0, "opening badger store at %v", s.dbPath)
+	s.Infof(0, "opening badger store at %v", s.dbPath)
 
-			db, err := badger.Open(badger.DefaultOptions(s.dbPath))
-			if err != nil {
-				return err
-			}
-			s.db = db
+	db, err := badger.Open(badger.DefaultOptions(s.dbPath))
+	if err != nil {
+		return err
+	}
+	s.db = db
 
-			s.Infof(0, "opening grpc listener at %v:%v", s.listenNetwork, s.listenHost)
-			lis, err := net.Listen(s.listenNetwork, s.listenHost)
-			if err != nil {
-				return err
-			}
+	s.Infof(0, "opening grpc listener at %v:%v", s.listenNetwork, s.listenHost)
+	lis, err := net.Listen(s.listenNetwork, s.listenHost)
+	if err != nil {
+		return err
+	}
 
-			// handshaker := newGrpcHandshaker(s.allowedAddresses, nil)
+	// handshaker := newGrpcHandshaker(s.allowedAddresses, nil)
 
-			var opts []grpc.ServerOption = []grpc.ServerOption{
-				// StreamServerLogger(s.Ctx()),
-				// UnaryServerLogger(s.Ctx()),
-				// UnaryServerJWT(s.Ctx()),
-				// StreamServerJWT(s.Ctx()),
-				// grpc.Creds(handshaker),
-			}
-			s.grpc = grpc.NewServer(opts...)
-			RegisterRemoteStoreServer(s.grpc, s)
-			go func() { s.grpc.Serve(lis) }()
+	var opts []grpc.ServerOption = []grpc.ServerOption{
+		// StreamServerLogger(s.Ctx()),
+		// UnaryServerLogger(s.Ctx()),
+		// UnaryServerJWT(s.Ctx()),
+		// StreamServerJWT(s.Ctx()),
+		// grpc.Creds(handshaker),
+	}
+	s.grpc = grpc.NewServer(opts...)
+	RegisterRemoteStoreServer(s.grpc, s)
+	go func() { s.grpc.Serve(lis) }()
 
-			return nil
-		},
-		nil,
-		nil,
-		// on shutdown
-		func() {
-			s.db.Close()
-			s.grpc.GracefulStop()
-		},
-	)
+	return nil
 }
 
-func (s *server) Close() error {
-	s.CtxStop("", nil)
-	return nil
+func (s *server) Close() {
+	s.db.Close()
+	s.grpc.GracefulStop()
 }
 
 func (s *server) requireAuth(ctx context.Context) error {

@@ -48,6 +48,7 @@ github.com/brynbellomy/go-structomancer v1.0.1 h1:gbXmDM/aELs0zHQj07u/OXnF85/YWZ
 github.com/brynbellomy/go-structomancer v1.0.1/go.mod h1:BLBqmko0HzmRBpCfPAwa6Mop/HI1nff7tOxMLYYcHNs=
 github.com/brynbellomy/go-structomancer v1.0.2 h1:utoeCc3oWfjq1Z8eP/b75ZwwqXRCCf91QfgE4nveNc4=
 github.com/brynbellomy/go-structomancer v1.0.2/go.mod h1:ksDiqWcC0cdNSgSCeza3WdV5ffC9gkkKk1EXEakqrPM=
+github.com/brynbellomy/go-structomancer v1.0.3 h1:3ZLfREEbriZ53XhmQ5/ZXUq32c798u1oOKqa6JKAcuc=
 github.com/brynbellomy/go-structomancer v1.0.3/go.mod h1:ksDiqWcC0cdNSgSCeza3WdV5ffC9gkkKk1EXEakqrPM=
 github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae h1:FO8VxsnMvWNRzx3vGjBmS2kotWl9f455Yj0H+9k01zk=
 github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae/go.mod h1:ZecQZYfGLYeVNx5ooyrBwTVsXx+7mi7bpuQLgTxClfQ=

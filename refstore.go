@@ -22,8 +22,8 @@ import (
 )
 
 type RefStore interface {
-	Ctx() *ctx.Context
 	Start() error
+	Close()
 
 	HaveObject(refID types.RefID) (bool, error)
 	Object(refID types.RefID) (io.ReadCloser, int64, error)
@@ -38,7 +38,7 @@ type RefStore interface {
 }
 
 type refStore struct {
-	*ctx.Context
+	ctx.Logger
 
 	rootPath string
 	metadata *badger.DB
@@ -52,34 +52,30 @@ type refStore struct {
 
 func NewRefStore(rootPath string) RefStore {
 	return &refStore{
-		Context:  &ctx.Context{},
+		Logger:   ctx.NewLogger("refstore"),
 		rootPath: rootPath,
 	}
 }
 
 func (s *refStore) Start() error {
-	return s.CtxStart(
-		// on startup
-		func() error {
-			s.SetLogLabel("refstore")
+	opts := badger.DefaultOptions(filepath.Join(s.rootPath, "metadata"))
+	opts.Logger = nil
 
-			opts := badger.DefaultOptions(filepath.Join(s.rootPath, "metadata"))
-			opts.Logger = nil
+	db, err := badger.Open(opts)
+	if err != nil {
+		return err
+	}
+	s.metadata = db
+	return nil
+}
 
-			db, err := badger.Open(opts)
-			if err != nil {
-				return err
-			}
-			s.metadata = db
-			return nil
-		},
-		nil,
-		nil,
-		// on shutdown
-		func() {
-			s.metadata.Close()
-		},
-	)
+func (s *refStore) Close() {
+	if s.metadata != nil {
+		err := s.metadata.Close()
+		if err != nil {
+			s.Errorf("error closing refstore: %v", err)
+		}
+	}
 }
 
 func (s *refStore) ensureRootPath() error {

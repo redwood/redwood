@@ -11,6 +11,7 @@ import (
 	rw "redwood.dev"
 	"redwood.dev/ctx"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type app struct {
@@ -35,20 +36,13 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer host1.Close()
+
 	err = host2.Start()
 	if err != nil {
 		panic(err)
 	}
-
-	app := app{}
-	app.CtxAddChild(host1.Ctx(), nil)
-	app.CtxAddChild(host2.Ctx(), nil)
-	app.CtxStart(
-		func() error { return nil },
-		nil,
-		nil,
-		nil,
-	)
+	defer host2.Close()
 
 	// Connect the two peers using libp2p
 	type libp2pPeerIDer interface {
@@ -77,8 +71,7 @@ func main() {
 
 	sendTxs(host1, host2)
 
-	app.AttachInterruptHandler()
-	app.CtxWait()
+	<-utils.AwaitInterrupt()
 }
 
 func sendTxs(host1, host2 rw.Host) {

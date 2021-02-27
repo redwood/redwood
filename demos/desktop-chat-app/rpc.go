@@ -8,12 +8,12 @@ import (
 
 	"redwood.dev"
 	"redwood.dev/cloud"
-	"redwood.dev/crypto"
+	"redwood.dev/identity"
 )
 
 type HTTPRPCServer struct {
 	*redwood.HTTPRPCServer
-	signingKeypair *crypto.SigningKeypair
+	keyStore identity.KeyStore
 }
 
 type (
@@ -80,10 +80,16 @@ func (s *HTTPRPCServer) CreateCloudStack(r *http.Request, args *CreateCloudStack
 	if err != nil {
 		return err
 	}
+
+	identity, err := s.keyStore.DefaultPublicIdentity()
+	if err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 	return c.CreateStack(ctx, cloud.CreateStackOptions{
 		FirstStateURI:    args.FirstStateURI,
-		AdminAddress:     s.signingKeypair.Address().Hex(),
+		AdminAddress:     identity.Address().Hex(),
 		DomainName:       args.DomainName,
 		DomainEmail:      args.DomainEmail,
 		InstanceLabel:    args.InstanceLabel,
@@ -107,7 +113,12 @@ func (s *HTTPRPCServer) CloudNodeSubscribe(r *http.Request, args *CloudNodeSubsc
 	client := redwood.NewHTTPRPCClient(args.RemoteRPCHost)
 	defer client.Close()
 
-	err := client.Authorize(s.signingKeypair)
+	identity, err := s.keyStore.DefaultPublicIdentity()
+	if err != nil {
+		return err
+	}
+
+	err = client.Authorize(identity.Signing)
 	if err != nil {
 		return err
 	}

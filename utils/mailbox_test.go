@@ -10,6 +10,8 @@ import (
 )
 
 func TestMailbox(t *testing.T) {
+	t.Parallel()
+
 	m := utils.NewMailbox(10)
 
 	var (

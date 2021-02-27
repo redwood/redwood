@@ -1,13 +1,12 @@
 package redwood
 
 import (
-	"redwood.dev/ctx"
 	"redwood.dev/types"
 )
 
 type TxStore interface {
-	Ctx() *ctx.Context
 	Start() error
+	Close()
 
 	AddTx(tx *Tx) error
 	RemoveTx(stateURI string, txID types.ID) error

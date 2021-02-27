@@ -13,8 +13,8 @@ import (
 )
 
 type ControllerHub interface {
-	Ctx() *ctx.Context
 	Start() error
+	Close()
 
 	AddTx(tx *Tx, force bool) error
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
@@ -37,7 +37,8 @@ type ControllerHub interface {
 }
 
 type controllerHub struct {
-	*ctx.Context
+	ctx.Logger
+	chStop chan struct{}
 
 	controllers   map[string]Controller
 	controllersMu sync.RWMutex
@@ -55,7 +56,8 @@ var (
 
 func NewControllerHub(dbRootPath string, txStore TxStore, refStore RefStore) ControllerHub {
 	return &controllerHub{
-		Context:     &ctx.Context{},
+		Logger:      ctx.NewLogger("controller hub"),
+		chStop:      make(chan struct{}),
 		controllers: make(map[string]Controller),
 		dbRootPath:  dbRootPath,
 		txStore:     txStore,
@@ -63,31 +65,36 @@ func NewControllerHub(dbRootPath string, txStore TxStore, refStore RefStore) Con
 	}
 }
 
-func (m *controllerHub) Start() error {
-	return m.CtxStart(
-		// on startup
-		func() error {
-			m.SetLogLabel("controller hub")
+func (m *controllerHub) Start() (err error) {
+	defer func() {
+		if err != nil {
+			m.Close()
+		}
+	}()
 
-			stateURIs, err := m.txStore.KnownStateURIs()
-			if err != nil {
-				return err
-			}
+	stateURIs, err := m.txStore.KnownStateURIs()
+	if err != nil {
+		return err
+	}
 
-			for _, stateURI := range stateURIs {
-				_, err := m.EnsureController(stateURI)
-				if err != nil {
-					return err
-				}
-			}
+	for _, stateURI := range stateURIs {
+		_, err := m.EnsureController(stateURI)
+		if err != nil {
+			return err
+		}
+	}
 
-			return nil
-		},
-		nil,
-		nil,
-		// on shutdown
-		func() {},
-	)
+	return nil
+}
+
+func (m *controllerHub) Close() {
+	close(m.chStop)
+
+	m.controllersMu.Lock()
+	defer m.controllersMu.Unlock()
+	for _, c := range m.controllers {
+		c.Close()
+	}
 }
 
 func (m *controllerHub) EnsureController(stateURI string) (Controller, error) {
@@ -105,7 +112,6 @@ func (m *controllerHub) EnsureController(stateURI string) (Controller, error) {
 
 		ctrl.OnNewState(m.notifyNewStateListeners)
 
-		m.CtxAddChild(ctrl.Ctx(), nil)
 		err = ctrl.Start()
 		if err != nil {
 			m.Errorf("error starting new controller: %v", err)

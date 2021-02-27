@@ -8,7 +8,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	// "github.com/json-iterator/go"
 	"github.com/pkg/errors"
@@ -20,20 +19,6 @@ import (
 //var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 var log = ctx.NewLogger("hi")
-
-var httpClient = func() *http.Client {
-	var c http.Client
-	c.Timeout = 10 * time.Second
-
-	go func() {
-		for {
-			time.Sleep(30 * time.Second)
-			c.CloseIdleConnections()
-		}
-	}()
-
-	return &c
-}()
 
 func combineErrors(errs []error) string {
 	var errStrings []string
