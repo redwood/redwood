@@ -9,8 +9,12 @@ import (
 )
 
 func TestWaitGroupChan(t *testing.T) {
-	t.Run("releases only after sufficiently many calls to Done()", func(t *testing.T) {
-		wg := utils.NewWaitGroupChan()
+	t.Parallel()
+
+	t.Run("with no context cancellation, releases only after sufficiently many calls to Done()", func(t *testing.T) {
+		t.Parallel()
+
+		wg := utils.NewWaitGroupChan(context.Background())
 		defer wg.Close()
 
 		wg.Add(5)
@@ -61,10 +65,48 @@ func TestWaitGroupChan(t *testing.T) {
 			t.Fatal("did not end")
 		}
 	})
+
+	t.Run("releases after the context expires, even if Done() has not been called enough", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		wg := utils.NewWaitGroupChan(ctx)
+		defer wg.Close()
+
+		wg.Add(5)
+
+		select {
+		case <-wg.Wait():
+			t.Fatal("ended too soon")
+		case <-time.After(1 * time.Second):
+		}
+
+		wg.Done()
+
+		select {
+		case <-wg.Wait():
+			t.Fatal("ended too soon")
+		case <-time.After(1 * time.Second):
+		}
+
+		cancel()
+
+		select {
+		case <-wg.Wait():
+		case <-time.After(1 * time.Second):
+			t.Fatal("did not end")
+		}
+	})
 }
 
 func TestCombinedContext(t *testing.T) {
+	t.Parallel()
+
 	t.Run("cancels when an inner context is canceled", func(t *testing.T) {
+		t.Parallel()
+
 		innerCtx, innerCancel := context.WithCancel(context.Background())
 		defer innerCancel()
 
@@ -83,6 +125,8 @@ func TestCombinedContext(t *testing.T) {
 	})
 
 	t.Run("cancels when a channel is closed", func(t *testing.T) {
+		t.Parallel()
+
 		innerCtx, innerCancel := context.WithCancel(context.Background())
 		defer innerCancel()
 
@@ -101,6 +145,8 @@ func TestCombinedContext(t *testing.T) {
 	})
 
 	t.Run("cancels when a duration elapses", func(t *testing.T) {
+		t.Parallel()
+
 		innerCtx, innerCancel := context.WithCancel(context.Background())
 		defer innerCancel()
 
@@ -117,6 +163,8 @@ func TestCombinedContext(t *testing.T) {
 	})
 
 	t.Run("doesn't cancel if none of its children cancel", func(t *testing.T) {
+		t.Parallel()
+
 		innerCtx, innerCancel := context.WithCancel(context.Background())
 		defer innerCancel()
 

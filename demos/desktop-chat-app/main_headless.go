@@ -13,6 +13,7 @@ import (
 
 	"github.com/brynbellomy/klog"
 	"github.com/urfave/cli"
+	"redwood.dev/utils"
 
 	rw "redwood.dev"
 )
@@ -73,6 +74,5 @@ func main() {
 	}
 	defer app.Close()
 
-	go app.waitForCtrlC()
-	select {}
+	<-utils.AwaitInterrupt()
 }

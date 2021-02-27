@@ -7,11 +7,9 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/brynbellomy/klog"
@@ -35,11 +33,13 @@ type appType struct {
 	started       bool
 	refStore      redwood.RefStore
 	txStore       redwood.TxStore
-	keyStore      identity.KeyStore
 	host          redwood.Host
 	db            *tree.DBTree
 	httpRPCServer *http.Server
 	chLoggedOut   chan struct{}
+
+	keyStore identity.KeyStore
+	password string
 
 	// These are set once on startup and never change
 	ctx.Logger
@@ -98,6 +98,11 @@ func (app *appType) Start() (err error) {
 		controllerHub = redwood.NewControllerHub(config.StateDBRoot(), txStore, refStore)
 	)
 	app.keyStore = keyStore
+
+	err = app.keyStore.Unlock(app.password)
+	if err != nil {
+		return err
+	}
 
 	err = refStore.Start()
 	if err != nil {
@@ -327,40 +332,6 @@ func (a *appType) ensureDataDirs(config *redwood.Config) error {
 		return err
 	}
 	return nil
-}
-
-func (app *appType) waitForCtrlC() {
-	sigInbox := make(chan os.Signal, 1)
-
-	signal.Notify(sigInbox, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
-
-	count := 0
-	firstTime := int64(0)
-
-	for range sigInbox {
-		count++
-		curTime := time.Now().Unix()
-
-		// Prevent un-terminated ^c character in terminal
-		fmt.Println()
-
-		if count == 1 {
-			firstTime = curTime
-
-			go func() {
-				app.Close()
-				klog.Flush()
-				fmt.Println("shutdown complete")
-				os.Exit(-1)
-			}()
-		} else {
-			if curTime > firstTime+3 {
-				fmt.Println("\nReceived interrupt before graceful shutdown, terminating...")
-				klog.Flush()
-				os.Exit(-1)
-			}
-		}
-	}
 }
 
 func (app *appType) inputLoop() {

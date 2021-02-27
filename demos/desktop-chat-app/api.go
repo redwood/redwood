@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -27,6 +28,17 @@ func startAPI(port uint) {
 }
 
 func loginUser(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	var loginRequest struct {
+		Password string `json:"password"`
+	}
+	err := json.NewDecoder(r.Body).Decode(&loginRequest)
+	if err != nil {
+		panic(err)
+	}
+
+	app.password = loginRequest.Password
 	app.configPath = "./node2.redwoodrc"
 	app.devMode = true
 	err := app.Start()

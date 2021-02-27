@@ -16,6 +16,7 @@ import (
 	"github.com/webview/webview"
 
 	"redwood.dev"
+	"redwood.dev/utils"
 )
 
 func main() {
@@ -70,7 +71,10 @@ func main() {
 		port := c.Uint("port")
 		// go startGUI(port)
 		go startAPI(port)
-		app.waitForCtrlC()
+
+		defer app.Close()
+
+		<-utils.AwaitInterrupt()
 		return nil
 	}
 

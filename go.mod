@@ -33,6 +33,7 @@ require (
 	github.com/libp2p/go-libp2p-peerstore v0.2.6
 	github.com/libp2p/go-libp2p-protocol v0.1.0
 	github.com/libp2p/go-libp2p-record v0.1.3
+	github.com/linode/linodego v1.0.0
 	github.com/markbates/pkger v0.17.0
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/multiformats/go-multiaddr v0.3.1
@@ -45,13 +46,15 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
 	github.com/urfave/cli v1.22.1
-	github.com/yhat/wsutil v0.0.0-20170731153501-1d66fa95c997 // indirect
+	github.com/yhat/wsutil v0.0.0-20170731153501-1d66fa95c997
 	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036
 	go.uber.org/multierr v1.5.0
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/net v0.0.0-20200822124328-c89045814202
+	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	google.golang.org/grpc v1.31.1
+	google.golang.org/protobuf v1.23.0
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 	rogchap.com/v8go v0.5.0
 )
