@@ -118,10 +118,21 @@ func sendTxs(host1, host2 rw.Host) {
 		panic(err)
 	}
 
+	identities1, err := host1.Identities()
+	if err != nil {
+		panic(err)
+	}
+	identities2, err := host2.Identities()
+	if err != nil {
+		panic(err)
+	}
+	host1Addr := identities1[0].Address()
+	host2Addr := identities2[0].Address()
+
 	// These are just convenience utils
 	hostsByAddress := map[types.Address]rw.Host{
-		host1.Address(): host1,
-		host2.Address(): host2,
+		host1Addr: host1,
+		host2Addr: host2,
 	}
 
 	sendTx := func(tx rw.Tx) {
@@ -157,7 +168,7 @@ func sendTxs(host1, host2 rw.Host) {
 		genesisDemo = rw.Tx{
 			ID:       rw.GenesisTxID,
 			Parents:  []types.ID{},
-			From:     host1.Address(),
+			From:     host1Addr,
 			StateURI: "somegitprovider.org/gitdemo",
 			Patches: []rw.Patch{
 				mustParsePatch(` = {
@@ -216,7 +227,7 @@ func sendTxs(host1, host2 rw.Host) {
 		commit1Repo = rw.Tx{
 			ID:         commit1RepoTxID,
 			Parents:    []types.ID{genesisDemo.ID},
-			From:       host1.Address(),
+			From:       host1Addr,
 			StateURI:   "somegitprovider.org/gitdemo",
 			Checkpoint: true,
 			Patches: []rw.Patch{

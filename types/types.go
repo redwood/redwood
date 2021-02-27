@@ -123,6 +123,18 @@ func (a *Address) UnmarshalText(asHex []byte) error {
 	return nil
 }
 
+func OverlappingAddresses(one, two []Address) []Address {
+	var overlap []Address
+	for _, a := range one {
+		for _, b := range two {
+			if a == b {
+				overlap = append(overlap, a)
+			}
+		}
+	}
+	return overlap
+}
+
 type Signature []byte
 
 func SignatureFromHex(hx string) (Signature, error) {

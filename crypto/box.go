@@ -43,7 +43,10 @@ func GenerateEncryptingKeypair() (*EncryptingKeypair, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &EncryptingKeypair{EncryptingPrivateKey: (*encryptingPrivateKey)(privateKey), EncryptingPublicKey: (*encryptingPublicKey)(publicKey)}, nil
+	return &EncryptingKeypair{
+		EncryptingPrivateKey: (*encryptingPrivateKey)(privateKey),
+		EncryptingPublicKey:  (*encryptingPublicKey)(publicKey),
+	}, nil
 }
 
 func EncryptingPublicKeyFromBytes(bs []byte) EncryptingPublicKey {

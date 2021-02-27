@@ -9,7 +9,6 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"redwood.dev/ctx"
-	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
@@ -167,7 +166,7 @@ func (p *peerPool) nextAvailablePeer() Peer {
 		} else if !peer.peer.Ready() {
 			p.Debugf("skipping peer: failures=%v lastFailure=%v", peer.peer.Failures(), time.Now().Sub(peer.peer.LastFailure()))
 			continue
-		} else if peer.peer.Address() == (types.Address{}) {
+		} else if len(peer.peer.Addresses()) == 0 {
 			p.Debugf("skipping peer: unverified (%v: %v)", peer.peer.DialInfo().TransportName, peer.peer.DialInfo().DialAddr)
 			continue
 		}

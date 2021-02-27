@@ -10,6 +10,7 @@ import (
 
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
+	"redwood.dev/utils"
 )
 
 type jsIndexer struct {
@@ -47,7 +48,7 @@ func NewJSIndexer(config tree.Node) (Indexer, error) {
 }
 
 func (i *jsIndexer) IndexNode(relKeypath tree.Keypath, node tree.Node) (_ tree.Keypath, _ tree.Node, err error) {
-	defer withStack(&err)
+	defer utils.WithStack(&err)
 
 	exists, err := node.Exists(nil)
 	if err != nil {

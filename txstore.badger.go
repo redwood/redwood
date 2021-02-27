@@ -51,7 +51,7 @@ func makeTxKey(stateURI string, txID types.ID) []byte {
 }
 
 func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
-	defer annotate(&err, "badgerTxStore#AddTx")
+	defer utils.Annotate(&err, "badgerTxStore#AddTx")
 
 	bs, err := tx.MarshalProto()
 	if err != nil {

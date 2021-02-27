@@ -211,14 +211,12 @@ func StartHTTPRPC(svc HTTPRPCService, config *HTTPRPCConfig) error {
 
 type HTTPRPCServer struct {
 	*ctx.Context
-	address types.Address
-	host    Host
+	host Host
 }
 
-func NewHTTPRPCServer(addr types.Address, host Host) *HTTPRPCServer {
+func NewHTTPRPCServer(host Host) *HTTPRPCServer {
 	return &HTTPRPCServer{
 		Context: &ctx.Context{},
-		address: addr,
 		host:    host,
 	}
 }
@@ -257,14 +255,42 @@ func (s *HTTPRPCServer) Subscribe(r *http.Request, args *RPCSubscribeArgs, resp 
 }
 
 type (
-	RPCNodeAddressArgs     struct{}
-	RPCNodeAddressResponse struct {
+	RPCIdentitiesArgs     struct{}
+	RPCIdentitiesResponse struct {
+		Identities []RPCIdentity
+	}
+	RPCIdentity struct {
+		Address types.Address
+		Public  bool
+	}
+)
+
+func (s *HTTPRPCServer) Identities(r *http.Request, args *RPCIdentitiesArgs, resp *RPCIdentitiesResponse) error {
+	identities, err := s.host.Identities()
+	if err != nil {
+		return err
+	}
+	for _, identity := range identities {
+		resp.Identities = append(resp.Identities, RPCIdentity{identity.Address(), identity.Public})
+	}
+	return nil
+}
+
+type (
+	RPCNewIdentityArgs struct {
+		Public bool
+	}
+	RPCNewIdentityResponse struct {
 		Address types.Address
 	}
 )
 
-func (s *HTTPRPCServer) NodeAddress(r *http.Request, args *RPCNodeAddressArgs, resp *RPCNodeAddressResponse) error {
-	resp.Address = s.address
+func (s *HTTPRPCServer) NewIdentity(r *http.Request, args *RPCNewIdentityArgs, resp *RPCNewIdentityResponse) error {
+	identity, err := s.host.NewIdentity(args.Public)
+	if err != nil {
+		return err
+	}
+	resp.Address = identity.Address()
 	return nil
 }
 

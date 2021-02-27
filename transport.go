@@ -39,8 +39,8 @@ type Peer interface {
 
 	// Identity/authentication
 	ChallengeIdentity(challengeMsg types.ChallengeMsg) error
-	RespondChallengeIdentity(verifyAddressResponse ChallengeIdentityResponse) error
-	ReceiveChallengeIdentityResponse() (ChallengeIdentityResponse, error)
+	RespondChallengeIdentity(verifyAddressResponse []ChallengeIdentityResponse) error
+	ReceiveChallengeIdentityResponse() ([]ChallengeIdentityResponse, error)
 
 	// Refs (referenced extrinsics)
 	FetchRef(refID types.RefID) error
@@ -68,9 +68,10 @@ type FetchRefResponseBody struct {
 }
 
 type EncryptedTx struct {
-	TxID             types.ID `json:"txID"`
-	EncryptedPayload []byte   `json:"encryptedPayload"`
-	SenderPublicKey  []byte   `json:"senderPublicKey"`
+	TxID             types.ID      `json:"txID"`
+	EncryptedPayload []byte        `json:"encryptedPayload"`
+	SenderPublicKey  []byte        `json:"senderPublicKey"`
+	RecipientAddress types.Address `json:"recipientAddress"`
 }
 
 type FetchHistoryHandler func(stateURI string, parents []types.ID, toVersion types.ID, peer Peer) error

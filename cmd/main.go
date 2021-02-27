@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -18,8 +19,8 @@ import (
 	"github.com/urfave/cli"
 
 	rw "redwood.dev"
-	"redwood.dev/crypto"
 	"redwood.dev/ctx"
+	"redwood.dev/identity"
 	"redwood.dev/tree"
 )
 
@@ -44,9 +45,13 @@ func main() {
 
 	cliApp.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:  "config",
+			Name:  "c, config",
 			Value: filepath.Join(configRoot, ".redwoodrc"),
 			Usage: "location of config file",
+		},
+		cli.StringFlag{
+			Name:  "p, password-file",
+			Usage: "location of password file",
 		},
 		cli.BoolFlag{
 			Name:  "gui",
@@ -59,10 +64,11 @@ func main() {
 	}
 
 	cliApp.Action = func(c *cli.Context) error {
+		passwordFile := c.String("password-file")
 		configPath := c.String("config")
 		gui := c.Bool("gui")
 		dev := c.Bool("dev")
-		return run(configPath, gui, dev)
+		return run(configPath, passwordFile, gui, dev)
 	}
 
 	err = cliApp.Run(os.Args)
@@ -72,7 +78,7 @@ func main() {
 	}
 }
 
-func run(configPath string, gui bool, dev bool) error {
+func run(configPath, passwordFile string, gui, dev bool) error {
 	var termUI *termUI
 	if gui {
 		termUI = NewTermUI()
@@ -103,6 +109,11 @@ func run(configPath string, gui bool, dev bool) error {
 	klog.Flush()
 	defer klog.Flush()
 
+	passwordBytes, err := ioutil.ReadFile(passwordFile)
+	if err != nil {
+		return err
+	}
+
 	config, err := rw.ReadConfigAtPath("redwood", configPath)
 	if err != nil {
 		return err
@@ -117,27 +128,23 @@ func run(configPath string, gui bool, dev bool) error {
 		return err
 	}
 
-	signingKeypair, err := crypto.SigningKeypairFromHDMnemonic(config.Node.HDMnemonicPhrase, crypto.DefaultHDDerivationPath)
-	if err != nil {
-		return err
-	}
-
-	encryptingKeypair, err := crypto.GenerateEncryptingKeypair()
-	if err != nil {
-		return err
-	}
-
-	peerDB, err := tree.NewDBTree(filepath.Join(config.Node.DataRoot, "peers"))
+	db, err := tree.NewDBTree(filepath.Join(config.Node.DataRoot, "shared"))
 	if err != nil {
 		return err
 	}
 
 	var (
 		txStore       = rw.NewBadgerTxStore(config.TxDBRoot())
+		keyStore      = identity.NewBadgerKeyStore(db, identity.DefaultScryptParams)
 		refStore      = rw.NewRefStore(config.RefDataRoot())
-		peerStore     = rw.NewPeerStore(peerDB)
+		peerStore     = rw.NewPeerStore(db)
 		controllerHub = rw.NewControllerHub(config.StateDBRoot(), txStore, refStore)
 	)
+
+	err = keyStore.Unlock(string(passwordBytes))
+	if err != nil {
+		return err
+	}
 
 	err = refStore.Start()
 	if err != nil {
@@ -163,13 +170,12 @@ func run(configPath string, gui bool, dev bool) error {
 		}
 
 		libp2pTransport, err := rw.NewLibp2pTransport(
-			signingKeypair.Address(),
 			config.P2PTransport.ListenPort,
 			config.P2PTransport.ReachableAt,
 			config.P2PTransport.KeyFile,
-			encryptingKeypair,
 			bootstrapPeers,
 			controllerHub,
+			keyStore,
 			refStore,
 			peerStore,
 		)
@@ -191,10 +197,9 @@ func run(configPath string, gui bool, dev bool) error {
 			config.HTTPTransport.ReachableAt,
 			config.HTTPTransport.DefaultStateURI,
 			controllerHub,
+			keyStore,
 			refStore,
 			peerStore,
-			signingKeypair,
-			encryptingKeypair,
 			cookieSecret,
 			tlsCertFilename,
 			tlsKeyFilename,
@@ -206,7 +211,7 @@ func run(configPath string, gui bool, dev bool) error {
 		transports = append(transports, httpTransport)
 	}
 
-	host, err := rw.NewHost(signingKeypair, encryptingKeypair, transports, controllerHub, refStore, peerStore, config)
+	host, err := rw.NewHost(transports, controllerHub, keyStore, refStore, peerStore, config)
 	if err != nil {
 		return err
 	}
@@ -217,7 +222,7 @@ func run(configPath string, gui bool, dev bool) error {
 	}
 
 	if config.HTTPRPC.Enabled {
-		httpRPC := rw.NewHTTPRPCServer(signingKeypair.Address(), host)
+		httpRPC := rw.NewHTTPRPCServer(host)
 
 		err = rw.StartHTTPRPC(httpRPC, config.HTTPRPC)
 		if err != nil {

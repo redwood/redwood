@@ -11,6 +11,7 @@ import (
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type luaResolver struct {
@@ -49,7 +50,7 @@ func (r *luaResolver) InternalState() map[string]interface{} {
 }
 
 func (r *luaResolver) ResolveState(state tree.Node, refStore RefStore, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) (err error) {
-	defer annotate(&err, "luaResolver.ResolveState")
+	defer utils.Annotate(&err, "luaResolver.ResolveState")
 
 	luaPatches, err := luaconv.Wrap(r.L, reflect.ValueOf(patches))
 	if err != nil {
