@@ -70,7 +70,6 @@ func NewHTTPTransport(
 	keyStore identity.KeyStore,
 	refStore RefStore,
 	peerStore PeerStore,
-	cookieSecret [32]byte,
 	tlsCertFilename, tlsKeyFilename string,
 	devMode bool,
 ) (Transport, error) {
@@ -95,7 +94,6 @@ func NewHTTPTransport(
 		controllerHub:         controllerHub,
 		listenAddr:            listenAddr,
 		defaultStateURI:       defaultStateURI,
-		cookieSecret:          cookieSecret,
 		tlsCertFilename:       tlsCertFilename,
 		tlsKeyFilename:        tlsKeyFilename,
 		devMode:               devMode,
@@ -107,7 +105,28 @@ func NewHTTPTransport(
 		refStore:              refStore,
 		peerStore:             peerStore,
 	}
+	keyStore.OnLoadUser(t.onLoadUser)
+	keyStore.OnSaveUser(t.onSaveUser)
 	return t, nil
+}
+
+func (t *httpTransport) onLoadUser(user identity.User) error {
+	maybeSecret, exists := user.ExtraData("http:cookiesecret")
+	cookieSecret, isBytes := maybeSecret.([]byte)
+	if !exists || !isBytes {
+		cookieSecret := make([]byte, 32)
+		_, err := rand.Read(cookieSecret)
+		if err != nil {
+			return err
+		}
+	}
+	copy(t.cookieSecret[:], cookieSecret)
+	return nil
+}
+
+func (t *httpTransport) onSaveUser(user identity.User) error {
+	user.SaveExtraData("http:cookiesecret", t.cookieSecret)
+	return nil
 }
 
 func (t *httpTransport) Start() error {
@@ -122,7 +141,19 @@ func (t *httpTransport) Start() error {
 	}
 
 	// Update our node's info in the peer store
-	t.peerStore.AddDialInfos([]PeerDialInfo{{t.Name(), t.ownURL}})
+	identities, err := t.keyStore.Identities()
+	if err != nil {
+		return err
+	}
+	for _, identity := range identities {
+		t.peerStore.AddVerifiedCredentials(
+			PeerDialInfo{TransportName: t.Name(), DialAddr: t.ownURL},
+			identity.Signing.SigningPublicKey.Address(),
+			identity.Signing.SigningPublicKey,
+			identity.Encrypting.EncryptingPublicKey,
+		)
+	}
+
 	go func() {
 		if !t.devMode {
 			t.srv = &http.Server{

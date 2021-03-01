@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -84,25 +83,58 @@ func NewLibp2pTransport(
 	keyStore identity.KeyStore,
 	refStore RefStore,
 	peerStore PeerStore,
-) (Transport, error) {
-	p2pKey, err := obtainP2PKey(keyfilePath)
-	if err != nil {
-		return nil, err
-	}
+) Transport {
 	t := &libp2pTransport{
 		Logger:            ctx.NewLogger("libp2p"),
 		chStop:            make(chan struct{}),
 		chDone:            make(chan struct{}),
 		port:              port,
 		reachableAt:       reachableAt,
-		p2pKey:            p2pKey,
 		controllerHub:     controllerHub,
 		keyStore:          keyStore,
 		refStore:          refStore,
 		peerStore:         peerStore,
 		writeSubsByPeerID: make(map[peer.ID]map[netp2p.Stream]WritableSubscription),
 	}
-	return t, nil
+	keyStore.OnLoadUser(t.onLoadUser)
+	keyStore.OnSaveUser(t.onSaveUser)
+	return t
+}
+
+func (t *libp2pTransport) onLoadUser(user identity.User) (err error) {
+	defer utils.WithStack(&err)
+
+	maybeKey, exists := user.ExtraData("libp2p:p2pkey")
+	p2pkeyBytes, isString := maybeKey.(string)
+	if exists && isString {
+		bs, err := hex.DecodeString(p2pkeyBytes)
+		if err != nil {
+			return err
+		}
+		p2pKey, err := cryptop2p.UnmarshalPrivateKey(bs)
+		if err != nil {
+			return err
+		}
+		t.p2pKey = p2pKey
+		return nil
+	}
+
+	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Secp256k1, 0)
+	if err != nil {
+		return err
+	}
+	t.p2pKey = p2pKey
+	return nil
+}
+
+func (t *libp2pTransport) onSaveUser(user identity.User) error {
+	bs, err := cryptop2p.MarshalPrivateKey(t.p2pKey)
+	if err != nil {
+		return err
+	}
+	hexKey := hex.EncodeToString(bs)
+	user.SaveExtraData("libp2p:p2pkey", hexKey)
+	return nil
 }
 
 func (t *libp2pTransport) Start() error {
@@ -1108,39 +1140,6 @@ func (sub *libp2pWritableSubscription) Put(ctx context.Context, tx *Tx, state tr
 		return err
 	}
 	return sub.libp2pPeer.Put(ctx, tx, state, leaves)
-}
-
-func obtainP2PKey(keyfilePath string) (cryptop2p.PrivKey, error) {
-	f, err := os.Open(keyfilePath)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-
-	} else if err == nil {
-		defer f.Close()
-
-		data, err := ioutil.ReadFile(keyfilePath)
-		if err != nil {
-			return nil, err
-		}
-		return cryptop2p.UnmarshalPrivateKey(data)
-	}
-
-	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Secp256k1, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	bs, err := p2pKey.Bytes()
-	if err != nil {
-		return nil, err
-	}
-
-	err = ioutil.WriteFile(keyfilePath, bs, 0400)
-	if err != nil {
-		return nil, err
-	}
-
-	return p2pKey, nil
 }
 
 func cidForString(s string) (cid.Cid, error) {
