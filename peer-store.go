@@ -156,8 +156,12 @@ func (s *peerStore) AddVerifiedCredentials(
 	if pd.encpubkeys == nil {
 		pd.encpubkeys = make(map[types.Address]crypto.EncryptingPublicKey)
 	}
-	pd.sigpubkeys[address] = sigpubkey
-	pd.encpubkeys[address] = encpubkey
+	if sigpubkey != nil {
+		pd.sigpubkeys[address] = sigpubkey
+	}
+	if encpubkey != nil {
+		pd.encpubkeys[address] = encpubkey
+	}
 
 	if _, exists := s.peersWithAddress[address]; !exists {
 		s.peersWithAddress[address] = make(map[PeerDialInfo]*peerDetails)

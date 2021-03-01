@@ -17,6 +17,7 @@ import (
 	"github.com/brynbellomy/klog"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
+	"redwood.dev"
 
 	rw "redwood.dev"
 	"redwood.dev/ctx"
@@ -74,12 +75,18 @@ func main() {
 
 	err = cliApp.Run(os.Args)
 	if err != nil {
-		fmt.Println("error:", err)
+		fmt.Printf("error: %+v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(configPath, passwordFile string, gui, dev bool) error {
+func run(configPath, passwordFile string, gui, dev bool) (err error) {
+	defer utils.WithStack(&err)
+
+	if passwordFile == "" {
+		return errors.New("must specify --password-file flag")
+	}
+
 	var termUI *termUI
 	if gui {
 		termUI = NewTermUI()
@@ -142,6 +149,57 @@ func run(configPath, passwordFile string, gui, dev bool) error {
 		controllerHub = rw.NewControllerHub(config.StateDBRoot(), txStore, refStore)
 	)
 
+	var transports []rw.Transport
+
+	if config.P2PTransport.Enabled {
+		var bootstrapPeers []string
+		for _, bp := range config.Node.BootstrapPeers {
+			if bp.Transport != "libp2p" {
+				continue
+			}
+			bootstrapPeers = append(bootstrapPeers, bp.DialAddresses...)
+		}
+
+		libp2pTransport := rw.NewLibp2pTransport(
+			config.P2PTransport.ListenPort,
+			config.P2PTransport.ReachableAt,
+			config.P2PTransport.KeyFile,
+			bootstrapPeers,
+			controllerHub,
+			keyStore,
+			refStore,
+			peerStore,
+		)
+		transports = append(transports, libp2pTransport)
+	}
+
+	if config.HTTPTransport.Enabled {
+		tlsCertFilename := filepath.Join(config.Node.DataRoot, "server.crt")
+		tlsKeyFilename := filepath.Join(config.Node.DataRoot, "server.key")
+
+		httpTransport, err := rw.NewHTTPTransport(
+			config.HTTPTransport.ListenHost,
+			config.HTTPTransport.ReachableAt,
+			config.HTTPTransport.DefaultStateURI,
+			controllerHub,
+			keyStore,
+			refStore,
+			peerStore,
+			tlsCertFilename,
+			tlsKeyFilename,
+			config.Node.DevMode,
+		)
+		if err != nil {
+			return err
+		}
+		transports = append(transports, httpTransport)
+	}
+
+	host, err := rw.NewHost(transports, controllerHub, keyStore, refStore, peerStore, config)
+	if err != nil {
+		return err
+	}
+
 	err = keyStore.Unlock(string(passwordBytes))
 	if err != nil {
 		return err
@@ -158,64 +216,6 @@ func run(configPath, passwordFile string, gui, dev bool) error {
 		return err
 	}
 	defer txStore.Close()
-
-	var transports []rw.Transport
-
-	if config.P2PTransport.Enabled {
-		var bootstrapPeers []string
-		for _, bp := range config.Node.BootstrapPeers {
-			if bp.Transport != "libp2p" {
-				continue
-			}
-			bootstrapPeers = append(bootstrapPeers, bp.DialAddresses...)
-		}
-
-		libp2pTransport, err := rw.NewLibp2pTransport(
-			config.P2PTransport.ListenPort,
-			config.P2PTransport.ReachableAt,
-			config.P2PTransport.KeyFile,
-			bootstrapPeers,
-			controllerHub,
-			keyStore,
-			refStore,
-			peerStore,
-		)
-		if err != nil {
-			return err
-		}
-		transports = append(transports, libp2pTransport)
-	}
-
-	if config.HTTPTransport.Enabled {
-		tlsCertFilename := filepath.Join(config.Node.DataRoot, "server.crt")
-		tlsKeyFilename := filepath.Join(config.Node.DataRoot, "server.key")
-
-		var cookieSecret [32]byte
-		copy(cookieSecret[:], []byte(config.HTTPTransport.CookieSecret))
-
-		httpTransport, err := rw.NewHTTPTransport(
-			config.HTTPTransport.ListenHost,
-			config.HTTPTransport.ReachableAt,
-			config.HTTPTransport.DefaultStateURI,
-			controllerHub,
-			keyStore,
-			refStore,
-			peerStore,
-			cookieSecret,
-			tlsCertFilename,
-			tlsKeyFilename,
-			config.Node.DevMode,
-		)
-		if err != nil {
-			return err
-		}
-		transports = append(transports, httpTransport)
-	}
-
-	host, err := rw.NewHost(transports, controllerHub, keyStore, refStore, peerStore, config)
-	if err != nil {
-		return err
-	}
 
 	err = host.Start()
 	if err != nil {
@@ -413,6 +413,25 @@ var replCommands = map[string]struct {
 			state = state.NodeAt(keypath, rng)
 			state.DebugPrint(log.Debugf, false, 0)
 			fmt.Println(rw.PrettyJSON(state))
+			return nil
+		},
+	},
+	"peers": {
+		"list all known peers",
+		func(ctx context.Context, args []string, host redwood.Host) error {
+			for _, peer := range host.Peers() {
+				fmt.Println("- ", peer.Addresses(), peer.DialInfo(), peer.LastContact())
+			}
+			return nil
+		},
+	},
+	"addpeer": {
+		"list all known peers",
+		func(ctx context.Context, args []string, host redwood.Host) error {
+			if len(args) < 2 {
+				return errors.New("requires two arguments: addpeer <transport> <dial addr>")
+			}
+			host.AddPeer(redwood.PeerDialInfo{args[0], args[1]})
 			return nil
 		},
 	},

@@ -20,13 +20,13 @@ Then, start the first Redwood node:
 
 ```sh
 $ cd ../demos/chat
-$ redwood --config ./node1.redwoodrc 
+$ redwood --config ./node1.redwoodrc --password-file ./password.txt
 ```
 
 Then, open another terminal and start the second Redwood node:
 
 ```sh
-$ redwood --config ./node2.redwoodrc 
+$ redwood --config ./node2.redwoodrc --password-file ./password.txt
 ```
 
 Lastly, open another terminal and run the `setup.js` script:

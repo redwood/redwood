@@ -553,6 +553,7 @@ func (h *host) processPeers(ctx context.Context) {
 			}()
 		}
 	}
+
 	wg.Done()
 	<-wg.Wait()
 }
@@ -781,6 +782,7 @@ func (h *host) HandleChallengeIdentity(challengeMsg types.ChallengeMsg, peer Pee
 
 	publicIdentities, err := h.keyStore.PublicIdentities()
 	if err != nil {
+		h.Errorf("error fetching public identities from key store: %v", err)
 		return err
 	}
 
@@ -788,6 +790,7 @@ func (h *host) HandleChallengeIdentity(challengeMsg types.ChallengeMsg, peer Pee
 	for _, identity := range publicIdentities {
 		sig, err := h.keyStore.SignHash(identity.Address(), types.HashBytes(challengeMsg))
 		if err != nil {
+			h.Errorf("error signing hash: %v", err)
 			return err
 		}
 		responses = append(responses, ChallengeIdentityResponse{

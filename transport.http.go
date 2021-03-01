@@ -259,9 +259,9 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Subscribe") != "" {
 			t.serveSubscription(w, r, address)
 		} else {
-			if r.URL.Path == "/braid.js" {
+			if r.URL.Path == "/redwood.js" {
 				// @@TODO: this is hacky
-				t.serveBraidJS(w, r)
+				t.serveRedwoodJS(w, r)
 			} else if strings.HasPrefix(r.URL.Path, "/__tx/") {
 				t.serveGetTx(w, r)
 			} else {
@@ -418,14 +418,14 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 	<-writeSub.chDone
 }
 
-func (t *httpTransport) serveBraidJS(w http.ResponseWriter, r *http.Request) {
-	f, err := pkger.Open("/braidjs/dist/braid.js")
+func (t *httpTransport) serveRedwoodJS(w http.ResponseWriter, r *http.Request) {
+	f, err := pkger.Open("/redwoodjs/dist/browser.js")
 	if err != nil {
 		http.Error(w, "can't find braidjs", http.StatusNotFound)
 		return
 	}
 	defer f.Close()
-	http.ServeContent(w, r, "./braidjs/braid-dist.js", time.Now(), f)
+	http.ServeContent(w, r, "./redwood.js", time.Now(), f)
 	return
 }
 

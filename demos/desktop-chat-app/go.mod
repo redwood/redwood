@@ -13,6 +13,6 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/urfave/cli v1.22.5
 	github.com/webview/webview v0.0.0-20200724072439-e0c01595b361
-	golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
+	golang.org/x/net v0.0.0-20200822124328-c89045814202
 	redwood.dev v0.0.0-00010101000000-000000000000
 )

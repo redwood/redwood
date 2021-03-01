@@ -193,12 +193,16 @@ func (p *peerPool) GetPeer() (Peer, error) {
 	ctx, cancel := utils.ContextFromChan(p.chStop)
 	defer cancel()
 
-	p.sem.Acquire(ctx, 1)
+	err := p.sem.Acquire(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
 
 	for {
 		select {
 		case peer, open := <-p.chPeers:
 			if !open {
+				p.sem.Release(1)
 				return nil, errors.New("connection closed")
 			}
 			if peer == nil {
@@ -220,6 +224,8 @@ func (p *peerPool) GetPeer() (Peer, error) {
 }
 
 func (p *peerPool) ReturnPeer(peer Peer, strike bool) {
+	p.sem.Release(1)
+
 	if strike {
 		// Close the faulty connection
 		peer.Close()
@@ -243,7 +249,6 @@ func (p *peerPool) ReturnPeer(peer Peer, strike bool) {
 			return
 		}
 	}
-	p.sem.Release(1)
 }
 
 func (p *peerPool) setPeerState(peer Peer, state peerState) {

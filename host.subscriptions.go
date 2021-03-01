@@ -340,14 +340,12 @@ func (s *multiReaderSubscription) Start() {
 				err = peer.EnsureConnected(context.TODO())
 				if err != nil {
 					s.host.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
-					s.peerPool.ReturnPeer(peer, false)
 					return
 				}
 
 				peerSub, err := peer.Subscribe(context.TODO(), s.stateURI)
 				if err != nil {
 					s.host.Errorf("error subscribing to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
-					s.peerPool.ReturnPeer(peer, false)
 					return
 				}
 				defer peerSub.Close()
