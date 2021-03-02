@@ -292,6 +292,7 @@ func fetchCommit(commitHash string, commit Commit, client *redwood.HTTPClient, o
 				err = errors.WithStack(err)
 				return
 			}
+			logf("xyzzy: %v %v", filePath.String(), string(bs))
 
 			type refEntry struct {
 				oid  git.Oid
@@ -545,6 +546,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 
 		blob, err := repo.LookupBlob(treeEntry.oid)
 		if err != nil {
+			logf("error: %v", err)
 			return errors.WithStack(err)
 		}
 
@@ -560,6 +562,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 				case <-ctx.Done():
 					return
 				case chErr <- err:
+					logf("error: %v", err)
 					return
 				}
 			}
@@ -570,6 +573,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 				case <-ctx.Done():
 					return
 				case chErr <- err:
+					logf("error: %v", err)
 					return
 				}
 			}
@@ -593,6 +597,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 			if err != nil {
 				select {
 				case chErr <- err:
+					logf("error: %v", err)
 					cancel()
 				case <-ctx.Done():
 					return
@@ -693,6 +698,17 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 		tx.Patches = append(tx.Patches, redwood.Patch{
 			Keypath: tree.Keypath("commits/" + commitHash + "/files"),
 			Val:     fileTree,
+		})
+
+		tx.Patches = append(tx.Patches, redwood.Patch{
+			Keypath: tree.Keypath("refs/heads/master"),
+			Val: map[string]interface{}{
+				"HEAD": commitHash,
+				"worktree": map[string]interface{}{
+					"Content-Type": "link",
+					"value":        "state:somegitprovider.org/gitdemo/commits/" + commitHash + "/files",
+				},
+			},
 		})
 
 		err = client.Put(context.Background(), tx, types.Address{}, nil)
