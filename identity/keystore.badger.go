@@ -15,10 +15,12 @@ import (
 )
 
 type BadgerKeyStore struct {
-	db           *tree.DBTree
-	scryptParams ScryptParams
-	unlockedUser *badgerUser
-	mu           sync.RWMutex
+	db                *tree.DBTree
+	scryptParams      ScryptParams
+	unlockedUser      *badgerUser
+	loadUserCallbacks []func(user User) error
+	saveUserCallbacks []func(user User) error
+	mu                sync.RWMutex
 }
 
 type badgerUser struct {
@@ -28,6 +30,7 @@ type badgerUser struct {
 	PublicIdentities       map[uint32]struct{}
 	AddressesToIndices     map[types.Address]uint32
 	LocalEncryptingKeypair *crypto.EncryptingKeypair
+	Extra                  map[string]interface{}
 }
 
 type ScryptParams struct{ N, P int }
@@ -50,6 +53,9 @@ func (ks *BadgerKeyStore) Unlock(password string) (err error) {
 
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
+
+	state := ks.db.State(false)
+	defer state.Close()
 
 	user, err := ks.loadUser(password)
 	if errors.Cause(err) == ErrNoUser {
@@ -80,14 +86,28 @@ func (ks *BadgerKeyStore) Unlock(password string) (err error) {
 			PublicIdentities:       map[uint32]struct{}{0: struct{}{}},
 			AddressesToIndices:     map[types.Address]uint32{sigkeys.Address(): 0},
 			LocalEncryptingKeypair: localEnckeys,
+			Extra:                  map[string]interface{}{},
 		}
+
+		for _, fn := range ks.loadUserCallbacks {
+			err := fn(ks.unlockedUser)
+			if err != nil {
+				return err
+			}
+		}
+
 		return ks.saveUser(ks.unlockedUser, password)
 
 	} else if err != nil {
 		return err
 	}
+
+	if user.Extra == nil {
+		user.Extra = make(map[string]interface{})
+	}
+
 	ks.unlockedUser = user
-	return nil
+	return ks.saveUser(ks.unlockedUser, password)
 }
 
 func (ks *BadgerKeyStore) Identities() (_ []Identity, err error) {
@@ -243,12 +263,34 @@ func (ks *BadgerKeyStore) OpenMessageFrom(usingIdentity types.Address, senderPub
 	return identity.Encrypting.OpenMessageFrom(senderPublicKey, msgEncrypted)
 }
 
+func (ks *BadgerKeyStore) OnLoadUser(fn UserCallback) {
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
+	ks.loadUserCallbacks = append(ks.loadUserCallbacks, fn)
+}
+
+func (ks *BadgerKeyStore) OnSaveUser(fn UserCallback) {
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
+	ks.saveUserCallbacks = append(ks.saveUserCallbacks, fn)
+}
+
+func (user *badgerUser) ExtraData(key string) (interface{}, bool) {
+	val, exists := user.Extra[key]
+	return val, exists
+}
+
+func (user *badgerUser) SaveExtraData(key string, value interface{}) {
+	user.Extra[key] = value
+}
+
 type encryptedBadgerUser struct {
 	Mnemonic               string
 	NumIdentities          uint32
 	PublicIdentities       map[uint32]struct{}
 	EncryptingKeys         map[uint32]dbEncryptingKeypair
 	LocalEncryptingKeypair dbEncryptingKeypair
+	Extra                  map[string]interface{}
 }
 
 type dbEncryptingKeypair struct {
@@ -257,6 +299,14 @@ type dbEncryptingKeypair struct {
 }
 
 func (ks *BadgerKeyStore) saveUser(user *badgerUser, password string) error {
+	// Allow other parts of the codebase to add data to the encrypted payload
+	for _, fn := range ks.saveUserCallbacks {
+		err := fn(user)
+		if err != nil {
+			return err
+		}
+	}
+
 	publicIdentities := make(map[uint32]struct{})
 	encryptingKeys := make(map[uint32]dbEncryptingKeypair, len(user.Identities))
 	for i, identity := range user.Identities {
@@ -278,6 +328,7 @@ func (ks *BadgerKeyStore) saveUser(user *badgerUser, password string) error {
 			Public:  user.LocalEncryptingKeypair.EncryptingPublicKey.Bytes(),
 			Private: user.LocalEncryptingKeypair.EncryptingPrivateKey.Bytes(),
 		},
+		Extra: user.Extra,
 	}
 
 	bs, err := json.Marshal(encryptedUser)
@@ -301,7 +352,9 @@ func (ks *BadgerKeyStore) saveUser(user *badgerUser, password string) error {
 	return state.Save()
 }
 
-func (ks *BadgerKeyStore) loadUser(password string) (*badgerUser, error) {
+func (ks *BadgerKeyStore) loadUser(password string) (_ *badgerUser, err error) {
+	defer utils.WithStack(&err)
+
 	state := ks.db.State(false)
 	defer state.Close()
 
@@ -364,7 +417,7 @@ func (ks *BadgerKeyStore) loadUser(password string) (*badgerUser, error) {
 		addressesToIndices[sigkeys.Address()] = i
 	}
 
-	return &badgerUser{
+	user := &badgerUser{
 		Password:           password,
 		Mnemonic:           encryptedUser.Mnemonic,
 		Identities:         identities,
@@ -374,5 +427,16 @@ func (ks *BadgerKeyStore) loadUser(password string) (*badgerUser, error) {
 			EncryptingPublicKey:  crypto.EncryptingPublicKeyFromBytes(encryptedUser.LocalEncryptingKeypair.Public),
 			EncryptingPrivateKey: crypto.EncryptingPrivateKeyFromBytes(encryptedUser.LocalEncryptingKeypair.Private),
 		},
-	}, nil
+		Extra: encryptedUser.Extra,
+	}
+
+	// Allow other parts of the codebase to read data from the encrypted payload
+	for _, fn := range ks.loadUserCallbacks {
+		err := fn(user)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return user, nil
 }

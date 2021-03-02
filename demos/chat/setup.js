@@ -1,18 +1,18 @@
-const Braid = require('../../braidjs/braid-src.js')
+const Redwood = require('../../redwood.js').default
 const fs = require('fs')
 
 //
-// Braid setup
+// Redwood setup
 //
-let node1Identity = Braid.identity.random()
-let node1Client = Braid.createPeer({
+let node1Identity = Redwood.identity.random()
+let node1Client = Redwood.createPeer({
     identity: node1Identity,
     httpHost: 'http://localhost:8080',
     onFoundPeersCallback: (peers) => {}
 })
 
-let node2Identity = Braid.identity.random()
-let node2Client = Braid.createPeer({
+let node2Identity = Redwood.identity.random()
+let node2Client = Redwood.createPeer({
     identity: node2Identity,
     httpHost: 'http://localhost:9090',
     onFoundPeersCallback: (peers) => {}
@@ -34,10 +34,10 @@ async function genesis() {
     // Send the genesis tx (notice that it contains an `index.html` key that references the uploaded file)
     let tx1 = {
         stateURI: 'chat.com/room-2837',
-        id: Braid.utils.genesisTxID,
+        id: Redwood.utils.genesisTxID,
         parents: [],
         patches: [
-            ' = ' + Braid.utils.JSON.stringify({
+            ' = ' + Redwood.utils.JSON.stringify({
                 'Merge-Type': {
                     'Content-Type': 'resolver/dumb',
                     'value': {}
@@ -86,10 +86,10 @@ async function genesis() {
 
     let tx2 = {
         stateURI: 'chat.com/room-2837',
-        id: Braid.utils.randomID(),
+        id: Redwood.utils.randomID(),
         parents: [ tx1.id ],
         patches: [
-            '.talk0 = ' + Braid.utils.JSON.stringify({
+            '.talk0 = ' + Redwood.utils.JSON.stringify({
             })
         ],
     }
@@ -103,10 +103,10 @@ async function genesis() {
     //
     let tx3 = {
         stateURI: 'chat.com/room-2837',
-        id: Braid.utils.randomID(),
+        id: Redwood.utils.randomID(),
         parents: [ tx2.id ],
         patches: [
-            '.users = ' + Braid.utils.JSON.stringify({
+            '.users = ' + Redwood.utils.JSON.stringify({
                 'Validator': {
                     'Content-Type': 'validator/permissions',
                     'value': {
@@ -125,10 +125,10 @@ async function genesis() {
     // Add a profile for Paul Stamets
     let tx4 = {
         stateURI: 'chat.com/room-2837',
-        id: Braid.utils.randomID(),
+        id: Redwood.utils.randomID(),
         parents: [ tx3.id ],
         patches: [
-            `.users.${node1Identity.address.toLowerCase()} = ` + Braid.utils.JSON.stringify({
+            `.users.${node1Identity.address.toLowerCase()} = ` + Redwood.utils.JSON.stringify({
                 'name': 'Paul Stamets',
                 'occupation': 'Astromycologist',
             }),
@@ -139,12 +139,12 @@ async function genesis() {
     // Here, we also add a private portion of Paul Stamets' user profile.  Only he can view this data.
     // Note that this tx contains a `recipients` field, and must use a different `stateURI`.
     let ptx1 = {
-        stateURI: 'chat.com/' + Braid.utils.privateTxRootForRecipients([ node1Identity.address ]),
-        id: Braid.utils.genesisTxID,
+        stateURI: 'chat.com/' + Redwood.utils.privateTxRootForRecipients([ node1Identity.address ]),
+        id: Redwood.utils.genesisTxID,
         parents: [],
         recipients: [ node1Identity.address ],
         patches: [
-            `.profile = ` + Braid.utils.JSON.stringify({
+            `.profile = ` + Redwood.utils.JSON.stringify({
                 'public': {
                     'Content-Type': 'link',
                     'value': `state:chat.com/room-2837/users/${node1Identity.address.toLowerCase()}`,
@@ -163,10 +163,10 @@ async function genesis() {
     //
     let tx5 = {
         stateURI: 'chat.com/room-2837',
-        id: Braid.utils.randomID(),
+        id: Redwood.utils.randomID(),
         parents: [ tx4.id ],
         patches: [
-            `.messages.value[0:0] = ` + Braid.utils.JSON.stringify([
+            `.messages.value[0:0] = ` + Redwood.utils.JSON.stringify([
                 {
                     'text': 'hello!',
                     'sender': node1Identity.address.toLowerCase(),
@@ -178,10 +178,10 @@ async function genesis() {
 
     let tx6 = {
         stateURI: 'chat.com/room-2837',
-        id: Braid.utils.randomID(),
+        id: Redwood.utils.randomID(),
         parents: [ tx5.id ],
         patches: [
-            `.messages.value[1:1] = ` + Braid.utils.JSON.stringify([
+            `.messages.value[1:1] = ` + Redwood.utils.JSON.stringify([
                 {
                     'text': 'well hello to you too',
                     'sender': node2Identity.address.toLowerCase(),
@@ -197,10 +197,10 @@ async function genesis() {
 
     let tx7 = {
         stateURI: 'chat.com/room-2837',
-        id: Braid.utils.randomID(),
+        id: Redwood.utils.randomID(),
         parents: [ tx6.id ],
         patches: [
-            `.messages.value[2:2] = ` + Braid.utils.JSON.stringify([
+            `.messages.value[2:2] = ` + Redwood.utils.JSON.stringify([
                 {
                     'text': 'who needs a meme?',
                     'sender': node1Identity.address.toLowerCase(),

@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -19,9 +18,9 @@ import (
 	dstore "github.com/ipfs/go-datastore"
 	dsync "github.com/ipfs/go-datastore/sync"
 	libp2p "github.com/libp2p/go-libp2p"
+	cryptop2p "github.com/libp2p/go-libp2p-core/crypto"
 	netp2p "github.com/libp2p/go-libp2p-core/network"
 	corepeer "github.com/libp2p/go-libp2p-core/peer"
-	cryptop2p "github.com/libp2p/go-libp2p-crypto"
 	p2phost "github.com/libp2p/go-libp2p-host"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
@@ -84,25 +83,58 @@ func NewLibp2pTransport(
 	keyStore identity.KeyStore,
 	refStore RefStore,
 	peerStore PeerStore,
-) (Transport, error) {
-	p2pKey, err := obtainP2PKey(keyfilePath)
-	if err != nil {
-		return nil, err
-	}
+) Transport {
 	t := &libp2pTransport{
 		Logger:            ctx.NewLogger("libp2p"),
 		chStop:            make(chan struct{}),
 		chDone:            make(chan struct{}),
 		port:              port,
 		reachableAt:       reachableAt,
-		p2pKey:            p2pKey,
 		controllerHub:     controllerHub,
 		keyStore:          keyStore,
 		refStore:          refStore,
 		peerStore:         peerStore,
 		writeSubsByPeerID: make(map[peer.ID]map[netp2p.Stream]WritableSubscription),
 	}
-	return t, nil
+	keyStore.OnLoadUser(t.onLoadUser)
+	keyStore.OnSaveUser(t.onSaveUser)
+	return t
+}
+
+func (t *libp2pTransport) onLoadUser(user identity.User) (err error) {
+	defer utils.WithStack(&err)
+
+	maybeKey, exists := user.ExtraData("libp2p:p2pkey")
+	p2pkeyBytes, isString := maybeKey.(string)
+	if exists && isString {
+		bs, err := hex.DecodeString(p2pkeyBytes)
+		if err != nil {
+			return err
+		}
+		p2pKey, err := cryptop2p.UnmarshalPrivateKey(bs)
+		if err != nil {
+			return err
+		}
+		t.p2pKey = p2pKey
+		return nil
+	}
+
+	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Secp256k1, 0)
+	if err != nil {
+		return err
+	}
+	t.p2pKey = p2pKey
+	return nil
+}
+
+func (t *libp2pTransport) onSaveUser(user identity.User) error {
+	bs, err := cryptop2p.MarshalPrivateKey(t.p2pKey)
+	if err != nil {
+		return err
+	}
+	hexKey := hex.EncodeToString(bs)
+	user.SaveExtraData("libp2p:p2pkey", hexKey)
+	return nil
 }
 
 func (t *libp2pTransport) Start() error {
@@ -116,11 +148,11 @@ func (t *libp2pTransport) Start() error {
 
 	t.BandwidthCounter = metrics.NewBandwidthCounter()
 
-	ctx, cancel := utils.CombinedContext(t.chStop, 30*time.Second)
-	defer cancel()
+	// ctx, cancel := utils.CombinedContext(t.chStop, 30*time.Second)
+	// defer cancel()
 
 	// Initialize the libp2p host
-	libp2pHost, err := libp2p.New(ctx,
+	libp2pHost, err := libp2p.New(context.Background(),
 		libp2p.ListenAddrStrings(
 			fmt.Sprintf("/ip4/0.0.0.0/tcp/%v", t.port),
 		),
@@ -135,6 +167,8 @@ func (t *libp2pTransport) Start() error {
 		return errors.Wrap(err, "could not initialize libp2p host")
 	}
 	t.libp2pHost = libp2pHost
+	t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
+	t.libp2pHost.Network().Notify(t) // Register for libp2p connect/disconnect notifications
 
 	// Initialize the DHT
 	// bootstrapPeers := dht.GetDefaultBootstrapPeerAddrInfos() // @@TODO: remove this
@@ -153,7 +187,7 @@ func (t *libp2pTransport) Start() error {
 		bootstrapPeers = append(bootstrapPeers, *addrInfo)
 	}
 
-	t.dht, err = dht.New(ctx, t.libp2pHost,
+	t.dht, err = dht.New(context.Background(), t.libp2pHost,
 		dht.BootstrapPeers(bootstrapPeers...),
 		dht.Mode(dht.ModeServer),
 		dht.Datastore(
@@ -168,9 +202,10 @@ func (t *libp2pTransport) Start() error {
 
 	t.dht.Validator = blankValidator{} // Set a pass-through validator
 
-	t.dht.Bootstrap(ctx)
-
-	t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
+	err = t.dht.Bootstrap(context.Background())
+	if err != nil {
+		return errors.Wrap(err, "could not bootstrap DHT")
+	}
 
 	// Update our node's info in the peer store
 	myDialAddrs := utils.NewStringSet(nil)
@@ -201,14 +236,11 @@ func (t *libp2pTransport) Start() error {
 	}
 
 	// Set up mDNS discovery
-	t.disc, err = discovery.NewMdnsService(ctx, libp2pHost, 10*time.Second, "redwood")
+	t.disc, err = discovery.NewMdnsService(context.Background(), libp2pHost, 10*time.Second, "redwood")
 	if err != nil {
 		return err
 	}
 	t.disc.RegisterNotifee(t)
-
-	// Register for libp2p connect/disconnect notifications
-	t.libp2pHost.Network().Notify(t)
 
 	// Update our node's info in the peer store
 	myAddrs := utils.NewStringSet(nil)
@@ -372,7 +404,7 @@ func (t *libp2pTransport) HandlePeerFound(pinfo peerstore.PeerInfo) {
 	}
 	err := peer.EnsureConnected(ctx)
 	if err != nil {
-		t.Errorf("error connecting to mDNS peer: %v", err)
+		t.Errorf("error connecting to mDNS peer %v: %v", pinfo, err)
 	}
 	// if len(dialInfos) > 0 {
 	//  err := t.libp2pHost.Connect(ctx, pinfo)
@@ -664,6 +696,8 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 			wg := utils.NewWaitGroupChan(ctx)
 			defer wg.Close()
 
+			wg.Add(1)
+
 			// Announce the URLs we're serving
 			stateURIs, err := t.controllerHub.KnownStateURIs()
 			if err != nil {
@@ -712,37 +746,33 @@ func (t *libp2pTransport) periodicallyAnnounceContent() {
 			}
 
 			// Announce our address (for exchanging private txs)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			identities, err := t.keyStore.Identities()
+			if err != nil {
+				t.Errorf("announce: error creating cid: %v", err)
+				return
+			}
 
-				identities, err := t.keyStore.Identities()
-				if err != nil {
-					t.Errorf("announce: error creating cid: %v", err)
-					return
-				}
+			for _, identity := range identities {
+				identity := identity
 
-				for _, identity := range identities {
-					identity := identity
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
 
-					wg.Add(1)
-					go func() {
-						defer wg.Done()
+					c, err := cidForString("addr:" + identity.Address().String())
+					if err != nil {
+						t.Errorf("announce: error creating cid: %v", err)
+						return
+					}
 
-						c, err := cidForString("addr:" + identity.Address().String())
-						if err != nil {
-							t.Errorf("announce: error creating cid: %v", err)
-							return
-						}
+					err = t.dht.Provide(ctx, c, true)
+					if err != nil && err != kbucket.ErrLookupFailure {
+						t.Errorf(`announce: could not dht.Provide pubkey: %v`, err)
+					}
+				}()
+			}
 
-						err = t.dht.Provide(ctx, c, true)
-						if err != nil && err != kbucket.ErrLookupFailure {
-							t.Errorf(`announce: could not dht.Provide pubkey: %v`, err)
-						}
-					}()
-				}
-			}()
-
+			wg.Done()
 			<-wg.Wait()
 		}()
 	}
@@ -1110,39 +1140,6 @@ func (sub *libp2pWritableSubscription) Put(ctx context.Context, tx *Tx, state tr
 		return err
 	}
 	return sub.libp2pPeer.Put(ctx, tx, state, leaves)
-}
-
-func obtainP2PKey(keyfilePath string) (cryptop2p.PrivKey, error) {
-	f, err := os.Open(keyfilePath)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-
-	} else if err == nil {
-		defer f.Close()
-
-		data, err := ioutil.ReadFile(keyfilePath)
-		if err != nil {
-			return nil, err
-		}
-		return cryptop2p.UnmarshalPrivateKey(data)
-	}
-
-	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Secp256k1, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	bs, err := p2pKey.Bytes()
-	if err != nil {
-		return nil, err
-	}
-
-	err = ioutil.WriteFile(keyfilePath, bs, 0400)
-	if err != nil {
-		return nil, err
-	}
-
-	return p2pKey, nil
 }
 
 func cidForString(s string) (cid.Cid, error) {

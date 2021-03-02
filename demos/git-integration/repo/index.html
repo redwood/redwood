@@ -85,23 +85,23 @@
 </body>
 
 <script src="https://unpkg.com/peerjs@1.0.0/dist/peerjs.min.js"></script>
-<script src="/braid.js"></script>
+<script src="/redwood.js"></script>
 <script>
     //
-    // Braid setup
+    // Redwood setup
     //
-    var identity = Braid.identity.random()
+    var identity = Redwood.identity.random()
 
     var currentState = {}
     var mostRecentTxID = null
     var txs = []
-    var queue = Braid.utils.createTxQueue(
-        (from, vid, parents, patches) => Braid.dumb.resolve_state(currentState, from, vid, parents, patches),
-        async (tx, newState) => {
+    var queue = Redwood.utils.createTxQueue(
+        (from, vid, parents, patches) => Redwood.dumb.resolve_state(currentState, from, vid, parents, patches),
+        async ({ tx, state }) => {
             mostRecentTxID = tx.id
 
             // Update the debug state UI
-            currentState = newState
+            currentState = state
             txs.push(tx)
             refreshDebugUI()
 
@@ -115,7 +115,7 @@
         }
     )
 
-    var braidClient = Braid.createPeer({
+    var braidClient = Redwood.createPeer({
         identity: identity,
         httpHost: '',
         webrtc: true,
@@ -126,7 +126,13 @@
     })
 
     braidClient.authorize().then(() => {
-        braidClient.subscribe('somegitprovider.org/gitdemo', '/', [ Braid.utils.genesisTxID ], queue.defaultTxHandler)
+        braidClient.subscribe({
+            stateURI: 'somegitprovider.org/gitdemo',
+            keypath: '/',
+            txs: true,
+            fromTxID: Redwood.utils.genesisTxID,
+            callback: queue.defaultTxHandler,
+        })
     })
 
     //

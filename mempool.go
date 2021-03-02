@@ -36,7 +36,7 @@ func NewMempool(processCallback func(tx *Tx) processTxOutcome) *mempool {
 		chDone:                  make(chan struct{}),
 		txs:                     newTxSortedSet(),
 		chAdd:                   make(chan *Tx, 100),
-		processMempoolWorkQueue: utils.NewMailbox(1),
+		processMempoolWorkQueue: utils.NewMailbox(0),
 		processCallback:         processCallback,
 	}
 }

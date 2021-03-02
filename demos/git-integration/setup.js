@@ -1,18 +1,18 @@
-const Braid = require('../../braidjs/braid-src.js')
+const Redwood = require('../../redwood.js').default
 const fs = require('fs')
 
 //
-// Braid setup
+// Redwood setup
 //
-let node1Identity = Braid.identity.random()
-let node1Client = Braid.createPeer({
+let node1Identity = Redwood.identity.random()
+let node1Client = Redwood.createPeer({
     identity: node1Identity,
     httpHost: 'http://localhost:8080',
     onFoundPeersCallback: (peers) => {}
 })
 
-let node2Identity = Braid.identity.random()
-let node2Client = Braid.createPeer({
+let node2Identity = Redwood.identity.random()
+let node2Client = Redwood.createPeer({
     identity: node2Identity,
     httpHost: 'http://localhost:9090',
     onFoundPeersCallback: (peers) => {}
@@ -48,10 +48,10 @@ async function genesis() {
     //         people from writing to the wrong keys.
     let tx1 = {
         stateURI: 'somegitprovider.org/gitdemo',
-        id: Braid.utils.genesisTxID,
+        id: Redwood.utils.genesisTxID,
         parents: [],
         patches: [
-            ' = ' + Braid.utils.JSON.stringify({
+            ' = ' + Redwood.utils.JSON.stringify({
                 'demo': {
                     'Content-Type': 'link',
                     'value': 'state:somegitprovider.org/gitdemo/refs/heads/master/worktree'
@@ -110,15 +110,15 @@ async function genesis() {
     // Note: if you alter the contents of the ./repo subdirectory, you'll need to determine the
     // git commit hash of the first commit again, and then tweak these variables.  Otherwise,
     // you'll get a "bad object" error from git.
-    let commit1Hash = '31ff34521e9a9499d6c2661f745afc69688219d6'
-    let commit1Timestamp = '2020-06-19T19:36:51-05:00'
+    let commit1Hash = '3832ec27a841e7a2071e1edaa6ca280f974f20b3'
+    let commit1Timestamp = '2021-03-01T18:03:22-06:00'
 
     let tx2 = {
         stateURI: 'somegitprovider.org/gitdemo',
-        id: Braid.utils.randomID(),
+        id: commit1Hash + '000000000000000000000000',
         parents: [ tx1.id ],
         patches: [
-            `.commits.${commit1Hash} = ` + Braid.utils.JSON.stringify({
+            `.commits.${commit1Hash} = ` + Redwood.utils.JSON.stringify({
                 'message': 'First commit\n',
                 'timestamp': commit1Timestamp,
                 'author': {
@@ -154,7 +154,7 @@ async function genesis() {
                     }
                 }
             }),
-            `.refs.heads.master = ` + Braid.utils.JSON.stringify({
+            `.refs.heads.master = ` + Redwood.utils.JSON.stringify({
                 'HEAD': commit1Hash,
                 'worktree': {
                     'Content-Type': 'link',

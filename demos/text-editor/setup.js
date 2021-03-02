@@ -1,18 +1,18 @@
-const Braid = require('../../braidjs/braid-src.js')
+const Redwood = require('../../redwood.js').default
 const fs = require('fs')
 
 //
-// Braid setup
+// Redwood setup
 //
-let node1Identity = Braid.identity.random()
-let node1Client = Braid.createPeer({
+let node1Identity = Redwood.identity.random()
+let node1Client = Redwood.createPeer({
     identity: node1Identity,
     httpHost: 'http://localhost:8080',
     onFoundPeersCallback: (peers) => {}
 })
 
-let node2Identity = Braid.identity.random()
-let node2Client = Braid.createPeer({
+let node2Identity = Redwood.identity.random()
+let node2Client = Redwood.createPeer({
     identity: node2Identity,
     httpHost: 'http://localhost:9090',
     onFoundPeersCallback: (peers) => {}
@@ -30,17 +30,17 @@ async function genesis() {
     // Upload our index.html into the state tree so that the HTTP transport will serve it to browsers.
     // Also upload the sync9 JS code so that we can use it as our merge resolver.
     let indexHTML = fs.createReadStream('./index.html')
-    let sync9JS = fs.createReadStream('../../braidjs/dist/sync9-otto.js')
+    let sync9JS = fs.createReadStream('../../redwood.js/dist/resolver.sync9.redwood.js')
     let { sha3: indexHTMLSha3 } = await node1Client.storeRef(indexHTML)
     let { sha3: sync9JSSha3 } = await node1Client.storeRef(sync9JS)
 
     // Send the genesis tx (notice that it contains an `index.html` key that references the uploaded file)
     let tx1 = {
         stateURI: 'docs.redwood.dev/document-3192',
-        id: Braid.utils.genesisTxID,
+        id: Redwood.utils.genesisTxID,
         parents: [],
         patches: [
-            ' = ' + Braid.utils.JSON.stringify({
+            ' = ' + Redwood.utils.JSON.stringify({
                 'text': {
                     'value': '',
 

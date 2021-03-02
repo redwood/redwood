@@ -2,7 +2,6 @@ package redwood
 
 import (
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,7 +10,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"redwood.dev/crypto"
 	"redwood.dev/utils"
 )
 
@@ -26,7 +24,6 @@ type Config struct {
 }
 
 type NodeConfig struct {
-	HDMnemonicPhrase        string          `yaml:"HDMnemonicPhrase"`
 	BootstrapPeers          []BootstrapPeer `yaml:"BootstrapPeers"`
 	SubscribedStateURIs     utils.StringSet `yaml:"SubscribedStateURIs"`
 	MaxPeersPerSubscription uint64          `yaml:"MaxPeersPerSubscription"`
@@ -50,7 +47,6 @@ type P2PTransportConfig struct {
 type HTTPTransportConfig struct {
 	Enabled         bool   `yaml:"Enabled"`
 	ListenHost      string `yaml:"ListenHost"`
-	CookieSecret    string `yaml:"CookieSecret"`
 	DefaultStateURI string `yaml:"DefaultStateURI"`
 	ReachableAt     string `yaml:"ReachableAt"`
 }
@@ -76,20 +72,8 @@ func DefaultConfig(appName string) Config {
 		panic(err)
 	}
 
-	hdMnemonicPhrase, err := crypto.GenerateMnemonic()
-	if err != nil {
-		panic(err)
-	}
-
-	httpCookieSecret := make([]byte, 32)
-	_, err = rand.Read(httpCookieSecret)
-	if err != nil {
-		panic(err)
-	}
-
 	return Config{
 		Node: &NodeConfig{
-			HDMnemonicPhrase:        hdMnemonicPhrase,
 			BootstrapPeers:          []BootstrapPeer{},
 			SubscribedStateURIs:     nil,
 			MaxPeersPerSubscription: 4,
@@ -105,7 +89,6 @@ func DefaultConfig(appName string) Config {
 		HTTPTransport: &HTTPTransportConfig{
 			Enabled:         true,
 			ListenHost:      ":8080",
-			CookieSecret:    string(httpCookieSecret),
 			DefaultStateURI: "",
 		},
 		HTTPRPC: &HTTPRPCConfig{

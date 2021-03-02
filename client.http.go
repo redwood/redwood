@@ -289,7 +289,7 @@ func (c *HTTPClient) StoreRef(file io.Reader) (StoreRefResponse, error) {
 	}
 	w.Close()
 
-	req, err := http.NewRequest("PUT", c.dialAddr, &buf)
+	req, err := http.NewRequest("POST", c.dialAddr, &buf)
 	if err != nil {
 		return StoreRefResponse{}, errors.WithStack(err)
 	}
@@ -300,7 +300,7 @@ func (c *HTTPClient) StoreRef(file io.Reader) (StoreRefResponse, error) {
 	if err != nil {
 		return StoreRefResponse{}, errors.WithStack(err)
 	} else if resp.StatusCode != 200 {
-		return StoreRefResponse{}, errors.Errorf("error verifying peer address: (%v) %v", resp.StatusCode, resp.Status)
+		return StoreRefResponse{}, errors.Errorf("error storing ref: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
 

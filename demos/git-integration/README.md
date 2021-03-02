@@ -14,7 +14,14 @@
 
 **Running the demo**
 
-First, build the Redwood binary and place it in your `$PATH`:
+First, compile `redwood.js`:
+
+```sh
+cd redwood.js
+yarn && yarn build
+```
+
+Then, build the Redwood binary and place it in your `$PATH`:
 
 ```sh
 cd cmd
@@ -25,13 +32,13 @@ Then, start the first Redwood node:
 
 ```sh
 $ cd ../demos/git-integration
-$ redwood --config ./node1.redwoodrc 
+$ redwood --config ./node1.redwoodrc --password-file ./password.txt
 ```
 
 Then, open another terminal and start the second Redwood node:
 
 ```sh
-$ redwood --config ./node2.redwoodrc 
+$ redwood --config ./node2.redwoodrc --password-file ./password.txt
 ```
 
 Lastly, open another terminal and run the `setup.js` script:

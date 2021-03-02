@@ -109,27 +109,31 @@
 </body>
 
 <script src="https://unpkg.com/peerjs@1.0.0/dist/peerjs.min.js"></script>
-<script src='/braid.js'></script>
+<script src='/redwood.js'></script>
 <script>
     //
     // Identity stuff
     //
-    var identity = Braid.identity.random()
+    var identity = Redwood.identity.random()
     function refreshIdentityUI() {
         document.getElementById('my-address').innerHTML = '<strong>Your address:</strong> ' + identity.address
     }
     refreshIdentityUI()
 
     //
-    // Braid/sync9 setup
+    // Redwood/sync9 setup
     //
-    var s9 = Braid.sync9.create()
+    var s9 = Redwood.sync9.create()
 
-    var queue = Braid.utils.createTxQueue(
-        (from, vid, parents, patches) => Braid.sync9.resolve_state(s9, from, vid, parents, patches),
-        (tx, leaves, newState) => {
+    var queue = Redwood.utils.createTxQueue(
+        (from, vid, parents, patches) => Redwood.sync9.resolve_state(s9, from, vid, parents, patches),
+        ({ tx, leaves, state }) => {
+            if (!tx) {
+                return
+            }
+
             // Update the debug state UI
-            currentState = newState
+            currentState = state
             if (!knownTxs[tx.id]) {
                 txs.push(tx)
                 knownTxs[tx.id] = true
@@ -137,14 +141,14 @@
             refreshDebugUI()
 
             // Update the chat UI
-            if (newState && newState.messages) {
-                messages = newState.messages.value
+            if (state && state.messages) {
+                messages = state.messages.value
             }
             refreshChatUI()
         }
     )
 
-    var braidClient = Braid.createPeer({
+    var braidClient = Redwood.createPeer({
         identity: identity,
         webrtc: true,
         onFoundPeersCallback: (peers) => {
@@ -154,7 +158,13 @@
     })
 
     braidClient.authorize().then(() => {
-        braidClient.subscribe('chat.com/room-2837', '/', [ Braid.utils.genesisTxID ], queue.defaultTxHandler)
+        braidClient.subscribe({
+            stateURI: 'chat.com/room-2837',
+            keypath: '/',
+            txs: true,
+            fromTxID: Redwood.utils.genesisTxID,
+            callback: queue.defaultTxHandler,
+        })
     })
 
 
@@ -295,7 +305,7 @@
         }
 
         var tx = {
-            id: Braid.utils.randomID(),
+            id: Redwood.utils.randomID(),
             parents: Object.keys(s9.leaves),
             stateURI: 'chat.com/room-2837',
             patches: [
@@ -327,7 +337,7 @@
 
     async function setUsername() {
         var tx = {
-            id: Braid.utils.randomID(),
+            id: Redwood.utils.randomID(),
             parents: Object.keys(s9.leaves),
             stateURI: 'chat.com/room-2837',
             patches: [

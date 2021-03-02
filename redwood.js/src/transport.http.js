@@ -1,0 +1,312 @@
+
+let whichFetch
+let theFetch
+if (typeof window !== 'undefined') {
+    whichFetch = 'browser'
+    theFetch = fetch
+} else {
+    whichFetch = 'node'
+    theFetch = require('node-fetch')
+}
+
+export default function (opts) {
+    const { httpHost, onFoundPeers, peerID } = opts
+
+    let knownPeers = {}
+    pollForPeers()
+
+    let alreadyRespondedTo = {}
+
+    async function subscribe({ stateURI, keypath, fromTxID, states, txs, callback }) {
+        try {
+            let subscribeHeader = []
+            if (states) {
+                subscribeHeader.push('states')
+            }
+            if (txs) {
+                subscribeHeader.push('transactions')
+            }
+
+            const headers = {
+                'State-URI': stateURI,
+                'Accept':    'application/json',
+                'Subscribe': subscribeHeader.join(','),
+            }
+            if (fromTxID) {
+                headers['From-Tx'] = fromTxID
+            }
+
+            const resp = await wrappedFetch(keypath, {
+                method: 'GET',
+                headers,
+            })
+            if (!resp.ok) {
+                callback('http transport: fetch failed')
+                return
+            }
+            console.log('RESP ~>', resp)
+            window.resp = resp
+            const unsubscribe = readSubscription(stateURI, resp.body.getReader(), (err, { tx, state, leaves }) => {
+                if (tx) {
+                    ack(tx.id)
+                    if (!alreadyRespondedTo[tx.id]) {
+                        alreadyRespondedTo[tx.id] = true
+                        callback(err, { tx, state, leaves })
+                    }
+                } else {
+                    callback(err, { tx, state, leaves })
+                }
+            })
+            return unsubscribe
+
+        } catch (err) {
+            callback('http transport: ' + err)
+            return
+        }
+    }
+
+    function readSubscription(stateURI, reader, callback) {
+        let shouldStop = false
+        function unsubscribe() {
+            shouldStop = true
+            reader.cancel()
+        }
+
+        setTimeout(async () => {
+            try {
+                const decoder = new TextDecoder('utf-8')
+                let buffer = ''
+
+                async function read() {
+                    const x = await reader.read()
+                    if (x.done) {
+                        return
+                    }
+
+                    const newData = decoder.decode(x.value)
+                    buffer += newData
+                    let idx
+                    while ((idx = buffer.indexOf('\n')) > -1) {
+                        if (shouldStop) {
+                            return
+                        }
+                        const line = buffer.substring(0, idx).trim()
+                        console.log('line:', line)
+                        if (line.length > 0) {
+                            const payloadStr = line.substring(5).trim() // remove "data:" prefix
+                            let payload
+                            try {
+                                payload = JSON.parse(payloadStr)
+                            } catch (err) {
+                                console.error('Error parsing JSON:', payloadStr)
+                                callback('http transport: ' + err)
+                                return
+                            }
+                            callback(null, payload)
+
+                        }
+                        buffer = buffer.substring(idx+1)
+                    }
+                    if (shouldStop) {
+                        return
+                    }
+                    read()
+                }
+                read()
+
+            } catch (err) {
+                callback('http transport: ' + err)
+                return
+            }
+        }, 0)
+        return unsubscribe
+    }
+
+    async function get({ stateURI, keypath, raw }) {
+        if (keypath.length > 0 && keypath[0] !== '/') {
+            keypath = '/' + keypath
+        }
+        if (raw) {
+            keypath = keypath + '?raw=1'
+        }
+        return (await (await wrappedFetch(keypath, {
+            headers: {
+                'Accept': 'application/json',
+                'State-URI': stateURI,
+            },
+        })).json())
+    }
+
+    function put(tx) {
+        let body
+        if (tx.attachment) {
+            if (typeof window !== 'undefined') {
+                body = new FormData()
+            } else {
+                let FormData = require('form-data')
+                body = new FormData()
+            }
+            body.append('attachment', tx.attachment)
+            body.append('patches', tx.patches.join('\n'))
+
+        } else {
+            body = tx.patches.join('\n')
+        }
+
+        return wrappedFetch('/', {
+            method: 'PUT',
+            body: body,
+            headers: {
+                'State-URI': tx.stateURI,
+                'Version': tx.id,
+                'Parents': (tx.parents || []).join(','),
+                'Signature': tx.sig,
+                'Patch-Type': 'braid',
+            },
+        })
+    }
+
+    async function ack(txID) {
+        return wrappedFetch('/', {
+            method: 'ACK',
+            body: txID,
+        })
+    }
+
+    async function storeRef(file) {
+        let formData
+        if (typeof window !== 'undefined') {
+            formData = new FormData()
+            formData.append('ref', file)
+        } else {
+            let FormData = require('form-data')
+            formData = new FormData()
+            formData.append('ref', file)
+        }
+
+        const resp = await wrappedFetch(`/`, {
+            method: 'POST',
+            headers: {
+                'Ref': 'true',
+            },
+            body: formData,
+        })
+
+        return (await resp.json())
+    }
+
+    async function authorize(identity) {
+        const resp = await wrappedFetch(`/`, {
+            method: 'AUTHORIZE',
+        })
+
+        const challengeHex = await resp.text()
+        const challenge = Buffer.from(challengeHex, 'hex')
+        const sigHex = identity.signBytes(challenge)
+
+        const resp2 = await wrappedFetch(`/`, {
+            method: 'AUTHORIZE',
+            headers: {
+                'Response': sigHex,
+            },
+        })
+    }
+
+    let cookies = {}
+
+    async function wrappedFetch(path, options) {
+        if (typeof window === 'undefined') {
+            // We have to manually parse and set cookies because isomorphic-fetch doesn't do it for us
+            let cookieStr = Object.keys(cookies).map(cookieName => `${cookieName}=${cookies[cookieName]}`).join(';')
+            options.headers = {
+                ...makeRequestHeaders(),
+                ...options.headers,
+                Cookie: cookieStr,
+            }
+
+        } else {
+            options.headers = {
+                ...makeRequestHeaders(),
+                ...options.headers,
+            }
+        }
+        options.credentials = 'include'
+
+        path = path || ''
+        if (path[0] !== '/') {
+            path = '/' + (path || '')
+        }
+
+        let url = !httpHost ? path : httpHost + path
+
+        const resp = await theFetch(url, options)
+        if (!resp.ok) {
+            let text = await resp.text()
+            throw { statusCode: resp.status, error: text }
+        }
+
+        if (typeof window === 'undefined') {
+            // Manual cookie parsing
+            for (let str of (resp.headers.raw()['set-cookie'] || [])) {
+                let keyVal = str.substr(0, str.indexOf(';')).split('=')
+                cookies[keyVal[0]] = keyVal[1]
+            }
+        }
+
+        // Receive list of peers from the Alt-Svc header
+        const altSvcHeader = resp.headers.get('Alt-Svc')
+        if (altSvcHeader) {
+            const peers = {}
+            const peerHeaders = altSvcHeader.split(',').map(x => x.trim())
+            for (let peer of peerHeaders) {
+                const x = peer.match(/^\s*(\w+)="([^"]+)"/)
+                const tptName = x[1]
+                const reachableAt = x[2]
+                peers[tptName] = peers[tptName] || {}
+                peers[tptName][reachableAt] = true
+            }
+            onFoundPeers(peers)
+        }
+        return resp
+    }
+
+    function pollForPeers() {
+        setInterval(async () => {
+            try {
+                await wrappedFetch(`/`, { method: 'HEAD' })
+            } catch(err) {
+                console.error('pollForPeers error ~>', err)
+            }
+
+        }, 5000)
+    }
+
+    function makeRequestHeaders() {
+        const headers = {}
+        const altSvc = []
+        for (let tptName of Object.keys(knownPeers)) {
+            for (let reachableAt of Object.keys(knownPeers[tptName])) {
+                altSvc.push(`${tptName}="${reachableAt}"`)
+            }
+        }
+        if (altSvc.length > 0) {
+            headers['Alt-Svc'] = altSvc.join(', ')
+        }
+        return headers
+    }
+
+    function foundPeers(peers) {
+        knownPeers = peers
+    }
+
+    return {
+        transportName:   () => 'http',
+        altSvcAddresses: () => [],
+        subscribe,
+        get,
+        put,
+        storeRef,
+        authorize,
+        foundPeers,
+    }
+}
