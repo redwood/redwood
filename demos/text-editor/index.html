@@ -72,20 +72,20 @@
 </body>
 
 <script src="https://unpkg.com/peerjs@1.0.0/dist/peerjs.min.js"></script>
-<script src='/braid.js'></script>
+<script src='/redwood.js'></script>
 <script>
     //
-    // Braid/sync9 setup
+    // Redwood/sync9 setup
     //
-    var identity = Braid.identity.random()
-    var s9 = Braid.sync9.create()
+    var identity = Redwood.identity.random()
+    var s9 = Redwood.sync9.create()
 
     var editor = document.querySelector('#editor')
-    var queue = Braid.utils.createTxQueue(
-        (from, vid, parents, patches) => Braid.sync9.resolve_state(s9, from, vid, parents, patches),
-        async (tx, newState) => {
+    var queue = Redwood.utils.createTxQueue(
+        (from, vid, parents, patches) => Redwood.sync9.resolve_state(s9, from, vid, parents, patches),
+        async ({ tx, state }) => {
             // Update the debug state UI
-            currentState = newState
+            currentState = state
             if (knownTxs[tx.id]) {
                 return
             }
@@ -95,10 +95,10 @@
             refreshDebugUI()
 
             // Update the editor UI
-            if (newState && newState.text) {
+            if (state && state.text) {
                 let n = 0
                 for (let patch of tx.patches) {
-                    let parsed = Braid.sync9.parse_change(patch)
+                    let parsed = Redwood.sync9.parse_change(patch)
                     if (parsed.range && parsed.range[0] <= editor.selectionStart) {
                         n += parsed.val.length - (parsed.range[1] - parsed.range[0])
                     }
@@ -106,14 +106,14 @@
                 let selectionStart = editor.selectionStart + n
                 let selectionEnd = editor.selectionEnd + n
 
-                editor.value = newState.text.value
+                editor.value = state.text.value
                 editor.selectionStart = selectionEnd
                 editor.selectionEnd = selectionEnd
             }
         }
     )
 
-    var braidClient = Braid.createPeer({
+    var braidClient = Redwood.createPeer({
         identity: identity,
         httpHost: '',
         webrtc: true,
@@ -124,7 +124,13 @@
     })
 
     braidClient.authorize().then(() => {
-        braidClient.subscribe('docs.redwood.dev/document-3192', '/', [ Braid.utils.genesisTxID ], queue.defaultTxHandler)
+        braidClient.subscribe({
+            stateURI: 'docs.redwood.dev/document-3192',
+            keypath: '/',
+            txs: true,
+            fromTxID: Redwood.utils.genesisTxID,
+            callback: queue.defaultTxHandler,
+        })
     })
 
 
@@ -143,7 +149,7 @@
             return
         }
         var tx = {
-            id: Braid.utils.randomID(),
+            id: Redwood.utils.randomID(),
             parents: Object.keys(s9.leaves),
             stateURI: 'docs.redwood.dev/document-3192',
             patches: [
