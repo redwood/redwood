@@ -1,17 +1,17 @@
-const Redwood = require('../../redwoodjs').default
+const Redwood = require('../../redwood.js').default
 const fs = require('fs')
 
 //
 // Redwood setup
 //
-let node1Identity = Redwood.identity.fromMnemonic('assault assist cycle squirrel drift hole decade state magic hip little scale dilemma horse upon exclude then will wolf wealth tent stand caught knee')
+let node1Identity = Redwood.identity.random()
 let node1Client = Redwood.createPeer({
     identity: node1Identity,
     httpHost: 'http://localhost:8080',
     onFoundPeersCallback: (peers) => {}
 })
 
-let node2Identity = Redwood.identity.fromMnemonic('taste remind age blood history slight dutch mass ankle gospel grit lizard gravity task theme erode ring angry crumble fish vibrant polar survey genuine')
+let node2Identity = Redwood.identity.random()
 let node2Client = Redwood.createPeer({
     identity: node2Identity,
     httpHost: 'http://localhost:9090',

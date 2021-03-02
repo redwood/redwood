@@ -2,7 +2,6 @@ package redwood
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -162,7 +161,7 @@ func (p *peerPool) nextAvailablePeer() Peer {
 
 	for _, peer := range p.peers {
 		if peer.state != peerState_Unknown {
-			p.Debugf("skipping peer: not ready (%v, %v)", peer.peer.DialInfo(), peer.state)
+			// p.Debugf("skipping peer: not ready (%v, %v)", peer.peer.DialInfo(), peer.state)
 			continue
 		} else if !peer.peer.Ready() {
 			p.Debugf("skipping peer: failures=%v lastFailure=%v", peer.peer.Failures(), time.Now().Sub(peer.peer.LastFailure()))
@@ -204,9 +203,6 @@ func (p *peerPool) GetPeer() (Peer, error) {
 			if !open {
 				p.sem.Release(1)
 				return nil, errors.New("connection closed")
-			}
-			if peer == nil {
-				panic("yup peer is nil")
 			}
 
 			if !peer.Ready() {
@@ -254,11 +250,6 @@ func (p *peerPool) ReturnPeer(peer Peer, strike bool) {
 func (p *peerPool) setPeerState(peer Peer, state peerState) {
 	p.peersMu.Lock()
 	defer p.peersMu.Unlock()
-
-	fmt.Println("PEER POOL p", p)
-	fmt.Println("PEER POOL p.peers", p.peers)
-	fmt.Println("PEER POOL peer", peer)
-	fmt.Println("PEER POOL peer.DialInfo()", peer.DialInfo())
 
 	peerInfo := p.peers[peer.DialInfo()]
 	peerInfo.state = state

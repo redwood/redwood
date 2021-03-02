@@ -30,8 +30,8 @@ function createTxQueue(resolverFn, txProcessedCallback) {
     let queue = []
     let haveTxs = {}
 
-    function addTx(tx, leaves) {
-        queue.push({ tx, leaves })
+    function addTx({ tx, state, leaves }) {
+        queue.push({ tx, state, leaves })
         processQueue()
     }
 
@@ -39,9 +39,9 @@ function createTxQueue(resolverFn, txProcessedCallback) {
         while (true) {
             let processedIdxs = []
             for (let i = 0; i < queue.length; i++) {
-                let { tx, leaves } = queue[i]
+                let { tx, state, leaves } = queue[i]
                 let missingAParent = false
-                if (tx.parents && tx.parents.length > 0) {
+                if (!!tx && !!tx.parents && tx.parents.length > 0) {
                     for (let p of tx.parents) {
                         if (!haveTxs[p]) {
                             missingAParent = true
@@ -51,7 +51,7 @@ function createTxQueue(resolverFn, txProcessedCallback) {
                 }
                 if (!missingAParent) {
                     processedIdxs.unshift(i)
-                    processTx(tx, leaves)
+                    processTx({ tx, state, leaves })
                 }
             }
 
@@ -69,17 +69,21 @@ function createTxQueue(resolverFn, txProcessedCallback) {
         }
     }
 
-    function processTx(tx, leaves) {
-        const newState = resolverFn(tx.from, tx.id, tx.parents, tx.patches)
-        haveTxs[tx.id] = true
-        txProcessedCallback(tx, leaves, newState)
+    function processTx({ tx, state, leaves }) {
+        if (!!tx) {
+            const newState = resolverFn(tx.from, tx.id, tx.parents, tx.patches)
+            haveTxs[tx.id] = true
+            txProcessedCallback({ tx, leaves, state: newState })
+        } else if (!!state) {
+            txProcessedCallback({ tx, leaves, state })
+        }
     }
 
     return {
         addTx,
-        defaultTxHandler: (err, { tx, leaves }) => {
+        defaultTxHandler: (err, { tx, state, leaves }) => {
             if (err) throw new Error(err)
-            addTx(tx, leaves)
+            addTx({ tx, state, leaves })
         },
     }
 }

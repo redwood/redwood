@@ -9,10 +9,17 @@
 
 **Running the demo**
 
-First, build the Redwood binary and place it in your `$PATH`:
+First, compile `redwood.js`:
 
 ```sh
-cd cmd
+cd redwood.js
+yarn && yarn build
+```
+
+Then, build the Redwood binary and place it in your `$PATH`:
+
+```sh
+cd ../cmd
 go build --tags static -o /usr/local/bin/redwood .
 ```
 

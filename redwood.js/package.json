@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "webpack --progress --watch --env dev",
     "dev-amd": "webpack --progress --watch --env dev --amd",
-    "build": "yarn build:main && yarn build:module && browserify ./dist/main/browser.js > ./dist/browser.js && cd .. && pkger && cd -",
-    "build:main": "tsc -p tsconfig.json",
+    "build": "yarn build:main && yarn build:module && cd .. && pkger && cd -",
+    "build:main": "tsc -p tsconfig.json && browserify ./dist/main/browser.js > ./dist/browser.js && browserify ./dist/main/resolver.sync9.redwood.js > ./dist/resolver.sync9.redwood.js",
     "build:module": "tsc -p tsconfig.module.json",
     "test": "./node_modules/.bin/jest",
     "test-watch": "./node_modules/.bin/jest --watch"

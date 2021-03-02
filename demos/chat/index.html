@@ -127,9 +127,13 @@
 
     var queue = Redwood.utils.createTxQueue(
         (from, vid, parents, patches) => Redwood.sync9.resolve_state(s9, from, vid, parents, patches),
-        (tx, leaves, newState) => {
+        ({ tx, leaves, state }) => {
+            if (!tx) {
+                return
+            }
+
             // Update the debug state UI
-            currentState = newState
+            currentState = state
             if (!knownTxs[tx.id]) {
                 txs.push(tx)
                 knownTxs[tx.id] = true
@@ -137,8 +141,8 @@
             refreshDebugUI()
 
             // Update the chat UI
-            if (newState && newState.messages) {
-                messages = newState.messages.value
+            if (state && state.messages) {
+                messages = state.messages.value
             }
             refreshChatUI()
         }
@@ -157,8 +161,6 @@
         braidClient.subscribe({
             stateURI: 'chat.com/room-2837',
             keypath: '/',
-            // fromTxID,
-            states: true,
             txs: true,
             fromTxID: Redwood.utils.genesisTxID,
             callback: queue.defaultTxHandler,

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/brynbellomy/klog"
@@ -419,8 +420,19 @@ var replCommands = map[string]struct {
 	"peers": {
 		"list all known peers",
 		func(ctx context.Context, args []string, host redwood.Host) error {
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
+			defer w.Flush()
+			fmt.Fprintf(w, "Addrs\tDial info\tLast contact\tLast failure\tFailures\n")
 			for _, peer := range host.Peers() {
-				fmt.Println("- ", peer.Addresses(), peer.DialInfo(), peer.LastContact())
+				var lastContact, lastFailure string
+				if !peer.LastContact().IsZero() {
+					lastContact = time.Now().Sub(peer.LastContact()).String()
+					fmt.Sprintf("%d")
+				}
+				if !peer.LastFailure().IsZero() {
+					lastFailure = time.Now().Sub(peer.LastFailure()).String()
+				}
+				fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", peer.Addresses(), peer.DialInfo(), lastContact, lastFailure, peer.Failures())
 			}
 			return nil
 		},

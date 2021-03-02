@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -130,7 +131,6 @@ func (t *httpTransport) onSaveUser(user identity.User) error {
 }
 
 func (t *httpTransport) Start() error {
-	t.SetLogLabel("http")
 	t.Infof(0, "opening http transport at %v", t.listenAddr)
 
 	if t.cookieSecret == [32]byte{} {
@@ -320,6 +320,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Respond to a request from another node challenging our identity.
 func (t *httpTransport) serveChallengeIdentityResponse(w http.ResponseWriter, r *http.Request, address types.Address, challengeMsgHex string) {
 	challengeMsg, err := hex.DecodeString(challengeMsgHex)
 	if err != nil {
@@ -327,7 +328,7 @@ func (t *httpTransport) serveChallengeIdentityResponse(w http.ResponseWriter, r 
 		return
 	}
 
-	peer := t.makePeerWithAddress(w, nil, address)
+	peer := t.makePeer(w, nil, "", address)
 	err = t.host.HandleChallengeIdentity([]byte(challengeMsg), peer)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -383,7 +384,7 @@ func (t *httpTransport) serveChallengeIdentityCheckResponse(w http.ResponseWrite
 	}
 
 	// @@TODO: make the request include the encrypting pubkey as well
-	t.peerStore.AddVerifiedCredentials(PeerDialInfo{"http", ""}, addr, sigpubkey, nil)
+	t.peerStore.AddVerifiedCredentials(PeerDialInfo{t.Name(), ""}, addr, sigpubkey, nil)
 
 	delete(t.pendingAuthorizations, sessionID) // @@TODO: expiration/garbage collection for failed auths
 }
@@ -420,7 +421,7 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	httpWriteSub := &httpWritableSubscription{t.makePeerWithAddress(w, f, address)}
+	httpWriteSub := &httpWritableSubscription{t.makePeer(w, f, "", address), subscriptionType}
 
 	// Listen to the closing of the http connection via the CloseNotifier
 	notify := w.(http.CloseNotifier).CloseNotify()
@@ -450,7 +451,7 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 }
 
 func (t *httpTransport) serveRedwoodJS(w http.ResponseWriter, r *http.Request) {
-	f, err := pkger.Open("/redwoodjs/dist/browser.js")
+	f, err := pkger.Open("/redwood.js/dist/browser.js")
 	if err != nil {
 		http.Error(w, "can't find braidjs", http.StatusNotFound)
 		return
@@ -758,7 +759,7 @@ func (t *httpTransport) serveAck(w http.ResponseWriter, r *http.Request, address
 
 	stateURI := r.Header.Get("State-URI")
 
-	t.host.HandleAckReceived(stateURI, txID, t.makePeerWithAddress(w, nil, address))
+	t.host.HandleAckReceived(stateURI, txID, t.makePeer(w, nil, "", address))
 }
 
 func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, address types.Address) {
@@ -790,7 +791,7 @@ func (t *httpTransport) servePostPrivateTx(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	t.host.HandleTxReceived(tx, t.makePeerWithAddress(w, nil, address))
+	t.host.HandleTxReceived(tx, t.makePeer(w, nil, "", address))
 }
 
 type StoreRefResponse struct {
@@ -803,12 +804,14 @@ func (t *httpTransport) servePostRef(w http.ResponseWriter, r *http.Request) {
 
 	err := r.ParseForm()
 	if err != nil {
-		panic(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	file, _, err := r.FormFile("ref")
 	if err != nil {
-		panic(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	defer file.Close()
 
@@ -949,7 +952,7 @@ func (t *httpTransport) servePostTx(w http.ResponseWriter, r *http.Request, addr
 	tx.From = pubkey.Address()
 	////////////////////////////////
 
-	peer := t.makePeerWithAddress(w, nil, address)
+	peer := t.makePeer(w, nil, "", address)
 	go t.host.HandleTxReceived(tx, peer)
 }
 
@@ -996,7 +999,7 @@ func (t *httpTransport) NewPeerConn(ctx context.Context, dialAddr string) (Peer,
 	if dialAddr == t.ownURL || strings.HasPrefix(dialAddr, "localhost") {
 		return nil, errors.WithStack(ErrPeerIsSelf)
 	}
-	return t.makePeer(nil, nil, dialAddr), nil
+	return t.makePeer(nil, nil, dialAddr, types.Address{}), nil
 }
 
 func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_ <-chan Peer, err error) {
@@ -1022,7 +1025,7 @@ func (t *httpTransport) ProvidersOfStateURI(ctx context.Context, stateURI string
 			}
 
 			select {
-			case ch <- t.makePeer(nil, nil, providerURL):
+			case ch <- t.makePeer(nil, nil, providerURL, types.Address{}):
 			case <-ctx.Done():
 			}
 		}
@@ -1165,33 +1168,32 @@ func (t *httpTransport) addressFromCookie(r *http.Request) types.Address {
 	return types.AddressFromBytes(addressBytes)
 }
 
-func (t *httpTransport) makePeer(writer io.Writer, flusher http.Flusher, dialAddr string) *httpPeer {
+func (t *httpTransport) makePeer(writer io.Writer, flusher http.Flusher, dialAddr string, address types.Address) *httpPeer {
 	peer := &httpPeer{t: t}
 	peer.stream.Writer = writer
 	peer.stream.Flusher = flusher
 
-	peerDetails := t.peerStore.PeerWithDialInfo(PeerDialInfo{t.Name(), dialAddr})
-	if peerDetails != nil && peerDetails != PeerDetails(nil) {
-		peer.PeerDetails = peerDetails
-	} else {
+	if !address.IsZero() {
+		t.peerStore.AddVerifiedCredentials(PeerDialInfo{TransportName: t.Name(), DialAddr: dialAddr}, address, nil, nil)
+	} else if dialAddr != "" {
 		t.peerStore.AddDialInfos([]PeerDialInfo{{t.Name(), dialAddr}})
-		peer.PeerDetails = t.peerStore.PeerWithDialInfo(PeerDialInfo{t.Name(), dialAddr})
 	}
-	return peer
-}
 
-func (t *httpTransport) makePeerWithAddress(writer io.Writer, flusher http.Flusher, address types.Address) *httpPeer {
-	peer := &httpPeer{t: t}
-	peer.stream.Writer = writer
-	peer.stream.Flusher = flusher
+	var pd *peerDetails
+	if address.IsZero() && dialAddr != "" {
+		pd = t.peerStore.PeerWithDialInfo(PeerDialInfo{t.Name(), dialAddr})
 
-	peerDetails := t.peerStore.PeersFromTransportWithAddress(t.Name(), address)
-	if len(peerDetails) > 0 {
-		peer.PeerDetails = peerDetails[0]
-	} else {
-		t.peerStore.AddVerifiedCredentials(PeerDialInfo{TransportName: t.Name()}, address, nil, nil)
+	} else if !address.IsZero() {
 		peerDetails := t.peerStore.PeersFromTransportWithAddress(t.Name(), address)
-		peer.PeerDetails = peerDetails[0]
+		// @@TODO: choose the one we prefer intelligently?
+		if len(peerDetails) > 0 {
+			pd = peerDetails[0]
+		}
+	}
+	if pd == nil {
+		peer.PeerDetails = NewEphemeralPeerDetails(PeerDialInfo{TransportName: t.Name(), DialAddr: dialAddr})
+	} else {
+		peer.PeerDetails = pd
 	}
 	return peer
 }
@@ -1513,6 +1515,7 @@ func (c *httpReadableSubscription) Close() error {
 
 type httpWritableSubscription struct {
 	*httpPeer
+	typ SubscriptionType
 }
 
 var _ WritableSubscriptionImpl = (*httpWritableSubscription)(nil)
@@ -1521,7 +1524,7 @@ func (sub *httpWritableSubscription) Put(ctx context.Context, tx *Tx, state tree
 	defer func() { sub.UpdateConnStats(err == nil) }()
 
 	var msg *SubscriptionMsg
-	if tx.IsPrivate() {
+	if tx != nil && tx.IsPrivate() {
 		marshalledTx, err := json.Marshal(tx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -1579,5 +1582,6 @@ func (sub *httpWritableSubscription) Put(ctx context.Context, tx *Tx, state tree
 	} else if n < len(event) {
 		return errors.New("error writing message to http peer: didn't write enough")
 	}
+	sub.stream.Flush()
 	return nil
 }

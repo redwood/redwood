@@ -16,14 +16,14 @@ import (
 type PeerStore interface {
 	AddDialInfos(dialInfos []PeerDialInfo)
 	AddVerifiedCredentials(dialInfo PeerDialInfo, address types.Address, sigpubkey crypto.SigningPublicKey, encpubkey crypto.EncryptingPublicKey)
-	UnverifiedPeers() []PeerDetails
-	Peers() []PeerDetails
+	UnverifiedPeers() []*peerDetails
+	Peers() []*peerDetails
 	AllDialInfos() []PeerDialInfo
 	PeerWithDialInfo(dialInfo PeerDialInfo) *peerDetails
-	PeersWithAddress(address types.Address) []PeerDetails
-	PeersFromTransport(transportName string) []PeerDetails
-	PeersFromTransportWithAddress(transportName string, address types.Address) []PeerDetails
-	PeersServingStateURI(stateURI string) []PeerDetails
+	PeersWithAddress(address types.Address) []*peerDetails
+	PeersFromTransport(transportName string) []*peerDetails
+	PeersFromTransportWithAddress(transportName string, address types.Address) []*peerDetails
+	PeersServingStateURI(stateURI string) []*peerDetails
 	IsKnownPeer(dialInfo PeerDialInfo) bool
 	OnNewUnverifiedPeer(fn func(dialInfo PeerDialInfo))
 }
@@ -78,11 +78,11 @@ func NewPeerStore(state *tree.DBTree) *peerStore {
 	return s
 }
 
-func (s *peerStore) Peers() []PeerDetails {
+func (s *peerStore) Peers() []*peerDetails {
 	s.muPeers.Lock()
 	defer s.muPeers.Unlock()
 
-	var pds []PeerDetails
+	var pds []*peerDetails
 	for _, pd := range s.peers {
 		pds = append(pds, pd)
 	}
@@ -190,11 +190,11 @@ func (s *peerStore) PeerWithDialInfo(dialInfo PeerDialInfo) *peerDetails {
 	return s.peers[dialInfo]
 }
 
-func (s *peerStore) UnverifiedPeers() []PeerDetails {
+func (s *peerStore) UnverifiedPeers() []*peerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	unverifiedPeers := make([]PeerDetails, len(s.unverifiedPeers))
+	unverifiedPeers := make([]*peerDetails, len(s.unverifiedPeers))
 	i := 0
 	for dialInfo := range s.unverifiedPeers {
 		unverifiedPeers[i] = s.peers[dialInfo]
@@ -214,11 +214,11 @@ func (s *peerStore) AllDialInfos() []PeerDialInfo {
 	return dialInfos
 }
 
-func (s *peerStore) PeersWithAddress(address types.Address) []PeerDetails {
+func (s *peerStore) PeersWithAddress(address types.Address) []*peerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	var peers []PeerDetails
+	var peers []*peerDetails
 	if _, exists := s.peersWithAddress[address]; exists {
 		for _, peerDetails := range s.peersWithAddress[address] {
 			peers = append(peers, peerDetails)
@@ -227,11 +227,11 @@ func (s *peerStore) PeersWithAddress(address types.Address) []PeerDetails {
 	return peers
 }
 
-func (s *peerStore) PeersFromTransport(transportName string) []PeerDetails {
+func (s *peerStore) PeersFromTransport(transportName string) []*peerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	var peers []PeerDetails
+	var peers []*peerDetails
 	for dialInfo, peerDetails := range s.peers {
 		if dialInfo.TransportName == transportName {
 			peers = append(peers, peerDetails)
@@ -240,11 +240,11 @@ func (s *peerStore) PeersFromTransport(transportName string) []PeerDetails {
 	return peers
 }
 
-func (s *peerStore) PeersFromTransportWithAddress(transport string, address types.Address) []PeerDetails {
+func (s *peerStore) PeersFromTransportWithAddress(transport string, address types.Address) []*peerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	var peers []PeerDetails
+	var peers []*peerDetails
 	if _, exists := s.peersWithAddress[address]; exists {
 		for dialInfo, peerDetails := range s.peersWithAddress[address] {
 			if dialInfo.TransportName == transport {
@@ -255,11 +255,11 @@ func (s *peerStore) PeersFromTransportWithAddress(transport string, address type
 	return peers
 }
 
-func (s *peerStore) PeersServingStateURI(stateURI string) []PeerDetails {
+func (s *peerStore) PeersServingStateURI(stateURI string) []*peerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	var peers []PeerDetails
+	var peers []*peerDetails
 	for _, peerDetails := range s.peers {
 		if peerDetails.stateURIs.Contains(stateURI) {
 			peers = append(peers, peerDetails)
@@ -298,8 +298,6 @@ func (s *peerStore) fetchAllPeerDetails() ([]*peerDetails, error) {
 
 	var decoded []*peerDetails
 	for _, codec := range pdCodecs {
-		s.Debugf("retrieved peer from DB: %v", PrettyJSON(codec))
-
 		pd, err := s.peerDetailsCodecToPeerDetails(codec)
 		if err != nil {
 			return nil, err
@@ -352,8 +350,8 @@ func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDet
 		sigpubkeys:  sigpubkeys,
 		encpubkeys:  encpubkeys,
 		stateURIs:   utils.NewStringSet(pd.StateURIs),
-		lastContact: time.Unix(0, int64(pd.LastContact)),
-		lastFailure: time.Unix(0, int64(pd.LastFailure)),
+		lastContact: time.Unix(int64(pd.LastContact), 0),
+		lastFailure: time.Unix(int64(pd.LastFailure), 0),
 		failures:    pd.Failures,
 	}, nil
 }
@@ -369,8 +367,8 @@ func (s *peerStore) savePeerDetails(peerDetails *peerDetails) error {
 		DialInfo:    peerDetails.dialInfo,
 		Addresses:   peerDetails.addresses.Slice(),
 		StateURIs:   peerDetails.stateURIs.Slice(),
-		LastContact: uint64(peerDetails.lastContact.UTC().UnixNano()),
-		LastFailure: uint64(peerDetails.lastFailure.UTC().UnixNano()),
+		LastContact: uint64(peerDetails.lastContact.UTC().Unix()),
+		LastFailure: uint64(peerDetails.lastFailure.UTC().Unix()),
 		Failures:    peerDetails.failures,
 	}
 	pdc.Sigpubkeys = make(map[string][]byte, len(peerDetails.sigpubkeys))
@@ -485,6 +483,7 @@ func (p *peerDetails) UpdateConnStats(success bool) {
 		p.lastFailure = now
 		p.failures++
 	}
+	p.peerStore.savePeerDetails(p)
 }
 
 func (p *peerDetails) LastContact() time.Time {
@@ -508,5 +507,49 @@ func (p *peerDetails) Failures() uint64 {
 func (p *peerDetails) Ready() bool {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
+	return uint64(time.Now().Sub(p.lastFailure)/time.Second) >= p.failures
+}
+
+// @@TODO: remove this and use transport-defined unique IDs to
+// identify peers so that *everything* is tracked
+type ephemeralPeerDetails peerDetails
+
+func NewEphemeralPeerDetails(dialInfo PeerDialInfo) *ephemeralPeerDetails {
+	return &ephemeralPeerDetails{dialInfo: dialInfo}
+}
+
+func (p *ephemeralPeerDetails) Addresses() []types.Address { return nil }
+func (p *ephemeralPeerDetails) PublicKeys(addr types.Address) (crypto.SigningPublicKey, crypto.EncryptingPublicKey) {
+	return nil, nil
+}
+func (p *ephemeralPeerDetails) DialInfo() PeerDialInfo         { return p.dialInfo }
+func (p *ephemeralPeerDetails) AddStateURI(stateURI string)    {}
+func (p *ephemeralPeerDetails) RemoveStateURI(stateURI string) {}
+func (p *ephemeralPeerDetails) StateURIs() utils.StringSet     { return nil }
+func (p *ephemeralPeerDetails) UpdateConnStats(success bool) {
+	now := time.Now()
+	if success {
+		p.lastContact = now
+		p.failures = 0
+	} else {
+		p.lastContact = now
+		p.lastFailure = now
+		p.failures++
+	}
+}
+
+func (p *ephemeralPeerDetails) LastContact() time.Time {
+	return p.lastContact
+}
+
+func (p *ephemeralPeerDetails) LastFailure() time.Time {
+	return p.lastFailure
+}
+
+func (p *ephemeralPeerDetails) Failures() uint64 {
+	return p.failures
+}
+
+func (p *ephemeralPeerDetails) Ready() bool {
 	return uint64(time.Now().Sub(p.lastFailure)/time.Second) >= p.failures
 }

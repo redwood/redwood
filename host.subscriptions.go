@@ -66,6 +66,10 @@ func (t *SubscriptionType) UnmarshalText(bs []byte) error {
 }
 
 func (t SubscriptionType) MarshalText() ([]byte, error) {
+	return []byte(t.String()), nil
+}
+
+func (t SubscriptionType) String() string {
 	var strs []string
 	if t.Includes(SubscriptionType_Txs) {
 		strs = append(strs, "transactions")
@@ -73,7 +77,7 @@ func (t SubscriptionType) MarshalText() ([]byte, error) {
 	if t.Includes(SubscriptionType_States) {
 		strs = append(strs, "states")
 	}
-	return []byte(strings.Join(strs, ",")), nil
+	return strings.Join(strs, ",")
 }
 
 func (t SubscriptionType) Includes(x SubscriptionType) bool {
@@ -157,7 +161,15 @@ func (sub *writableSubscription) writeMessages() {
 			return
 		}
 		msg := x.(*SubscriptionMsg)
-		err = sub.subImpl.Put(context.TODO(), msg.Tx, msg.State, msg.Leaves)
+		var tx *Tx
+		var state tree.Node
+		if sub.subscriptionType.Includes(SubscriptionType_Txs) {
+			tx = msg.Tx
+		}
+		if sub.subscriptionType.Includes(SubscriptionType_States) {
+			state = msg.State
+		}
+		err = sub.subImpl.Put(context.TODO(), tx, state, msg.Leaves)
 		if err != nil {
 			sub.host.Errorf("error writing to subscribed peer: %v", err)
 			return

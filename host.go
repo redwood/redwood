@@ -35,7 +35,7 @@ type Host interface {
 	Identities() ([]identity.Identity, error)
 	NewIdentity(public bool) (identity.Identity, error)
 
-	Peers() []PeerDetails
+	Peers() []*peerDetails
 	ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan Peer
 	ProvidersOfRef(ctx context.Context, refID types.RefID) <-chan Peer
 	PeersClaimingAddress(ctx context.Context, address types.Address) <-chan Peer
@@ -186,7 +186,7 @@ func (h *host) Close() {
 	}
 }
 
-func (h *host) Peers() []PeerDetails {
+func (h *host) Peers() []*peerDetails {
 	return h.peerStore.Peers()
 }
 
@@ -492,9 +492,7 @@ func (h *host) processPeers(ctx context.Context) {
 					defer wg.Done()
 
 					peer, err := tpt.NewPeerConn(ctx, peerDetails.DialInfo().DialAddr)
-					if errors.Cause(err) != ErrPeerIsSelf {
-						return
-					} else if errors.Cause(err) == ErrPeerIsSelf {
+					if errors.Cause(err) == ErrPeerIsSelf {
 						return
 					} else if err != nil {
 						h.Warnf("error creating new %v peer: %v", tpt.Name(), err)
@@ -504,6 +502,7 @@ func (h *host) processPeers(ctx context.Context) {
 
 					err = peer.EnsureConnected(ctx)
 					if err != nil {
+						h.Warnf("error connecting to %v peer (%v): %v", tpt.Name(), peerDetails.DialInfo().DialAddr, err)
 						return
 					}
 

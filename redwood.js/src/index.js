@@ -1,6 +1,6 @@
 import * as identity from './identity'
-import * as sync9 from './sync9-src'
-import * as dumb from './dumb-src'
+import * as sync9 from './resolver.sync9.browser'
+import * as dumb from './resolver.dumb.browser'
 import * as utils from './utils'
 import httpTransport from './transport.http'
 // import * as webrtcTransport from './transport.webrtc'
