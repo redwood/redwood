@@ -427,7 +427,6 @@ var replCommands = map[string]struct {
 				var lastContact, lastFailure string
 				if !peer.LastContact().IsZero() {
 					lastContact = time.Now().Sub(peer.LastContact()).String()
-					fmt.Sprintf("%d")
 				}
 				if !peer.LastFailure().IsZero() {
 					lastFailure = time.Now().Sub(peer.LastFailure()).String()

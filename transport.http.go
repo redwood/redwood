@@ -17,7 +17,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
