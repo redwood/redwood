@@ -1,20 +1,6 @@
 Node:
-    HDMnemonicPhrase: drink glass cruel clown supreme gloom huge oxygen toddler find
-        ripple until rookie hurt gasp amazing high above ginger stick adult blur sheriff
-        evil
     BootstrapPeers: []
-    SubscribedStateURIs:
-      - test/another chat
-      - chat.local/servers
-      - null/registry
-      - Server/registry
-      - test/general
-      - Server/yooo
-      - Server/test
-      - test/working
-      - test/test
-      - test/registry
-      - test/yooo
+    SubscribedStateURIs: []
     MaxPeersPerSubscription: 4
     DataRoot: ./node2_data
     DevMode: true
@@ -27,7 +13,6 @@ P2PTransport:
 HTTPTransport:
     Enabled: true
     ListenHost: :8080
-    CookieSecret: !!binary DE1R42irslrK+oKH+gicyIZDLqKUW93uMTBx1sWZLNY=
     DefaultStateURI: ""
     ReachableAt: ""
 HTTPRPC:

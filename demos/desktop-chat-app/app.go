@@ -99,11 +99,6 @@ func (app *appType) Start() (err error) {
 	)
 	app.keyStore = keyStore
 
-	err = app.keyStore.Unlock(app.password)
-	if err != nil {
-		return err
-	}
-
 	err = refStore.Start()
 	if err != nil {
 		return err
@@ -127,7 +122,7 @@ func (app *appType) Start() (err error) {
 			bootstrapPeers = append(bootstrapPeers, bp.DialAddresses...)
 		}
 
-		libp2pTransport, err := redwood.NewLibp2pTransport(
+		libp2pTransport := redwood.NewLibp2pTransport(
 			config.P2PTransport.ListenPort,
 			config.P2PTransport.ReachableAt,
 			config.P2PTransport.KeyFile,
@@ -147,8 +142,8 @@ func (app *appType) Start() (err error) {
 		tlsCertFilename := filepath.Join(config.Node.DataRoot, "..", "server.crt")
 		tlsKeyFilename := filepath.Join(config.Node.DataRoot, "..", "server.key")
 
-		var cookieSecret [32]byte
-		copy(cookieSecret[:], []byte(config.HTTPTransport.CookieSecret))
+		// var cookieSecret [32]byte
+		// copy(cookieSecret[:], []byte(config.HTTPTransport.CookieSecret))
 
 		httpTransport, err := redwood.NewHTTPTransport(
 			config.HTTPTransport.ListenHost,
@@ -158,7 +153,7 @@ func (app *appType) Start() (err error) {
 			keyStore,
 			refStore,
 			peerStore,
-			cookieSecret,
+			// cookieSecret,
 			tlsCertFilename,
 			tlsKeyFilename,
 			config.Node.DevMode,
@@ -167,6 +162,11 @@ func (app *appType) Start() (err error) {
 			return err
 		}
 		transports = append(transports, httpTransport)
+	}
+
+	err = app.keyStore.Unlock(app.password)
+	if err != nil {
+		return err
 	}
 
 	app.host, err = redwood.NewHost(transports, controllerHub, keyStore, refStore, peerStore, config)
