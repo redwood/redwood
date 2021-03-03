@@ -23,8 +23,8 @@ function Provider({ children }) {
 
     useEffect(() => {
         (async function() {
-            let addr = await rpcFetch('RPC.NodeAddress', {})
-            setNodeAddress(addr.Address)
+            let addr = await rpcFetch('RPC.Identities', {})
+            setNodeAddress(addr.Identities[0].Address)
         })()
     }, [])
 
