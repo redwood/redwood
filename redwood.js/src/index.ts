@@ -5,6 +5,18 @@ import * as utils from './utils'
 import httpTransport from './transport.http'
 // import * as webrtcTransport from './transport.webrtc'
 import rpcTransport from './transport.rpc'
+import {
+    Transport,
+    Identity,
+    PeersMap,
+    PeersCallback,
+    SubscribeParams,
+    GetParams,
+    Tx,
+    StoreRefResponse,
+} from './types'
+
+export * from './types'
 
 export default {
     createPeer,
@@ -16,16 +28,25 @@ export default {
     utils,
 }
 
-function createPeer(opts) {
+interface CreatePeerOptions {
+    httpHost: string
+    identity: Identity
+    webrtc?: boolean
+    onFoundPeersCallback?: PeersCallback
+    rpcEndpoint?: string
+}
+
+function createPeer(opts: CreatePeerOptions) {
     const { httpHost, identity, webrtc, onFoundPeersCallback, rpcEndpoint } = opts
 
-    const transports = [ httpTransport({ onFoundPeers, httpHost, peerID: identity.peerID }) ]
+    const http = httpTransport({ onFoundPeers, httpHost, peerID: identity.peerID })
+    const transports: Transport[] = [ http ]
     // if (webrtc === true) {
     //     transports.push(webrtcTransport({ onFoundPeers, peerID: identity.peerID }))
     // }
 
-    let knownPeers = {}
-    function onFoundPeers(peers) {
+    let knownPeers: PeersMap = {}
+    function onFoundPeers(peers: PeersMap) {
         knownPeers = utils.deepmerge(knownPeers, peers)
 
         transports.forEach(tpt => tpt.foundPeers(knownPeers))
@@ -47,9 +68,9 @@ function createPeer(opts) {
         }
     }
 
-    async function subscribe({ stateURI, keypath, fromTxID, states, txs, callback }) {
+    async function subscribe(params: SubscribeParams) {
         let unsubscribers = (await Promise.all(
-            transports.map(tpt => tpt.subscribe({ stateURI, keypath, fromTxID, states, txs, callback }))
+            transports.map(tpt => tpt.subscribe(params))
         )).filter(unsub => !!unsub)
         return () => {
             for (let unsub of unsubscribers) {
@@ -60,7 +81,7 @@ function createPeer(opts) {
         }
     }
 
-    async function get({ stateURI, keypath, raw }) {
+    async function get({ stateURI, keypath, raw }: GetParams) {
         for (let tpt of transports) {
             if (tpt.get) {
                 return tpt.get({ stateURI, keypath, raw })
@@ -68,7 +89,7 @@ function createPeer(opts) {
         }
     }
 
-    async function put(tx) {
+    async function put(tx: Tx) {
         tx.from = identity.address
         tx.sig = identity.signTx(tx)
 
@@ -83,15 +104,13 @@ function createPeer(opts) {
         }
     }
 
-    async function storeRef(file) {
-        let hash
+    async function storeRef(file: string | Blob) {
         for (let tpt of transports) {
             if (tpt.storeRef) {
-                hash = await tpt.storeRef(file)
+                return tpt.storeRef(file)
             }
         }
-        // @@TODO: check if different?
-        return hash
+        throw new Error('no transports support storeRef')
     }
 
     return {
@@ -102,7 +121,7 @@ function createPeer(opts) {
         storeRef,
         authorize,
         peers,
-        rpc: rpcTransport(rpcEndpoint || 'http://localhost:8081'),
+        rpc: rpcTransport({ endpoint: rpcEndpoint || 'http://localhost:8081' }),
     }
 }
 

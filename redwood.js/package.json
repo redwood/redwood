@@ -51,6 +51,7 @@
     "yargs": "^10.0.3"
   },
   "dependencies": {
+    "@types/json-stable-stringify": "^1.0.32",
     "ethers": "^5.0.31",
     "json-stable-stringify": "^1.0.1",
     "node-fetch": "^2.6.1"
