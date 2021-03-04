@@ -8,11 +8,12 @@
     "rootDir": "src",
     "sourceMap": true,
     "target": "ES2015",
+    "jsx": "react",
 
     "strict": true,
 
     "esModuleInterop": true,
-    "moduleResolution": "Node",
+    "moduleResolution": "node",
     "allowJs": true,
 
     "forceConsistentCasingInFileNames": true,

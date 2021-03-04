@@ -1,10 +1,10 @@
 import * as ethers from 'ethers'
 import stringify from 'json-stable-stringify'
+import { ResolverFunc, NewStateCallback, NewStateMsg, Tx } from './types'
 
 let genesisTxID = '67656e6573697300000000000000000000000000000000000000000000000000'
 
 let JSON = { stringify }
-console.log('ethers', ethers)
 let keccak256 = ethers.utils.keccak256
 
 export {
@@ -26,11 +26,11 @@ export {
 
 
 
-function createTxQueue(resolverFn, txProcessedCallback) {
-    let queue = []
-    let haveTxs = {}
+function createTxQueue(resolverFn: ResolverFunc, txProcessedCallback: NewStateCallback) {
+    let queue: NewStateMsg[] = []
+    let haveTxs: { [id: string]: boolean } = {}
 
-    function addTx({ tx, state, leaves }) {
+    function addTx({ tx, state, leaves }: NewStateMsg) {
         queue.push({ tx, state, leaves })
         processQueue()
     }
@@ -69,7 +69,7 @@ function createTxQueue(resolverFn, txProcessedCallback) {
         }
     }
 
-    function processTx({ tx, state, leaves }) {
+    function processTx({ tx, state, leaves }: NewStateMsg) {
         if (!!tx) {
             const newState = resolverFn(tx.from, tx.id, tx.parents, tx.patches)
             haveTxs[tx.id] = true
@@ -81,7 +81,7 @@ function createTxQueue(resolverFn, txProcessedCallback) {
 
     return {
         addTx,
-        defaultTxHandler: (err, { tx, state, leaves }) => {
+        defaultTxHandler: (err: string | undefined, { tx, state, leaves }: NewStateMsg) => {
             if (err) throw new Error(err)
             addTx({ tx, state, leaves })
         },
@@ -89,12 +89,12 @@ function createTxQueue(resolverFn, txProcessedCallback) {
 }
 
 
-function hashTx(tx) {
+function hashTx(tx: Tx) {
     let txHex = serializeTx(tx)
-    return ethers.utils.keccak256(Buffer.from(txHex, 'hex')).toString('hex')
+    return ethers.utils.keccak256(Buffer.from(txHex, 'hex')).toString()
 }
 
-function serializeTx(tx) {
+function serializeTx(tx: Tx) {
     let txHex = ''
     txHex += tx.id
     ;(tx.parents || []).forEach(parent => txHex += parent)
@@ -103,21 +103,21 @@ function serializeTx(tx) {
     return txHex
 }
 
-function privateTxRootForRecipients(recipients) {
+function privateTxRootForRecipients(recipients: string[]) {
     return 'private-' + ethers.utils.keccak256(
         Buffer.concat( recipients.sort().map(r => Buffer.from(r, 'hex')) )
-    ).toString('hex')
+    ).toString()
 }
 
 function randomID() {
     return stringToHex(randomString(32))
 }
 
-function stringToHex(s) {
+function stringToHex(s: string) {
     return Buffer.from(s, 'utf8').toString('hex')
 }
 
-function randomString(length) {
+function randomString(length: number) {
     let result           = ''
     let characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
     let charactersLength = characters.length
@@ -127,81 +127,89 @@ function randomString(length) {
     return result
 }
 
-function hexToUint8Array(hexString) {
-    return new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)))
+function hexToUint8Array(hexString: string) {
+    let result = hexString.match(/.{1,2}/g)
+    if (!result) {
+        throw new Error(`could not convert "${hexString}" to Uint8Array`)
+    }
+    return new Uint8Array(result.map(byte => parseInt(byte, 16)))
 }
 
-function uint8ArrayToHex(bytes) {
+function uint8ArrayToHex(bytes: Uint8Array) {
     return bytes.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '')
 }
 
-function isMergeableObject(val) {
+function isMergeableObject(val: any) {
     let nonNullObject = val && typeof val === 'object'
-
     return nonNullObject
         && Object.prototype.toString.call(val) !== '[object RegExp]'
         && Object.prototype.toString.call(val) !== '[object Date]'
 }
 
-function emptyTarget(val) {
+function emptyTarget(val: any) {
     return Array.isArray(val) ? [] : {}
 }
 
-function cloneIfNecessary(value, optionsArgument) {
-    let clone = optionsArgument && optionsArgument.clone === true
-    return (clone && isMergeableObject(value)) ? deepmerge(emptyTarget(value), value, optionsArgument) : value
+interface DeepmergeOpts {
+    arrayMerge?: typeof defaultArrayMerge
+    clone?: boolean
 }
 
-function defaultArrayMerge(target, source, optionsArgument) {
+function cloneIfNecessary(value: any, opts?: DeepmergeOpts): any {
+    let clone = opts && opts.clone === true
+    return (clone && isMergeableObject(value)) ? deepmerge(emptyTarget(value), value, opts) : value
+}
+
+function defaultArrayMerge<T>(target: T[], source: T[], opts?: DeepmergeOpts): any {
     let destination = target.slice()
-    source.forEach(function(e, i) {
+    source.forEach((e, i) => {
         if (typeof destination[i] === 'undefined') {
-            destination[i] = cloneIfNecessary(e, optionsArgument)
+            destination[i] = cloneIfNecessary(e, opts)
         } else if (isMergeableObject(e)) {
-            destination[i] = deepmerge(target[i], e, optionsArgument)
+            destination[i] = deepmerge(target[i], e, opts)
         } else if (target.indexOf(e) === -1) {
-            destination.push(cloneIfNecessary(e, optionsArgument))
+            destination.push(cloneIfNecessary(e, opts))
         }
     })
     return destination
 }
 
-function mergeObject(target, source, optionsArgument) {
-    let destination = {}
+function mergeObject(target: any, source: any, opts?: DeepmergeOpts): any {
+    let destination: any = {}
     if (isMergeableObject(target)) {
-        Object.keys(target).forEach(function (key) {
-            destination[key] = cloneIfNecessary(target[key], optionsArgument)
+        Object.keys(target).forEach((key) => {
+            destination[key] = cloneIfNecessary(target[key], opts)
         })
     }
-    Object.keys(source).forEach(function (key) {
+    Object.keys(source).forEach((key) => {
         if (!isMergeableObject(source[key]) || !target[key]) {
-            destination[key] = cloneIfNecessary(source[key], optionsArgument)
+            destination[key] = cloneIfNecessary(source[key], opts)
         } else {
-            destination[key] = deepmerge(target[key], source[key], optionsArgument)
+            destination[key] = deepmerge(target[key], source[key], opts)
         }
     })
     return destination
 }
 
-function deepmerge(target, source, optionsArgument) {
-    let array = Array.isArray(source);
-    let options = optionsArgument || { arrayMerge: defaultArrayMerge }
+function deepmerge<A, B>(target: A, source: B, opts?: DeepmergeOpts): A & B {
+    let array = Array.isArray(source)
+    let options = opts || { arrayMerge: defaultArrayMerge }
     let arrayMerge = options.arrayMerge || defaultArrayMerge
 
     if (array) {
-        return Array.isArray(target) ? arrayMerge(target, source, optionsArgument) : cloneIfNecessary(source, optionsArgument)
+        return Array.isArray(target) ? arrayMerge(target, (source as unknown) as any[], opts) : cloneIfNecessary(source, opts)
     } else {
-        return mergeObject(target, source, optionsArgument)
+        return mergeObject(target, source, opts)
     }
 }
 
-deepmerge.all = function deepmergeAll(array, optionsArgument) {
+deepmerge.all = function deepmergeAll(array: any, opts?: DeepmergeOpts): any {
     if (!Array.isArray(array) || array.length < 2) {
         throw new Error('first argument should be an array with at least two elements')
     }
 
     // we are sure there are at least 2 values, so it is safe to have no initial value
-    return array.reduce(function(prev, next) {
-        return deepmerge(prev, next, optionsArgument)
+    return array.reduce((prev, next) => {
+        return deepmerge(prev, next, opts)
     })
 }
