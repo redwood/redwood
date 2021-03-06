@@ -29,6 +29,7 @@ const SInputWrapper = styled.div`
 const SInputLabel = styled.label`
     font-size: 10px;
     margin-bottom: 6px;
+    color: rgba(255, 255, 255, .8);
 `
 
 export function InputLabel(props) {

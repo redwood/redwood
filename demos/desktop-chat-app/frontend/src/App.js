@@ -1,9 +1,18 @@
 import React, { useState, useRef } from 'react'
 import styled from 'styled-components'
+import {
+  BrowserRouter as Router,
+  Switch,
+  Route,
+} from "react-router-dom";
 
 import ServerBar from './components/Sidebar/ServerBar'
 import Sidebar from './components/Sidebar'
 import Chat from './components/Chat'
+import SignIn from './components/Account/SignIn'
+import SignUp from './components/Account/SignUp'
+console.log(SignUp)
+
 import StateTreeDebugView from './components/StateTreeDebugView'
 import useNavigation from './hooks/useNavigation'
 
@@ -57,48 +66,33 @@ const SHeaderBar = styled(HeaderBar)`
     width: 100%;
 `
 
-function Login(props) {
-  const mnemonicInput = useRef(null)
-
-  const login = async (event) => {
-    event.preventDefault()
-    let resp = await (await fetch('http://localhost:54231/api/login', {
-      method: 'POST',
-      headers: {
-          'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        mnemonic: mnemonicInput.current.value,
-      }),
-    })).json()
-
-
-    props.setIsLoggedIn(true)
-
-    console.log(resp)
-  }
-
-  return (
-    <form onSubmit={login}>
-      <label>Mnemonic <input ref={mnemonicInput} placeholder="Mnemonic..." /></label>
-      <button type="submit">Login</button>
-    </form>
-  )
-}
-
 function App() {
     return (
-        <Layout>
-            <SServerBar verticalPadding={serverBarVerticalPadding} />
-            <HeaderAndContent>
-                <SHeaderBar />
-                <Content>
+      <Router>
+        <div>
+          <Switch>
+            <Route exact path="/">
+              <Layout>
+                <SServerBar verticalPadding={serverBarVerticalPadding} />
+                <HeaderAndContent>
+                  <SHeaderBar />
+                  <Content>
                     <Sidebar />
                     <SChat />
                     <SStateTreeDebugView />
-                </Content>
-            </HeaderAndContent>
-        </Layout>
+                  </Content>
+                </HeaderAndContent>
+              </Layout>
+            </Route>
+            <Route path="/signin">
+              <SignIn />
+            </Route>
+            <Route path="/signup">
+              <SignUp />
+            </Route>
+          </Switch>
+        </div>
+      </Router>
     )
 }
 
