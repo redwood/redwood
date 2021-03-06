@@ -1,8 +1,12 @@
 import React, { createContext, useCallback, useState, useEffect } from 'react'
+import * as RedwoodReact from 'redwood.js/dist/module/react'
+
 import rpcFetch from '../utils/rpcFetch'
 import Redwood from '../redwood.js'
-import useRedwood from '../hooks/useRedwood'
+// import useRedwood from '../hooks/useRedwood'
 import createAPI from '../api'
+
+const { useRedwood } = RedwoodReact
 
 export const Context = createContext(null)
 

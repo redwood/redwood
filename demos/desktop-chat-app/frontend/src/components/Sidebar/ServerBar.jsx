@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { Avatar, Fab, IconButton, TextField } from '@material-ui/core'
 import { Add as AddIcon, CloudDownloadRounded as ImportIcon } from '@material-ui/icons'
+import * as RedwoodReact from 'redwood.js/dist/module/react'
 
 import Tooltip from '../Tooltip'
 import GroupItem from './GroupItem'
@@ -9,12 +10,14 @@ import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
 import Input from '../Input'
 import AddServerModal from './AddServerModal'
-import useStateTree from '../../hooks/useStateTree'
+// import useStateTree from '../../hooks/useStateTree'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
 import strToColor from '../../utils/strToColor'
 import theme from '../../theme'
+
+const { useStateTree } = RedwoodReact 
 
 const Container = styled.div`
     display: flex;
@@ -115,6 +118,8 @@ function ServerBar({ className, verticalPadding }) {
     }, [onPresentImportServerModal])
 
     let knownServers = ((knownServersTree || {}).value || []).filter(x => !!x)
+
+    console.log('KNOWN', knownServersTree)
 
     useEffect(() => {
         if (!isLoaded && knownServers.length > 0) {

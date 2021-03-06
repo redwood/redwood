@@ -1,6 +1,18 @@
 Node:
     BootstrapPeers: []
-    SubscribedStateURIs: []
+    SubscribedStateURIs:
+      - qqq/registry
+      - chat.local/servers
+      - ooo/registry
+      - lll/registry
+      - ttt/registry
+      - fff/registry
+      - test/random
+      - working/registry
+      - ddd/registry
+      - ooo/lll
+      - test/registry
+      - lol/registry
     MaxPeersPerSubscription: 4
     DataRoot: ./node2_data
     DevMode: true

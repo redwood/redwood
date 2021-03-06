@@ -1,9 +1,11 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import { ThemeProvider } from 'styled-components'
+import * as RedwoodReact from 'redwood.js/dist/module/react'
+
 import App from './App'
 import reportWebVitals from './reportWebVitals'
-import RedwoodProvider from './contexts/Redwood'
+// import RedwoodProvider from './contexts/Redwood'
 import ModalsProvider from './contexts/Modals'
 import APIProvider from './contexts/API'
 import NavigationProvider from './contexts/Navigation'
@@ -11,9 +13,14 @@ import NavigationProvider from './contexts/Navigation'
 import './index.css'
 import theme from './theme'
 
+const { RedwoodProvider } = RedwoodReact
+
 ReactDOM.render(
         <ThemeProvider theme={theme}>
-            <RedwoodProvider>
+            <RedwoodProvider
+                httpHost="http://localhost:8080"
+                useWebsocket={true}
+            >
                 <APIProvider>
                     <NavigationProvider>
                         <ModalsProvider>

@@ -1,15 +1,19 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import styled from 'styled-components'
+import * as RedwoodReact from 'redwood.js/dist/module/react'
+
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Input from '../Input'
 import Button from '../Button'
 import CurrentUserAvatar from '../CurrentUserAvatar'
-import useRedwood from '../../hooks/useRedwood'
+// import useRedwood from '../../hooks/useRedwood'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
-import useStateTree from '../../hooks/useStateTree'
+// import useStateTree from '../../hooks/useStateTree'
 import UploadAvatar from '../UploadAvatar'
+
+const { useRedwood, useStateTree } = RedwoodReact
 
 const SUserControlContainer = styled.div`
     display: flex;
@@ -64,7 +68,11 @@ const SCurrentUserAvatar = styled(CurrentUserAvatar)`
 
 function UserControl() {
     let { onPresent, onDismiss } = useModal('user profile')
-    let { nodeAddress } = useRedwood()
+    const { identities } = useRedwood()
+    let nodeAddress = ''
+    if (identities) {
+      nodeAddress = identities[0].address
+    }
     let { selectedServer } = useNavigation()
     const [username, setUsername] = useState(null)
     const [userPhotoURL, setUserPhotoURL] = useState(null)
@@ -83,7 +91,11 @@ function UserControl() {
     return (
         <SUserControlContainer>
             <SUserLeft onClick={onPresent}>
-                <SCurrentUserAvatar />
+                <SCurrentUserAvatar
+                  address={nodeAddress}
+                  username={username}
+                  photoURL={userPhotoURL}
+                />
                 <UsernameWrapper>
                     <Username>{!!username ? username : nodeAddress}</Username>
                     <NodeAddress>{!!username ? nodeAddress : null}</NodeAddress>
@@ -102,7 +114,11 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
     const [username, setUsername] = useState('')
     const [iconImg, setIconImg] = useState(null)
     const [iconFile, setIconFile] = useState(null)
-    const { nodeAddress } = useRedwood()
+    const { identities } = useRedwood()
+    let nodeAddress = ''
+    if (identities) {
+      nodeAddress = identities[0].address
+    }
     const api = useAPI()
     const { selectedServer } = useNavigation()
     const photoFileRef = useRef()

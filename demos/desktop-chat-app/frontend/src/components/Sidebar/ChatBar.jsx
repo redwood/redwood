@@ -3,19 +3,22 @@ import styled, { useTheme } from 'styled-components'
 import { Avatar } from '@material-ui/core'
 import { AddCircleOutline as AddIcon } from '@material-ui/icons'
 import moment from 'moment'
+import * as RedwoodReact from 'redwood.js/dist/module/react'
 
 import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
 import Input from '../Input'
-import useRedwood from '../../hooks/useRedwood'
-import useStateTree from '../../hooks/useStateTree'
+// import useRedwood from '../../hooks/useRedwood'
+// import useStateTree from '../../hooks/useStateTree'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
 
 import addChat from './assets/add_chat.svg'
 import avatarPlaceholder from './assets/speech-bubble.svg'
+
+const { useRedwood, useStateTree } = RedwoodReact
 
 const ChatBarWrapper = styled.div`
     display: flex;

@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import styled, { useTheme } from 'styled-components'
 import filesize from 'filesize.js'
+import * as RedwoodReact from 'redwood.js/dist/module/react'
+
 import UploadAvatar from '../UploadAvatar'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
@@ -10,11 +12,12 @@ import SlidingPane, { Pane, PaneContent, PaneActions } from '../SlidingPane'
 import Select from '../Select'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
-import useStateTree from '../../hooks/useStateTree'
 import useNavigation from '../../hooks/useNavigation'
 import useCreateCloudStackOptions from '../../hooks/useCreateCloudStackOptions'
 import theme from '../../theme'
 import linodeLogo from '../../assets/linode.png'
+
+const { useStateTree } = RedwoodReact
 
 const SSelect = styled(Select)`
     && {

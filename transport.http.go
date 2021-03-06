@@ -397,6 +397,7 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 		fetchHistoryOpts *FetchHistoryOpts
 		innerWriteSub    WritableSubscriptionImpl
 	)
+
 	if r.URL.Path == "/ws" {
 		stateURI = r.URL.Query().Get("state_uri")
 		keypath = r.URL.Query().Get("keypath")
