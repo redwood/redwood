@@ -30,7 +30,7 @@ export default function createRPCClient({ endpoint }: { endpoint?: string }): RP
         },
 
         identities: async function (): Promise<RPCIdentitiesResponse[]> {
-            return ((await rpcFetch(_endpoint, 'RPC.NodeAddress')).Address as { Address: string, Public: boolean }[])
+            return ((await rpcFetch(_endpoint, 'RPC.Identities')).Identities as { Address: string, Public: boolean }[])
                           .map(({ Address, Public }) => ({ address: Address, public: Public }))
         },
 

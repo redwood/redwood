@@ -30,7 +30,7 @@ export default {
 
 interface CreatePeerOptions {
     httpHost: string
-    identity: Identity
+    identity?: Identity
     webrtc?: boolean
     onFoundPeersCallback?: PeersCallback
     rpcEndpoint?: string
@@ -39,7 +39,7 @@ interface CreatePeerOptions {
 function createPeer(opts: CreatePeerOptions) {
     const { httpHost, identity, webrtc, onFoundPeersCallback, rpcEndpoint } = opts
 
-    const http = httpTransport({ onFoundPeers, httpHost, peerID: identity.peerID })
+    const http = httpTransport({ onFoundPeers, httpHost })
     const transports: Transport[] = [ http ]
     // if (webrtc === true) {
     //     transports.push(webrtcTransport({ onFoundPeers, peerID: identity.peerID }))
@@ -61,6 +61,9 @@ function createPeer(opts: CreatePeerOptions) {
     }
 
     async function authorize() {
+        if (!identity) {
+            throw new Error('cannot .authorize() without an identity')
+        }
         for (let tpt of transports) {
             if (tpt.authorize) {
                 await tpt.authorize(identity)
@@ -90,6 +93,9 @@ function createPeer(opts: CreatePeerOptions) {
     }
 
     async function put(tx: Tx) {
+        if (!identity) {
+            throw new Error('cannot .put() without an identity')
+        }
         tx.from = identity.address
         tx.sig = identity.signTx(tx)
 

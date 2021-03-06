@@ -1,7 +1,7 @@
 import { Wallet as EthersWallet, utils as ethersUtils } from 'ethers'
 
 export interface RedwoodClient {
-    identity: Identity
+    identity?: Identity
     get: ({ stateURI, keypath, raw }: GetParams) => Promise<any>
     subscribe: (params: SubscribeParams) => Promise<UnsubscribeFunc>
     put: (tx: Tx) => Promise<void>
@@ -74,6 +74,7 @@ export interface SubscribeParams {
     states?: boolean
     txs?: boolean
     callback: NewStateCallbackWithError
+    useWebsocket?: boolean
 }
 
 export interface RPCSubscribeParams {

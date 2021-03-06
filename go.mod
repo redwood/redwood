@@ -15,6 +15,7 @@ require (
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.4.2
 	github.com/gorilla/rpc v1.2.0
+	github.com/gorilla/websocket v1.4.2
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/ijc25/Gotty v0.0.0-20170406111628-a8b993ba6abd
 	github.com/ipfs/go-cid v0.0.7
