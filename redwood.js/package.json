@@ -8,7 +8,7 @@
     "dev": "webpack --progress --watch --env dev",
     "dev-amd": "webpack --progress --watch --env dev --amd",
     "build": "yarn build:main && yarn build:module",
-    "build:main": "tsc -p tsconfig.json && browserify ./dist/main/browser.js > ./dist/browser.js && browserify ./dist/main/resolver.sync9.redwood.js > ./dist/resolver.sync9.redwood.js",
+    "build:main": "tsc -p tsconfig.json && browserify ./dist/main/browser.js > ./dist/browser.js && browserify ./dist/main/react/index.js > ./dist/react.js && browserify ./dist/main/resolver.sync9.redwood.js > ./dist/resolver.sync9.redwood.js",
     "build:module": "tsc -p tsconfig.module.json",
     "build:pkger": "cd .. && pkger; cd -",
     "test": "./node_modules/.bin/jest",
@@ -44,13 +44,21 @@
     "esmify": "^2.1.1",
     "jest": "26.6.3",
     "mocha": "^4.0.1",
+    "react": "^17.0.1",
+    "react-dom": "^17.0.1",
     "typescript": "^4.2.2",
     "vite": "^2.0.4",
     "webpack": "5.11.0",
     "webpack-cli": "4.2.0",
     "yargs": "^10.0.3"
   },
+  "peerDependencies": {
+    "react": "^17.0.1",
+    "react-dom": "^17.0.1"
+  },
   "dependencies": {
+    "@types/json-stable-stringify": "^1.0.32",
+    "@types/react": "^17.0.2",
     "ethers": "^5.0.31",
     "json-stable-stringify": "^1.0.1",
     "node-fetch": "^2.6.1"

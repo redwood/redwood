@@ -1,71 +1,125 @@
+import querystring from 'querystring'
+import url from 'url'
+import {
+    Transport,
+    Identity,
+    PeersMap,
+    PeersCallback,
+    Tx,
+    SubscribeParams,
+    UnsubscribeFunc,
+    NewStateMsg,
+    NewStateCallbackWithError,
+    GetParams
+} from './types'
 
-let whichFetch
-let theFetch
-if (typeof window !== 'undefined') {
-    whichFetch = 'browser'
-    theFetch = fetch
-} else {
-    whichFetch = 'node'
-    theFetch = require('node-fetch')
+let theFetch: typeof fetch = typeof window !== 'undefined'
+                                ? fetch
+                                : require('node-fetch')
+
+interface SubscribeHeaders {
+    'State-URI': string
+    Accept:    string
+    Subscribe: SubscribeType
+    'From-Tx'?: string
 }
 
-export default function (opts) {
-    const { httpHost, onFoundPeers, peerID } = opts
+type SubscribeType = 'states' | 'transactions' | 'states,transactions' | 'transactions,states'
 
-    let knownPeers = {}
+export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback }) {
+    const { httpHost, onFoundPeers } = opts
+
+    let knownPeers: PeersMap = {}
     pollForPeers()
 
-    let alreadyRespondedTo = {}
+    let alreadyRespondedTo: { [txID: string]: boolean } = {}
 
-    async function subscribe({ stateURI, keypath, fromTxID, states, txs, callback }) {
+    async function subscribe(opts: SubscribeParams) {
+        let { stateURI, keypath, fromTxID, states, txs, callback } = opts
         try {
-            let subscribeHeader = []
-            if (states) {
-                subscribeHeader.push('states')
-            }
-            if (txs) {
-                subscribeHeader.push('transactions')
-            }
-
-            const headers = {
-                'State-URI': stateURI,
-                'Accept':    'application/json',
-                'Subscribe': subscribeHeader.join(','),
-            }
-            if (fromTxID) {
-                headers['From-Tx'] = fromTxID
+            let subscriptionType: SubscribeType
+            if (states && txs) {
+                subscriptionType = 'states,transactions'
+            } else if (states) {
+                subscriptionType = 'states'
+            } else if (txs) {
+                subscriptionType = 'transactions'
+            } else {
+                throw new Error('must provide either `txs: true`, `states: true`, or both')
             }
 
-            const resp = await wrappedFetch(keypath, {
-                method: 'GET',
-                headers,
-            })
-            if (!resp.ok) {
-                callback('http transport: fetch failed')
-                return
-            }
-            console.log('RESP ~>', resp)
-            window.resp = resp
-            const unsubscribe = readSubscription(stateURI, resp.body.getReader(), (err, { tx, state, leaves }) => {
-                if (tx) {
-                    ack(tx.id)
-                    if (!alreadyRespondedTo[tx.id]) {
-                        alreadyRespondedTo[tx.id] = true
+            let unsubscribe: UnsubscribeFunc
+
+            if (opts.useWebsocket) {
+                let url = new URL(httpHost)
+                url.searchParams.set('state_uri', stateURI)
+                url.searchParams.set('keypath', keypath || '/')
+                url.searchParams.set('subscription_type', subscriptionType)
+                if (fromTxID) {
+                    url.searchParams.set('from_tx', fromTxID)
+                }
+                url.protocol = 'ws'
+                url.pathname = '/ws'
+
+                let conn = new WebSocket(url.toString())
+                conn.onclose = function (evt) {}
+                conn.onmessage = function (evt) {
+                    let messages = (evt.data as string).split('\n').filter(x => x.trim().length > 0)
+                    for (let msg of messages) {
+                        try {
+                            let { tx, state, leaves } = JSON.parse(msg)
+                            callback(null, { tx, state, leaves })
+                        } catch (err) {
+                            callback(err, undefined as any)
+                        }
+                    }
+                }
+                unsubscribe = () => conn.close()
+
+            } else {
+                const headers: SubscribeHeaders = {
+                    'State-URI': stateURI,
+                    'Accept':    'application/json',
+                    'Subscribe': subscriptionType,
+                }
+                if (fromTxID) {
+                    headers['From-Tx'] = fromTxID
+                }
+
+                const resp = await wrappedFetch(keypath || '/', {
+                    method: 'GET',
+                    headers,
+                })
+                if (!resp.ok || !resp.body) {
+                    callback('http transport: fetch failed', undefined as any)
+                    return
+                }
+                unsubscribe = readSubscription(stateURI, resp.body.getReader(), (err, update) => {
+                    if (err) {
+                        callback(err, undefined as any)
+                        return
+                    }
+                    let { tx, state, leaves } = update
+                    if (tx) {
+                        ack(tx.id)
+                        if (!alreadyRespondedTo[tx.id]) {
+                            alreadyRespondedTo[tx.id] = true
+                            callback(err, { tx, state, leaves })
+                        }
+                    } else {
                         callback(err, { tx, state, leaves })
                     }
-                } else {
-                    callback(err, { tx, state, leaves })
-                }
-            })
+                })
+            }
             return unsubscribe
 
         } catch (err) {
-            callback('http transport: ' + err)
-            return
+            callback('http transport: ' + err, undefined as any)
+            return () => {}
         }
     }
 
-    function readSubscription(stateURI, reader, callback) {
+    function readSubscription(stateURI: string, reader: ReadableStreamDefaultReader<Uint8Array>, callback: NewStateCallbackWithError) {
         let shouldStop = false
         function unsubscribe() {
             shouldStop = true
@@ -91,7 +145,6 @@ export default function (opts) {
                             return
                         }
                         const line = buffer.substring(0, idx).trim()
-                        console.log('line:', line)
                         if (line.length > 0) {
                             const payloadStr = line.substring(5).trim() // remove "data:" prefix
                             let payload
@@ -99,7 +152,7 @@ export default function (opts) {
                                 payload = JSON.parse(payloadStr)
                             } catch (err) {
                                 console.error('Error parsing JSON:', payloadStr)
-                                callback('http transport: ' + err)
+                                callback('http transport: ' + err, undefined as any)
                                 return
                             }
                             callback(null, payload)
@@ -115,45 +168,48 @@ export default function (opts) {
                 read()
 
             } catch (err) {
-                callback('http transport: ' + err)
+                callback('http transport: ' + err, undefined as any)
                 return
             }
         }, 0)
         return unsubscribe
     }
 
-    async function get({ stateURI, keypath, raw }) {
-        if (keypath.length > 0 && keypath[0] !== '/') {
-            keypath = '/' + keypath
+    async function get({ stateURI, keypath, raw }: GetParams) {
+        let url = keypath || '/'
+        if (url.length > 0 && url[0] !== '/') {
+            url = '/' + url
         }
         if (raw) {
-            keypath = keypath + '?raw=1'
+            url = url + '?raw=1'
         }
-        return (await (await wrappedFetch(keypath, {
+        return (await (await wrappedFetch(url, {
             headers: {
                 'Accept': 'application/json',
                 'State-URI': stateURI,
             },
-        })).json())
+        })).json()) as any
     }
 
-    function put(tx) {
-        let body
+    async function put(tx: Tx) {
+        let body: FormData | string
         if (tx.attachment) {
+            let fd: FormData
             if (typeof window !== 'undefined') {
-                body = new FormData()
+                fd = new FormData()
             } else {
                 let FormData = require('form-data')
-                body = new FormData()
+                fd = new FormData()
             }
-            body.append('attachment', tx.attachment)
-            body.append('patches', tx.patches.join('\n'))
+            fd.append('attachment', tx.attachment)
+            fd.append('patches', tx.patches.join('\n'))
+            body = fd
 
         } else {
             body = tx.patches.join('\n')
         }
 
-        return wrappedFetch('/', {
+        await wrappedFetch('/', {
             method: 'PUT',
             body: body,
             headers: {
@@ -166,14 +222,14 @@ export default function (opts) {
         })
     }
 
-    async function ack(txID) {
-        return wrappedFetch('/', {
+    async function ack(txID: string) {
+        await wrappedFetch('/', {
             method: 'ACK',
             body: txID,
         })
     }
 
-    async function storeRef(file) {
+    async function storeRef(file: string | Blob) {
         let formData
         if (typeof window !== 'undefined') {
             formData = new FormData()
@@ -195,7 +251,7 @@ export default function (opts) {
         return (await resp.json())
     }
 
-    async function authorize(identity) {
+    async function authorize(identity: Identity) {
         const resp = await wrappedFetch(`/`, {
             method: 'AUTHORIZE',
         })
@@ -212,9 +268,9 @@ export default function (opts) {
         })
     }
 
-    let cookies = {}
+    let cookies: { [cookie: string]: string } = {}
 
-    async function wrappedFetch(path, options) {
+    async function wrappedFetch(path: string, options: any) {
         if (typeof window === 'undefined') {
             // We have to manually parse and set cookies because isomorphic-fetch doesn't do it for us
             let cookieStr = Object.keys(cookies).map(cookieName => `${cookieName}=${cookies[cookieName]}`).join(';')
@@ -247,7 +303,8 @@ export default function (opts) {
 
         if (typeof window === 'undefined') {
             // Manual cookie parsing
-            for (let str of (resp.headers.raw()['set-cookie'] || [])) {
+            let rawHeaders: { [k: string]: string[] } = (resp.headers as any).raw()
+            for (let str of (rawHeaders['set-cookie'] || [])) {
                 let keyVal = str.substr(0, str.indexOf(';')).split('=')
                 cookies[keyVal[0]] = keyVal[1]
             }
@@ -256,16 +313,19 @@ export default function (opts) {
         // Receive list of peers from the Alt-Svc header
         const altSvcHeader = resp.headers.get('Alt-Svc')
         if (altSvcHeader) {
-            const peers = {}
+            const peers: PeersMap = {}
             const peerHeaders = altSvcHeader.split(',').map(x => x.trim())
             for (let peer of peerHeaders) {
                 const x = peer.match(/^\s*(\w+)="([^"]+)"/)
+                if (!x) { continue }
                 const tptName = x[1]
                 const reachableAt = x[2]
                 peers[tptName] = peers[tptName] || {}
                 peers[tptName][reachableAt] = true
             }
-            onFoundPeers(peers)
+            if (onFoundPeers) {
+                onFoundPeers(peers)
+            }
         }
         return resp
     }
@@ -282,7 +342,7 @@ export default function (opts) {
     }
 
     function makeRequestHeaders() {
-        const headers = {}
+        const headers: { [header: string]: string } = {}
         const altSvc = []
         for (let tptName of Object.keys(knownPeers)) {
             for (let reachableAt of Object.keys(knownPeers[tptName])) {
@@ -295,7 +355,7 @@ export default function (opts) {
         return headers
     }
 
-    function foundPeers(peers) {
+    function foundPeers(peers: PeersMap) {
         knownPeers = peers
     }
 
@@ -305,8 +365,9 @@ export default function (opts) {
         subscribe,
         get,
         put,
+        ack,
         storeRef,
         authorize,
         foundPeers,
-    }
+    } as Transport
 }
