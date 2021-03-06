@@ -287,7 +287,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "GET":
-		if r.Header.Get("Subscribe") != "" {
+		if r.Header.Get("Subscribe") != "" || r.URL.Path == "/ws" {
 			t.serveSubscription(w, r, address)
 		} else {
 			if r.URL.Path == "/redwood.js" {
