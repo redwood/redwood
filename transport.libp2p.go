@@ -58,7 +58,6 @@ type libp2pTransport struct {
 	*metrics.BandwidthCounter
 
 	address types.Address
-	enckeys *crypto.EncryptingKeypair
 
 	host          Host
 	controllerHub ControllerHub
@@ -160,8 +159,8 @@ func (t *libp2pTransport) Start() error {
 		libp2p.BandwidthReporter(t.BandwidthCounter),
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
-		libp2p.EnableAutoRelay(),
-		libp2p.DefaultStaticRelays(),
+		// libp2p.EnableAutoRelay(),
+		// libp2p.DefaultStaticRelays(),
 	)
 	if err != nil {
 		return errors.Wrap(err, "could not initialize libp2p host")
@@ -936,10 +935,15 @@ func (peer *libp2pPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves
 			return errors.WithStack(err)
 		}
 
+		identity, err := peer.t.keyStore.DefaultPublicIdentity()
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		etx := EncryptedTx{
 			TxID:             tx.ID,
 			EncryptedPayload: encryptedTxBytes,
-			SenderPublicKey:  peer.t.enckeys.EncryptingPublicKey.Bytes(),
+			SenderPublicKey:  identity.Encrypting.EncryptingPublicKey.Bytes(),
 			RecipientAddress: peerSigPubkey.Address(),
 		}
 		return peer.writeMsg(Msg{Type: MsgType_Private, Payload: etx})

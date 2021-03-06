@@ -1,7 +1,11 @@
 import { RPCClient, Tx, RPCSubscribeParams, RPCIdentitiesResponse } from './types'
 
+let theFetch: typeof fetch = typeof window !== 'undefined'
+                                ? fetch
+                                : require('node-fetch')
+
 async function rpcFetch(endpoint: string, method: string, params?: {[key: string]: any}) {
-    let resp = await (await fetch(endpoint, {
+    let resp = await (await theFetch(endpoint, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

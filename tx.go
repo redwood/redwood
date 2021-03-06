@@ -106,7 +106,7 @@ func (tx *Tx) Copy() *Tx {
 
 	var recipients []types.Address
 	if len(tx.Recipients) > 0 {
-		recipients := make([]types.Address, len(tx.Recipients))
+		recipients = make([]types.Address, len(tx.Recipients))
 		for i, addr := range tx.Recipients {
 			recipients[i] = addr
 		}
@@ -179,7 +179,7 @@ func (tx Tx) MarshalProto() ([]byte, error) {
 
 	recipients := make([][]byte, len(tx.Recipients))
 	for i, recipient := range tx.Recipients {
-		recipients[i] = recipient[:]
+		recipients[i] = recipient.Bytes()
 	}
 
 	return proto.Marshal(&pb.Tx{

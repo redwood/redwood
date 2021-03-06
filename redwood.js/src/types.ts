@@ -55,6 +55,7 @@ export interface Tx {
     parents: string[]
     patches: string[]
     from: string
+    recipients?: string[]
     attachment?: string | Blob
     sig?: string
 }
