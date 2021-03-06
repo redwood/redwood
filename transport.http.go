@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -389,70 +390,118 @@ func (t *httpTransport) serveChallengeIdentityCheckResponse(w http.ResponseWrite
 }
 
 func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request, address types.Address) {
-	// @@TODO: ensure we actually have this stateURI
-	stateURI := r.Header.Get("State-URI")
-	if stateURI == "" {
-		stateURI = t.defaultStateURI
-	}
+	var (
+		stateURI         string
+		keypath          string
+		subscriptionType SubscriptionType
+		fetchHistoryOpts *FetchHistoryOpts
+		innerWriteSub    WritableSubscriptionImpl
+	)
+	if r.URL.Path == "/ws" {
+		stateURI = r.URL.Query().Get("state_uri")
+		keypath = r.URL.Query().Get("keypath")
+		subscriptionTypeStr := r.URL.Query().Get("subscription_type")
+		fromTx := r.URL.Query().Get("from_tx")
 
-	t.Infof(0, "incoming subscription (address: %v, state uri: %v)", address, stateURI)
+		if stateURI == "" {
+			stateURI = t.defaultStateURI
+		}
 
-	// Make sure that the writer supports flushing.
-	f, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-
-	// Set the headers related to event streaming.
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Transfer-Encoding", "chunked")
-
-	keypath := r.Header.Get("Keypath")
-	subscriptionTypeStr := r.Header.Get("Subscribe")
-
-	var subscriptionType SubscriptionType
-	err := subscriptionType.UnmarshalText([]byte(subscriptionTypeStr))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("could not parse Subscribe header: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	httpWriteSub := &httpWritableSubscription{t.makePeer(w, f, "", address), subscriptionType}
-
-	// Listen to the closing of the http connection via the CloseNotifier
-	notify := w.(http.CloseNotifier).CloseNotify()
-	go func() {
-		defer httpWriteSub.Close()
-		<-notify
-		t.Infof(0, "http subscription closed (%v)", stateURI)
-	}()
-
-	f.Flush()
-
-	var fetchHistoryOpts *FetchHistoryOpts
-	if fromTxHeader := r.Header.Get("From-Tx"); fromTxHeader != "" {
-		fromTxID, err := types.IDFromHex(fromTxHeader)
+		err := subscriptionType.UnmarshalText([]byte(subscriptionTypeStr))
 		if err != nil {
-			http.Error(w, "could not parse From-Tx header", http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("could not parse Subscribe header: %v", err), http.StatusBadRequest)
 			return
 		}
-		fetchHistoryOpts = &FetchHistoryOpts{FromTxID: fromTxID}
+
+		if fromTx != "" {
+			fromTxID, err := types.IDFromHex(fromTx)
+			if err != nil {
+				http.Error(w, "could not parse From-Tx header", http.StatusBadRequest)
+				return
+			}
+			fetchHistoryOpts = &FetchHistoryOpts{FromTxID: fromTxID}
+		}
+
+		t.Infof(0, "incoming websocket subscription (address: %v, state uri: %v)", address, stateURI)
+
+		conn, err := wsUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		wsWriteSub := &wsWritableSubscription{httpPeer: t.makePeer(nil, nil, "", address), conn: conn}
+		innerWriteSub = wsWriteSub
+		wsWriteSub.start()
+		defer wsWriteSub.close()
+
+	} else {
+		// Make sure that the writer supports flushing
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+
+		// @@TODO: ensure we actually have this stateURI?
+		stateURI = r.Header.Get("State-URI")
+		if stateURI == "" {
+			stateURI = t.defaultStateURI
+		}
+
+		t.Infof(0, "incoming subscription (address: %v, state uri: %v)", address, stateURI)
+
+		keypath = r.Header.Get("Keypath")
+		subscriptionTypeStr := r.Header.Get("Subscribe")
+
+		err := subscriptionType.UnmarshalText([]byte(subscriptionTypeStr))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("could not parse Subscribe header: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		if fromTxHeader := r.Header.Get("From-Tx"); fromTxHeader != "" {
+			fromTxID, err := types.IDFromHex(fromTxHeader)
+			if err != nil {
+				http.Error(w, "could not parse From-Tx header", http.StatusBadRequest)
+				return
+			}
+			fetchHistoryOpts = &FetchHistoryOpts{FromTxID: fromTxID}
+		}
+
+		// Set the headers related to event streaming
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Transfer-Encoding", "chunked")
+
+		httpWriteSub := &httpWritableSubscription{t.makePeer(w, f, "", address), subscriptionType}
+		innerWriteSub = httpWriteSub
+
+		// Listen to the closing of the http connection via the CloseNotifier
+		notify := w.(http.CloseNotifier).CloseNotify()
+		go func() {
+			defer httpWriteSub.Close()
+			<-notify
+			t.Infof(0, "http subscription closed (%v)", stateURI)
+		}()
+
+		f.Flush()
 	}
 
-	writeSub := newWritableSubscription(t.host, stateURI, tree.Keypath(keypath), subscriptionType, httpWriteSub)
+	writeSub := newWritableSubscription(t.host, stateURI, tree.Keypath(keypath), subscriptionType, innerWriteSub)
 	t.host.HandleWritableSubscriptionOpened(writeSub, fetchHistoryOpts)
 
 	// Block until the subscription is canceled so that net/http doesn't close the connection
-	<-writeSub.chDone
+	select {
+	case <-writeSub.chDone:
+	case <-t.chStop:
+	}
 }
 
 func (t *httpTransport) serveRedwoodJS(w http.ResponseWriter, r *http.Request) {
 	f, err := pkger.Open("/redwood.js/dist/browser.js")
 	if err != nil {
-		http.Error(w, "can't find braidjs", http.StatusNotFound)
+		http.Error(w, "can't find redwood.js", http.StatusNotFound)
 		return
 	}
 	defer f.Close()
@@ -1583,4 +1632,97 @@ func (sub *httpWritableSubscription) Put(ctx context.Context, tx *Tx, state tree
 	}
 	sub.stream.Flush()
 	return nil
+}
+
+const (
+	wsWriteWait  = 10 * time.Second      // Time allowed to write a message to the peer.
+	wsPongWait   = 10 * time.Second      // Time allowed to read the next pong message from the peer.
+	wsPingPeriod = (wsPongWait * 9) / 10 // Send pings to peer with this period. Must be less than wsPongWait.
+)
+
+var (
+	newline    = []byte{'\n'}
+	space      = []byte{' '}
+	wsUpgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     func(*http.Request) bool { return true },
+	}
+)
+
+type wsWritableSubscription struct {
+	*httpPeer
+	conn      *websocket.Conn
+	chStop    chan struct{}
+	chDone    chan struct{}
+	closeOnce sync.Once
+}
+
+var _ WritableSubscriptionImpl = (*wsWritableSubscription)(nil)
+
+func (sub *wsWritableSubscription) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
+	defer func() { sub.UpdateConnStats(err == nil) }()
+
+	sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+
+	w, err := sub.conn.NextWriter(websocket.TextMessage)
+	if err != nil {
+		sub.t.Errorf("error obtaining next writer: %v", err)
+		return err
+	}
+	defer w.Close()
+
+	bs, err := json.Marshal(SubscriptionMsg{Tx: tx, State: state, Leaves: leaves})
+	if err != nil {
+		sub.t.Errorf("error marshaling message json: %v", err)
+		return err
+	}
+
+	_, err = w.Write([]byte(string(bs) + "\n"))
+	if err != nil {
+		sub.t.Errorf("error writing to websocket client: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (sub *wsWritableSubscription) close() {
+	sub.closeOnce.Do(func() {
+		close(sub.chStop)
+		<-sub.chDone
+		sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+		err := sub.conn.WriteMessage(websocket.CloseMessage, []byte{})
+		sub.UpdateConnStats(err == nil)
+		sub.conn.Close()
+	})
+}
+
+func (sub *wsWritableSubscription) start() {
+	sub.chStop = make(chan struct{})
+	sub.chDone = make(chan struct{})
+
+	ticker := time.NewTicker(wsPingPeriod)
+
+	go func() {
+		defer close(sub.chDone)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-sub.chStop:
+				return
+
+			case <-ticker.C:
+				sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+
+				err := sub.conn.WriteMessage(websocket.PingMessage, nil)
+				sub.UpdateConnStats(err == nil)
+				if err != nil {
+					sub.t.Errorf("error pinging websocket client: %v", err)
+					sub.close()
+					return
+				}
+			}
+		}
+	}()
 }

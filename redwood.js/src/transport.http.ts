@@ -1,3 +1,5 @@
+import querystring from 'querystring'
+import url from 'url'
 import {
     Transport,
     Identity,
@@ -24,8 +26,8 @@ interface SubscribeHeaders {
 
 type SubscribeType = 'states' | 'transactions' | 'states,transactions' | 'transactions,states'
 
-export default function (opts: { httpHost?: string, onFoundPeers?: PeersCallback, peerID: string }) {
-    const { httpHost, onFoundPeers, peerID } = opts
+export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback }) {
+    const { httpHost, onFoundPeers } = opts
 
     let knownPeers: PeersMap = {}
     pollForPeers()
@@ -35,51 +37,81 @@ export default function (opts: { httpHost?: string, onFoundPeers?: PeersCallback
     async function subscribe(opts: SubscribeParams) {
         let { stateURI, keypath, fromTxID, states, txs, callback } = opts
         try {
-            let subscribeHeader: SubscribeType
+            let subscriptionType: SubscribeType
             if (states && txs) {
-                subscribeHeader = 'states,transactions'
+                subscriptionType = 'states,transactions'
             } else if (states) {
-                subscribeHeader = 'states'
+                subscriptionType = 'states'
             } else if (txs) {
-                subscribeHeader = 'transactions'
+                subscriptionType = 'transactions'
             } else {
                 throw new Error('must provide either `txs: true`, `states: true`, or both')
             }
 
-            const headers: SubscribeHeaders = {
-                'State-URI': stateURI,
-                'Accept':    'application/json',
-                'Subscribe': subscribeHeader,
-            }
-            if (fromTxID) {
-                headers['From-Tx'] = fromTxID
-            }
+            let unsubscribe: UnsubscribeFunc
 
-            const resp = await wrappedFetch(keypath || '/', {
-                method: 'GET',
-                headers,
-            })
-            if (!resp.ok || !resp.body) {
-                callback('http transport: fetch failed', undefined as any)
-                return
-            }
-            const unsubscribe = readSubscription(stateURI, resp.body.getReader(), (err, update) => {
-                if (err) {
-                    callback(err, undefined as any)
+            if (opts.useWebsocket) {
+                let url = new URL(httpHost)
+                url.searchParams.set('state_uri', stateURI)
+                url.searchParams.set('keypath', keypath || '/')
+                url.searchParams.set('subscription_type', subscriptionType)
+                if (fromTxID) {
+                    url.searchParams.set('from_tx', fromTxID)
+                }
+                url.protocol = 'ws'
+                url.pathname = '/ws'
+
+                let conn = new WebSocket(url.toString())
+                conn.onclose = function (evt) {}
+                conn.onmessage = function (evt) {
+                    let messages = (evt.data as string).split('\n').filter(x => x.trim().length > 0)
+                    for (let msg of messages) {
+                        try {
+                            let { tx, state, leaves } = JSON.parse(msg)
+                            callback(null, { tx, state, leaves })
+                        } catch (err) {
+                            callback(err, undefined as any)
+                        }
+                    }
+                }
+                unsubscribe = () => conn.close()
+
+            } else {
+                const headers: SubscribeHeaders = {
+                    'State-URI': stateURI,
+                    'Accept':    'application/json',
+                    'Subscribe': subscriptionType,
+                }
+                if (fromTxID) {
+                    headers['From-Tx'] = fromTxID
+                }
+
+                const resp = await wrappedFetch(keypath || '/', {
+                    method: 'GET',
+                    headers,
+                })
+                if (!resp.ok || !resp.body) {
+                    callback('http transport: fetch failed', undefined as any)
                     return
                 }
-                let { tx, state, leaves } = update
-                if (tx) {
-                    ack(tx.id)
-                    if (!alreadyRespondedTo[tx.id]) {
-                        alreadyRespondedTo[tx.id] = true
+                unsubscribe = readSubscription(stateURI, resp.body.getReader(), (err, update) => {
+                    if (err) {
+                        callback(err, undefined as any)
+                        return
+                    }
+                    let { tx, state, leaves } = update
+                    if (tx) {
+                        ack(tx.id)
+                        if (!alreadyRespondedTo[tx.id]) {
+                            alreadyRespondedTo[tx.id] = true
+                            callback(err, { tx, state, leaves })
+                        }
+                    } else {
                         callback(err, { tx, state, leaves })
                     }
-                } else {
-                    callback(err, { tx, state, leaves })
-                }
-            })
-            return unsubscribe as UnsubscribeFunc
+                })
+            }
+            return unsubscribe
 
         } catch (err) {
             callback('http transport: ' + err, undefined as any)
