@@ -287,7 +287,7 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "GET":
-		if r.Header.Get("Subscribe") != "" {
+		if r.Header.Get("Subscribe") != "" || r.URL.Path == "/ws" {
 			t.serveSubscription(w, r, address)
 		} else {
 			if r.URL.Path == "/redwood.js" {
@@ -397,6 +397,7 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 		fetchHistoryOpts *FetchHistoryOpts
 		innerWriteSub    WritableSubscriptionImpl
 	)
+
 	if r.URL.Path == "/ws" {
 		stateURI = r.URL.Query().Get("state_uri")
 		keypath = r.URL.Query().Get("keypath")

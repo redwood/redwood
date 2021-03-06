@@ -6,6 +6,7 @@ import * as tinycolor from 'tinycolor2'
 import filesize from 'filesize.js'
 import moment from 'moment'
 import CloseIcon from '@material-ui/icons/Close'
+import * as RedwoodReact from 'redwood.js/dist/module/react'
 
 import Button from './Button'
 import Input from './Input'
@@ -15,10 +16,12 @@ import Modal, { ModalTitle, ModalContent, ModalActions } from './Modal'
 import UserAvatar from './UserAvatar'
 import useModal from '../hooks/useModal'
 import useAPI from '../hooks/useAPI'
-import useRedwood from '../hooks/useRedwood'
-import useStateTree from '../hooks/useStateTree'
+// import useRedwood from '../hooks/useRedwood'
+// import useStateTree from '../hooks/useStateTree'
 import useNavigation from '../hooks/useNavigation'
 import strToColor from '../utils/strToColor'
+
+const { useRedwood, useStateTree } = RedwoodReact
 
 const Container = styled.div`
     display: flex;
@@ -131,7 +134,11 @@ const SImgPreviewWrapper = styled.div`
 `
 
 function Chat({ className }) {
-    const { nodeAddress } = useRedwood()
+    const { identities } = useRedwood()
+    let nodeAddress = ''
+    if (identities) {
+      nodeAddress = identities[0].address
+    }
     const api = useAPI()
     const { selectedStateURI, selectedServer, selectedRoom } = useNavigation()
     const registry = useStateTree(!!selectedServer ? `${selectedServer}/registry` : null)
