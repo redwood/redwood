@@ -639,15 +639,14 @@ func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription, f
 			leaves, err := h.Controllers().Leaves(writeSub.StateURI())
 			if err != nil {
 				h.Errorf("error writing initial state to peer (%v): %v", writeSub.StateURI(), err)
-				return
+			} else {
+				node, err := state.CopyToMemory(keypath, nil)
+				if err != nil {
+					h.Errorf("error writing initial state to peer (%v): %v", writeSub.StateURI(), err)
+				} else {
+					writeSub.EnqueueWrite(nil, node, leaves)
+				}
 			}
-
-			node, err := state.CopyToMemory(keypath, nil)
-			if err != nil {
-				h.Errorf("error writing initial state to peer: %v", err)
-				return
-			}
-			writeSub.EnqueueWrite(nil, node, leaves)
 		}
 	}
 
@@ -824,9 +823,9 @@ func (h *host) handleNewState(tx *Tx, state tree.Node, leaves []types.ID) {
 		}
 
 		// If this state URI isn't meant to be shared, don't broadcast
-		if utils.IsLocalStateURI(tx.StateURI) {
-			return
-		}
+		// if utils.IsLocalStateURI(tx.StateURI) {
+		// 	return
+		// }
 
 		// Broadcast state and tx to others
 		ctx, cancel := utils.CombinedContext(h.chStop, 10*time.Second)

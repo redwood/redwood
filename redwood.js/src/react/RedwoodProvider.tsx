@@ -2,7 +2,8 @@ import React, { createContext, useCallback, useState, useEffect, useRef } from '
 import Redwood, { RedwoodClient, Identity, RPCIdentitiesResponse, PeersMap } from '..'
 
 export interface IContext {
-    identities: null | RPCIdentitiesResponse[]
+    identity: null | undefined | Identity
+    nodeIdentities: null | RPCIdentitiesResponse[]
     redwoodClient: null | RedwoodClient
     httpHost: string
     useWebsocket: boolean
@@ -14,7 +15,8 @@ export interface IContext {
 }
 
 export const Context = createContext<IContext>({
-    identities: null,
+    identity: null,
+    nodeIdentities: null,
     redwoodClient: null,
     httpHost: '',
     useWebsocket: false,
@@ -33,10 +35,9 @@ function Provider(props: {
     identity?: Identity,
     children: React.ReactNode,
 }) {
-    console.log('RedwoodProvider', props)
     let { httpHost, rpcEndpoint, useWebsocket, identity, webrtc, children } = props
 
-    const [identities, setIdentities] = useState<null|RPCIdentitiesResponse[]>(null)
+    const [nodeIdentities, setNodeIdentities] = useState<null|RPCIdentitiesResponse[]>(null)
     const [redwoodClient, setRedwoodClient] = useState<null|RedwoodClient>(null)
     const subscribedStateURIs = useRef<{[stateURI: string]: boolean}>({})
     const [stateTrees, setStateTrees] = useState({})
@@ -56,10 +57,10 @@ function Provider(props: {
             if (!!identity) {
                 await redwoodClient.authorize()
             }
-            let identities = await redwoodClient.rpc.identities()
+            let nodeIdentities = await redwoodClient.rpc.identities()
 
             setRedwoodClient(redwoodClient)
-            setIdentities(identities)
+            setNodeIdentities(nodeIdentities)
         })()
     }, [identity, httpHost, rpcEndpoint, webrtc])
 
@@ -70,7 +71,8 @@ function Provider(props: {
 
     return (
       <Context.Provider value={{
-          identities,
+          identity,
+          nodeIdentities,
           redwoodClient,
           httpHost,
           useWebsocket: !!useWebsocket,

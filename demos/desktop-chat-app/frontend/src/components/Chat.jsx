@@ -15,8 +15,7 @@ import Modal, { ModalTitle, ModalContent, ModalActions } from './Modal'
 import UserAvatar from './UserAvatar'
 import useModal from '../hooks/useModal'
 import useAPI from '../hooks/useAPI'
-import useRedwood from '../hooks/useRedwood'
-import useStateTree from '../hooks/useStateTree'
+import { useRedwood, useStateTree } from 'redwood/dist/main/react'
 import useNavigation from '../hooks/useNavigation'
 import strToColor from '../utils/strToColor'
 
@@ -131,7 +130,7 @@ const SImgPreviewWrapper = styled.div`
 `
 
 function Chat({ className }) {
-    const { nodeAddress } = useRedwood()
+    const { nodeIdentities } = useRedwood()
     const api = useAPI()
     const { selectedStateURI, selectedServer, selectedRoom } = useNavigation()
     const registry = useStateTree(!!selectedServer ? `${selectedServer}/registry` : null)
@@ -156,10 +155,10 @@ function Chat({ className }) {
     const onClickSend = useCallback(async () => {
         if (!api) { return }
         console.log('attachments', attachments)
-        await api.sendMessage(messageText, attachments, nodeAddress, selectedServer, selectedRoom, messages)
+        await api.sendMessage(messageText, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
         setAttachments([])
         setPreviews([])
-    }, [messageText, nodeAddress, attachments, selectedServer, selectedRoom, messages, api])
+    }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api])
 
     useEffect(() => {
       // Scrolls on new messages

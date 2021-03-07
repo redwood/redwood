@@ -1,5 +1,5 @@
 import rpcFetch from '../utils/rpcFetch'
-import Redwood from '../redwood.js'
+import Redwood from 'redwood'
 
 const sync9JSSha3 = '0c87e1035db28f334cd7484b47d9e7cc285e026d4f876d24ddad78c47ac40a14'
 
