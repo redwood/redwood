@@ -834,19 +834,71 @@ func (h *host) handleNewState(tx *Tx, state tree.Node, leaves []types.ID) {
 		var wg sync.WaitGroup
 		var alreadySentPeers sync.Map
 
-		wg.Add(2)
+		wg.Add(3)
 		go h.broadcastToWritableSubscribers(ctx, tx, state, leaves, &alreadySentPeers, &wg)
 		go h.broadcastToStateURIProviders(ctx, tx, leaves, &alreadySentPeers, &wg)
+		go h.broadcastToPrivateRecipients(ctx, tx, leaves, &alreadySentPeers, &wg)
 
 		wg.Wait()
 	}()
 }
 
-func (h *host) broadcastToStateURIProviders(ctx context.Context, tx *Tx, leaves []types.ID, alreadySentPeers *sync.Map, wg *sync.WaitGroup) {
+func (h *host) broadcastToPrivateRecipients(ctx context.Context, tx *Tx, leaves []types.ID, alreadySentPeers *sync.Map, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second) // @@TODO: make configurable
-	defer cancel()
+	for _, address := range tx.Recipients {
+		for _, peerDetails := range h.peerStore.PeersWithAddress(address) {
+			tpt := h.Transport(peerDetails.DialInfo().TransportName)
+			if tpt == nil {
+				continue
+			}
+
+			peer, err := tpt.NewPeerConn(ctx, peerDetails.DialInfo().DialAddr)
+			if err != nil {
+				h.Errorf("error creating connection to peer %v: %v", peerDetails.DialInfo(), err)
+				continue
+			}
+
+			if len(peer.Addresses()) == 0 {
+				panic("impossible")
+			} else if h.txSeenByPeer(peer, tx.StateURI, tx.ID) {
+				continue
+			}
+			// @@TODO: do we always want to avoid broadcasting when `from == peer.address`?
+			for _, addr := range peer.Addresses() {
+				if tx.From == addr {
+					continue
+				}
+			}
+
+			_, alreadySent := alreadySentPeers.LoadOrStore(peer.DialInfo(), struct{}{})
+			if alreadySent {
+				continue
+			}
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				err := peer.EnsureConnected(ctx)
+				if err != nil {
+					h.Errorf("error connecting to peer: %v", err)
+					return
+				}
+				defer peer.Close()
+
+				err = peer.Put(ctx, tx, nil, leaves)
+				if err != nil {
+					h.Errorf("error writing tx to peer: %v", err)
+					return
+				}
+			}()
+		}
+	}
+}
+
+func (h *host) broadcastToStateURIProviders(ctx context.Context, tx *Tx, leaves []types.ID, alreadySentPeers *sync.Map, wg *sync.WaitGroup) {
+	defer wg.Done()
 
 	ch := make(chan Peer)
 	go func() {
@@ -1005,7 +1057,7 @@ func (h *host) SendTx(ctx context.Context, tx Tx) (err error) {
 		}
 	}()
 
-	if tx.From == (types.Address{}) {
+	if tx.From.IsZero() {
 		publicIdentities, err := h.keyStore.PublicIdentities()
 		if err != nil {
 			return err

@@ -135,7 +135,7 @@ func (m *controllerHub) AddTx(tx *Tx, force bool) error {
 	if tx.IsPrivate() {
 		parts := strings.Split(tx.StateURI, "/")
 		if parts[len(parts)-1] != tx.PrivateRootKey() {
-			return ErrInvalidPrivateRootKey
+			return errors.Wrapf(ErrInvalidPrivateRootKey, "got %v, expected %v", parts[len(parts)-1], tx.PrivateRootKey())
 		}
 	}
 

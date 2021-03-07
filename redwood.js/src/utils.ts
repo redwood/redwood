@@ -106,7 +106,7 @@ function serializeTx(tx: Tx) {
 function privateTxRootForRecipients(recipients: string[]) {
     return 'private-' + ethers.utils.keccak256(
         Buffer.concat( recipients.sort().map(r => Buffer.from(r, 'hex')) )
-    ).toString()
+    ).toString().substr(2)
 }
 
 function randomID() {

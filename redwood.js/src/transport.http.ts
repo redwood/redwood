@@ -191,6 +191,7 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
         })).json()) as any
     }
 
+    // @@TODO: private tx functionality
     async function put(tx: Tx) {
         let body: FormData | string
         if (tx.attachment) {
