@@ -2,6 +2,8 @@ Node:
     HDMnemonicPhrase: device neutral review street clean mechanic stomach curious
         rude betray lamp tongue two curious noise fury stomach general ranch angle
         indoor bicycle brick diary
+    BootstrapPeers: []
+    SubscribedStateURIs: []
     MaxPeersPerSubscription: 4
     DataRoot: ./node1_data
     DevMode: true

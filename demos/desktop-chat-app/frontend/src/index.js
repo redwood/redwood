@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom'
 import { ThemeProvider } from 'styled-components'
 import App from './App'
 import reportWebVitals from './reportWebVitals'
-import RedwoodProvider from './contexts/Redwood'
+import { RedwoodProvider } from 'redwood/dist/main/react'
 import ModalsProvider from './contexts/Modals'
 import APIProvider from './contexts/API'
 import NavigationProvider from './contexts/Navigation'
@@ -13,7 +13,10 @@ import theme from './theme'
 
 ReactDOM.render(
         <ThemeProvider theme={theme}>
-            <RedwoodProvider>
+            <RedwoodProvider
+                httpHost="http://localhost:8080"
+                useWebsocket={true}
+            >
                 <APIProvider>
                     <NavigationProvider>
                         <ModalsProvider>

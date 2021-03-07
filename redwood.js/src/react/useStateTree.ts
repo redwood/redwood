@@ -2,12 +2,11 @@ import { useEffect, useState, useCallback, useContext, useDebugValue } from 'rea
 import useRedwood from './useRedwood'
 
 function useStateTree(stateURI: string | null | undefined, keypath?: string) {
-    console.log('useStateTree', stateURI, keypath)
     const { redwoodClient, httpHost, useWebsocket, subscribedStateURIs, stateTrees, updateStateTree } = useRedwood()
 
     let keypath_ = (keypath || '').length === 0 ? '/' : keypath
 
-    useDebugValue({ redwoodClient, stateURI, keypath: keypath_, subscribedStateURIs })
+    useDebugValue({ redwoodClient, stateURI, keypath: keypath_, subscribedStateURIs, stateTrees })
 
     useEffect(() => {
         if (!redwoodClient || !stateURI) {

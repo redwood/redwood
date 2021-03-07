@@ -18,7 +18,6 @@ var chLoggedOut = make(chan struct{}, 1)
 func startAPI(port uint) {
 	http.HandleFunc("/api/login", loginUser)
 	http.HandleFunc("/api/logout", logoutUser)
-	http.HandleFunc("/ws", serveWs)
 	http.HandleFunc("/", serveHome)
 
 	err := http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
