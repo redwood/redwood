@@ -1,6 +1,6 @@
 import React, { Fragment, useState, useEffect } from 'react'
 import styled from 'styled-components'
-import { Link, useHistory, Redirect } from 'react-router-dom'
+import { Link, useHistory } from 'react-router-dom'
 import * as RedwoodReact from 'redwood.js/dist/module/react'
 
 import Input, { InputLabel } from './../Input'
@@ -60,45 +60,46 @@ const SLink = styled(Link)`
   margin-top: 8px;
 `
 
-const SErrorMessage = styled.div`
-  font-size: 10px;
-  color: red;
-`
-
-const checkLogin = async () => {
-  try {
-    let resp = await fetch('http://localhost:54231/api/check-login', { method: 'POST' })
-
-    const jsonResp = await resp.text()
-
-    return jsonResp === 'true'
-  } catch (err) {
-    console.error(err)
-  }
-}
-
 function SignIn(props) {
   const redwood = useRedwood()
   const history = useHistory()
 
+  const checkLogin = async () => {
+    try {
+      let resp = await fetch('http://localhost:54231/api/check-login', { method: 'POST' })
+
+      const jsonResp = await resp.text()
+
+      return jsonResp === 'true'
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const onSignIn = async () => {
     try {
-      props.setErrorMessage('')
+      const isLoggedIn = await checkLogin()
+      console.log(isLoggedIn)
+
+      if (isLoggedIn) {
+        const logoutResp = await fetch('http://localhost:54231/api/logout', { method: 'POST' })
+        console.log(logoutResp)
+        console.log('LOGGED OUT')
+        if (logoutResp.status === 500) {
+          console.log(logoutResp)
+        }
+      }
+
       let resp = await fetch('http://localhost:54231/api/login', {
         method: 'POST',
-        // headers: {
-        //   'Content-Type': 'application/json',
-        // },
         body: JSON.stringify({
-          profileName: props.profileName,
-          mnemonic: props.mnemonic,
+          profileName: props.selectedProfile,
           password: props.password,
         }),
       })
 
       if (resp.status === 500) {
         const errorText = await resp.text()
-        props.setErrorMessage(errorText)
         console.log(errorText)
       }
 
@@ -111,25 +112,6 @@ function SignIn(props) {
 
   return (
     <Fragment>
-      {props.errorMessage ? <SErrorMessage>{props.errorMessage}</SErrorMessage> : null}
-      <InputLabel
-        label={'Profile Name'}
-      >
-        <Input
-          value={props.profileName}
-          onChange={(event) => props.setProfileName(event.currentTarget.value)}
-          type={'text'}
-        />
-      </InputLabel>
-      <InputLabel
-        label={'Mnemonic'}
-      >
-        <Input
-          value={props.mnemonic}
-          onChange={(event) => props.setMnemonic(event.currentTarget.value)}
-          type={'password'}
-        />
-      </InputLabel>
       <InputLabel
         label={'Password'}
       >
@@ -139,51 +121,66 @@ function SignIn(props) {
           type={'password'}
         />
       </InputLabel>
-      <SLink to={'/signup'}>Create an account.</SLink>
+      <div onClick={() => props.setSelectedProfile('')}>Select another profile ({props.profileNames.length})</div>
+      <SLink to={'/signin'}>Back</SLink>
       <Button
         onClick={onSignIn}
         primary
         style={{ width: '100%', marginTop: 12 }}
-        disabled={!(!!props.mnemonic && !!props.profileName && !!props.password)}
+        disabled={!props.password}
       >Sign In</Button>
     </Fragment>
   )
 }
 
+function SelectProfile(props) {
+  return (
+    <div>
+      { props.profileNames.map((profileName, key) => {
+        return (
+          <div key={key} onClick={() => props.setSelectedProfile(profileName)}>{profileName}</div>
+        )
+      })}
+    </div>
+  )
+}
+
 function Account(props) {
-  const [mnemonic, setMnemonic] = useState('')
-  const [profileName, setProfileName] = useState('')
+  const [selectedProfile, setSelectedProfile] = useState('')
   const [password, setPassword] = useState('')
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
+  const [profileNames, setProfileNames] = useState([])
 
-  useEffect(async () => {
-    const pingIsloggedIn = await checkLogin()
-
-    setIsLoggedIn(pingIsloggedIn)
-  }, [])
-
-  if (isLoggedIn) {
-    return <Redirect to="/" />
+  const getProfileNames = async () => {
+    try {
+      let resp = await (await fetch('http://localhost:54231/api/profile-names', { method: 'GET' })).json()
+      setProfileNames(resp.profileNames)
+    } catch (err) {
+      return err
+    }
   }
+
+  useEffect(() => {
+    getProfileNames()
+  }, [])
 
   return (
     <SAccount>
-      {/* <SAccountHeader /> */}
       <SAccountCard>
-        <SAccountCardHeader>Sign In</SAccountCardHeader>
-        <SAccountCardDesc>Always keep your mnemonic safe.</SAccountCardDesc>
+        <SAccountCardHeader>Profiles</SAccountCardHeader>
+        <SAccountCardDesc>{selectedProfile || '---'}</SAccountCardDesc>
         <SAccountCardContent>
-          <SignIn
-            mnemonic={mnemonic}
-            setMnemonic={setMnemonic}
-            profileName={profileName}
-            setProfileName={setProfileName}
-            password={password}
-            setPassword={setPassword}
-            errorMessage={errorMessage}
-            setErrorMessage={setErrorMessage}
-          />
+          { selectedProfile ? 
+            <SignIn
+              password={password}
+              setPassword={setPassword}
+              selectedProfile={selectedProfile}
+              profileNames={profileNames}
+              setSelectedProfile={setSelectedProfile}
+            />
+          : <SelectProfile
+              profileNames={profileNames}
+              setSelectedProfile={setSelectedProfile}
+          />}
         </SAccountCardContent> 
       </SAccountCard>
     </SAccount>

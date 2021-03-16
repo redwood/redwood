@@ -10,6 +10,7 @@ export const Context = createContext({
     updateStateTree: () => {},
     leaves: {},
     knownPeers: {},
+    fetchNodeAddress: () => {}, 
 })
 
 function Provider({ children }) {
@@ -21,10 +22,14 @@ function Provider({ children }) {
     const [knownPeers, setKnownPeers] = useState({})
     const [error, setError] = useState(null)
 
+    const fetchNodeAddress = async () => {
+      let addr = await rpcFetch('RPC.Identities', {})
+      setNodeAddress(addr.Identities[0].Address)
+    }
+
     useEffect(() => {
         (async function() {
-            let addr = await rpcFetch('RPC.Identities', {})
-            setNodeAddress(addr.Identities[0].Address)
+          await fetchNodeAddress()
         })()
     }, [])
 
@@ -58,6 +63,7 @@ function Provider({ children }) {
           leaves,
           updateStateTree,
           knownPeers,
+          fetchNodeAddress,
       }}>
           {children}
       </Context.Provider>

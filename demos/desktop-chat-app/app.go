@@ -38,8 +38,10 @@ type appType struct {
 	httpRPCServer *http.Server
 	chLoggedOut   chan struct{}
 
-	keyStore identity.KeyStore
-	password string
+	keyStore    identity.KeyStore
+	password    string
+	profileName string
+	mnemonic    string
 
 	// These are set once on startup and never change
 	ctx.Logger
@@ -74,6 +76,11 @@ func (app *appType) Start() (err error) {
 	} else if err != nil {
 		return err
 	}
+
+	// Set profile data root
+	splitDataRoot := strings.Split(config.Node.DataRoot, "/")
+	splitDataRoot[2] = app.profileName
+	config.Node.DataRoot = strings.Join(splitDataRoot[:], "/")
 
 	if app.devMode {
 		config.Node.DevMode = true
@@ -142,6 +149,8 @@ func (app *appType) Start() (err error) {
 		tlsCertFilename := filepath.Join(config.Node.DataRoot, "..", "server.crt")
 		tlsKeyFilename := filepath.Join(config.Node.DataRoot, "..", "server.key")
 
+		// tlsCertFilename := filepath.Join(config.Node.DataRoot, "..", "server.crt")
+		// tlsKeyFilename := filepath.Join(config.Node.DataRoot, "..", "server.key")
 		// var cookieSecret [32]byte
 		// copy(cookieSecret[:], []byte(config.HTTPTransport.CookieSecret))
 
@@ -164,8 +173,16 @@ func (app *appType) Start() (err error) {
 		transports = append(transports, httpTransport)
 	}
 
-	err = app.keyStore.Unlock(app.password)
+	err = app.keyStore.Unlock(app.password, app.mnemonic)
 	if err != nil {
+		app.refStore.Close()
+		app.refStore = nil
+
+		app.txStore.Close()
+		app.txStore = nil
+
+		app.db.Close()
+		app.db = nil
 		return err
 	}
 

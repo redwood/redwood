@@ -11,6 +11,8 @@ export interface IContext {
     updateStateTree: (stateURI: string, newTree: any, newLeaves: string[]) => void
     leaves: {[txID: string]: boolean}
     knownPeers: PeersMap
+    fetchIdentities: any
+    something: string,
 }
 
 export const Context = createContext<IContext>({
@@ -23,6 +25,8 @@ export const Context = createContext<IContext>({
     updateStateTree: (stateURI: string, newTree: any, newLeaves: string[]) => {},
     leaves: {},
     knownPeers: {},
+    fetchIdentities: () => {},
+    something: '',
 })
 
 function Provider(props: {
@@ -33,7 +37,6 @@ function Provider(props: {
     identity?: Identity,
     children: React.ReactNode,
 }) {
-    console.log('RedwoodProvider', props)
     let { httpHost, rpcEndpoint, useWebsocket, identity, webrtc, children } = props
 
     const [identities, setIdentities] = useState<null|RPCIdentitiesResponse[]>(null)
@@ -43,6 +46,11 @@ function Provider(props: {
     const [leaves, setLeaves] = useState({})
     const [knownPeers, setKnownPeers] = useState({})
     const [error, setError] = useState(null)
+
+    let fetchIdentities = async (redwoodClient: any) => {
+      let identities = await redwoodClient.rpc.identities()
+      setIdentities(identities)
+    }
 
     useEffect(() => {
         ;(async function() {
@@ -54,12 +62,13 @@ function Provider(props: {
                 onFoundPeersCallback: (peers) => { setKnownPeers(peers) },
             })
             if (!!identity) {
-                await redwoodClient.authorize()
+              await redwoodClient.authorize()
             }
-            let identities = await redwoodClient.rpc.identities()
 
             setRedwoodClient(redwoodClient)
-            setIdentities(identities)
+
+            await fetchIdentities(redwoodClient)
+
         })()
     }, [identity, httpHost, rpcEndpoint, webrtc])
 
@@ -79,6 +88,8 @@ function Provider(props: {
           leaves,
           updateStateTree,
           knownPeers,
+          fetchIdentities,
+          something: '123',
       }}>
           {children}
       </Context.Provider>
