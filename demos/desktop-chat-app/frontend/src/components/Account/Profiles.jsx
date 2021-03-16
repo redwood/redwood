@@ -5,6 +5,7 @@ import * as RedwoodReact from 'redwood.js/dist/module/react'
 
 import Input, { InputLabel } from './../Input'
 import Button from './../Button'
+import UserAvatar from './../UserAvatar'
 
 const { useRedwood } = RedwoodReact
 
@@ -60,6 +61,49 @@ const SLink = styled(Link)`
   margin-top: 8px;
 `
 
+const SBackProfiles = styled.div`
+  font-size: 10px;
+  color: #635bff;
+  margin-top: 8px;
+  text-decoration: underline;
+  cursor: pointer;
+`
+
+const SProfileWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+`
+
+const SProfile = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  margin: 12px;
+  margin-top: 0px;
+  cursor: pointer;
+  transition: .15s ease-in-out all;
+  &:hover {
+    transform: scale(1.1);
+  }
+  > span {
+    margin-top: 4px;
+    color: rgba(255, 255, 255, .8);
+    font-size: 10px;
+  }
+`
+
+function Profile(props) {
+  return (
+    <SProfile onClick={() => props.onClick(props.profileName)}>
+      <UserAvatar username={props.profileName} />
+      <span>{props.profileName}</span>
+    </SProfile>
+  )
+}
+
 function SignIn(props) {
   const redwood = useRedwood()
   const history = useHistory()
@@ -79,7 +123,6 @@ function SignIn(props) {
   const onSignIn = async () => {
     try {
       const isLoggedIn = await checkLogin()
-      console.log(isLoggedIn)
 
       if (isLoggedIn) {
         const logoutResp = await fetch('http://localhost:54231/api/logout', { method: 'POST' })
@@ -102,7 +145,7 @@ function SignIn(props) {
         const errorText = await resp.text()
         console.log(errorText)
       }
-
+      
       await redwood.fetchIdentities(redwood.redwoodClient)
       history.push('/')
     } catch (err) {
@@ -121,8 +164,8 @@ function SignIn(props) {
           type={'password'}
         />
       </InputLabel>
-      <div onClick={() => props.setSelectedProfile('')}>Select another profile ({props.profileNames.length})</div>
-      <SLink to={'/signin'}>Back</SLink>
+      <SBackProfiles onClick={() => props.setSelectedProfile('')}>Select another profile ({props.profileNames.length})</SBackProfiles>
+      <SLink to={'/signin'}>Leave</SLink>
       <Button
         onClick={onSignIn}
         primary
@@ -135,13 +178,17 @@ function SignIn(props) {
 
 function SelectProfile(props) {
   return (
-    <div>
+    <SProfileWrapper>
       { props.profileNames.map((profileName, key) => {
         return (
-          <div key={key} onClick={() => props.setSelectedProfile(profileName)}>{profileName}</div>
+          <Profile
+            key={key}
+            onClick={() => props.setSelectedProfile(profileName)}
+            profileName={profileName}
+          />
         )
       })}
-    </div>
+    </SProfileWrapper>
   )
 }
 
@@ -167,7 +214,7 @@ function Account(props) {
     <SAccount>
       <SAccountCard>
         <SAccountCardHeader>Profiles</SAccountCardHeader>
-        <SAccountCardDesc>{selectedProfile || '---'}</SAccountCardDesc>
+        <SAccountCardDesc>{ `Profile Name: ${selectedProfile}` || '---'}</SAccountCardDesc>
         <SAccountCardContent>
           { selectedProfile ? 
             <SignIn
