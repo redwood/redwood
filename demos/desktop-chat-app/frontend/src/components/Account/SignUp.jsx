@@ -149,6 +149,7 @@ function SignUp(props) {
           type={'password'}
         />
       </InputLabel>
+      <SLink to={'/profiles'}>Existing profiles.</SLink>
       <SLink to={'/signin'}>Sign into an account.</SLink>
       <Button
         onClick={onSignUp}
