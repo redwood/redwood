@@ -71,10 +71,11 @@ const checkLogin = async () => {
 }
 
 function Main() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(true)
 
   useEffect(async () => {
     const pingIsLoggedIn = await checkLogin()
+
     setIsLoggedIn(pingIsLoggedIn)
   }, [])
 

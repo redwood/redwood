@@ -129,15 +129,20 @@ func confirmProfile(w http.ResponseWriter, r *http.Request) {
 		ProfileName string `json:"profileName"`
 	}
 
+	err := json.NewDecoder(r.Body).Decode(&reqResponse)
+	if err != nil {
+		panic(err)
+	}
+
 	files, err := ioutil.ReadDir("./node2_data")
 	if err != nil {
 		panic(err)
 	}
 
 	// Check if profilName is unique
-	for _, profileNames := range files {
-		if profileNames.IsDir() {
-			if strings.ToLower(profileNames.Name()) == strings.ToLower(reqResponse.ProfileName) {
+	for _, profileName := range files {
+		if profileName.IsDir() {
+			if strings.ToLower(profileName.Name()) == strings.ToLower(reqResponse.ProfileName) {
 				http.Error(w, "Profile name already exists.", http.StatusInternalServerError)
 				return
 			}

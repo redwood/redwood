@@ -5,6 +5,7 @@ import * as RedwoodReact from 'redwood.js/dist/module/react'
 
 import Input, { InputLabel } from './../Input'
 import Button from './../Button'
+import Loading from './Loading'
 
 const { useRedwood } = RedwoodReact
 
@@ -30,6 +31,7 @@ const SAccountCard = styled.div`
   box-shadow: 0 2px 10px 0 rgb(0 0 0 / 20%);
   border-radius: 4px;
   padding-bottom: 24px;
+  position: relative;
 `
 
 const SAccountCardHeader = styled.h2`
@@ -84,6 +86,7 @@ function SignIn(props) {
   const onSignIn = async () => {
     try {
       props.setErrorMessage('')
+      props.setLoadingText('Signing into profile...')
       let resp = await fetch('http://localhost:54231/api/login', {
         method: 'POST',
         // headers: {
@@ -99,13 +102,16 @@ function SignIn(props) {
       if (resp.status === 500) {
         const errorText = await resp.text()
         props.setErrorMessage(errorText)
-        console.log(errorText)
+        props.setLoadingText('')
+        return
       }
 
       await redwood.fetchIdentities(redwood.redwoodClient)
+      props.setLoadingText('')
       history.push('/')
     } catch (err) {
       console.error(err)
+      props.setLoadingText('')
     }
   }
 
@@ -157,6 +163,7 @@ function Account(props) {
   const [password, setPassword] = useState('')
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [loadingText, setLoadingText] = useState('')
 
   useEffect(async () => {
     const pingIsloggedIn = await checkLogin()
@@ -184,8 +191,10 @@ function Account(props) {
             setPassword={setPassword}
             errorMessage={errorMessage}
             setErrorMessage={setErrorMessage}
+            setLoadingText={setLoadingText}
           />
         </SAccountCardContent> 
+        { loadingText ? <Loading text={loadingText} /> : null }
       </SAccountCard>
     </SAccount>
   )
