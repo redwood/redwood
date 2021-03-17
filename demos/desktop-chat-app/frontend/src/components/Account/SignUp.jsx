@@ -6,6 +6,7 @@ import * as RedwoodReact from 'redwood.js/dist/module/react'
 import Input, { InputLabel } from './../Input'
 import Button from './../Button'
 import Loading from './Loading'
+import createAccountsApi from './../../api/accounts'
 
 const { useRedwood } = RedwoodReact
 
@@ -88,57 +89,7 @@ const SErrorMessage = styled.div`
   color: red;
 `
 
-const checkLogin = async () => {
-  try {
-    let resp = await fetch('http://localhost:54231/api/check-login', { method: 'POST' })
-
-    const jsonResp = await resp.text()
-
-    return jsonResp === 'true'
-  } catch (err) {
-    console.error(err)
-  }
-}
-
 function SignUp(props) {
-
-  const onSignUp = async () => {
-    try {
-      props.setErrorMessage('')
-      props.setLoadingText('Creating profile...')
-
-      if (props.password !== props.confirmPassword) {
-        props.setErrorMessage('Passwords do not match.')
-        props.setLoadingText('')
-        return
-      }
-
-      let resp = await fetch('http://localhost:54231/api/confirm-profile', {
-        method: 'POST',
-        // headers: {
-        //   'Content-Type': 'application/json',
-        // },
-        body: JSON.stringify({
-          profileName: props.profileName,
-        }),
-      })
-
-      if (resp.status === 500) {
-        const errorText = await resp.text()
-        props.setLoadingText('')
-        props.setErrorMessage(errorText)
-        return
-      }
-      const createdMnemonic = await resp.text()
-      props.setMnemonic(createdMnemonic)
-      props.setLoadingText('')
-    } catch (err) {
-      props.setLoadingText('')
-      props.setErrorMessage('')
-      console.error(err)
-    }
-  }
-
   return (
     <Fragment>
       { props.errorMessage ? <SErrorMessage>{props.errorMessage}</SErrorMessage> : null}
@@ -172,7 +123,16 @@ function SignUp(props) {
       <SLink to={'/profiles'}>Existing profiles.</SLink>
       <SLink to={'/signin'}>Sign into an account.</SLink>
       <Button
-        onClick={onSignUp}
+        onClick={() => props.confirmProfile(
+          props.setErrorMessage,
+          props.setLoadingText,
+          props.setMnemonic,
+          {
+            profileName: props.profileName,
+            password: props.password,
+            confirmPassword: props.confirmPassword,
+          }          
+        )}
         primary
         style={{ width: '100%', marginTop: 12 }}
         disabled={!(!!props.profileName && !!props.password && !!props.confirmPassword)}
@@ -182,42 +142,6 @@ function SignUp(props) {
 }
 
 function ConfirmDisplay(props) {
-  const redwood = useRedwood()
-  const history = useHistory()
-
-  const onCreate = async () => {
-    try {
-      props.setErrorMessage('')
-      props.setLoadingText('Validating and generating mnemonic...')
-      let resp = await fetch('http://localhost:54231/api/login', {
-        method: 'POST',
-        // headers: {
-        //   'Content-Type': 'application/json',
-        // },
-        body: JSON.stringify({
-          profileName: props.profileName,
-          mnemonic: props.mnemonic,
-          password: props.password,
-        }),
-      })
-
-      if (resp.status === 500) {
-        const errorText = await resp.text()
-        props.setLoadingText('')
-        props.setErrorMessage(errorText)
-        return
-      }
-
-      await redwood.fetchIdentities(redwood.redwoodClient)
-      props.setLoadingText('')
-      history.push('/')
-    } catch (err) {
-      props.setLoadingText('')
-      props.setErrorMessage('')
-      console.error(err)
-    }
-  }
-
   return <Fragment>
     { props.errorMessage ? <SErrorMessage>{props.errorMessage}</SErrorMessage> : null}
     <ConfirmValueWrapper style={{ marginBottom: 24 }}>
@@ -235,7 +159,15 @@ function ConfirmDisplay(props) {
         style={{ width: '45%', marginTop: 12 }}
       >Cancel</Button>
       <Button
-        onClick={() => onCreate()}
+        onClick={() => props.onSignUp(
+          props.setErrorMessage,
+          props.setLoadingText,
+          {
+            profileName: props.profileName,
+            mnemonic: props.mnemonic,
+            password: props.password,
+          }
+        )}
         primary
         style={{ width: '45%', marginTop: 12 }}
       >Create</Button>
@@ -244,6 +176,11 @@ function ConfirmDisplay(props) {
 }
 
 function Account(props) {
+  const redwood = useRedwood()
+  const history = useHistory()
+  const accountsApi = createAccountsApi(redwood, history)
+  console.log(accountsApi)
+
   const [profileName, setProfileName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -253,7 +190,7 @@ function Account(props) {
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(async () => {
-    const pingIsloggedIn = await checkLogin()
+    const pingIsloggedIn = await accountsApi.checkLogin()
 
     setIsLoggedIn(pingIsloggedIn)
   }, [])
@@ -278,6 +215,7 @@ function Account(props) {
               setLoadingText={setLoadingText}
               errorMessage={errorMessage}
               setErrorMessage={setErrorMessage}
+              onSignUp={accountsApi.onSignUp}
             />
           : <SignUp
             setMnemonic={setMnemonic}
@@ -290,6 +228,7 @@ function Account(props) {
             setLoadingText={setLoadingText}
             errorMessage={errorMessage}
             setErrorMessage={setErrorMessage}
+            confirmProfile={accountsApi.confirmProfile}
           />          
           }
 
