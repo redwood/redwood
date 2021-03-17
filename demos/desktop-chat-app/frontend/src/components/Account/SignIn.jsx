@@ -6,6 +6,7 @@ import * as RedwoodReact from 'redwood.js/dist/module/react'
 import Input, { InputLabel } from './../Input'
 import Button from './../Button'
 import Loading from './Loading'
+import createAccountsApi from './../../api/accounts'
 
 const { useRedwood } = RedwoodReact
 
@@ -67,53 +68,7 @@ const SErrorMessage = styled.div`
   color: red;
 `
 
-const checkLogin = async () => {
-  try {
-    let resp = await fetch('http://localhost:54231/api/check-login', { method: 'POST' })
-
-    const jsonResp = await resp.text()
-
-    return jsonResp === 'true'
-  } catch (err) {
-    console.error(err)
-  }
-}
-
 function SignIn(props) {
-  const redwood = useRedwood()
-  const history = useHistory()
-
-  const onSignIn = async () => {
-    try {
-      props.setErrorMessage('')
-      props.setLoadingText('Signing into profile...')
-      let resp = await fetch('http://localhost:54231/api/login', {
-        method: 'POST',
-        // headers: {
-        //   'Content-Type': 'application/json',
-        // },
-        body: JSON.stringify({
-          profileName: props.profileName,
-          mnemonic: props.mnemonic,
-          password: props.password,
-        }),
-      })
-
-      if (resp.status === 500) {
-        const errorText = await resp.text()
-        props.setErrorMessage(errorText)
-        props.setLoadingText('')
-        return
-      }
-
-      await redwood.fetchIdentities(redwood.redwoodClient)
-      props.setLoadingText('')
-      history.push('/')
-    } catch (err) {
-      console.error(err)
-      props.setLoadingText('')
-    }
-  }
 
   return (
     <Fragment>
@@ -148,7 +103,15 @@ function SignIn(props) {
       <SLink to={'/profiles'}>Existing profiles.</SLink>
       <SLink to={'/signup'}>Create an account.</SLink>
       <Button
-        onClick={onSignIn}
+        onClick={() => props.onSignIn(
+          props.setErrorMessage,
+          props.setLoadingText,
+          {
+            profileName: props.profileName,
+            mnemonic: props.mnemonic,
+            password: props.password,
+          }
+        )}
         primary
         style={{ width: '100%', marginTop: 12 }}
         disabled={!(!!props.mnemonic && !!props.profileName && !!props.password)}
@@ -158,6 +121,9 @@ function SignIn(props) {
 }
 
 function Account(props) {
+  const redwood = useRedwood()
+  const history = useHistory()
+
   const [mnemonic, setMnemonic] = useState('')
   const [profileName, setProfileName] = useState('')
   const [password, setPassword] = useState('')
@@ -165,8 +131,10 @@ function Account(props) {
   const [errorMessage, setErrorMessage] = useState('')
   const [loadingText, setLoadingText] = useState('')
 
+  const accountsApi = createAccountsApi(redwood, history)
+
   useEffect(async () => {
-    const pingIsloggedIn = await checkLogin()
+    const pingIsloggedIn = await accountsApi.checkLogin()
 
     setIsLoggedIn(pingIsloggedIn)
   }, [])
@@ -192,6 +160,7 @@ function Account(props) {
             errorMessage={errorMessage}
             setErrorMessage={setErrorMessage}
             setLoadingText={setLoadingText}
+            onSignIn={accountsApi.onSignIn}
           />
         </SAccountCardContent> 
         { loadingText ? <Loading text={loadingText} /> : null }

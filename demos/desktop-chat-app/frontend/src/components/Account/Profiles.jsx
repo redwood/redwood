@@ -7,6 +7,7 @@ import Input, { InputLabel } from './../Input'
 import Button from './../Button'
 import UserAvatar from './../UserAvatar'
 import Loading from './Loading'
+import createAccountsApi from './../../api/accounts'
 
 const { useRedwood } = RedwoodReact
 
@@ -183,7 +184,14 @@ function SignIn(props) {
       <SBackProfiles onClick={() => props.setSelectedProfile('')}>Select another profile ({props.profileNames.length})</SBackProfiles>
       <SLink to={'/signin'}>Leave</SLink>
       <Button
-        onClick={onSignIn}
+        onClick={() => props.signInProfile(
+          props.setErrorMessage,
+          props.setLoadingText,
+          {
+            selectedProfile: props.selectedProfile,
+            password: props.password, 
+          }
+        )}
         primary
         style={{ width: '100%', marginTop: 12 }}
         disabled={!props.password}
@@ -209,23 +217,19 @@ function SelectProfile(props) {
 }
 
 function Account(props) {
+  const redwood = useRedwood()
+  const history = useHistory()
+
   const [selectedProfile, setSelectedProfile] = useState('')
   const [password, setPassword] = useState('')
   const [profileNames, setProfileNames] = useState([])
   const [errorMessage, setErrorMessage] = useState('')
   const [loadingText, setLoadingText] = useState('')
+  const accountsApi = createAccountsApi(redwood, history)
 
-  const getProfileNames = async () => {
-    try {
-      let resp = await (await fetch('http://localhost:54231/api/profile-names', { method: 'GET' })).json()
-      setProfileNames(resp.profileNames)
-    } catch (err) {
-      return err
-    }
-  }
-
-  useEffect(() => {
-    getProfileNames()
+  useEffect(async () => {
+    const pns = await accountsApi.getProfileNames()
+    setProfileNames(pns)
   }, [])
 
   return (
@@ -245,6 +249,7 @@ function Account(props) {
               setErrorMessage={setErrorMessage}
               loadingText={loadingText}
               setLoadingText={setLoadingText}
+              signInProfile={accountsApi.signInProfile}
             />
           : <SelectProfile
               profileNames={profileNames}

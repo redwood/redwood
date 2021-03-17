@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import styled from 'styled-components'
-import { Redirect } from 'react-router-dom'
+import { Redirect, useHistory } from 'react-router-dom'
+import * as RedwoodReact from 'redwood.js/dist/module/react'
 
 import Sidebar from './components/Sidebar'
 import ServerBar from './components/Sidebar/ServerBar'
 import Chat from './components/Chat'
 import StateTreeDebugView from './components/StateTreeDebugView'
 import useNavigation from './hooks/useNavigation'
+import createAccountsApi from './api/accounts'
+
+const { useRedwood } = RedwoodReact
 
 const serverBarVerticalPadding = '12px'
 
@@ -71,10 +75,15 @@ const checkLogin = async () => {
 }
 
 function Main() {
+  const redwood = useRedwood()
+  const history = useHistory()
+
   const [isLoggedIn, setIsLoggedIn] = useState(true)
 
+  const accountsApi = createAccountsApi(redwood, history)
+
   useEffect(async () => {
-    const pingIsLoggedIn = await checkLogin()
+    const pingIsLoggedIn = await accountsApi.checkLogin()
 
     setIsLoggedIn(pingIsLoggedIn)
   }, [])

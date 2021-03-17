@@ -2,8 +2,10 @@ import React, { useState, useCallback, useEffect } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { Avatar } from '@material-ui/core'
 import { AddCircleOutline as AddIcon } from '@material-ui/icons'
+import { ExitToApp } from '@material-ui/icons'
 import moment from 'moment'
 import * as RedwoodReact from 'redwood.js/dist/module/react'
+import { useHistory } from 'react-router-dom'
 
 import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
@@ -14,6 +16,7 @@ import Input from '../Input'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
+import createAccountsApi from './../../api/accounts'
 
 import addChat from './assets/add_chat.svg'
 import avatarPlaceholder from './assets/speech-bubble.svg'
@@ -63,12 +66,19 @@ const SAddIcon = styled(AddIcon)`
     margin-right: 10px;
 `
 
+const SExitToApp = styled(ExitToApp)`
+    margin-right: 10px;
+`
+
 function ChatBar({ className }) {
     const { selectedServer, selectedStateURI, navigate } = useNavigation()
-    const { stateTrees } = useRedwood()
+    const history = useHistory()
+    const redwood = useRedwood()
+    const { stateTrees } = redwood
     const serverState = useStateTree(!!selectedServer ? `${selectedServer}/registry` : null)
     const { onPresent: onPresentNewChatModal, onDismiss: onDismissNewChatModal } = useModal('new chat')
     const theme = useTheme()
+    const accountsApi = createAccountsApi(redwood, history)
 
     const onClickCreateNewChat = useCallback(() => {
         if (!selectedServer) {
@@ -104,6 +114,9 @@ function ChatBar({ className }) {
                     <SAddIcon style={{ color: theme.color.indigo[500] }} /> New chat
                 </SControlWrapper>
             }
+            <SControlWrapper onClick={accountsApi.logout}>
+                <SExitToApp style={{ color: theme.color.indigo[500] }} /> Logout
+            </SControlWrapper>
             <NewChatModal selectedServer={selectedServer} serverRooms={serverRooms} onDismiss={onDismissNewChatModal} navigate={navigate} />
         </ChatBarWrapper>
     )
