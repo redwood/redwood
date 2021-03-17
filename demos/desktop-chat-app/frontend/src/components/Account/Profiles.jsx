@@ -6,6 +6,7 @@ import * as RedwoodReact from 'redwood.js/dist/module/react'
 import Input, { InputLabel } from './../Input'
 import Button from './../Button'
 import UserAvatar from './../UserAvatar'
+import Loading from './Loading'
 
 const { useRedwood } = RedwoodReact
 
@@ -95,6 +96,11 @@ const SProfile = styled.div`
   }
 `
 
+const SErrorMessage = styled.div`
+  font-size: 10px;
+  color: red;
+`
+
 function Profile(props) {
   return (
     <SProfile onClick={() => props.onClick(props.profileName)}>
@@ -122,6 +128,8 @@ function SignIn(props) {
 
   const onSignIn = async () => {
     try {
+      props.setErrorMessage('')
+      props.setLoadingText('Signing into profile...')
       const isLoggedIn = await checkLogin()
 
       if (isLoggedIn) {
@@ -129,7 +137,9 @@ function SignIn(props) {
         console.log(logoutResp)
         console.log('LOGGED OUT')
         if (logoutResp.status === 500) {
-          console.log(logoutResp)
+          props.setErrorMessage(logoutResp)
+          props.setLoadingText('')
+          return
         }
       }
 
@@ -143,18 +153,24 @@ function SignIn(props) {
 
       if (resp.status === 500) {
         const errorText = await resp.text()
+        props.setErrorMessage(errorText)
+        props.setLoadingText('')
+        return
         console.log(errorText)
       }
       
       await redwood.fetchIdentities(redwood.redwoodClient)
       history.push('/')
     } catch (err) {
+      props.setErrorMessage('')
+      props.setLoadingText('')
       console.error(err)
     }
   }
 
   return (
     <Fragment>
+      { props.errorMessage ? <SErrorMessage>{props.errorMessage}</SErrorMessage> : null}
       <InputLabel
         label={'Password'}
       >
@@ -196,6 +212,8 @@ function Account(props) {
   const [selectedProfile, setSelectedProfile] = useState('')
   const [password, setPassword] = useState('')
   const [profileNames, setProfileNames] = useState([])
+  const [errorMessage, setErrorMessage] = useState('')
+  const [loadingText, setLoadingText] = useState('')
 
   const getProfileNames = async () => {
     try {
@@ -223,12 +241,17 @@ function Account(props) {
               selectedProfile={selectedProfile}
               profileNames={profileNames}
               setSelectedProfile={setSelectedProfile}
+              errorMessage={errorMessage}
+              setErrorMessage={setErrorMessage}
+              loadingText={loadingText}
+              setLoadingText={setLoadingText}
             />
           : <SelectProfile
               profileNames={profileNames}
               setSelectedProfile={setSelectedProfile}
           />}
         </SAccountCardContent> 
+        { loadingText ? <Loading text={loadingText} /> : null }
       </SAccountCard>
     </SAccount>
   )
