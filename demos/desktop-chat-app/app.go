@@ -223,10 +223,66 @@ func (app *appType) Start() (err error) {
 	klog.Info(redwood.PrettyJSON(config))
 	klog.Flush()
 
-	go app.inputLoop()
 	app.initializeLocalState()
+	go app.monitorForDMs()
+	go app.inputLoop()
 
 	return nil
+}
+
+func (app *appType) monitorForDMs() {
+	time.Sleep(5 * time.Second)
+	sub := app.host.SubscribeStateURIs()
+	defer sub.Close()
+	for {
+		stateURI, err := sub.Read()
+		if err != nil {
+			app.Debugf("error in stateURI subscription: %v", err)
+			return
+		} else if stateURI == "" {
+			continue
+		}
+
+		if strings.HasPrefix(stateURI, "chat.p2p/private-") {
+			var found bool
+			func() {
+				dmState, err := app.host.Controllers().StateAtVersion("chat.local/dms", nil)
+				if err != nil {
+					panic(err)
+				}
+				defer dmState.Close()
+
+				iter := dmState.ChildIterator(tree.Keypath("value"), true, 10)
+				defer iter.Close()
+
+				for iter.Rewind(); iter.Valid(); iter.Next() {
+					elem, exists, err := iter.Node().StringValue(nil)
+					if err != nil {
+						panic(err)
+					} else if !exists {
+						break // weird
+					}
+					if elem == stateURI {
+						found = true
+						return
+					}
+				}
+			}()
+			if !found {
+				err := app.host.SendTx(context.TODO(), redwood.Tx{
+					StateURI: "chat.local/dms",
+					Patches: []redwood.Patch{{
+						Keypath: tree.Keypath("rooms"),
+						Range:   &tree.Range{0, 0},
+						Val:     []interface{}{stateURI},
+					}},
+				})
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+	}
 }
 
 func (app *appType) Close() {
