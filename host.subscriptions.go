@@ -29,6 +29,7 @@ type (
 	}
 
 	SubscriptionMsg struct {
+		StateURI    string       `json:"stateURI"`
 		Tx          *Tx          `json:"tx,omitempty"`
 		EncryptedTx *EncryptedTx `json:"encryptedTx,omitempty"`
 		State       tree.Node    `json:"state,omitempty"`
@@ -171,7 +172,7 @@ func (sub *writableSubscription) writeMessages() {
 		}
 		err = sub.subImpl.Put(context.TODO(), tx, state, msg.Leaves)
 		if err != nil {
-			sub.host.Errorf("error writing to subscribed peer: %v", err)
+			sub.host.Errorf("error writing to subscribed peer: %+v", err)
 			return
 		}
 	}
@@ -294,7 +295,7 @@ type multiReaderSubscription struct {
 	stateURI string
 	maxConns uint64
 	host     Host
-	conns    map[types.Address]Peer
+	conns    sync.Map
 	chStop   chan struct{}
 	chDone   chan struct{}
 	peerPool *peerPool
@@ -305,10 +306,15 @@ func newMultiReaderSubscription(stateURI string, maxConns uint64, host Host) *mu
 		stateURI: stateURI,
 		maxConns: maxConns,
 		host:     host,
-		conns:    make(map[types.Address]Peer),
 		chStop:   make(chan struct{}),
 		chDone:   make(chan struct{}),
 	}
+}
+
+func (s *multiReaderSubscription) getPeer() (Peer, error) {
+	ctx, cancel := utils.CombinedContext(s.chStop, 3*time.Second)
+	defer cancel()
+	return s.peerPool.GetPeer(ctx)
 }
 
 func (s *multiReaderSubscription) Start() {
@@ -333,8 +339,7 @@ func (s *multiReaderSubscription) Start() {
 			default:
 			}
 
-			time.Sleep(1 * time.Second)
-			peer, err := s.peerPool.GetPeer()
+			peer, err := s.getPeer()
 			if err != nil {
 				log.Errorf("error getting peer from pool: %v", err)
 				// @@TODO: exponential backoff
@@ -343,11 +348,15 @@ func (s *multiReaderSubscription) Start() {
 			if reflect.ValueOf(peer).IsNil() {
 				panic("peer is nil")
 			}
+			s.conns.Store(peer, struct{}{})
 
 			wgClose.Add(1)
 			go func() {
 				defer wgClose.Done()
-				defer s.peerPool.ReturnPeer(peer, false)
+				defer func() {
+					s.peerPool.ReturnPeer(peer, false)
+					s.conns.Delete(peer)
+				}()
 
 				err = peer.EnsureConnected(context.TODO())
 				if err != nil {
@@ -386,9 +395,19 @@ func (s *multiReaderSubscription) Start() {
 }
 
 func (s *multiReaderSubscription) Close() error {
-	s.peerPool.Close()
+	// 1. Stop reading from the peer
 	s.host.HandleReadableSubscriptionClosed(s.stateURI)
+
+	// 2. Signal shutdown
 	close(s.chStop)
+
+	// 3. Close all active peer conns
+	s.conns.Range(func(peer, val interface{}) bool {
+		peer.(Peer).Close()
+		return true
+	})
+
+	s.peerPool.Close()
 	<-s.chDone
 	return nil
 }
