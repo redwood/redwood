@@ -930,12 +930,12 @@ func (peer *libp2pPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves
 		}
 		peerSigPubkey, peerEncPubkey := peer.PublicKeys(peerAddrs[0])
 
-		encryptedTxBytes, err := peer.t.keyStore.SealMessageFor(tx.From, peerEncPubkey, marshalledTx)
+		identity, err := peer.t.keyStore.DefaultPublicIdentity()
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		identity, err := peer.t.keyStore.DefaultPublicIdentity()
+		encryptedTxBytes, err := peer.t.keyStore.SealMessageFor(identity.Address(), peerEncPubkey, marshalledTx)
 		if err != nil {
 			return errors.WithStack(err)
 		}

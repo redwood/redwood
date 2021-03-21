@@ -1663,6 +1663,12 @@ var _ WritableSubscriptionImpl = (*wsWritableSubscription)(nil)
 func (sub *wsWritableSubscription) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { sub.UpdateConnStats(err == nil) }()
 
+	select {
+	case <-sub.chStop:
+		return errors.New("can't put when closed")
+	default:
+	}
+
 	sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
 
 	w, err := sub.conn.NextWriter(websocket.TextMessage)
