@@ -172,6 +172,71 @@ func (s *HTTPRPCServer) SendTx(r *http.Request, args *RPCSendTxArgs, resp *RPCSe
 	return s.host.SendTx(context.Background(), args.Tx)
 }
 
+type (
+	RPCPrivateTreeMembersArgs struct {
+		StateURI string
+	}
+	RPCPrivateTreeMembersResponse struct {
+		Members []types.Address
+	}
+)
+
+func (s *HTTPRPCServer) PrivateTreeMembers(r *http.Request, args *RPCPrivateTreeMembersArgs, resp *RPCPrivateTreeMembersResponse) error {
+	members, err := s.host.Controllers().Members(args.StateURI)
+	if err != nil {
+		return err
+	}
+	resp.Members = members
+	return nil
+}
+
+type (
+	RPCPeersArgs struct {
+		StateURI string
+	}
+	RPCPeersResponse struct {
+		Peers []RPCPeer
+	}
+	RPCPeer struct {
+		Identities  []RPCPeerIdentity
+		Transport   string
+		DialAddr    string
+		StateURIs   []string
+		LastContact uint64
+	}
+	RPCPeerIdentity struct {
+		Address             types.Address
+		SigningPublicKey    crypto.SigningPublicKey
+		EncryptingPublicKey crypto.EncryptingPublicKey
+	}
+)
+
+func (s *HTTPRPCServer) Peers(r *http.Request, args *RPCPeersArgs, resp *RPCPeersResponse) error {
+	for _, peer := range s.host.Peers() {
+		var identities []RPCPeerIdentity
+		for _, addr := range peer.Addresses() {
+			sigpubkey, encpubkey := peer.PublicKeys(addr)
+			identities = append(identities, RPCPeerIdentity{
+				Address:             addr,
+				SigningPublicKey:    sigpubkey,
+				EncryptingPublicKey: encpubkey,
+			})
+		}
+		var lastContact uint64
+		if !peer.LastContact().IsZero() {
+			lastContact = uint64(peer.LastContact().UTC().Unix())
+		}
+		resp.Peers = append(resp.Peers, RPCPeer{
+			Identities:  identities,
+			Transport:   peer.DialInfo().TransportName,
+			DialAddr:    peer.DialInfo().DialAddr,
+			StateURIs:   peer.StateURIs().Slice(),
+			LastContact: lastContact,
+		})
+	}
+	return nil
+}
+
 type whitelistMiddleware struct {
 	permittedAddrs          map[types.Address]struct{}
 	nextHandler             http.Handler
