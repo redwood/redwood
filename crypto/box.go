@@ -72,6 +72,18 @@ func (pubkey *encryptingPublicKey) Bytes() []byte {
 	return bs
 }
 
+func (pubkey *encryptingPublicKey) Hex() string {
+	return hex.EncodeToString(pubkey.Bytes())
+}
+
+func (pubkey *encryptingPublicKey) String() string {
+	return pubkey.Hex()
+}
+
+func (pubkey *encryptingPublicKey) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + pubkey.Hex() + `"`), nil
+}
+
 func EncryptingPrivateKeyFromBytes(bs []byte) EncryptingPrivateKey {
 	var pk encryptingPrivateKey
 	copy(pk[:], bs)

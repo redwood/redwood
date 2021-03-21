@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto/ecdsa"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 
 	"github.com/btcsuite/btcd/chaincfg"
@@ -34,6 +35,7 @@ type (
 		Bytes() []byte
 		Hex() string
 		String() string
+		json.Marshaler
 	}
 
 	signingPrivateKey struct {
@@ -80,6 +82,10 @@ func (pubkey *signingPublicKey) UnmarshalText(bs []byte) error {
 
 func (pubkey *signingPublicKey) MarshalText() ([]byte, error) {
 	return crypto.FromECDSAPub(pubkey.PublicKey), nil
+}
+
+func (pubkey *signingPublicKey) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + pubkey.Hex() + `"`), nil
 }
 
 func (privkey *signingPrivateKey) SignHash(hash types.Hash) ([]byte, error) {

@@ -22,6 +22,7 @@ type Transport interface {
 	AnnounceRef(ctx context.Context, refID types.RefID) error
 }
 
+//go:generate mockery --name Peer --output ./mocks/ --case=underscore
 type Peer interface {
 	PeerDetails
 
