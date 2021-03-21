@@ -1,4 +1,4 @@
-import { RPCClient, Tx, RPCSubscribeParams, RPCIdentitiesResponse } from './types'
+import { RPCClient, Tx, RPCSubscribeParams, RPCIdentitiesResponse, RPCPeer, RPCPeerIdentity } from './types'
 
 let theFetch: typeof fetch = typeof window !== 'undefined'
                                 ? fetch
@@ -24,34 +24,68 @@ async function rpcFetch(endpoint: string, method: string, params?: {[key: string
     return resp.result
 }
 
-export default function createRPCClient({ endpoint }: { endpoint?: string }): RPCClient {
-    let _endpoint = endpoint || 'http://localhost:8081'
+export default function createRPCClient({ endpoint }: { endpoint: string }): RPCClient {
+    if (!endpoint) {
+        throw new Error('RPC client requires an endpoint')
+    }
     return {
-        rpcFetch: (method: string, params?: {[key: string]: any}) => rpcFetch(_endpoint, method, params),
+        rpcFetch: (method: string, params?: {[key: string]: any}) => rpcFetch(endpoint, method, params),
 
         subscribe: async function ({ stateURI, keypath, txs, states }: RPCSubscribeParams) {
-            await rpcFetch(_endpoint, 'RPC.Subscribe', { stateURI, txs, states, keypath })
+            await rpcFetch(endpoint, 'RPC.Subscribe', { stateURI, txs, states, keypath })
         },
 
         identities: async function (): Promise<RPCIdentitiesResponse[]> {
-            return ((await rpcFetch(_endpoint, 'RPC.Identities')).Identities as { Address: string, Public: boolean }[])
+            return ((await rpcFetch(endpoint, 'RPC.Identities')).Identities as { Address: string, Public: boolean }[])
                           .map(({ Address, Public }) => ({ address: Address, public: Public }))
         },
 
         newIdentity: async function () {
-            return (await rpcFetch(_endpoint, 'RPC.NewIdentity')).Address as string
+            return (await rpcFetch(endpoint, 'RPC.NewIdentity')).Address as string
         },
 
         knownStateURIs: async function () {
-            return (await rpcFetch(_endpoint, 'RPC.KnownStateURIs')).StateURIs as string[]
+            return (await rpcFetch(endpoint, 'RPC.KnownStateURIs')).StateURIs as string[]
         },
 
         sendTx: async function (tx: Tx) {
-            await rpcFetch(_endpoint, 'RPC.SendTx', { Tx: tx })
+            await rpcFetch(endpoint, 'RPC.SendTx', { Tx: tx })
         },
 
         addPeer: async function ({ transportName, dialAddr }: { transportName: string, dialAddr: string }) {
-            await rpcFetch(_endpoint, 'RPC.AddPeer', { TransportName: transportName, DialAddr: dialAddr })
+            await rpcFetch(endpoint, 'RPC.AddPeer', { TransportName: transportName, DialAddr: dialAddr })
+        },
+
+        privateTreeMembers: async function (stateURI: string) {
+            try {
+                return (await rpcFetch(endpoint, 'RPC.PrivateTreeMembers', { StateURI: stateURI })).Members as string[]
+            } catch (err) {
+                if (err.toString().indexOf('no controller for that stateURI') > -1) {
+                    return []
+                }
+                throw err
+            }
+        },
+
+        peers: async function (): Promise<RPCPeer[]> {
+            let peers = (await rpcFetch(endpoint, 'RPC.Peers')).Peers as {
+                Identities:          { Address: string, SigningPublicKey: string, EncryptingPublicKey: string }[]
+                Transport:           string
+                DialAddr:            string
+                StateURIs:           string[]
+                LastContact:         number
+            }[]
+            return peers.map(peer => ({
+                identities:  (peer.Identities || []).map(i => ({
+                    address:             i.Address,
+                    signingPublicKey:    i.SigningPublicKey,
+                    encryptingPublicKey: i.EncryptingPublicKey,
+                })),
+                transport:   peer.Transport,
+                dialAddr:    peer.DialAddr,
+                stateURIs:   peer.StateURIs,
+                lastContact: peer.LastContact > 0 ? new Date(peer.LastContact * 1000) : null,
+            }))
         },
     }
 }

@@ -2,45 +2,58 @@ import { useEffect, useState, useCallback, useContext, useDebugValue } from 'rea
 import useRedwood from './useRedwood'
 
 function useStateTree(stateURI: string | null | undefined, keypath?: string) {
-    const { redwoodClient, httpHost, useWebsocket, subscribedStateURIs, stateTrees, updateStateTree } = useRedwood()
+    const {
+        redwoodClient,
+        httpHost,
+        useWebsocket,
+        subscribe,
+        subscribedStateURIs,
+        stateTrees,
+        privateTreeMembers,
+        updatePrivateTreeMembers,
+        updateStateTree,
+    } = useRedwood()
 
-    let keypath_ = (keypath || '').length === 0 ? '/' : keypath
+    const keypath_ = (keypath || '').length === 0 ? '/' : keypath
 
-    useDebugValue({ redwoodClient, stateURI, keypath: keypath_, subscribedStateURIs, stateTrees })
+    useDebugValue({
+        redwoodClient,
+        httpHost,
+        useWebsocket,
+        subscribedStateURIs,
+        stateTrees,
+        privateTreeMembers,
+        updatePrivateTreeMembers,
+        updateStateTree,
+    })
 
     useEffect(() => {
-        if (!redwoodClient || !stateURI) {
-            return
-        } else if (subscribedStateURIs.current[stateURI]) {
+        ;(async function() {
+            if (!redwoodClient || !stateURI || !updatePrivateTreeMembers) {
+                return
+            }
+            // @@TODO: just read from the `.Members` keypath
+            if (!!redwoodClient.rpc) {
+                const members = await redwoodClient.rpc.privateTreeMembers(stateURI)
+                updatePrivateTreeMembers(stateURI, members)
+            }
+        })()
+    }, [redwoodClient, stateURI, updatePrivateTreeMembers])
+
+    useEffect(() => {
+        if (!stateURI) {
             return
         }
-
-        const unsubscribePromise = redwoodClient.subscribe({
-            stateURI,
-            keypath: '/',
-            states: true,
-            useWebsocket,
-            callback: async (err, next) => {
-                if (err) {
-                    console.error(err)
-                    return
-                }
-                let { state, leaves } = next
-                updateStateTree(stateURI, state, leaves)
-            },
-        })
-
-        subscribedStateURIs.current[stateURI] = true
+        const unsubscribePromise = subscribe(stateURI)
 
         return () => {
             (async function() {
                 const unsubscribe = await unsubscribePromise
                 unsubscribe()
-                subscribedStateURIs.current[stateURI] = false
             })()
         }
 
-    }, [redwoodClient, stateURI])
+    }, [subscribe, stateURI])
 
     return !!stateURI ? stateTrees[stateURI] : null
 }
