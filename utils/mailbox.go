@@ -54,6 +54,14 @@ func (m *Mailbox) Retrieve() interface{} {
 	return x
 }
 
+func (m *Mailbox) RetrieveAll() []interface{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	queue := m.queue
+	m.queue = nil
+	return queue
+}
+
 func (m *Mailbox) Clear() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
