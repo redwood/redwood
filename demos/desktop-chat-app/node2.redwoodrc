@@ -1,12 +1,13 @@
 Node:
     BootstrapPeers: []
     SubscribedStateURIs:
+      - test/working
       - null/registry
       - other/registry
       - chat.local/servers
       - test/registry
     MaxPeersPerSubscription: 4
-    DataRoot: ./node2_data/kek
+    DataRoot: ./node2_data/tes
     DevMode: true
 P2PTransport:
     Enabled: true
