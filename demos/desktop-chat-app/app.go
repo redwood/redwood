@@ -265,18 +265,91 @@ func (app *appType) initializeLocalState() {
 	}
 	defer f.Close()
 
-	_, _, err = app.host.AddRef(f)
+	_, sync9Sha3, err := app.host.AddRef(f)
 	if err != nil {
 		panic(err)
 	}
 
-	state, err := app.host.StateAtVersion("chat.local/servers", nil)
+	type M = map[string]interface{}
+
+	app.ensureState("chat.local/servers", "value", M{
+		"Merge-Type": M{
+			"Content-Type": "resolver/js",
+			"value": M{
+				"src": M{
+					"Content-Type": "link",
+					"value":        "ref:sha3:" + sync9Sha3.Hex(),
+				},
+			},
+		},
+		"Validator": M{
+			"Content-Type": "validator/permissions",
+			"value": M{
+				"*": M{
+					"^.*$": M{
+						"write": true,
+					},
+				},
+			},
+		},
+		"value": []interface{}{},
+	})
+
+	app.ensureState("chat.local/dms", "rooms", M{
+		"Merge-Type": M{
+			"Content-Type": "resolver/js",
+			"value": M{
+				"src": M{
+					"Content-Type": "link",
+					"value":        "ref:sha3:" + sync9Sha3.Hex(),
+				},
+			},
+		},
+		"Validator": M{
+			"Content-Type": "validator/permissions",
+			"value": M{
+				"*": M{
+					"^.*$": M{
+						"write": true,
+					},
+				},
+			},
+		},
+		"rooms": []interface{}{},
+	})
+
+	app.ensureState("chat.local/address-book", "value", M{
+		"Merge-Type": M{
+			"Content-Type": "resolver/js",
+			"value": M{
+				"src": M{
+					"Content-Type": "link",
+					"value":        "ref:sha3:" + sync9Sha3.Hex(),
+				},
+			},
+		},
+		"Validator": M{
+			"Content-Type": "validator/permissions",
+			"value": M{
+				"*": M{
+					"^.*$": M{
+						"write": true,
+					},
+				},
+			},
+		},
+		"value": M{},
+	})
+}
+
+func (app *appType) ensureState(stateURI string, checkKeypath string, value interface{}) {
+	state, err := app.host.StateAtVersion(stateURI, nil)
 	if err != nil && errors.Cause(err) != redwood.ErrNoController {
 		panic(err)
 	} else if err == nil {
 		defer state.Close()
 
-		exists, err := state.Exists(tree.Keypath("value"))
+		exists, err := state.Exists(tree.Keypath(checkKeypath))
 		if err != nil {
 			panic(err)
 		}
@@ -286,30 +359,10 @@ func (app *appType) initializeLocalState() {
 		state.Close()
 	}
 
-	type M = map[string]interface{}
-
 	err = app.host.SendTx(context.Background(), redwood.Tx{
-		StateURI: "chat.local/servers",
+		StateURI: stateURI,
 		ID:       redwood.GenesisTxID,
-		Patches: []redwood.Patch{{
-			Val: M{
-				"Merge-Type": M{
-					"Content-Type": "resolver/dumb",
-					"value":        M{},
-				},
-				"Validator": M{
-					"Content-Type": "validator/permissions",
-					"value": M{
-						"*": M{
-							"^.*$": M{
-								"write": true,
-							},
-						},
-					},
-				},
-				"value": []interface{}{},
-			},
-		}},
+		Patches:  []redwood.Patch{{Val: value}},
 	})
 	if err != nil {
 		panic(err)
