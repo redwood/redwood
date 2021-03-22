@@ -5,7 +5,7 @@ Node:
     BootstrapPeers: []
     SubscribedStateURIs: []
     MaxPeersPerSubscription: 4
-    DataRoot: ./node1_data
+    DataRoot: ./node1_data/default
     DevMode: true
 P2PTransport:
     Enabled: true

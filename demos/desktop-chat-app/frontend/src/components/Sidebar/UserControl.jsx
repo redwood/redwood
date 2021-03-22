@@ -1,13 +1,16 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import styled from 'styled-components'
+import { useRedwood, useStateTree } from 'redwood/dist/main/react'
+
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Input from '../Input'
 import Button from '../Button'
 import CurrentUserAvatar from '../CurrentUserAvatar'
-import { useRedwood, useStateTree } from 'redwood/dist/main/react'
+// import useRedwood from '../../hooks/useRedwood'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
+// import useStateTree from '../../hooks/useStateTree'
 import UploadAvatar from '../UploadAvatar'
 
 const SUserControlContainer = styled.div`
@@ -63,35 +66,43 @@ const SCurrentUserAvatar = styled(CurrentUserAvatar)`
 
 function UserControl() {
     let { onPresent, onDismiss } = useModal('user profile')
-    let { nodeIdentities } = useRedwood()
+    const redwood = useRedwood()
+    let nodeAddress = ''
+    if (redwood.identities) {
+      nodeAddress = redwood.identities[0].address
+    }
     let { selectedServer } = useNavigation()
-    let [username, setUsername] = useState(null)
-    let [userPhotoURL, setUserPhotoURL] = useState(null)
+    const [username, setUsername] = useState(null)
+    const [userPhotoURL, setUserPhotoURL] = useState(null)
     let registry = useStateTree(!!selectedServer ? `${selectedServer}/registry` : null)
-    let nodeAddress = !!nodeIdentities && nodeIdentities.length > 0 ? nodeIdentities[0].address.toLowerCase() : null
+    nodeAddress = !!nodeAddress ? nodeAddress.toLowerCase() : null
 
     useEffect(() => {
-        if (registry && registry.users && registry.users[nodeAddress]) {
-            setUsername(registry.users[nodeAddress].username)
-            if (registry.users[nodeAddress].photo) {
-                setUserPhotoURL(`http://localhost:8080/users/${nodeAddress}/photo?state_uri=${selectedServer}/registry&${Date.now()}`)
-            }
+      if (registry && registry.users && registry.users[nodeAddress]) {
+        setUsername(registry.users[nodeAddress].username)
+        if (registry.users[nodeAddress].photo) {
+          setUserPhotoURL(`http://localhost:8080/users/${nodeAddress}/photo?state_uri=${selectedServer}/registry&${Date.now()}`)
         }
+      }
     }, [registry])
 
     return (
         <SUserControlContainer>
             <SUserLeft onClick={onPresent}>
-                <SCurrentUserAvatar />
+                <SCurrentUserAvatar
+                  address={nodeAddress}
+                  username={username}
+                  photoURL={userPhotoURL}
+                />
                 <UsernameWrapper>
                     <Username>{!!username ? username : nodeAddress}</Username>
                     <NodeAddress>{!!username ? nodeAddress : null}</NodeAddress>
                 </UsernameWrapper>
             </SUserLeft>
             <UserProfileModal
-                onDismiss={onDismiss}
-                currentUsername={username}
-                userPhotoURL={userPhotoURL}
+              onDismiss={onDismiss}
+              currentUsername={username}
+              userPhotoURL={userPhotoURL}
             />
         </SUserControlContainer>
     )
@@ -101,7 +112,12 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
     const [username, setUsername] = useState('')
     const [iconImg, setIconImg] = useState(null)
     const [iconFile, setIconFile] = useState(null)
-    const { nodeAddress } = useRedwood()
+    const { identities } = useRedwood()
+    let nodeAddress = ''
+    console.log('IDENTITIES', identities)
+    if (identities) {
+      nodeAddress = identities[0].address
+    }
     const api = useAPI()
     const { selectedServer } = useNavigation()
     const photoFileRef = useRef()
