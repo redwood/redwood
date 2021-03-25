@@ -1,7 +1,7 @@
-
 # 🌲 Redwood
 
 ![Build status](https://github.com/brynbellomy/redwood/actions/workflows/go_tests.yaml/badge.svg)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fredwood%2Fredwood.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fredwood%2Fredwood?ref=badge_shield)
 
 Redwood is a **highly-configurable, distributed, realtime database** that manages a state tree shared among many peers.  Imagine something like a Redux store, but distributed across all users of an application, that offers offline editing and is resilient to poor connectivity.
 
@@ -84,3 +84,7 @@ Redwood has a goal of providing a multilayered, robust security model.  It curre
 
 
 
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fredwood%2Fredwood.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fredwood%2Fredwood?ref=badge_large)
