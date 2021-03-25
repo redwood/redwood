@@ -38,7 +38,6 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.password = loginRequest.Password
-	app.configPath = "./node2.redwoodrc"
 	app.devMode = true
 	err = app.Start()
 	if err != nil {
