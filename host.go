@@ -611,11 +611,11 @@ func (h *host) HandleFetchHistoryRequest(stateURI string, opts FetchHistoryOpts,
 			}
 
 			if isAllowed {
-				writeSub.EnqueueWrite(tx, nil, leaves)
+				writeSub.EnqueueWrite(tx.StateURI, tx, nil, leaves)
 			}
 
 		} else {
-			writeSub.EnqueueWrite(tx, nil, leaves)
+			writeSub.EnqueueWrite(tx.StateURI, tx, nil, leaves)
 		}
 	}
 	return nil
@@ -650,7 +650,7 @@ func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription, f
 				if err != nil {
 					h.Errorf("error writing initial state to peer (%v): %v", writeSub.StateURI(), err)
 				} else {
-					writeSub.EnqueueWrite(nil, node, leaves)
+					writeSub.EnqueueWrite(writeSub.StateURI(), nil, node, leaves)
 				}
 			}
 		}
@@ -1114,11 +1114,11 @@ func (h *host) broadcastToWritableSubscribers(
 				}
 
 				if isAllowed {
-					writeSub.EnqueueWrite(tx, state, leaves)
+					writeSub.EnqueueWrite(tx.StateURI, tx, state, leaves)
 				}
 
 			} else {
-				writeSub.EnqueueWrite(tx, state, leaves)
+				writeSub.EnqueueWrite(tx.StateURI, tx, state, leaves)
 			}
 		}()
 	}

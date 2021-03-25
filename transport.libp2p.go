@@ -1136,7 +1136,7 @@ type libp2pWritableSubscription struct {
 	*libp2pPeer
 }
 
-func (sub *libp2pWritableSubscription) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
+func (sub *libp2pWritableSubscription) Put(ctx context.Context, stateURI string, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { sub.UpdateConnStats(err == nil) }()
 
 	err = sub.libp2pPeer.EnsureConnected(ctx)

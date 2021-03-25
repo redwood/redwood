@@ -270,7 +270,6 @@ func (t *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// w.Header().Set("Access-Control-Allow-Headers", "State-URI")
 
 	case "AUTHORIZE":
-
 		// Address verification requests (2 kinds)
 		if challengeMsgHex := r.Header.Get("Challenge"); challengeMsgHex != "" {
 			// 1. Remote node is reaching out to us with a challenge, and we respond
@@ -429,8 +428,16 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		wsWriteSub := &wsWritableSubscription{httpPeer: t.makePeer(nil, nil, "", address), conn: conn}
+		wsWriteSub := &wsWritableSubscription{
+			httpPeer: t.makePeer(nil, nil, "", address),
+			conn:     conn,
+		}
+		wsWriteSub.onAddMultiplexedSubscription = func(stateURI string, keypath tree.Keypath, subscriptionType SubscriptionType, fetchHistoryOpts *FetchHistoryOpts) {
+			writeSub := newWritableSubscription(t.host, stateURI, keypath, subscriptionType, wsWriteSub)
+			t.host.HandleWritableSubscriptionOpened(writeSub, fetchHistoryOpts)
+		}
 		innerWriteSub = wsWriteSub
+
 		wsWriteSub.start()
 		defer wsWriteSub.close()
 
@@ -685,8 +692,6 @@ func (t *httpTransport) serveGetState(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			keypath = nil
-
-			// state.DebugPrint(t.Successf, false, 0)
 
 			state, err = state.CopyToMemory(keypath, rng)
 			if errors.Cause(err) == types.Err404 {
@@ -1568,7 +1573,7 @@ type httpWritableSubscription struct {
 
 var _ WritableSubscriptionImpl = (*httpWritableSubscription)(nil)
 
-func (sub *httpWritableSubscription) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
+func (sub *httpWritableSubscription) Put(ctx context.Context, stateURI string, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { sub.UpdateConnStats(err == nil) }()
 
 	var msg *SubscriptionMsg
@@ -1611,9 +1616,9 @@ func (sub *httpWritableSubscription) Put(ctx context.Context, tx *Tx, state tree
 			RecipientAddress: peerSigPubkey.Address(),
 		}
 
-		msg = &SubscriptionMsg{EncryptedTx: etx, Leaves: leaves}
+		msg = &SubscriptionMsg{StateURI: stateURI, EncryptedTx: etx, Leaves: leaves}
 	} else {
-		msg = &SubscriptionMsg{Tx: tx, State: state, Leaves: leaves}
+		msg = &SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves}
 	}
 
 	bs, err := json.Marshal(msg)
@@ -1652,15 +1657,16 @@ var (
 
 type wsWritableSubscription struct {
 	*httpPeer
-	conn      *websocket.Conn
-	chStop    chan struct{}
-	chDone    chan struct{}
-	closeOnce sync.Once
+	conn                         *websocket.Conn
+	onAddMultiplexedSubscription func(stateURI string, keypath tree.Keypath, subscriptionType SubscriptionType, fetchHistoryOpts *FetchHistoryOpts)
+	chStop                       chan struct{}
+	chDone                       chan struct{}
+	closeOnce                    sync.Once
 }
 
 var _ WritableSubscriptionImpl = (*wsWritableSubscription)(nil)
 
-func (sub *wsWritableSubscription) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
+func (sub *wsWritableSubscription) Put(ctx context.Context, stateURI string, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { sub.UpdateConnStats(err == nil) }()
 
 	select {
@@ -1678,7 +1684,7 @@ func (sub *wsWritableSubscription) Put(ctx context.Context, tx *Tx, state tree.N
 	}
 	defer w.Close()
 
-	bs, err := json.Marshal(SubscriptionMsg{Tx: tx, State: state, Leaves: leaves})
+	bs, err := json.Marshal(SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
 	if err != nil {
 		sub.t.Errorf("error marshaling message json: %v", err)
 		return err
@@ -1729,6 +1735,59 @@ func (sub *wsWritableSubscription) start() {
 					return
 				}
 			}
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-sub.chStop:
+				return
+			default:
+			}
+
+			_, bs, err := sub.conn.ReadMessage()
+			if err != nil {
+				sub.t.Errorf("error reading from websocket: %v", err)
+				sub.close()
+				return
+			}
+
+			var addSubMsg struct {
+				Params struct {
+					StateURI         string `json:"stateURI"`
+					Keypath          string `json:"keypath"`
+					SubscriptionType string `json:"subscriptionType"`
+					FromTxID         string `json:"fromTxID"`
+				} `json:"params"`
+			}
+			err = json.Unmarshal(bs, &addSubMsg)
+			if err != nil {
+				sub.t.Errorf("got bad multiplexed subscription request: %v", err)
+				continue
+			}
+			sub.t.Infof(0, "incoming websocket subscription (state uri: %v)", addSubMsg.Params.StateURI)
+
+			var subscriptionType SubscriptionType
+			if addSubMsg.Params.SubscriptionType != "" {
+				err := subscriptionType.UnmarshalText([]byte(addSubMsg.Params.SubscriptionType))
+				if err != nil {
+					sub.t.Errorf("could not parse subscription type: %v", err)
+					continue
+				}
+			}
+
+			var fetchHistoryOpts *FetchHistoryOpts
+			if addSubMsg.Params.FromTxID != "" {
+				fromTxID, err := types.IDFromHex(addSubMsg.Params.FromTxID)
+				if err != nil {
+					sub.t.Errorf("could not parse fromTxID: %v", err)
+					continue
+				}
+				fetchHistoryOpts = &FetchHistoryOpts{FromTxID: fromTxID}
+			}
+
+			sub.onAddMultiplexedSubscription(addSubMsg.Params.StateURI, tree.Keypath(addSubMsg.Params.Keypath), subscriptionType, fetchHistoryOpts)
 		}
 	}()
 }

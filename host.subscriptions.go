@@ -24,7 +24,7 @@ type (
 		StateURI() string
 		Type() SubscriptionType
 		Keypath() tree.Keypath
-		EnqueueWrite(tx *Tx, state tree.Node, leaves []types.ID)
+		EnqueueWrite(stateURI string, tx *Tx, state tree.Node, leaves []types.ID)
 		Close() error
 	}
 
@@ -96,11 +96,12 @@ type writableSubscription struct {
 	chErrored        chan struct{}
 	chStop           chan struct{}
 	chDone           chan struct{}
+	stopOnce         sync.Once
 }
 
 type WritableSubscriptionImpl interface {
 	Transport() Transport
-	Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error
+	Put(ctx context.Context, stateURI string, tx *Tx, state tree.Node, leaves []types.ID) error
 	UpdateConnStats(ok bool)
 	Close() error
 }
@@ -170,7 +171,7 @@ func (sub *writableSubscription) writeMessages() {
 		if sub.subscriptionType.Includes(SubscriptionType_States) {
 			state = msg.State
 		}
-		err = sub.subImpl.Put(context.TODO(), tx, state, msg.Leaves)
+		err = sub.subImpl.Put(context.TODO(), msg.StateURI, tx, state, msg.Leaves)
 		if err != nil {
 			sub.host.Errorf("error writing to subscribed peer: %+v", err)
 			return
@@ -193,8 +194,8 @@ func (sub *writableSubscription) StateURI() string       { return sub.stateURI }
 func (sub *writableSubscription) Type() SubscriptionType { return sub.subscriptionType }
 func (sub *writableSubscription) Keypath() tree.Keypath  { return sub.keypath }
 
-func (sub *writableSubscription) EnqueueWrite(tx *Tx, state tree.Node, leaves []types.ID) {
-	sub.messages.Deliver(&SubscriptionMsg{Tx: tx, State: state, Leaves: leaves})
+func (sub *writableSubscription) EnqueueWrite(stateURI string, tx *Tx, state tree.Node, leaves []types.ID) {
+	sub.messages.Deliver(&SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
 }
 
 func (sub *writableSubscription) Close() error {
@@ -270,8 +271,8 @@ func (sub *inProcessSubscription) Keypath() tree.Keypath {
 	return sub.keypath
 }
 
-func (sub *inProcessSubscription) EnqueueWrite(tx *Tx, state tree.Node, leaves []types.ID) {
-	sub.messages.Deliver(&SubscriptionMsg{Tx: tx, State: state, Leaves: leaves})
+func (sub *inProcessSubscription) EnqueueWrite(stateURI string, tx *Tx, state tree.Node, leaves []types.ID) {
+	sub.messages.Deliver(&SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
 }
 
 func (sub *inProcessSubscription) Read() (*SubscriptionMsg, error) {

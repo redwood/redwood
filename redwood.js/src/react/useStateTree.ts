@@ -47,10 +47,10 @@ function useStateTree(stateURI: string | null | undefined, keypath?: string) {
         const unsubscribePromise = subscribe(stateURI)
 
         return () => {
-            (async function() {
-                const unsubscribe = await unsubscribePromise
-                unsubscribe()
-            })()
+            // (async function() {
+            //     const unsubscribe = await unsubscribePromise
+            //     unsubscribe()
+            // })()
         }
 
     }, [subscribe, stateURI])

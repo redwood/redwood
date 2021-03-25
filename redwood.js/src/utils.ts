@@ -30,8 +30,8 @@ function createTxQueue(resolverFn: ResolverFunc, txProcessedCallback: NewStateCa
     let queue: NewStateMsg[] = []
     let haveTxs: { [id: string]: boolean } = {}
 
-    function addTx({ tx, state, leaves }: NewStateMsg) {
-        queue.push({ tx, state, leaves })
+    function addTx({ stateURI, tx, state, leaves }: NewStateMsg) {
+        queue.push({ stateURI, tx, state, leaves })
         processQueue()
     }
 
@@ -39,7 +39,7 @@ function createTxQueue(resolverFn: ResolverFunc, txProcessedCallback: NewStateCa
         while (true) {
             let processedIdxs = []
             for (let i = 0; i < queue.length; i++) {
-                let { tx, state, leaves } = queue[i]
+                let { stateURI, tx, state, leaves } = queue[i]
                 let missingAParent = false
                 if (!!tx && !!tx.parents && tx.parents.length > 0) {
                     for (let p of tx.parents) {
@@ -51,7 +51,7 @@ function createTxQueue(resolverFn: ResolverFunc, txProcessedCallback: NewStateCa
                 }
                 if (!missingAParent) {
                     processedIdxs.unshift(i)
-                    processTx({ tx, state, leaves })
+                    processTx({ stateURI, tx, state, leaves })
                 }
             }
 
@@ -69,21 +69,21 @@ function createTxQueue(resolverFn: ResolverFunc, txProcessedCallback: NewStateCa
         }
     }
 
-    function processTx({ tx, state, leaves }: NewStateMsg) {
+    function processTx({ stateURI, tx, state, leaves }: NewStateMsg) {
         if (!!tx) {
             const newState = resolverFn(tx.from, tx.id, tx.parents, tx.patches)
             haveTxs[tx.id] = true
-            txProcessedCallback({ tx, leaves, state: newState })
+            txProcessedCallback({ stateURI, tx, leaves, state: newState })
         } else if (!!state) {
-            txProcessedCallback({ tx, leaves, state })
+            txProcessedCallback({ stateURI, tx, leaves, state })
         }
     }
 
     return {
         addTx,
-        defaultTxHandler: (err: string | undefined, { tx, state, leaves }: NewStateMsg) => {
+        defaultTxHandler: (err: string | undefined, { stateURI, tx, state, leaves }: NewStateMsg) => {
             if (err) throw new Error(err)
-            addTx({ tx, state, leaves })
+            addTx({ stateURI, tx, state, leaves })
         },
     }
 }

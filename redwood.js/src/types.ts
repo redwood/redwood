@@ -88,6 +88,7 @@ export interface RPCSubscribeParams {
 }
 
 export interface NewStateMsg {
+    stateURI: string
     tx: Tx
     state: any
     leaves: string[]

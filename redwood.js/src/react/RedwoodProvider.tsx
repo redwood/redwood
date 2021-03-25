@@ -57,6 +57,12 @@ function Provider(props: {
 
     useEffect(() => {
         ;(async function() {
+            subscribedStateURIs.current = {}
+            setStateTrees({})
+            setLeaves({})
+            setBrowserPeers({})
+            setPrivateTreeMembers({})
+            setError(null)
             let redwoodClient = Redwood.createPeer({
                 identity,
                 httpHost,
@@ -102,7 +108,7 @@ function Provider(props: {
                     console.error(err)
                     return
                 }
-                let { state, leaves } = next
+                let { stateURI, state, leaves } = next
                 updateStateTree(stateURI, state, leaves)
             },
         })
