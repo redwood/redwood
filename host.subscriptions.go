@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/pkg/errors"
 
@@ -313,7 +312,7 @@ func newMultiReaderSubscription(stateURI string, maxConns uint64, host Host) *mu
 }
 
 func (s *multiReaderSubscription) getPeer() (Peer, error) {
-	ctx, cancel := utils.CombinedContext(s.chStop, 3*time.Second)
+	ctx, cancel := utils.ContextFromChan(s.chStop)
 	defer cancel()
 	return s.peerPool.GetPeer(ctx)
 }
@@ -361,12 +360,14 @@ func (s *multiReaderSubscription) Start() {
 
 				err = peer.EnsureConnected(context.TODO())
 				if err != nil {
+					peer.UpdateConnStats(false)
 					s.host.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
 					return
 				}
 
 				peerSub, err := peer.Subscribe(context.TODO(), s.stateURI)
 				if err != nil {
+					peer.UpdateConnStats(false)
 					s.host.Errorf("error subscribing to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
 					return
 				}
