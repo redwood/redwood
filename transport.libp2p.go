@@ -430,6 +430,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			t.Errorf("Subscribe message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
+		t.Infof(0, "incoming libp2p subscription (stateURI: %v)", stateURI)
 
 		writeSub := newWritableSubscription(t.host, stateURI, nil, SubscriptionType_Txs, &libp2pWritableSubscription{peer})
 		func() {

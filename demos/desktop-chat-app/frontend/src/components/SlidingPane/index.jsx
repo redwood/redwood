@@ -5,7 +5,7 @@ const Container = styled.div`
     position: relative;
     width: ${props => props.width}px;
     height: ${props => props.height}px;
-    transition: all 0.2s ease-in-out;
+    transition: all 0.4s cubic-bezier(0.86, 0.16, 0.16, 0.78);
     overflow: hidden;
 `
 
@@ -14,7 +14,8 @@ const PaneWrapper = styled.div`
     top: 0;
     left: ${props => props.left}px;
     width: ${props => props.width}px;
-    transition: left 0.2s ease-in-out;
+    // transition: left 0.2s ease-in-out;
+    transition: left 0.4s cubic-bezier(0.86, 0.16, 0.16, 0.78);
     display: flex;
 `
 

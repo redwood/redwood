@@ -133,7 +133,7 @@ func (tx *Tx) Copy() *Tx {
 
 func PrivateRootKeyForRecipients(recipients []types.Address) string {
 	sort.Slice(recipients, func(i, j int) bool {
-		return bytes.Compare(recipients[i][:], recipients[j][:]) < 0
+		return strings.Compare(recipients[i].Hex(), recipients[j].Hex()) < 0
 	})
 
 	var bs []byte

@@ -3,15 +3,20 @@ import styled, { useTheme } from 'styled-components'
 import { Avatar } from '@material-ui/core'
 import { AddCircleOutline as AddIcon } from '@material-ui/icons'
 import moment from 'moment'
+import Redwood from 'redwood'
 
 import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
 import Input from '../Input'
+import PeerRow from '../PeerRow'
 import { useRedwood, useStateTree } from 'redwood/dist/main/react'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
+import usePeers from '../../hooks/usePeers'
+import useServerAndRoomInfo from '../../hooks/useServerAndRoomInfo'
+import useRoomName from '../../hooks/useRoomName'
 
 import addChat from './assets/add_chat.svg'
 import avatarPlaceholder from './assets/speech-bubble.svg'
@@ -60,81 +65,85 @@ const SAddIcon = styled(AddIcon)`
 `
 
 function ChatBar({ className }) {
-    const { selectedServer, selectedStateURI, navigate } = useNavigation()
+    const { selectedServer, selectedRoomName, selectedStateURI, registryStateURI, isDirectMessage, navigate } = useNavigation()
     const { stateTrees } = useRedwood()
-    const serverState = useStateTree(!!selectedServer ? `${selectedServer}/registry` : null)
+    const { servers, rooms } = useServerAndRoomInfo()
+
     const { onPresent: onPresentNewChatModal, onDismiss: onDismissNewChatModal } = useModal('new chat')
+    const { onPresent: onPresentNewDMModal, onDismiss: onDismissNewDMModal } = useModal('new dm')
     const theme = useTheme()
 
     const onClickCreateNewChat = useCallback(() => {
-        if (!selectedServer) {
-            return
+        if (isDirectMessage) {
+            onPresentNewDMModal()
+        } else {
+            onPresentNewChatModal()
         }
-        onPresentNewChatModal()
-    }, [selectedServer, onPresentNewChatModal])
+    }, [isDirectMessage, onPresentNewChatModal, onPresentNewDMModal])
 
-    let serverRooms = ((!!serverState ? serverState.rooms : []) || []).filter(room => !!room)
+    const registryState = useStateTree(registryStateURI)
+    const serverRooms = Object.keys((!!registryState ? registryState.rooms : {}) || {}).filter(room => !!room).map(room => `${selectedServer}/${room}`)
 
     return (
         <ChatBarWrapper className={className}>
-            {serverRooms.map(roomStateURI => {
-                let messages = (stateTrees[roomStateURI] || {}).messages || []
-                let mostRecentMessageText
-                if (messages.length > 0) {
-                    mostRecentMessageText = messages[messages.length - 1].text
-                }
-                return <ChatBarItem
-                            key={roomStateURI}
-                            selectedServer={selectedServer}
-                            stateURI={roomStateURI}
-                            selectedStateURI={selectedStateURI}
-                            navigate={navigate}
-                            mostRecentMessageText={mostRecentMessageText}
-                />
-            })}
+            {serverRooms.map(roomStateURI => (
+                rooms[roomStateURI]
+                    ? <ChatBarItem
+                        key={roomStateURI}
+                        stateURI={roomStateURI}
+                        selected={roomStateURI === selectedStateURI}
+                        onClick={() => navigate(selectedServer, rooms[roomStateURI].rawName)}
+                      />
+                    : null
+            ))}
 
             <Spacer />
 
             {!!selectedServer &&
                 <SControlWrapper onClick={onClickCreateNewChat}>
-                    <SAddIcon style={{ color: theme.color.indigo[500] }} /> New chat
+                    <SAddIcon style={{ color: theme.color.indigo[500] }} /> {isDirectMessage ? 'New message' : 'New chat'}
                 </SControlWrapper>
             }
             <NewChatModal selectedServer={selectedServer} serverRooms={serverRooms} onDismiss={onDismissNewChatModal} navigate={navigate} />
+            <NewDMModal serverRooms={serverRooms} onDismiss={onDismissNewDMModal} navigate={navigate} />
         </ChatBarWrapper>
     )
 }
 
-function ChatBarItem({ stateURI, selectedServer, selectedStateURI, navigate, mostRecentMessageText }) {
+function ChatBarItem({ stateURI, selected, onClick }) {
     const chatState = useStateTree(stateURI)
-    let [ _, roomName ] = stateURI.split('/')
     const [latestMessageTime, setLatestMessageTime] = useState(null)
+    const [server, room] = stateURI.split('/')
+    const roomName = useRoomName(server, room)
 
     let latestTimestamp
-    if (chatState && chatState.messages) {
-      if (chatState.messages[chatState.messages.length - 1]) {
+    let mostRecentMessageText
+    if (chatState && chatState.messages && chatState.messages.length > 0) {
         latestTimestamp = chatState.messages[chatState.messages.length - 1].timestamp
-      }
+        mostRecentMessageText = chatState.messages[chatState.messages.length - 1].text
     }
 
-    useEffect(() => {
-      const intervalId = setInterval(() => {
+    let updateTime = useCallback((latestTimestamp) => {
         if (latestTimestamp) {
-          let timeAgo = moment.unix(latestTimestamp).fromNow()
-          if (timeAgo === 'a few seconds ago') { timeAgo = 'moments ago' }
-          setLatestMessageTime(timeAgo)
+            let timeAgo = moment.unix(latestTimestamp).fromNow()
+            if (timeAgo === 'a few seconds ago') { timeAgo = 'moments ago' }
+            setLatestMessageTime(timeAgo)
         }
-      }, 1000)
-      return () => {
-        clearInterval(intervalId)
-      }
-    }, [chatState])
+    }, [setLatestMessageTime])
+
+    useEffect(() => {
+        updateTime(latestTimestamp)
+    }, [updateTime, latestTimestamp])
+
+    useEffect(() => {
+        const intervalID = setInterval(() => updateTime(latestTimestamp), 10000)
+        return () => { clearInterval(intervalID) }
+    }, [latestTimestamp, updateTime])
 
     return (
         <SGroupItem
-            key={stateURI}
-            selected={selectedStateURI === stateURI}
-            onClick={() => navigate(selectedServer, roomName)}
+            selected={selected}
+            onClick={onClick}
             name={roomName}
             text={mostRecentMessageText}
             time={latestMessageTime}
@@ -194,6 +203,63 @@ function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
             <ModalActions>
                 <Button primary onClick={onClickCreate}>Create</Button>
             </ModalActions>
+        </Modal>
+    )
+}
+
+function NewDMModal({ serverRooms, onDismiss, navigate }) {
+    const { nodeIdentities } = useRedwood()
+    const [sender, setSender] = useState('')
+    const api = useAPI()
+    let { peersByAddress } = usePeers()
+    let peers = Object.keys(peersByAddress).map(addr => peersByAddress[addr]).filter(peer => !peer.isSelf)
+
+    useEffect(() => {
+        if (nodeIdentities && nodeIdentities.length > 0) {
+            setSender(nodeIdentities[0].address)
+        }
+    }, [nodeIdentities])
+
+    const onClickCreate = useCallback(async (recipientAddr) => {
+        if (!api) { return }
+        try {
+            await api.createNewDM([sender, recipientAddr])
+            onDismiss()
+            navigate('chat.p2p', Redwood.utils.privateTxRootForRecipients([sender, recipientAddr]))
+        } catch (err) {
+            console.error(err)
+        }
+    }, [api, serverRooms, navigate])
+
+    function onChangeRecipient(e) {
+        setRecipient(e.target.value)
+    }
+
+    function onChangeSender(e) {
+        setSender(e.target.value)
+    }
+
+    function onKeyDown(e) {
+        if (e.code === 'Enter') {
+            e.stopPropagation()
+            onClickCreate()
+            setRecipient('')
+        }
+    }
+
+    function closeModal() {
+        setRecipient()
+        onDismiss()
+    }
+
+    return (
+        <Modal modalKey="new dm">
+            <ModalTitle closeModal={closeModal}>Start a DM</ModalTitle>
+            <ModalContent>
+                {peers.map(peer => (
+                    <PeerRow address={peer.address} onClick={() => onClickCreate(peer.address)} key={peer.address} />
+                ))}
+            </ModalContent>
         </Modal>
     )
 }

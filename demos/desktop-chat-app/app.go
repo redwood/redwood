@@ -232,8 +232,10 @@ func (app *appType) Start() (err error) {
 
 func (app *appType) monitorForDMs() {
 	time.Sleep(5 * time.Second)
+
 	sub := app.host.SubscribeStateURIs()
 	defer sub.Close()
+
 	for {
 		stateURI, err := sub.Read()
 		if err != nil {
@@ -244,6 +246,8 @@ func (app *appType) monitorForDMs() {
 		}
 
 		if strings.HasPrefix(stateURI, "chat.p2p/private-") {
+			roomName := stateURI[len("chat.p2p/"):]
+			roomKeypath := tree.Keypath("rooms").Pushs(roomName)
 			var found bool
 			func() {
 				dmState, err := app.host.Controllers().StateAtVersion("chat.local/dms", nil)
@@ -252,29 +256,17 @@ func (app *appType) monitorForDMs() {
 				}
 				defer dmState.Close()
 
-				iter := dmState.ChildIterator(tree.Keypath("value"), true, 10)
-				defer iter.Close()
-
-				for iter.Rewind(); iter.Valid(); iter.Next() {
-					elem, exists, err := iter.Node().StringValue(nil)
-					if err != nil {
-						panic(err)
-					} else if !exists {
-						break // weird
-					}
-					if elem == stateURI {
-						found = true
-						return
-					}
+				found, err = dmState.Exists(roomKeypath)
+				if err != nil {
+					panic(err)
 				}
 			}()
 			if !found {
 				err := app.host.SendTx(context.TODO(), redwood.Tx{
 					StateURI: "chat.local/dms",
 					Patches: []redwood.Patch{{
-						Keypath: tree.Keypath("rooms"),
-						Range:   &tree.Range{0, 0},
-						Val:     []interface{}{stateURI},
+						Keypath: roomKeypath,
+						Val:     true,
 					}},
 				})
 				if err != nil {
@@ -348,7 +340,7 @@ func (app *appType) initializeLocalState() {
 				},
 			},
 		},
-		"value": []interface{}{},
+		"value": M{},
 	})
 
 	app.ensureState("chat.local/dms", "rooms", M{
@@ -371,7 +363,7 @@ func (app *appType) initializeLocalState() {
 				},
 			},
 		},
-		"rooms": []interface{}{},
+		"rooms": M{},
 	})
 
 	app.ensureState("chat.local/address-book", "value", M{

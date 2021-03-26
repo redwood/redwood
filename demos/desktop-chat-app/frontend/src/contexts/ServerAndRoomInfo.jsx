@@ -58,7 +58,6 @@ function Provider({ children }) {
                     if (subscribedStateURIs[roomStateURI]) {
                         continue
                     }
-                    console.log('xyzzy', { stateURI, registryStateURI, roomStateURI })
                     subscribe(roomStateURI)
                     api.subscribe(roomStateURI)
                 }

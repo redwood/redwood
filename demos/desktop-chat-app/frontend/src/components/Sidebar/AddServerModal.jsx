@@ -431,14 +431,12 @@ function ConfigureHostingPane({ setRequestValues, onClickBack, onClickNext, ...p
 function ConfirmationPane({ provider, requestValues, onClickBack, closeModal, ...props }) {
     const api = useAPI()
     const { navigate } = useNavigation()
-    const knownServersTree = useStateTree('chat.local/servers')
-    let knownServers = (knownServersTree || {}).value || []
 
     const onClickAdd = useCallback(async () => {
         if (!api) { return }
         try {
             let { apiKey, iconFile, iconImg, image, instanceType, region, serverName, sshKey, label, password, email } = requestValues
-            await api.addServer(serverName, knownServers, iconFile, provider, {
+            await api.addServer(serverName, iconFile, provider, {
                 apiKey,
                 domainName: serverName,
                 domainEmail: email,
@@ -454,7 +452,7 @@ function ConfirmationPane({ provider, requestValues, onClickBack, closeModal, ..
         } catch (err) {
             console.error(err)
         }
-    }, [api, requestValues, knownServers, closeModal, requestValues, navigate])
+    }, [api, requestValues, closeModal, requestValues, navigate])
 
     return (
         <Pane {...props}>

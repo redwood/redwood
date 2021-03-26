@@ -41,8 +41,8 @@ const SItemInfoSub = styled.div`
 const STime = styled.div`
     padding-right: 12px;
     white-space: nowrap;
-    font-size: 0.6rem;
-    color: ${props => props.theme.color.grey[100]}
+    font-size: 0.7rem;
+    color: ${props => props.theme.color.grey[50]}
 `
 
 const ChatName = styled.div`

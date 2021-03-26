@@ -862,7 +862,7 @@ func (tx *DBNode) setRangeSlice(absKeypath Keypath, rng *Range, encodedVal []byt
 	startIdx, endIdx := rng.IndicesForLength(oldLen)
 
 	// Delete deleted items
-	{
+	if startIdx != endIdx {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
 		opts.Reverse = false
@@ -908,7 +908,9 @@ func (tx *DBNode) setRangeSlice(absKeypath Keypath, rng *Range, encodedVal []byt
 			endKeypath = absKeypath.PushIndex(oldLen)
 		} else {
 			startKeypath = absKeypath.PushIndex(oldLen - 1).Push([]byte{0xff})
-			endKeypath = absKeypath.PushIndex(startIdx)
+			if startIdx > 0 {
+				endKeypath = absKeypath.PushIndex(startIdx - 1).Push([]byte{0xff})
+			}
 		}
 		prefixLen := len(scanPrefix)
 
