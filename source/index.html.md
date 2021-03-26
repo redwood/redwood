@@ -1,10 +1,9 @@
 ---
-title: API Reference
+title: Redwood
 
 language_tabs: # must be one of https://git.io/vQNgJ
   - shell
-  - ruby
-  - python
+  - go
   - javascript
 
 toc_footers:
@@ -21,20 +20,79 @@ code_clipboard: true
 
 # Introduction
 
-Welcome to the Kittn API! You can use our API to access Kittn API endpoints, which can get information on various cats, kittens, and breeds in our database.
+Welcome to the Redwood developer documentation.
 
-We have language bindings in Shell, Ruby, Python, and JavaScript! You can view code examples in the dark area to the right, and you can switch the programming language of the examples with the tabs in the top right.
+# Getting started
 
-This example API documentation page was created with [Slate](https://github.com/slatedocs/slate). Feel free to edit it and use it as a base for your own API's documentation.
+> Let's get a Redwood node running locally.
+
+```shell
+git clone https://github.com/brynbellomy/redwood
+cd redwood
+go build --tags static -o $GOPATH/bin/redwood ./cmd
+```
+
+Let's get a Redwood node running locally.
+
+<aside class="notice">
+    Building Redwood requires Go 1.13 or greater.
+</aside>
+
 
 # Authentication
 
 > To authorize, use this code:
 
-```ruby
-require 'kittn'
+```javascript
+import Redwood from 'redwood'
 
-api = Kittn::APIClient.authorize!('meowmeowmeow')
+function main() {
+    const identity = Redwood.identity.random()
+
+    const s9 = Redwood.sync9.create()
+
+    const queue = Redwood.utils.createTxQueue(
+        (from, vid, parents, patches) => Redwood.sync9.resolve_state(s9, from, vid, parents, patches),
+        ({ tx, leaves, state }) => {
+            if (!tx) {
+                return
+            }
+
+            // Update the debug state UI
+            currentState = state
+            if (!knownTxs[tx.id]) {
+                txs.push(tx)
+                knownTxs[tx.id] = true
+            }
+            refreshDebugUI()
+
+            // Update the chat UI
+            if (state && state.messages) {
+                messages = state.messages.value
+            }
+            refreshChatUI()
+        }
+    )
+
+    const braidClient = Redwood.createPeer({
+        identity: identity,
+        webrtc: true,
+        onFoundPeersCallback: (peers) => {
+            knownPeers = peers
+            refreshDebugUI()
+        }
+    })
+
+    braidClient.authorize().then(() => {
+        braidClient.subscribe({
+            stateURI: 'chat.com/room-2837',
+            keypath: '/',
+            txs: true,
+            fromTxID: Redwood.utils.genesisTxID,
+            callback: queue.defaultTxHandler,
+        })
+    })
+}
 ```
 
 ```python
