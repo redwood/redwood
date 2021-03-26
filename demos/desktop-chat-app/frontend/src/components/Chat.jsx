@@ -17,6 +17,8 @@ import useModal from '../hooks/useModal'
 import useAPI from '../hooks/useAPI'
 import { useRedwood, useStateTree } from 'redwood/dist/main/react'
 import useNavigation from '../hooks/useNavigation'
+import useAddressBook from '../hooks/useAddressBook'
+import useUsers from '../hooks/useUsers'
 import strToColor from '../utils/strToColor'
 
 const Container = styled.div`
@@ -133,6 +135,7 @@ function Chat({ className }) {
     const { nodeIdentities } = useRedwood()
     const api = useAPI()
     const { selectedStateURI, selectedServer, selectedRoom } = useNavigation()
+    const { users } = useUsers(selectedStateURI)
     const registry = useStateTree(!!selectedServer ? `${selectedServer}/registry` : null)
     const roomState = useStateTree(selectedStateURI)
     const [messageText, setMessageText] = useState('')
@@ -149,12 +152,10 @@ function Chat({ className }) {
         onPresentPreviewModal()
     }, [setPreviewedAttachment, onPresentPreviewModal])
 
-    let users = (registry || {}).users || {}
     let messages = (roomState || {}).messages || []
 
     const onClickSend = useCallback(async () => {
         if (!api) { return }
-        console.log('attachments', attachments)
         await api.sendMessage(messageText, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
         setAttachments([])
         setPreviews([])
@@ -229,17 +230,18 @@ function Chat({ className }) {
         return <Container className={className}></Container>
     }
 
+    const ownAddress = nodeIdentities && nodeIdentities[0] ? nodeIdentities[0].address : null
+
     return (
         <Container className={className}>
             <MessageContainer ref={messageTextContainer}>
                 {messages.map((msg, i) => (
                     <Message
                         msg={msg}
-                        user={users[msg.sender.toLowerCase()]}
-                        selectedServer={selectedServer}
-                        selectedStateURI={selectedStateURI}
+                        isOwnMessage={msg.sender === ownAddress}
                         onClickAttachment={onClickAttachment}
                         messageIndex={i}
+                        key={msg.sender + msg.timestamp + i}
                     />
                 ))}
             </MessageContainer>
@@ -248,12 +250,12 @@ function Chat({ className }) {
 
             <ImgPreviewContainer show={previews.length > 0}>
                 {previews.map((dataURL, idx) => !!dataURL ? (
-                  <SImgPreviewWrapper key={idx}>
-                    <button onClick={() => removePreview(idx)}>
-                      <CloseIcon />
-                    </button>
-                    <ImgPreview src={dataURL} key={dataURL} />
-                  </SImgPreviewWrapper>
+                    <SImgPreviewWrapper key={idx}>
+                        <button onClick={() => removePreview(idx)}>
+                            <CloseIcon />
+                        </button>
+                        <ImgPreview src={dataURL} key={dataURL} />
+                    </SImgPreviewWrapper>
                 ) : null)}
                 <HiddenInput type="file" multiple ref={attachmentsInput} onChange={onChangeAttachments} />
             </ImgPreviewContainer>
@@ -269,11 +271,11 @@ function Chat({ className }) {
 const MessageWrapper = styled.div`
     display: flex;
     padding: ${props => props.firstByUser ? '20px 0 0' : '0'};
-    cursor: pointer;
-    transition: .1s all ease-in-out;
-    &:hover {
-      background: rgba(0,0,0, .12);
-    }
+    border-radius: 8px;
+    transition: 50ms all ease-in-out;
+    // &:hover {
+    //   background: ${props => props.theme.color.grey[300]};
+    // }
 `
 
 const MessageSender = styled.div`
@@ -290,51 +292,59 @@ const SMessageTimestamp = styled.span`
   margin-left: 4px;
 `
 
-function MessageTimeStamp({ dayDisplay, displayTime }) {
-
-  return (
-    <SMessageTimestamp>{dayDisplay} {displayTime}</SMessageTimestamp>
-  )
+function MessageTimestamp({ dayDisplay, displayTime }) {
+    return <SMessageTimestamp>{dayDisplay} {displayTime}</SMessageTimestamp>
 }
 
 function getTimestampDisplay(timestamp) {
-  const momentDate = moment.unix(timestamp)
-  let dayDisplay = momentDate.format('MM/YY')
-  let displayTime = momentDate.format('h:mm A')
+    const momentDate = moment.unix(timestamp)
+    let dayDisplay = momentDate.format('MM/DD')
+    let displayTime = momentDate.format('h:mm A')
 
-  if (momentDate.format('MM/YY') === moment().format('MM/YY')){
-    dayDisplay = 'Today'
-  } else if (momentDate.subtract(1, 'day') === moment().subtract(1, 'day')) {
-    dayDisplay = 'Yesterday'
-  }
-
-  return {
-    dayDisplay,
-    displayTime,
-  }
-
+    if (momentDate.format('MM/DD') === moment.unix(Date.now()).format('MM/DD')){
+        dayDisplay = 'Today'
+    } else if (momentDate.subtract(1, 'day') === moment.unix(Date.now()).subtract(1, 'day')) {
+        dayDisplay = 'Yesterday'
+    }
+    return {
+        dayDisplay,
+        displayTime,
+    }
 }
 
-function Message({ msg, user, selectedServer, selectedStateURI, onClickAttachment, messageIndex }) {
-    user = user || {}
+const SUserAvatar = styled(UserAvatar)`
+    cursor: pointer;
+`
+
+function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
+    let { selectedServer, selectedStateURI } = useNavigation()
+    let { users, usersStateURI } = useUsers(selectedStateURI)
+    let addressBook = useAddressBook()
     let userAddress = msg.sender.toLowerCase()
-    let displayName = user.username || msg.sender
-    const { dayDisplay, displayTime } = getTimestampDisplay(msg.timestamp)
+    let user = (users && users[userAddress]) || {}
+    let displayName = addressBook[userAddress] || user.username || msg.sender
+    let { dayDisplay, displayTime } = getTimestampDisplay(msg.timestamp)
+    let { onPresent: onPresentContactsModal } = useModal('contacts')
+    let { onPresent: onPresentUserProfileModal } = useModal('user profile')
+    let { httpHost } = useRedwood()
+
+    let showContactsModal = useCallback(() => {
+        if (isOwnMessage) {
+            onPresentUserProfileModal()
+        } else {
+            onPresentContactsModal({ initiallyFocusedContact: msg.sender })
+        }
+    }, [onPresentContactsModal, onPresentUserProfileModal, msg, msg && msg.sender, isOwnMessage])
 
     return (
-      <Tooltip title={`${dayDisplay} ${displayTime}`} placement="left" arrow>
-        <MessageWrapper firstByUser={msg.firstByUser} key={userAddress + msg.timestamp}>
-
-          {msg.firstByUser ? <UserAvatar
-            address={userAddress}
-            username={user.username}
-            photoURL={!!user.photo ? `http://localhost:8080/users/${userAddress.toLowerCase()}/photo?state_uri=${selectedServer}/registry` : null}
-          />
-            : <UserAvatarPlaceholder />
+        <MessageWrapper firstByUser={msg.firstByUser} key={selectedStateURI + messageIndex}>
+          {msg.firstByUser
+              ? <SUserAvatar address={userAddress} onClick={showContactsModal} />
+              : <UserAvatarPlaceholder />
           }
           <MessageDetails>
             {msg.firstByUser &&
-              <MessageSender>{displayName} <MessageTimeStamp dayDisplay={dayDisplay} displayTime={displayTime} /></MessageSender>
+              <MessageSender>{displayName} <MessageTimestamp dayDisplay={dayDisplay} displayTime={displayTime} /></MessageSender>
             }
 
             <MessageText>{msg.text}</MessageText>
@@ -342,13 +352,12 @@ function Message({ msg, user, selectedServer, selectedStateURI, onClickAttachmen
               <SAttachment
                 key={`${selectedStateURI}${messageIndex},${j}`}
                 attachment={attachment}
-                url={`http://localhost:8080/messages[${messageIndex}]/attachments[${j}]?state_uri=${encodeURIComponent(selectedStateURI)}`}
+                url={`${httpHost}/messages[${messageIndex}]/attachments[${j}]?state_uri=${encodeURIComponent(selectedStateURI)}`}
                 onClick={onClickAttachment}
               />
             ))}
           </MessageDetails>
         </MessageWrapper>
-      </Tooltip>
     )
 }
 

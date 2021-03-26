@@ -7,6 +7,8 @@ import { RedwoodProvider } from 'redwood/dist/main/react'
 import ModalsProvider from './contexts/Modals'
 import APIProvider from './contexts/API'
 import NavigationProvider from './contexts/Navigation'
+import PeersProvider from './contexts/Peers'
+import ServerAndRoomInfoProvider from './contexts/ServerAndRoomInfo'
 
 import './index.css'
 import theme from './theme'
@@ -15,13 +17,18 @@ ReactDOM.render(
         <ThemeProvider theme={theme}>
             <RedwoodProvider
                 httpHost="http://localhost:8080"
+                rpcEndpoint="http://localhost:8081"
                 useWebsocket={true}
             >
                 <APIProvider>
                     <NavigationProvider>
-                        <ModalsProvider>
-                            <App />
-                        </ModalsProvider>
+                        <ServerAndRoomInfoProvider>
+                            <PeersProvider>
+                                <ModalsProvider>
+                                    <App />
+                                </ModalsProvider>
+                            </PeersProvider>
+                        </ServerAndRoomInfoProvider>
                     </NavigationProvider>
                 </APIProvider>
             </RedwoodProvider>

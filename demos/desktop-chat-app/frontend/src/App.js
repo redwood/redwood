@@ -1,11 +1,16 @@
 import React, { useState, useRef } from 'react'
 import styled from 'styled-components'
 
+import { useStateTree } from 'redwood/dist/main/react'
 import ServerBar from './components/Sidebar/ServerBar'
 import Sidebar from './components/Sidebar'
 import Chat from './components/Chat'
 import StateTreeDebugView from './components/StateTreeDebugView'
+import ContactsModal from './components/ContactsModal'
 import useNavigation from './hooks/useNavigation'
+import useCurrentServerAndRoom from './hooks/useCurrentServerAndRoom'
+import useModal from './hooks/useModal'
+import useRoomName from './hooks/useRoomName'
 
 const serverBarVerticalPadding = '12px'
 
@@ -21,12 +26,17 @@ const HeaderAndContent = styled.div`
 `
 
 const Content = styled.div`
+    height: calc(100vh - 50px);
     max-height: calc(100vh - 50px);
     display: flex;
     flex-grow: 1;
     font-family: 'Noto Sans KR';
     font-weight: 300;
     color: ${props => props.theme.color.white};
+`
+
+const SSidebar = styled(Sidebar)`
+    height: 100%;
 `
 
 const SServerBar = styled(ServerBar)`
@@ -87,6 +97,7 @@ function Login(props) {
 }
 
 function App() {
+    const { onDismiss: onDismissContactsModal } = useModal('contacts')
     return (
         <Layout>
             <SServerBar verticalPadding={serverBarVerticalPadding} />
@@ -98,6 +109,8 @@ function App() {
                     <SStateTreeDebugView />
                 </Content>
             </HeaderAndContent>
+
+            <ContactsModal onDismiss={onDismissContactsModal} />
         </Layout>
     )
 }
@@ -129,12 +142,12 @@ const ChatTitle = styled.div`
 
 function HeaderBar({ className }) {
     const { selectedServer, selectedRoom } = useNavigation()
+    const { currentRoom, currentServer } = useCurrentServerAndRoom()
+    const roomName = useRoomName(selectedServer, selectedRoom)
     return (
         <HeaderBarContainer className={className}>
-            <ServerTitle>{selectedServer}/</ServerTitle>
-            {selectedRoom &&
-                <ChatTitle>{selectedRoom}</ChatTitle>
-            }
+            <ServerTitle>{currentServer && currentServer.name} /</ServerTitle>
+            <ChatTitle>{currentRoom && roomName}</ChatTitle>
         </HeaderBarContainer>
     )
 }

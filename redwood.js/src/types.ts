@@ -8,7 +8,7 @@ export interface RedwoodClient {
     storeRef: (file: string | Blob) => Promise<StoreRefResponse>
     authorize: () => Promise<void>
     peers: () => Promise<PeersMap>
-    rpc: RPCClient
+    rpc?: RPCClient
 }
 
 export interface RPCClient {
@@ -19,6 +19,8 @@ export interface RPCClient {
     knownStateURIs: () => Promise<string[]>
     sendTx: (tx: Tx) => void
     addPeer: (dialInfo: PeerDialInfo) => void
+    privateTreeMembers: (stateURI: string) => Promise<string[]>
+    peers: () => Promise<RPCPeer[]>
 }
 
 export interface Transport {
@@ -86,6 +88,7 @@ export interface RPCSubscribeParams {
 }
 
 export interface NewStateMsg {
+    stateURI: string
     tx: Tx
     state: any
     leaves: string[]
@@ -118,4 +121,18 @@ export interface RPCIdentitiesResponse {
 export interface PeerDialInfo {
     transportName: string
     dialAddr: string
+}
+
+export interface RPCPeer {
+    identities:  RPCPeerIdentity[]
+    transport:   string
+    dialAddr:    string
+    stateURIs:   string[]
+    lastContact: Date | null
+}
+
+export interface RPCPeerIdentity {
+    address:             string
+    signingPublicKey:    string
+    encryptingPublicKey: string
 }

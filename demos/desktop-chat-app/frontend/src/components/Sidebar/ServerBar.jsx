@@ -1,19 +1,23 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import styled, { useTheme } from 'styled-components'
-import { Avatar, Fab, IconButton, TextField } from '@material-ui/core'
-import { Add as AddIcon, CloudDownloadRounded as ImportIcon } from '@material-ui/icons'
+import { Avatar, IconButton, TextField } from '@material-ui/core'
+import { Add as AddIcon, CloudDownloadRounded as ImportIcon, Face as FaceIcon } from '@material-ui/icons'
+import moment from 'moment'
 
 import Tooltip from '../Tooltip'
 import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
 import Input from '../Input'
+import { ServerFab, DMButton } from '../ServerFab'
 import AddServerModal from './AddServerModal'
-import { useStateTree } from 'redwood/dist/main/react'
+import { useRedwood, useStateTree } from 'redwood/dist/main/react'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
-import strToColor from '../../utils/strToColor'
+import usePeers from '../../hooks/usePeers'
+import useAddressBook from '../../hooks/useAddressBook'
+import useJoinedServers from '../../hooks/useJoinedServers'
 import theme from '../../theme'
 
 const Container = styled.div`
@@ -46,10 +50,6 @@ const ServerIconWrapper = styled.div`
     }
 `
 
-const ServerIcon = styled(Button)`
-    border-radius: 9999px;
-`
-
 const CircularButton = styled(IconButton)`
     border-radius: 9999;
     background-color: ${props => props.theme.color.grey[200]} !important;
@@ -59,52 +59,19 @@ const Spacer = styled.div`
     flex-grow: 1;
 `
 
-const SFab = styled(Fab)`
-    width: 50px !important;
-    height: 50px !important;
-    transition: .12s ease-in-out all !important;
-    background-color: ${props => strToColor(props.text)} !important;
-    color: ${props => props.theme.color.white} !important;
-    font-weight: 700 !important;
-    font-size: 1.1rem !important;
-    overflow: hidden;
-
-    img {
-      height: 50px;
-      border-radius: 100%;
-    }
-
-    &:hover {
-        // border-radius: 20px !important;
-        transform: scale(1.1);
-    }
-`
-
-const PrimaryButton = styled(Button)`
-    background-color: ${props => props.theme.color.green} !important;
-`
-
-function ServerFab({ serverName }) {
-    const stateTree = useStateTree(!!serverName ? `${serverName}/registry` : null)
-
-    if (stateTree && stateTree.iconImg) {
-        return (
-            <SFab text={serverName}>
-                <img src={`http://localhost:8080/iconImg?state_uri=${serverName}/registry`} />
-            </SFab>
-        )
-    }
-    return <SFab text={serverName}>{serverName.slice(0, 1)}</SFab>
-}
-
 function ServerBar({ className, verticalPadding }) {
     const { selectedServer, navigate } = useNavigation()
     const [isLoaded, setIsLoaded] = useState(false)
-    const knownServersTree = useStateTree('chat.local/servers')
+    const joinedServers = useJoinedServers()
 
+    const { onPresent: onPresentContactsModal } = useModal('contacts')
     const { onPresent: onPresentAddServerModal, onDismiss: onDismissAddServerModal } = useModal('add server')
     const { onPresent: onPresentImportServerModal, onDismiss: onDismissImportServerModal } = useModal('import server')
     const theme = useTheme()
+
+    const onClickContacts = useCallback(() => {
+        onPresentContactsModal()
+    }, [onPresentContactsModal])
 
     const onClickAddServer = useCallback(() => {
         onPresentAddServerModal()
@@ -114,26 +81,36 @@ function ServerBar({ className, verticalPadding }) {
         onPresentImportServerModal()
     }, [onPresentImportServerModal])
 
-    let knownServers = ((knownServersTree || {}).value || []).filter(x => !!x)
-
     useEffect(() => {
-        if (!isLoaded && knownServers.length > 0) {
+        if (!isLoaded && joinedServers.length > 0) {
             setIsLoaded(true)
-            navigate(knownServers[0], null)
+            navigate(joinedServers[0], null)
         }
-    }, [knownServersTree])
+    }, [joinedServers])
 
     return (
         <Container className={className} verticalPadding={verticalPadding}>
-            {knownServers.map(server => (
+            <Tooltip title="Direct messages" placement="right" arrow>
+                <ServerIconWrapper selected={selectedServer === 'chat.p2p'}>
+                    <ServerFab serverName="chat.p2p" navigateOnClick />
+                </ServerIconWrapper>
+            </Tooltip>
+
+            {joinedServers.map(server => (
                 <Tooltip title={server} placement="right" arrow key={server}>
-                    <ServerIconWrapper selected={server === selectedServer} onClick={() => navigate(server, null)}>
-                      <ServerFab serverName={server} />
+                    <ServerIconWrapper selected={server === selectedServer}>
+                        <ServerFab serverName={server} navigateOnClick />
                     </ServerIconWrapper>
                 </Tooltip>
             ))}
 
             <Spacer />
+
+            <Tooltip title="Contacts" placement="right" arrow>
+                <ServerIconWrapper onClick={onClickContacts}>
+                    <CircularButton><FaceIcon style={{ color: theme.color.indigo[500] }} /></CircularButton>
+                </ServerIconWrapper>
+            </Tooltip>
 
             <Tooltip title="Import existing server" placement="right" arrow>
                 <ServerIconWrapper onClick={onClickImportServer}>
@@ -154,7 +131,6 @@ function ServerBar({ className, verticalPadding }) {
 }
 
 
-
 const SInput = styled(Input)`
     width: 460px;
 `
@@ -163,20 +139,17 @@ function ImportServerModal({ onDismiss }) {
     const { navigate } = useNavigation()
     const [serverName, setServerName] = useState('')
     const api = useAPI()
-    const knownServersTree = useStateTree('chat.local/servers')
-
-    let knownServers = (knownServersTree || {}).value || []
 
     const onClickImport = useCallback(async () => {
         if (!api) { return }
         try {
-            await api.importServer(serverName, knownServers)
+            await api.importServer(serverName)
             onDismiss()
             navigate(serverName, null)
         } catch (err) {
             console.error(err)
         }
-    }, [api, serverName, knownServers])
+    }, [api, serverName])
 
     function onChangeServerName(e) {
         if (e.code === 'Enter') {

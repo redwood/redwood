@@ -24,6 +24,7 @@ type Host interface {
 	StateAtVersion(stateURI string, version *types.ID) (tree.Node, error)
 	Subscribe(ctx context.Context, stateURI string, subscriptionType SubscriptionType, keypath tree.Keypath, fetchHistoryOpts *FetchHistoryOpts) (ReadableSubscription, error)
 	Unsubscribe(stateURI string) error
+	SubscribeStateURIs() StateURISubscription
 	SendTx(ctx context.Context, tx Tx) error
 	AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error)
 	FetchRef(ctx context.Context, ref types.RefID)
@@ -61,8 +62,11 @@ type host struct {
 	readableSubscriptionsMu sync.RWMutex
 	writableSubscriptions   map[string]map[WritableSubscription]struct{} // map[stateURI]
 	writableSubscriptionsMu sync.RWMutex
-	peerSeenTxs             map[PeerDialInfo]map[string]map[types.ID]bool // map[PeerDialInfo]map[stateURI]map[tx.ID]
-	peerSeenTxsMu           sync.RWMutex
+	stateURISubscriptions   map[*stateURISubscription]struct{}
+	stateURISubscriptionsMu sync.RWMutex
+
+	peerSeenTxs   map[PeerDialInfo]map[string]map[types.ID]bool // map[PeerDialInfo]map[stateURI]map[tx.ID]
+	peerSeenTxsMu sync.RWMutex
 
 	processPeersTask *utils.PeriodicTask
 
@@ -101,6 +105,7 @@ func NewHost(
 		controllerHub:         controllerHub,
 		readableSubscriptions: make(map[string]*multiReaderSubscription),
 		writableSubscriptions: make(map[string]map[WritableSubscription]struct{}),
+		stateURISubscriptions: make(map[*stateURISubscription]struct{}),
 		peerSeenTxs:           make(map[PeerDialInfo]map[string]map[types.ID]bool),
 		peerStore:             peerStore,
 		refStore:              refStore,
@@ -606,11 +611,11 @@ func (h *host) HandleFetchHistoryRequest(stateURI string, opts FetchHistoryOpts,
 			}
 
 			if isAllowed {
-				writeSub.EnqueueWrite(tx, nil, leaves)
+				writeSub.EnqueueWrite(tx.StateURI, tx, nil, leaves)
 			}
 
 		} else {
-			writeSub.EnqueueWrite(tx, nil, leaves)
+			writeSub.EnqueueWrite(tx.StateURI, tx, nil, leaves)
 		}
 	}
 	return nil
@@ -632,6 +637,7 @@ func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription, f
 		state, err := h.Controllers().StateAtVersion(writeSub.StateURI(), nil)
 		if err != nil && errors.Cause(err) != ErrNoController {
 			h.Errorf("error writing initial state to peer: %v", err)
+			writeSub.Close()
 			return
 		} else if err == nil {
 			defer state.Close()
@@ -644,7 +650,7 @@ func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription, f
 				if err != nil {
 					h.Errorf("error writing initial state to peer (%v): %v", writeSub.StateURI(), err)
 				} else {
-					writeSub.EnqueueWrite(nil, node, leaves)
+					writeSub.EnqueueWrite(writeSub.StateURI(), nil, node, leaves)
 				}
 			}
 		}
@@ -701,6 +707,13 @@ func (h *host) subscribe(ctx context.Context, stateURI string) error {
 		go multiSub.Start()
 		h.readableSubscriptions[stateURI] = multiSub
 	}
+
+	h.stateURISubscriptionsMu.Lock()
+	defer h.stateURISubscriptionsMu.Unlock()
+	for sub := range h.stateURISubscriptions {
+		sub.put(stateURI)
+	}
+
 	return nil
 }
 
@@ -737,6 +750,79 @@ func (h *host) Unsubscribe(stateURI string) error {
 	h.readableSubscriptions[stateURI].Close()
 	delete(h.readableSubscriptions, stateURI)
 	return nil
+}
+
+func (h *host) SubscribeStateURIs() StateURISubscription {
+	sub := &stateURISubscription{
+		host:    h,
+		mailbox: utils.NewMailbox(0),
+		ch:      make(chan string),
+		chStop:  make(chan struct{}),
+		chDone:  make(chan struct{}),
+	}
+
+	sub.host.stateURISubscriptionsMu.Lock()
+	defer sub.host.stateURISubscriptionsMu.Unlock()
+	h.stateURISubscriptions[sub] = struct{}{}
+
+	go func() {
+		defer close(sub.chDone)
+		for {
+			select {
+			case <-sub.chStop:
+				return
+			case <-sub.mailbox.Notify():
+				for {
+					x := sub.mailbox.Retrieve()
+					if x == nil {
+						break
+					}
+					stateURI := x.(string)
+					select {
+					case sub.ch <- stateURI:
+					case <-sub.chStop:
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return sub
+}
+
+type StateURISubscription interface {
+	Read() (string, error)
+	Close()
+}
+
+type stateURISubscription struct {
+	host    *host
+	mailbox *utils.Mailbox
+	ch      chan string
+	chStop  chan struct{}
+	chDone  chan struct{}
+}
+
+func (sub *stateURISubscription) put(stateURI string) {
+	sub.mailbox.Deliver(stateURI)
+}
+
+func (sub *stateURISubscription) Read() (string, error) {
+	select {
+	case <-sub.chStop:
+		return "", errors.New("shutting down")
+	case s := <-sub.ch:
+		return s, nil
+	}
+}
+
+func (sub *stateURISubscription) Close() {
+	sub.host.stateURISubscriptionsMu.Lock()
+	defer sub.host.stateURISubscriptionsMu.Unlock()
+	delete(sub.host.stateURISubscriptions, sub)
+	close(sub.chStop)
+	<-sub.chDone
 }
 
 func (h *host) ChallengePeerIdentity(ctx context.Context, peer Peer) (err error) {
@@ -1028,11 +1114,11 @@ func (h *host) broadcastToWritableSubscribers(
 				}
 
 				if isAllowed {
-					writeSub.EnqueueWrite(tx, state, leaves)
+					writeSub.EnqueueWrite(tx.StateURI, tx, state, leaves)
 				}
 
 			} else {
-				writeSub.EnqueueWrite(tx, state, leaves)
+				writeSub.EnqueueWrite(tx.StateURI, tx, state, leaves)
 			}
 		}()
 	}

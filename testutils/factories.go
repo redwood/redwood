@@ -39,6 +39,24 @@ func RandomEncryptingPublicKey(t *testing.T) crypto.EncryptingPublicKey {
 }
 
 func RandomTime(t *testing.T) time.Time {
+	t.Helper()
+
 	n := rand.Intn(1613680441*2) + 1613680441
 	return time.Unix(int64(n), 0)
+}
+
+func RandomDuration(t *testing.T, max time.Duration) time.Duration {
+	return time.Duration(rand.Intn(int(max)))
+}
+
+func RandomString(t *testing.T, n int) string {
+	t.Helper()
+
+	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+	s := make([]rune, n)
+	for i := range s {
+		s[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(s)
 }

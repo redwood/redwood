@@ -1,20 +1,20 @@
 import React, { createContext, useCallback, useState, useEffect } from 'react'
-import rpcFetch from '../utils/rpcFetch'
 import { useRedwood } from 'redwood/dist/main/react'
 import createAPI from '../api'
 
 export const Context = createContext(null)
 
 function Provider({ children }) {
-    const { redwoodClient } = useRedwood()
+    const { redwoodClient, nodeIdentities } = useRedwood()
     const [api, setAPI] = useState(null)
 
     useEffect(() => {
         if (!redwoodClient) {
             return
         }
-        setAPI(createAPI(redwoodClient))
-    }, [redwoodClient])
+        let ownAddress = nodeIdentities && nodeIdentities.length > 0 ? nodeIdentities[0].address : null
+        setAPI(createAPI(redwoodClient, ownAddress))
+    }, [redwoodClient, nodeIdentities])
 
     return (
       <Context.Provider value={api}>

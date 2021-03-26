@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/pkg/errors"
 
@@ -24,11 +23,12 @@ type (
 		StateURI() string
 		Type() SubscriptionType
 		Keypath() tree.Keypath
-		EnqueueWrite(tx *Tx, state tree.Node, leaves []types.ID)
+		EnqueueWrite(stateURI string, tx *Tx, state tree.Node, leaves []types.ID)
 		Close() error
 	}
 
 	SubscriptionMsg struct {
+		StateURI    string       `json:"stateURI"`
 		Tx          *Tx          `json:"tx,omitempty"`
 		EncryptedTx *EncryptedTx `json:"encryptedTx,omitempty"`
 		State       tree.Node    `json:"state,omitempty"`
@@ -95,11 +95,12 @@ type writableSubscription struct {
 	chErrored        chan struct{}
 	chStop           chan struct{}
 	chDone           chan struct{}
+	stopOnce         sync.Once
 }
 
 type WritableSubscriptionImpl interface {
 	Transport() Transport
-	Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) error
+	Put(ctx context.Context, stateURI string, tx *Tx, state tree.Node, leaves []types.ID) error
 	UpdateConnStats(ok bool)
 	Close() error
 }
@@ -169,9 +170,9 @@ func (sub *writableSubscription) writeMessages() {
 		if sub.subscriptionType.Includes(SubscriptionType_States) {
 			state = msg.State
 		}
-		err = sub.subImpl.Put(context.TODO(), tx, state, msg.Leaves)
+		err = sub.subImpl.Put(context.TODO(), msg.StateURI, tx, state, msg.Leaves)
 		if err != nil {
-			sub.host.Errorf("error writing to subscribed peer: %v", err)
+			sub.host.Errorf("error writing to subscribed peer: %+v", err)
 			return
 		}
 	}
@@ -192,8 +193,8 @@ func (sub *writableSubscription) StateURI() string       { return sub.stateURI }
 func (sub *writableSubscription) Type() SubscriptionType { return sub.subscriptionType }
 func (sub *writableSubscription) Keypath() tree.Keypath  { return sub.keypath }
 
-func (sub *writableSubscription) EnqueueWrite(tx *Tx, state tree.Node, leaves []types.ID) {
-	sub.messages.Deliver(&SubscriptionMsg{Tx: tx, State: state, Leaves: leaves})
+func (sub *writableSubscription) EnqueueWrite(stateURI string, tx *Tx, state tree.Node, leaves []types.ID) {
+	sub.messages.Deliver(&SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
 }
 
 func (sub *writableSubscription) Close() error {
@@ -269,8 +270,8 @@ func (sub *inProcessSubscription) Keypath() tree.Keypath {
 	return sub.keypath
 }
 
-func (sub *inProcessSubscription) EnqueueWrite(tx *Tx, state tree.Node, leaves []types.ID) {
-	sub.messages.Deliver(&SubscriptionMsg{Tx: tx, State: state, Leaves: leaves})
+func (sub *inProcessSubscription) EnqueueWrite(stateURI string, tx *Tx, state tree.Node, leaves []types.ID) {
+	sub.messages.Deliver(&SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
 }
 
 func (sub *inProcessSubscription) Read() (*SubscriptionMsg, error) {
@@ -294,7 +295,7 @@ type multiReaderSubscription struct {
 	stateURI string
 	maxConns uint64
 	host     Host
-	conns    map[types.Address]Peer
+	conns    sync.Map
 	chStop   chan struct{}
 	chDone   chan struct{}
 	peerPool *peerPool
@@ -305,10 +306,15 @@ func newMultiReaderSubscription(stateURI string, maxConns uint64, host Host) *mu
 		stateURI: stateURI,
 		maxConns: maxConns,
 		host:     host,
-		conns:    make(map[types.Address]Peer),
 		chStop:   make(chan struct{}),
 		chDone:   make(chan struct{}),
 	}
+}
+
+func (s *multiReaderSubscription) getPeer() (Peer, error) {
+	ctx, cancel := utils.ContextFromChan(s.chStop)
+	defer cancel()
+	return s.peerPool.GetPeer(ctx)
 }
 
 func (s *multiReaderSubscription) Start() {
@@ -333,8 +339,7 @@ func (s *multiReaderSubscription) Start() {
 			default:
 			}
 
-			time.Sleep(1 * time.Second)
-			peer, err := s.peerPool.GetPeer()
+			peer, err := s.getPeer()
 			if err != nil {
 				log.Errorf("error getting peer from pool: %v", err)
 				// @@TODO: exponential backoff
@@ -343,20 +348,26 @@ func (s *multiReaderSubscription) Start() {
 			if reflect.ValueOf(peer).IsNil() {
 				panic("peer is nil")
 			}
+			s.conns.Store(peer, struct{}{})
 
 			wgClose.Add(1)
 			go func() {
 				defer wgClose.Done()
-				defer s.peerPool.ReturnPeer(peer, false)
+				defer func() {
+					s.peerPool.ReturnPeer(peer, false)
+					s.conns.Delete(peer)
+				}()
 
 				err = peer.EnsureConnected(context.TODO())
 				if err != nil {
+					peer.UpdateConnStats(false)
 					s.host.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
 					return
 				}
 
 				peerSub, err := peer.Subscribe(context.TODO(), s.stateURI)
 				if err != nil {
+					peer.UpdateConnStats(false)
 					s.host.Errorf("error subscribing to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
 					return
 				}
@@ -386,9 +397,19 @@ func (s *multiReaderSubscription) Start() {
 }
 
 func (s *multiReaderSubscription) Close() error {
-	s.peerPool.Close()
+	// 1. Stop reading from the peer
 	s.host.HandleReadableSubscriptionClosed(s.stateURI)
+
+	// 2. Signal shutdown
 	close(s.chStop)
+
+	// 3. Close all active peer conns
+	s.conns.Range(func(peer, val interface{}) bool {
+		peer.(Peer).Close()
+		return true
+	})
+
+	s.peerPool.Close()
 	<-s.chDone
 	return nil
 }

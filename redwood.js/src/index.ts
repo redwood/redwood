@@ -127,7 +127,7 @@ function createPeer(opts: CreatePeerOptions) {
         storeRef,
         authorize,
         peers,
-        rpc: rpcTransport({ endpoint: rpcEndpoint || 'http://localhost:8081' }),
+        rpc: rpcEndpoint ? rpcTransport({ endpoint: rpcEndpoint }) : undefined,
     }
 }
 

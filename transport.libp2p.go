@@ -430,6 +430,7 @@ func (t *libp2pTransport) handleIncomingStream(stream netp2p.Stream) {
 			t.Errorf("Subscribe message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
+		t.Infof(0, "incoming libp2p subscription (stateURI: %v)", stateURI)
 
 		writeSub := newWritableSubscription(t.host, stateURI, nil, SubscriptionType_Txs, &libp2pWritableSubscription{peer})
 		func() {
@@ -930,12 +931,12 @@ func (peer *libp2pPeer) Put(ctx context.Context, tx *Tx, state tree.Node, leaves
 		}
 		peerSigPubkey, peerEncPubkey := peer.PublicKeys(peerAddrs[0])
 
-		encryptedTxBytes, err := peer.t.keyStore.SealMessageFor(tx.From, peerEncPubkey, marshalledTx)
+		identity, err := peer.t.keyStore.DefaultPublicIdentity()
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		identity, err := peer.t.keyStore.DefaultPublicIdentity()
+		encryptedTxBytes, err := peer.t.keyStore.SealMessageFor(identity.Address(), peerEncPubkey, marshalledTx)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -1136,7 +1137,7 @@ type libp2pWritableSubscription struct {
 	*libp2pPeer
 }
 
-func (sub *libp2pWritableSubscription) Put(ctx context.Context, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
+func (sub *libp2pWritableSubscription) Put(ctx context.Context, stateURI string, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
 	defer func() { sub.UpdateConnStats(err == nil) }()
 
 	err = sub.libp2pPeer.EnsureConnected(ctx)

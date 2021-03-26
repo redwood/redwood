@@ -3,11 +3,13 @@ import styled from 'styled-components'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Input from '../Input'
 import Button from '../Button'
-import CurrentUserAvatar from '../CurrentUserAvatar'
+import UserAvatar from '../UserAvatar'
 import { useRedwood, useStateTree } from 'redwood/dist/main/react'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
+import useUsers from '../../hooks/useUsers'
+import useServerAndRoomInfo from '../../hooks/useServerAndRoomInfo'
 import UploadAvatar from '../UploadAvatar'
 
 const SUserControlContainer = styled.div`
@@ -57,32 +59,37 @@ const NodeAddress = styled.div`
     font-weight: 300;
 `
 
-const SCurrentUserAvatar = styled(CurrentUserAvatar)`
+const SUserAvatar = styled(UserAvatar)`
     height: 40px;
 `
 
 function UserControl() {
     let { onPresent, onDismiss } = useModal('user profile')
-    let { nodeIdentities } = useRedwood()
-    let { selectedServer } = useNavigation()
+    let { httpHost, nodeIdentities } = useRedwood()
+    let { selectedStateURI } = useNavigation()
+    let { users, usersStateURI } = useUsers(selectedStateURI)
     let [username, setUsername] = useState(null)
     let [userPhotoURL, setUserPhotoURL] = useState(null)
-    let registry = useStateTree(!!selectedServer ? `${selectedServer}/registry` : null)
-    let nodeAddress = !!nodeIdentities && nodeIdentities.length > 0 ? nodeIdentities[0].address.toLowerCase() : null
+    let nodeAddress = !!nodeIdentities && nodeIdentities.length > 0 ? nodeIdentities[0].address : null
 
     useEffect(() => {
-        if (registry && registry.users && registry.users[nodeAddress]) {
-            setUsername(registry.users[nodeAddress].username)
-            if (registry.users[nodeAddress].photo) {
-                setUserPhotoURL(`http://localhost:8080/users/${nodeAddress}/photo?state_uri=${selectedServer}/registry&${Date.now()}`)
+        if (users && users[nodeAddress]) {
+            setUsername(users[nodeAddress].username)
+            if (users[nodeAddress].photo) {
+                setUserPhotoURL(`${httpHost}/users/${nodeAddress}/photo?state_uri=${usersStateURI}&${Date.now()}`)
+            } else {
+                setUserPhotoURL(null)
             }
+        } else {
+            setUsername(null)
+            setUserPhotoURL(null)
         }
-    }, [registry])
+    }, [users, httpHost, nodeAddress, usersStateURI])
 
     return (
         <SUserControlContainer>
             <SUserLeft onClick={onPresent}>
-                <SCurrentUserAvatar />
+            <SUserAvatar address={nodeAddress} />
                 <UsernameWrapper>
                     <Username>{!!username ? username : nodeAddress}</Username>
                     <NodeAddress>{!!username ? nodeAddress : null}</NodeAddress>
@@ -101,9 +108,10 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
     const [username, setUsername] = useState('')
     const [iconImg, setIconImg] = useState(null)
     const [iconFile, setIconFile] = useState(null)
-    const { nodeAddress } = useRedwood()
+    const { nodeIdentities } = useRedwood()
     const api = useAPI()
-    const { selectedServer } = useNavigation()
+    const { selectedStateURI } = useNavigation()
+    const { usersStateURI } = useUsers(selectedStateURI)
     const photoFileRef = useRef()
 
     useEffect(() => {
@@ -114,18 +122,18 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
     }, [currentUsername, userPhotoURL])
 
     const onSave = useCallback(async () => {
-        if (!api) { return }
+        if (!api || !nodeIdentities || nodeIdentities.length === 0) { return }
         try {
             // let photoFile
             // if (photoFileRef && photoFileRef.current && photoFileRef.current.files && photoFileRef.current.files.length > 0) {
             //     photoFile = photoFileRef.current.files[0]
             // }
-            await api.updateProfile(nodeAddress, selectedServer, username, iconFile)
+            await api.updateProfile(nodeIdentities[0].address, usersStateURI, username, iconFile)
             onDismiss()
         } catch (err) {
             console.error(err)
         }
-    }, [api, nodeAddress, selectedServer, username, iconFile, onDismiss])
+    }, [api, nodeIdentities, usersStateURI, username, iconFile, onDismiss])
 
     const onChangeUsername = useCallback((e) => {
         if (e.code === 'Enter') {

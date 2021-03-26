@@ -33,6 +33,9 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
     pollForPeers()
 
     let alreadyRespondedTo: { [txID: string]: boolean } = {}
+    let websocketConn: WebSocket | undefined
+    let websocketConnected = false
+    let websocketPendingSubscribeOpts: any = []
 
     async function subscribe(opts: SubscribeParams) {
         let { stateURI, keypath, fromTxID, states, txs, callback } = opts
@@ -51,30 +54,61 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
             let unsubscribe: UnsubscribeFunc
 
             if (opts.useWebsocket) {
-                let url = new URL(httpHost)
-                url.searchParams.set('state_uri', stateURI)
-                url.searchParams.set('keypath', keypath || '/')
-                url.searchParams.set('subscription_type', subscriptionType)
-                if (fromTxID) {
-                    url.searchParams.set('from_tx', fromTxID)
-                }
-                url.protocol = 'ws'
-                url.pathname = '/ws'
+                if (!websocketConn) {
+                    let url = new URL(httpHost)
+                    url.searchParams.set('state_uri', stateURI)
+                    url.searchParams.set('keypath', keypath || '/')
+                    url.searchParams.set('subscription_type', subscriptionType)
+                    if (fromTxID) {
+                        url.searchParams.set('from_tx', fromTxID)
+                    }
+                    url.protocol = 'ws'
+                    url.pathname = '/ws'
 
-                let conn = new WebSocket(url.toString())
-                conn.onclose = function (evt) {}
-                conn.onmessage = function (evt) {
-                    let messages = (evt.data as string).split('\n').filter(x => x.trim().length > 0)
-                    for (let msg of messages) {
-                        try {
-                            let { tx, state, leaves } = JSON.parse(msg)
-                            callback(null, { tx, state, leaves })
-                        } catch (err) {
-                            callback(err, undefined as any)
+                    websocketConn = new WebSocket(url.toString())
+                    websocketConn.onopen = function (evt) {
+                        websocketConnected = true
+                        for (let pendingSubscribeOpts of websocketPendingSubscribeOpts) {
+                            if (!websocketConn) {
+                                continue
+                            }
+                            websocketConn.send(JSON.stringify({
+                                op: 'subscribe',
+                                params: pendingSubscribeOpts,
+                            }))
                         }
                     }
+                    websocketConn.onclose = function (evt) {
+                        websocketConnected = false
+                    }
+                    websocketConn.onmessage = function (evt) {
+                        let messages = (evt.data as string).split('\n').filter(x => x.trim().length > 0)
+                        for (let msg of messages) {
+                            try {
+                                let { stateURI, tx, state, leaves } = JSON.parse(msg)
+                                callback(null, { stateURI, tx, state, leaves })
+                            } catch (err) {
+                                callback(err, undefined as any)
+                            }
+                        }
+                    }
+                } else {
+                    let subscribeOpts = { stateURI, keypath, subscriptionType, fromTxID }
+                    if (websocketConnected) {
+                        websocketConn.send(JSON.stringify({
+                            op: 'subscribe',
+                            params: subscribeOpts,
+                        }))
+                    } else {
+                        websocketPendingSubscribeOpts.push(subscribeOpts)
+                    }
                 }
-                unsubscribe = () => conn.close()
+                unsubscribe = () => {
+                    // if (websocketConn) {
+                    //     websocketConn.close()
+                    //     websocketConn = undefined
+                    // }
+                }
 
             } else {
                 const headers: SubscribeHeaders = {
@@ -99,15 +133,15 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
                         callback(err, undefined as any)
                         return
                     }
-                    let { tx, state, leaves } = update
+                    let { stateURI, tx, state, leaves } = update
                     if (tx) {
                         ack(tx.id)
                         if (!alreadyRespondedTo[tx.id]) {
                             alreadyRespondedTo[tx.id] = true
-                            callback(err, { tx, state, leaves })
+                            callback(err, { stateURI, tx, state, leaves })
                         }
                     } else {
-                        callback(err, { tx, state, leaves })
+                        callback(err, { stateURI, tx, state, leaves })
                     }
                 })
             }

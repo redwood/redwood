@@ -1,14 +1,13 @@
-import rpcFetch from '../utils/rpcFetch'
 import Redwood from 'redwood'
 
 const sync9JSSha3 = '0c87e1035db28f334cd7484b47d9e7cc285e026d4f876d24ddad78c47ac40a14'
 
-export default function(redwoodClient) {
+export default function(redwoodClient, ownAddress) {
     async function addPeer(transportName, dialAddr) {
         await redwoodClient.rpc.addPeer({ TransportName: transportName, DialAddr: dialAddr })
     }
 
-    async function addServer(server, servers, iconFile, provider, cloudStackOptions) {
+    async function addServer(server, iconFile, provider, cloudStackOptions) {
         let stateURI = `${server}/registry`
 
         let iconImgPatch = null
@@ -45,7 +44,7 @@ export default function(redwoodClient) {
                             },
                         },
                     },
-                    'rooms': [],
+                    'rooms': {},
                     'users': {},
                     'iconImg': iconImgPatch
                 }),
@@ -59,13 +58,12 @@ export default function(redwoodClient) {
             stateURI: 'chat.local/servers',
             id: Redwood.utils.randomID(),
             patches: [
-                `.value[${servers.length}:${servers.length}] = ["${server}"]`,
+                `.value["${server}"] = true`,
             ],
         }
         await redwoodClient.rpc.sendTx(tx)
 
         if (!!provider && provider !== 'none' && !!cloudStackOptions) {
-            console.log('rv', provider, cloudStackOptions)
             await redwoodClient.rpc.rpcFetch('RPC.CreateCloudStack', {
                 ...cloudStackOptions,
                 firstStateURI: stateURI,
@@ -74,21 +72,23 @@ export default function(redwoodClient) {
         }
     }
 
-    async function importServer(server, servers) {
-        console.log('API importServer', server, servers)
+    async function importServer(server) {
         let tx = {
             stateURI: 'chat.local/servers',
             id: Redwood.utils.randomID(),
             patches: [
-                `.value[${servers.length}:${servers.length}] = ["${server}"]`,
+                `.value["${server}"] = true`,
             ],
         }
         await redwoodClient.rpc.subscribe({ stateURI: `${server}/registry`, keypath: '/', txs: true, states: true })
         await redwoodClient.rpc.sendTx(tx)
     }
 
-    async function createNewChat(server, newChatName, rooms) {
-        console.log('API createNewChat', server, newChatName, rooms)
+    async function subscribe(stateURI) {
+        await redwoodClient.rpc.subscribe({ stateURI, keypath: '/', txs: true, states: true })
+    }
+
+    async function createNewChat(server, newChatName) {
         let stateURI = `${server}/${newChatName}`
         let tx = {
             stateURI: stateURI,
@@ -109,7 +109,7 @@ export default function(redwoodClient) {
                         'Content-Type': 'validator/permissions',
                         'value': {
                             '*': {
-                                '^\\.messages\\b': { 'write': true },
+                                '^.*$': { 'write': true },
                             },
                         },
                     },
@@ -120,16 +120,64 @@ export default function(redwoodClient) {
         await redwoodClient.rpc.subscribe({ stateURI, keypath: '/', txs: true, states: true })
         await redwoodClient.rpc.sendTx(tx)
 
-        rooms = rooms || []
-
         tx = {
             stateURI: `${server}/registry`,
             id: Redwood.utils.randomID(),
             patches: [
-                `.rooms[${rooms.length}:${rooms.length}] = ["${stateURI}"]`,
+                `.rooms["${newChatName}"] = true`,
             ],
         }
         await redwoodClient.rpc.sendTx(tx)
+    }
+
+    async function createNewDM(recipients) {
+        let roomName = Redwood.utils.privateTxRootForRecipients(recipients)
+        let stateURI = 'chat.p2p/' + roomName
+
+        let users = {}
+        for (let addr of recipients) {
+            users[addr] = {}
+        }
+
+        await redwoodClient.rpc.subscribe({ stateURI, keypath: '/', txs: true, states: true })
+        await redwoodClient.rpc.sendTx({
+            stateURI: stateURI,
+            id: Redwood.utils.genesisTxID,
+            parents: [],
+            recipients: recipients,
+            patches: [
+                ' = ' + Redwood.utils.JSON.stringify({
+                    'Merge-Type': {
+                        'Content-Type': 'resolver/js',
+                        'value': {
+                            'src': {
+                                'Content-Type': 'link',
+                                'value': `ref:sha3:${sync9JSSha3}`,
+                            }
+                        }
+                    },
+                    'Validator': {
+                        'Content-Type': 'validator/permissions',
+                        'value': {
+                            '*': {
+                                '^.*$': { 'write': true },
+                            },
+                        },
+                    },
+                    'Members': recipients,
+                    'users': users,
+                    'messages': [],
+                }),
+            ],
+        })
+
+        await redwoodClient.rpc.sendTx({
+            stateURI: 'chat.local/dms',
+            id: Redwood.utils.randomID(),
+            patches: [
+                `.rooms["${roomName}"] = true`,
+            ],
+        })
     }
 
     async function sendMessage(messageText, files, nodeAddress, server, room, messages) {
@@ -160,17 +208,16 @@ export default function(redwoodClient) {
                 }]),
             ],
         }
-        console.log('tx', tx)
         await redwoodClient.rpc.sendTx(tx)
     }
 
-    async function updateProfile(nodeAddress, server, username, photoFile) {
-        nodeAddress = nodeAddress.toLowerCase()
+    async function updateProfile(address, usersStateURI, username, photoFile) {
+        address = address.toLowerCase()
         let patches = []
         if (photoFile) {
             let { sha3 } = await redwoodClient.storeRef(photoFile)
             let { type } = photoFile
-            patches.push(`.users.${nodeAddress}.photo = ` + Redwood.utils.JSON.stringify({
+            patches.push(`.users.${address}.photo = ` + Redwood.utils.JSON.stringify({
                 'Content-Type': type,
                 'value': {
                     'Content-Type': 'link',
@@ -179,7 +226,7 @@ export default function(redwoodClient) {
             }))
         }
         if (username) {
-            patches.push(`.users.${nodeAddress}.username = "${username}"`)
+            patches.push(`.users.${address}.username = "${username}"`)
         }
         if (patches.length === 0) {
             return
@@ -187,10 +234,20 @@ export default function(redwoodClient) {
 
         let tx = {
             id: Redwood.utils.randomID(),
-            stateURI: `${server}/registry`,
+            stateURI: usersStateURI,
             patches,
         }
         await redwoodClient.rpc.sendTx(tx)
+    }
+
+    async function setNickname(peerAddress, nickname) {
+        await redwoodClient.rpc.sendTx({
+            id: Redwood.utils.randomID(),
+            stateURI: 'chat.local/address-book',
+            patches: [
+                `.value.${peerAddress} = "${nickname}"`,
+            ],
+        })
     }
 
     function createCloudStackOptions(provider, apiKey) {
@@ -200,9 +257,12 @@ export default function(redwoodClient) {
     return {
         addServer,
         importServer,
+        subscribe,
         createNewChat,
+        createNewDM,
         sendMessage,
         updateProfile,
+        setNickname,
         createCloudStackOptions,
     }
 }

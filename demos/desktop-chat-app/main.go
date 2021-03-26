@@ -40,7 +40,7 @@ func main() {
 			Value: 54231,
 			Usage: "port on which to serve UI assets",
 		},
-		cli.BoolFlag{
+		cli.StringFlag{
 			Name:  "pprof",
 			Usage: "enable pprof",
 		},
@@ -61,12 +61,14 @@ func main() {
 		})
 		klog.Flush()
 
-		if c.Bool("pprof") {
-			go func() {
-				http.ListenAndServe(":6060", nil)
-			}()
-			runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
-		}
+		// if c.Bool("pprof") {
+		go func() {
+			http.ListenAndServe(":"+c.String("pprof"), nil)
+		}()
+		runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
+		// }
+
+		app.configPath = c.String("config")
 
 		port := c.Uint("port")
 		// go startGUI(port)

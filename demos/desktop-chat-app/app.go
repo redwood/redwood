@@ -223,10 +223,58 @@ func (app *appType) Start() (err error) {
 	klog.Info(redwood.PrettyJSON(config))
 	klog.Flush()
 
-	go app.inputLoop()
 	app.initializeLocalState()
+	go app.monitorForDMs()
+	go app.inputLoop()
 
 	return nil
+}
+
+func (app *appType) monitorForDMs() {
+	time.Sleep(5 * time.Second)
+
+	sub := app.host.SubscribeStateURIs()
+	defer sub.Close()
+
+	for {
+		stateURI, err := sub.Read()
+		if err != nil {
+			app.Debugf("error in stateURI subscription: %v", err)
+			return
+		} else if stateURI == "" {
+			continue
+		}
+
+		if strings.HasPrefix(stateURI, "chat.p2p/private-") {
+			roomName := stateURI[len("chat.p2p/"):]
+			roomKeypath := tree.Keypath("rooms").Pushs(roomName)
+			var found bool
+			func() {
+				dmState, err := app.host.Controllers().StateAtVersion("chat.local/dms", nil)
+				if err != nil {
+					panic(err)
+				}
+				defer dmState.Close()
+
+				found, err = dmState.Exists(roomKeypath)
+				if err != nil {
+					panic(err)
+				}
+			}()
+			if !found {
+				err := app.host.SendTx(context.TODO(), redwood.Tx{
+					StateURI: "chat.local/dms",
+					Patches: []redwood.Patch{{
+						Keypath: roomKeypath,
+						Val:     true,
+					}},
+				})
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+	}
 }
 
 func (app *appType) Close() {
@@ -265,18 +313,91 @@ func (app *appType) initializeLocalState() {
 	}
 	defer f.Close()
 
-	_, _, err = app.host.AddRef(f)
+	_, sync9Sha3, err := app.host.AddRef(f)
 	if err != nil {
 		panic(err)
 	}
 
-	state, err := app.host.StateAtVersion("chat.local/servers", nil)
+	type M = map[string]interface{}
+
+	app.ensureState("chat.local/servers", "value", M{
+		"Merge-Type": M{
+			"Content-Type": "resolver/js",
+			"value": M{
+				"src": M{
+					"Content-Type": "link",
+					"value":        "ref:sha3:" + sync9Sha3.Hex(),
+				},
+			},
+		},
+		"Validator": M{
+			"Content-Type": "validator/permissions",
+			"value": M{
+				"*": M{
+					"^.*$": M{
+						"write": true,
+					},
+				},
+			},
+		},
+		"value": M{},
+	})
+
+	app.ensureState("chat.local/dms", "rooms", M{
+		"Merge-Type": M{
+			"Content-Type": "resolver/js",
+			"value": M{
+				"src": M{
+					"Content-Type": "link",
+					"value":        "ref:sha3:" + sync9Sha3.Hex(),
+				},
+			},
+		},
+		"Validator": M{
+			"Content-Type": "validator/permissions",
+			"value": M{
+				"*": M{
+					"^.*$": M{
+						"write": true,
+					},
+				},
+			},
+		},
+		"rooms": M{},
+	})
+
+	app.ensureState("chat.local/address-book", "value", M{
+		"Merge-Type": M{
+			"Content-Type": "resolver/js",
+			"value": M{
+				"src": M{
+					"Content-Type": "link",
+					"value":        "ref:sha3:" + sync9Sha3.Hex(),
+				},
+			},
+		},
+		"Validator": M{
+			"Content-Type": "validator/permissions",
+			"value": M{
+				"*": M{
+					"^.*$": M{
+						"write": true,
+					},
+				},
+			},
+		},
+		"value": M{},
+	})
+}
+
+func (app *appType) ensureState(stateURI string, checkKeypath string, value interface{}) {
+	state, err := app.host.StateAtVersion(stateURI, nil)
 	if err != nil && errors.Cause(err) != redwood.ErrNoController {
 		panic(err)
 	} else if err == nil {
 		defer state.Close()
 
-		exists, err := state.Exists(tree.Keypath("value"))
+		exists, err := state.Exists(tree.Keypath(checkKeypath))
 		if err != nil {
 			panic(err)
 		}
@@ -286,30 +407,10 @@ func (app *appType) initializeLocalState() {
 		state.Close()
 	}
 
-	type M = map[string]interface{}
-
 	err = app.host.SendTx(context.Background(), redwood.Tx{
-		StateURI: "chat.local/servers",
+		StateURI: stateURI,
 		ID:       redwood.GenesisTxID,
-		Patches: []redwood.Patch{{
-			Val: M{
-				"Merge-Type": M{
-					"Content-Type": "resolver/dumb",
-					"value":        M{},
-				},
-				"Validator": M{
-					"Content-Type": "validator/permissions",
-					"value": M{
-						"*": M{
-							"^.*$": M{
-								"write": true,
-							},
-						},
-					},
-				},
-				"value": []interface{}{},
-			},
-		}},
+		Patches:  []redwood.Patch{{Val: value}},
 	})
 	if err != nil {
 		panic(err)
