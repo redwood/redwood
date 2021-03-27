@@ -1,15 +1,15 @@
 Node:
     BootstrapPeers: []
     SubscribedStateURIs:
-      - www/registry
-      - www/kk
       - test/testing
       - chat.local/servers
       - null/registry
       - test/registry
       - test/working
+      - www/registry
+      - www/kk
     MaxPeersPerSubscription: 4
-    DataRoot: ./node2_data/timothy
+    DataRoot: ./node2_data/e129e
     DevMode: true
 P2PTransport:
     Enabled: true

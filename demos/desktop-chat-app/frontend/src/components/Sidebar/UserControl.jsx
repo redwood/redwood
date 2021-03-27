@@ -68,8 +68,8 @@ function UserControl() {
     let { onPresent, onDismiss } = useModal('user profile')
     const redwood = useRedwood()
     let nodeAddress = ''
-    if (redwood.identities) {
-      nodeAddress = redwood.identities[0].address
+    if (redwood.nodeIdentities) {
+      nodeAddress = redwood.nodeIdentities[0].address
     }
     let { selectedServer } = useNavigation()
     const [username, setUsername] = useState(null)
@@ -112,11 +112,10 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
     const [username, setUsername] = useState('')
     const [iconImg, setIconImg] = useState(null)
     const [iconFile, setIconFile] = useState(null)
-    const { identities } = useRedwood()
+    const { nodeIdentities } = useRedwood()
     let nodeAddress = ''
-    console.log('IDENTITIES', identities)
-    if (identities) {
-      nodeAddress = identities[0].address
+    if (nodeIdentities) {
+      nodeAddress = nodeIdentities[0].address
     }
     const api = useAPI()
     const { selectedServer } = useNavigation()

@@ -11,7 +11,8 @@ export interface IContext {
     stateTrees: any
     updateStateTree: (stateURI: string, newTree: any, newLeaves: string[]) => void
     leaves: {[txID: string]: boolean}
-    knownPeers: PeersMap
+    knownPeers: PeersMap,
+    fetchIdentities: any,
 }
 
 export const Context = createContext<IContext>({
@@ -25,6 +26,7 @@ export const Context = createContext<IContext>({
     updateStateTree: (stateURI: string, newTree: any, newLeaves: string[]) => {},
     leaves: {},
     knownPeers: {},
+    fetchIdentities: () => {},
 })
 
 function Provider(props: {
@@ -45,6 +47,12 @@ function Provider(props: {
     const [knownPeers, setKnownPeers] = useState({})
     const [error, setError] = useState(null)
 
+    let fetchIdentities = async (redwoodClient: any) => {
+      console.log('WORKING', redwoodClient.rpc)
+      let nodeIdentities = await redwoodClient.rpc.identities()	
+      setNodeIdentities(nodeIdentities)
+    }	
+
     useEffect(() => {
         ;(async function() {
             let redwoodClient = Redwood.createPeer({
@@ -57,10 +65,11 @@ function Provider(props: {
             if (!!identity) {
                 await redwoodClient.authorize()
             }
-            let nodeIdentities = await redwoodClient.rpc.identities()
+
+            await fetchIdentities(redwoodClient)
 
             setRedwoodClient(redwoodClient)
-            setNodeIdentities(nodeIdentities)
+            
         })()
     }, [identity, httpHost, rpcEndpoint, webrtc])
 
@@ -81,6 +90,7 @@ function Provider(props: {
           leaves,
           updateStateTree,
           knownPeers,
+          fetchIdentities,
       }}>
           {children}
       </Context.Provider>

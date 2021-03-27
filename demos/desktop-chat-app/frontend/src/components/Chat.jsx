@@ -131,7 +131,7 @@ const SImgPreviewWrapper = styled.div`
 
 function Chat({ className }) {
     const redwood = useRedwood()
-    const { identities } = redwood
+    const { nodeIdentities } = redwood
     const api = useAPI()
     const { selectedStateURI, selectedServer, selectedRoom } = useNavigation()
     const registry = useStateTree(!!selectedServer ? `${selectedServer}/registry` : null)
@@ -156,10 +156,10 @@ function Chat({ className }) {
     const onClickSend = useCallback(async () => {
         if (!api) { return }
         console.log('attachments', attachments)
-        await api.sendMessage(messageText, attachments, identities[0].address, selectedServer, selectedRoom, messages)
+        await api.sendMessage(messageText, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
         setAttachments([])
         setPreviews([])
-    }, [messageText, identities, attachments, selectedServer, selectedRoom, messages, api])
+    }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api])
 
     useEffect(() => {
       // Scrolls on new messages

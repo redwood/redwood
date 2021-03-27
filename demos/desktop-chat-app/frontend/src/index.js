@@ -15,6 +15,7 @@ ReactDOM.render(
         <ThemeProvider theme={theme}>
             <RedwoodProvider
                 httpHost="http://localhost:8080"
+                rpcEndpoint="http://localhost:8081"
                 useWebsocket={true}
             >
                 <APIProvider>
