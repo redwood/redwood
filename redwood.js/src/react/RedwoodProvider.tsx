@@ -13,6 +13,7 @@ export interface IContext {
     leaves: {[txID: string]: boolean}
     knownPeers: PeersMap,
     fetchIdentities: any,
+    fetchRedwoodClient: any,
 }
 
 export const Context = createContext<IContext>({
@@ -27,6 +28,7 @@ export const Context = createContext<IContext>({
     leaves: {},
     knownPeers: {},
     fetchIdentities: () => {},
+    fetchRedwoodClient: () => {},
 })
 
 function Provider(props: {
@@ -48,28 +50,34 @@ function Provider(props: {
     const [error, setError] = useState(null)
 
     let fetchIdentities = async (redwoodClient: any) => {
-      console.log('WORKING', redwoodClient.rpc)
       let nodeIdentities = await redwoodClient.rpc.identities()	
       setNodeIdentities(nodeIdentities)
     }	
 
+    let fetchRedwoodClient = () => {
+      let redwoodClient = Redwood.createPeer({
+        identity,
+        httpHost,
+        rpcEndpoint,
+        webrtc,
+        onFoundPeersCallback: (peers) => { setKnownPeers(peers) },
+      })
+
+      setRedwoodClient(redwoodClient)
+
+      return redwoodClient
+    }
+    
+
+
     useEffect(() => {
         ;(async function() {
-            let redwoodClient = Redwood.createPeer({
-                identity,
-                httpHost,
-                rpcEndpoint,
-                webrtc,
-                onFoundPeersCallback: (peers) => { setKnownPeers(peers) },
-            })
+            const redwoodClient = fetchRedwoodClient()
             if (!!identity) {
                 await redwoodClient.authorize()
             }
 
             await fetchIdentities(redwoodClient)
-
-            setRedwoodClient(redwoodClient)
-            
         })()
     }, [identity, httpHost, rpcEndpoint, webrtc])
 
@@ -91,6 +99,7 @@ function Provider(props: {
           updateStateTree,
           knownPeers,
           fetchIdentities,
+          fetchRedwoodClient,
       }}>
           {children}
       </Context.Provider>

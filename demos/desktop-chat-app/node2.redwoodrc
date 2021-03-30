@@ -6,10 +6,12 @@ Node:
       - null/registry
       - test/registry
       - test/working
-      - www/registry
       - www/kk
+      - working/registry
+      - working/kk
+      - www/registry
     MaxPeersPerSubscription: 4
-    DataRoot: ./node2_data/e129e
+    DataRoot: ./node2_data/timmmy
     DevMode: true
 P2PTransport:
     Enabled: true

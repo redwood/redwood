@@ -44,7 +44,8 @@ export default function(redwood, history) {
         return
       }
   
-      await redwood.fetchIdentities(redwood.redwoodClient)
+      let redwoodClient = redwood.fetchRedwoodClient()
+      await redwood.fetchIdentities(redwoodClient)
       setLoadingText('')
       history.push('/')
     } catch (err) {
@@ -113,7 +114,9 @@ export default function(redwood, history) {
         return
       }
 
-      await redwood.fetchIdentities(redwood.redwoodClient)
+
+      let redwoodClient = redwood.fetchRedwoodClient()
+      await redwood.fetchIdentities(redwoodClient)
       setLoadingText('')
       history.push('/')
     } catch (err) {
@@ -158,7 +161,8 @@ export default function(redwood, history) {
         return
       }
       
-      await redwood.fetchIdentities(redwood.redwoodClient)
+      let redwoodClient = redwood.fetchRedwoodClient()
+      await redwood.fetchIdentities(redwoodClient)
       history.push('/')
     } catch (err) {
       setErrorMessage('')
