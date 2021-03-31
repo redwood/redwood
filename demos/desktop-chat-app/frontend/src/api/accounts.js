@@ -130,7 +130,7 @@ export default function(redwood, history) {
     try {
       let resp = await (await fetch('http://localhost:54231/api/profile-names', { method: 'GET' })).json()
 
-      return resp.profileNames
+      return resp.profileNames || []
     } catch (err) {
       return err
     }

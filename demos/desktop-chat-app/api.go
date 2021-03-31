@@ -63,7 +63,7 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		files, err := ioutil.ReadDir("./node2_data")
+		files, err := ioutil.ReadDir(app.mainDataRoot)
 		// if err != nil {
 		// 	panic(err)
 		// }
@@ -85,7 +85,7 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
 	app.password = loginRequest.Password
 	app.mnemonic = loginRequest.Mnemonic
 	app.profileName = loginRequest.ProfileName
-	app.configPath = "./node2.redwoodrc"
+	// app.configPath = "./node2.redwoodrc"
 	app.devMode = true
 
 	err = app.Start()
@@ -103,8 +103,9 @@ func getProfileNames(w http.ResponseWriter, r *http.Request) {
 		ProfileNames []string `json:"profileNames"`
 	}
 
-	files, err := ioutil.ReadDir("./node2_data")
+	files, err := ioutil.ReadDir(app.mainDataRoot)
 	if err != nil {
+		fmt.Println(err)
 		panic(err)
 	}
 
@@ -132,7 +133,7 @@ func confirmProfile(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	files, err := ioutil.ReadDir("./node2_data")
+	files, err := ioutil.ReadDir(app.mainDataRoot)
 	// if err != nil {
 	// 	panic(err)
 	// }

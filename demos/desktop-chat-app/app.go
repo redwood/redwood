@@ -38,10 +38,11 @@ type appType struct {
 	httpRPCServer *http.Server
 	chLoggedOut   chan struct{}
 
-	keyStore    identity.KeyStore
-	password    string
-	profileName string
-	mnemonic    string
+	keyStore     identity.KeyStore
+	mainDataRoot string
+	password     string
+	profileName  string
+	mnemonic     string
 
 	// These are set once on startup and never change
 	ctx.Logger

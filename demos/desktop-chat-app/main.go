@@ -9,6 +9,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/brynbellomy/klog"
@@ -76,6 +77,22 @@ func main() {
 
 		<-utils.AwaitInterrupt()
 		return nil
+	}
+
+	// Get .redwoodrc config
+	config, err := redwood.ReadConfigAtPath("redwood-webview", app.configPath)
+	if err != nil {
+		panic(err)
+	}
+
+	// Create DataRoot if it doesn't exist
+	splitDataRoot := strings.Split(config.Node.DataRoot, "/")
+	app.mainDataRoot = "./" + splitDataRoot[1]
+	if _, err := os.Stat(app.mainDataRoot); os.IsNotExist(err) {
+		err := os.MkdirAll(app.mainDataRoot, 0777|os.ModeDir)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	err = cliApp.Run(os.Args)

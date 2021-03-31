@@ -76,6 +76,13 @@ const SProfileWrapper = styled.div`
   flex-wrap: wrap;
 `
 
+const SSelectProfile = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+`
+
 const SProfile = styled.div`
   display: flex;
   align-items: center;
@@ -200,17 +207,21 @@ function SignIn(props) {
 
 function SelectProfile(props) {
   return (
-    <SProfileWrapper>
-      { props.profileNames.map((profileName, key) => {
-        return (
-          <Profile
-            key={key}
-            onClick={() => props.setSelectedProfile(profileName)}
-            profileName={profileName}
-          />
-        )
-      })}
-    </SProfileWrapper>
+    <SSelectProfile>
+      <SProfileWrapper>
+        {props.profileNames.length > 0 ? props.profileNames.map((profileName, key) => {
+          return (
+            <Profile
+              key={key}
+              onClick={() => props.setSelectedProfile(profileName)}
+              profileName={profileName}
+            />
+          )
+        }) : <SAccountCardDesc>No profiles to display.</SAccountCardDesc>}
+      </SProfileWrapper>
+      <SLink to={'/signin'}>Sign into account.</SLink>
+      <SLink to={'/signup'}>Create an account.</SLink>
+    </SSelectProfile>
   )
 }
 
