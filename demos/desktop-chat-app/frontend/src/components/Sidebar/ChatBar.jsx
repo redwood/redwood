@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react'
+import { useHistory } from 'react-router-dom'
 import styled, { useTheme } from 'styled-components'
 import { Avatar } from '@material-ui/core'
-import { AddCircleOutline as AddIcon } from '@material-ui/icons'
+import { AddCircleOutline as AddIcon, ExitToApp } from '@material-ui/icons'
 import moment from 'moment'
 import Redwood from 'redwood'
 
@@ -17,6 +18,7 @@ import useNavigation from '../../hooks/useNavigation'
 import usePeers from '../../hooks/usePeers'
 import useServerAndRoomInfo from '../../hooks/useServerAndRoomInfo'
 import useRoomName from '../../hooks/useRoomName'
+import useLoginStatus from '../../hooks/useLoginStatus'
 
 import addChat from './assets/add_chat.svg'
 import avatarPlaceholder from './assets/speech-bubble.svg'
@@ -64,10 +66,14 @@ const SAddIcon = styled(AddIcon)`
     margin-right: 10px;
 `
 
+const SExitToApp = styled(ExitToApp)`
+    margin-right: 10px;
+`
+
 function ChatBar({ className }) {
     const { selectedServer, selectedRoomName, selectedStateURI, registryStateURI, isDirectMessage, navigate } = useNavigation()
-    const { stateTrees } = useRedwood()
     const { servers, rooms } = useServerAndRoomInfo()
+    const { isLoggedIn, logout } = useLoginStatus()
 
     const { onPresent: onPresentNewChatModal, onDismiss: onDismissNewChatModal } = useModal('new chat')
     const { onPresent: onPresentNewDMModal, onDismiss: onDismissNewDMModal } = useModal('new dm')
@@ -80,6 +86,11 @@ function ChatBar({ className }) {
             onPresentNewChatModal()
         }
     }, [isDirectMessage, onPresentNewChatModal, onPresentNewDMModal])
+
+    const onClickLogout = useCallback(async () => {
+        if (!isLoggedIn) { return }
+        await logout()
+    }, [isLoggedIn, logout])
 
     const registryState = useStateTree(registryStateURI)
     const serverRooms = Object.keys((!!registryState ? registryState.rooms : {}) || {}).filter(room => !!room).map(room => `${selectedServer}/${room}`)
@@ -104,6 +115,9 @@ function ChatBar({ className }) {
                     <SAddIcon style={{ color: theme.color.indigo[500] }} /> {isDirectMessage ? 'New message' : 'New chat'}
                 </SControlWrapper>
             }
+            <SControlWrapper onClick={onClickLogout}>
+                <SExitToApp style={{ color: theme.color.indigo[500] }} /> Logout
+            </SControlWrapper>
             <NewChatModal selectedServer={selectedServer} serverRooms={serverRooms} onDismiss={onDismissNewChatModal} navigate={navigate} />
             <NewDMModal serverRooms={serverRooms} onDismiss={onDismissNewDMModal} navigate={navigate} />
         </ChatBarWrapper>
@@ -231,14 +245,6 @@ function NewDMModal({ serverRooms, onDismiss, navigate }) {
         }
     }, [api, serverRooms, navigate])
 
-    function onChangeRecipient(e) {
-        setRecipient(e.target.value)
-    }
-
-    function onChangeSender(e) {
-        setSender(e.target.value)
-    }
-
     function onKeyDown(e) {
         if (e.code === 'Enter') {
             e.stopPropagation()
@@ -247,14 +253,9 @@ function NewDMModal({ serverRooms, onDismiss, navigate }) {
         }
     }
 
-    function closeModal() {
-        setRecipient()
-        onDismiss()
-    }
-
     return (
         <Modal modalKey="new dm">
-            <ModalTitle closeModal={closeModal}>Start a DM</ModalTitle>
+            <ModalTitle>Start a DM</ModalTitle>
             <ModalContent>
                 {peers.map(peer => (
                     <PeerRow address={peer.address} onClick={() => onClickCreate(peer.address)} key={peer.address} />

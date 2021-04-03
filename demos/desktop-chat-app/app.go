@@ -23,9 +23,8 @@ import (
 )
 
 var app = &appType{
-	Logger:     ctx.NewLogger("app"),
-	configPath: "./node2.redwoodrc",
-	devMode:    true,
+	Logger:  ctx.NewLogger("app"),
+	devMode: true,
 }
 
 type appType struct {
@@ -38,8 +37,11 @@ type appType struct {
 	httpRPCServer *http.Server
 	chLoggedOut   chan struct{}
 
-	keyStore identity.KeyStore
-	password string
+	keyStore    identity.KeyStore
+	password    string
+	profileRoot string
+	profileName string
+	mnemonic    string
 
 	// These are set once on startup and never change
 	ctx.Logger
@@ -54,7 +56,8 @@ func (app *appType) Start() (err error) {
 		return errors.New("already started")
 	}
 	defer func() {
-		if err == nil {
+		perr := recover()
+		if err == nil && perr == nil {
 			app.started = true
 		}
 	}()
@@ -74,6 +77,9 @@ func (app *appType) Start() (err error) {
 	} else if err != nil {
 		return err
 	}
+
+	// Ignore the config file's data root and use our profileRoot + profileName
+	config.Node.DataRoot = filepath.Join(app.profileRoot, app.profileName)
 
 	if app.devMode {
 		config.Node.DevMode = true
@@ -164,8 +170,16 @@ func (app *appType) Start() (err error) {
 		transports = append(transports, httpTransport)
 	}
 
-	err = app.keyStore.Unlock(app.password)
+	err = app.keyStore.Unlock(app.password, app.mnemonic)
 	if err != nil {
+		app.refStore.Close()
+		app.refStore = nil
+
+		app.txStore.Close()
+		app.txStore = nil
+
+		app.db.Close()
+		app.db = nil
 		return err
 	}
 
@@ -204,21 +218,25 @@ func (app *appType) Start() (err error) {
 		}()
 	}
 
-	go func() {
-		time.Sleep(5 * time.Second)
-		for stateURI := range config.Node.SubscribedStateURIs {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
+	// go func() {
+	// time.Sleep(5 * time.Second)
+	for stateURI := range config.Node.SubscribedStateURIs {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-			sub, err := app.host.Subscribe(ctx, stateURI, 0, nil, nil)
-			if err != nil {
-				app.Errorf("error subscribing to %v: %v", stateURI, err)
-				continue
-			}
-			sub.Close()
-			app.Successf("subscribed to %v", stateURI)
+		if app == nil || app.host == nil {
+			return
 		}
-	}()
+
+		sub, err := app.host.Subscribe(ctx, stateURI, 0, nil, nil)
+		if err != nil {
+			app.Errorf("error subscribing to %v: %v", stateURI, err)
+			continue
+		}
+		sub.Close()
+		app.Successf("subscribed to %v", stateURI)
+	}
+	// }()
 
 	klog.Info(redwood.PrettyJSON(config))
 	klog.Flush()
@@ -231,7 +249,7 @@ func (app *appType) Start() (err error) {
 }
 
 func (app *appType) monitorForDMs() {
-	time.Sleep(5 * time.Second)
+	// time.Sleep(5 * time.Second)
 
 	sub := app.host.SubscribeStateURIs()
 	defer sub.Close()

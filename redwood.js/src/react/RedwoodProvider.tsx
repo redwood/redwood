@@ -16,6 +16,8 @@ export interface IContext {
     privateTreeMembers: {[stateURI: string]: string[]}
     browserPeers: PeersMap
     nodePeers: RPCPeer[]
+    fetchIdentities: () => void
+    fetchRedwoodClient: () => void
 }
 
 export const Context = createContext<IContext>({
@@ -33,6 +35,8 @@ export const Context = createContext<IContext>({
     privateTreeMembers: {},
     browserPeers: {},
     nodePeers: [],
+    fetchIdentities: () => {},
+    fetchRedwoodClient: () => {},
 })
 
 function Provider(props: {
@@ -58,12 +62,20 @@ function Provider(props: {
     useEffect(() => {
         ;(async function() {
             subscribedStateURIs.current = {}
+            setRedwoodClient(null)
+            setNodeIdentities(null)
+            setNodePeers([])
             setStateTrees({})
             setLeaves({})
             setBrowserPeers({})
             setPrivateTreeMembers({})
             setError(null)
-            let redwoodClient = Redwood.createPeer({
+
+            if (!httpHost) {
+                return
+            }
+
+            let client = Redwood.createPeer({
                 identity,
                 httpHost,
                 rpcEndpoint,
@@ -71,16 +83,22 @@ function Provider(props: {
                 onFoundPeersCallback: (peers) => { setBrowserPeers(peers) },
             })
             if (!!identity) {
-                await redwoodClient.authorize()
+                await client.authorize()
             }
-            if (!!redwoodClient.rpc) {
-                let nodeIdentities = await redwoodClient.rpc.identities()
-                let nodePeers = await redwoodClient.rpc.peers()
+            if (!!client.rpc) {
+                let nodeIdentities = await client.rpc.identities()
+                let nodePeers = await client.rpc.peers()
                 setNodeIdentities(nodeIdentities)
                 setNodePeers(nodePeers)
             }
-            setRedwoodClient(redwoodClient)
+            setRedwoodClient(client)
         })()
+
+        return () => {
+            if (redwoodClient) {
+                redwoodClient.close()
+            }
+        }
     }, [identity, httpHost, rpcEndpoint, webrtc])
 
     let updatePrivateTreeMembers = useCallback((stateURI: string, members: string[]) => {
@@ -140,6 +158,8 @@ function Provider(props: {
           privateTreeMembers,
           browserPeers,
           nodePeers,
+          fetchIdentities: () => {},
+          fetchRedwoodClient: () => {},
       }}>
           {children}
       </Context.Provider>

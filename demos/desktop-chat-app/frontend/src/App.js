@@ -1,154 +1,75 @@
-import React, { useState, useRef } from 'react'
-import styled from 'styled-components'
+import React, { useState, useCallback, useEffect } from 'react'
+import {
+    BrowserRouter as Router,
+    Switch,
+    Route,
+} from 'react-router-dom'
+import { ThemeProvider } from 'styled-components'
+import { RedwoodProvider } from 'redwood/dist/main/react'
 
-import { useStateTree } from 'redwood/dist/main/react'
-import ServerBar from './components/Sidebar/ServerBar'
-import Sidebar from './components/Sidebar'
-import Chat from './components/Chat'
-import StateTreeDebugView from './components/StateTreeDebugView'
-import ContactsModal from './components/ContactsModal'
-import useNavigation from './hooks/useNavigation'
-import useCurrentServerAndRoom from './hooks/useCurrentServerAndRoom'
-import useModal from './hooks/useModal'
-import useRoomName from './hooks/useRoomName'
+import ModalsProvider from './contexts/Modals'
+import APIProvider from './contexts/API'
+import NavigationProvider from './contexts/Navigation'
+import PeersProvider from './contexts/Peers'
+import ServerAndRoomInfoProvider from './contexts/ServerAndRoomInfo'
+import useLoginStatus from './hooks/useLoginStatus'
+import theme from './theme'
 
-const serverBarVerticalPadding = '12px'
-
-const Layout = styled.div`
-    display: flex;
-    height: 100vh;
-`
-
-const HeaderAndContent = styled.div`
-    display: flex;
-    flex-direction: column;
-    flex-grow: 1;
-`
-
-const Content = styled.div`
-    height: calc(100vh - 50px);
-    max-height: calc(100vh - 50px);
-    display: flex;
-    flex-grow: 1;
-    font-family: 'Noto Sans KR';
-    font-weight: 300;
-    color: ${props => props.theme.color.white};
-`
-
-const SSidebar = styled(Sidebar)`
-    height: 100%;
-`
-
-const SServerBar = styled(ServerBar)`
-    width: 72px;
-    height: calc(100% - 2 * ${props => serverBarVerticalPadding});
-    background: ${props => props.theme.color.grey[600]};
-`
-
-const SChat = styled(Chat)`
-    flex-grow: 1;
-    padding-left: 16px;
-`
-
-const SStateTreeDebugView = styled(StateTreeDebugView)`
-    width: 600px;
-`
-
-const MainContentArea = styled.div`
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-`
-
-const SHeaderBar = styled(HeaderBar)`
-    background-color: ${props => props.theme.color.grey[200]};
-    border-bottom: 2px solid ${props => props.theme.color.grey[300]};
-    height: 48px;
-    width: 100%;
-`
-
-function Login(props) {
-  const mnemonicInput = useRef(null)
-
-  const login = async (event) => {
-    event.preventDefault()
-    let resp = await (await fetch('http://localhost:54231/api/login', {
-      method: 'POST',
-      headers: {
-          'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        mnemonic: mnemonicInput.current.value,
-      }),
-    })).json()
-
-
-    props.setIsLoggedIn(true)
-
-    console.log(resp)
-  }
-
-  return (
-    <form onSubmit={login}>
-      <label>Mnemonic <input ref={mnemonicInput} placeholder="Mnemonic..." /></label>
-      <button type="submit">Login</button>
-    </form>
-  )
-}
+import Main from './Main'
+import SignIn from './components/Account/SignIn'
+import SignUp from './components/Account/SignUp'
+import Profiles from './components/Account/Profiles'
 
 function App() {
-    const { onDismiss: onDismissContactsModal } = useModal('contacts')
+    let [httpHost, setHttpHost] = useState()
+    let [rpcEndpoint, setRpcEndpoint] = useState()
+    let { isLoggedIn } = useLoginStatus()
+
+    useEffect(() => {
+        if (isLoggedIn) {
+            setHttpHost('http://localhost:8080')
+            setRpcEndpoint('http://localhost:8081')
+        } else {
+            setHttpHost()
+            setRpcEndpoint()
+        }
+    }, [isLoggedIn, setHttpHost, setRpcEndpoint])
+
     return (
-        <Layout>
-            <SServerBar verticalPadding={serverBarVerticalPadding} />
-            <HeaderAndContent>
-                <SHeaderBar />
-                <Content>
-                    <Sidebar />
-                    <SChat />
-                    <SStateTreeDebugView />
-                </Content>
-            </HeaderAndContent>
-
-            <ContactsModal onDismiss={onDismissContactsModal} />
-        </Layout>
-    )
-}
-
-const HeaderBarContainer = styled.div`
-    display: flex;
-`
-
-const ServerTitle = styled.div`
-    font-size: 1.1rem;
-    font-weight: 500;
-    padding-top: 12px;
-    padding-left: 18px;
-    color: ${props => props.theme.color.white};
-    background-color: ${props => props.theme.color.grey[400]};
-    width: calc(${props => props.theme.chatSidebarWidth} - 18px);
-    height: calc(100% - 12px);
-`
-
-const ChatTitle = styled.div`
-    font-size: 1.1rem;
-    font-weight: 500;
-    padding-top: 12px;
-    padding-left: 18px;
-    color: ${props => props.theme.color.white};
-    width: calc(${props => props.theme.chatSidebarWidth} - 18px);
-    height: calc(100% - 12px);
-`
-
-function HeaderBar({ className }) {
-    const { selectedServer, selectedRoom } = useNavigation()
-    const { currentRoom, currentServer } = useCurrentServerAndRoom()
-    const roomName = useRoomName(selectedServer, selectedRoom)
-    return (
-        <HeaderBarContainer className={className}>
-            <ServerTitle>{currentServer && currentServer.name} /</ServerTitle>
-            <ChatTitle>{currentRoom && roomName}</ChatTitle>
-        </HeaderBarContainer>
+        <ThemeProvider theme={theme}>
+            <RedwoodProvider
+                httpHost={httpHost}
+                rpcEndpoint={rpcEndpoint}
+                useWebsocket={true}
+            >
+                <APIProvider>
+                    <NavigationProvider>
+                        <ServerAndRoomInfoProvider>
+                            <PeersProvider>
+                                <ModalsProvider>
+                                    <Router>
+                                        <Switch>
+                                            <Route exact path="/">
+                                                <Main />
+                                            </Route>
+                                            <Route path="/signin">
+                                                <SignIn />
+                                            </Route>
+                                            <Route path="/signup">
+                                                <SignUp />
+                                            </Route>
+                                            <Route path="/profiles">
+                                                <Profiles />
+                                            </Route>
+                                        </Switch>
+                                    </Router>
+                                </ModalsProvider>
+                            </PeersProvider>
+                        </ServerAndRoomInfoProvider>
+                    </NavigationProvider>
+                </APIProvider>
+            </RedwoodProvider>
+        </ThemeProvider>
     )
 }
 

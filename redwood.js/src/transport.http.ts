@@ -37,6 +37,14 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
     let websocketConnected = false
     let websocketPendingSubscribeOpts: any = []
 
+    let unsubscribes: UnsubscribeFunc[] = []
+
+    async function close() {
+        for (let unsubscribe of unsubscribes) {
+            unsubscribe()
+        }
+    }
+
     async function subscribe(opts: SubscribeParams) {
         let { stateURI, keypath, fromTxID, states, txs, callback } = opts
         try {
@@ -92,6 +100,12 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
                             }
                         }
                     }
+
+                    unsubscribes.push(() => {
+                        websocketConn?.close(3333, 'client closing')
+                        websocketConn = undefined
+                    })
+
                 } else {
                     let subscribeOpts = { stateURI, keypath, subscriptionType, fromTxID }
                     if (websocketConnected) {
@@ -145,6 +159,7 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
                     }
                 })
             }
+            unsubscribes.push(unsubscribe)
             return unsubscribe
 
         } catch (err) {
@@ -404,5 +419,6 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
         storeRef,
         authorize,
         foundPeers,
+        close,
     } as Transport
 }

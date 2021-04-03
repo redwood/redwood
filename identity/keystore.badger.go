@@ -48,7 +48,7 @@ func NewBadgerKeyStore(db *tree.DBTree, scryptParams ScryptParams) *BadgerKeySto
 }
 
 // Loads the user's keys from the DB and decrypts them.
-func (ks *BadgerKeyStore) Unlock(password string) (err error) {
+func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err error) {
 	defer utils.WithStack(&err)
 
 	ks.mu.Lock()
@@ -59,9 +59,17 @@ func (ks *BadgerKeyStore) Unlock(password string) (err error) {
 
 	user, err := ks.loadUser(password)
 	if errors.Cause(err) == ErrNoUser {
-		mnemonic, err := crypto.GenerateMnemonic()
-		if err != nil {
-			return err
+		var mnemonic string
+		var err error
+
+		// Add user mnemonic or create if it doesn't exist
+		if len(userMnemonic) > 0 {
+			mnemonic = userMnemonic
+		} else {
+			mnemonic, err = crypto.GenerateMnemonic()
+			if err != nil {
+				return err
+			}
 		}
 
 		sigkeys, err := crypto.SigningKeypairFromHDMnemonic(mnemonic, 0)

@@ -9,6 +9,7 @@ export interface RedwoodClient {
     authorize: () => Promise<void>
     peers: () => Promise<PeersMap>
     rpc?: RPCClient
+    close: () => Promise<void>
 }
 
 export interface RPCClient {
@@ -33,6 +34,7 @@ export interface Transport {
     foundPeers: (peers: PeersMap) => void
     transportName: () => string
     altSvcAddresses: () => string[]
+    close: () => Promise<void>
 }
 
 export type UnsubscribeFunc = () => void

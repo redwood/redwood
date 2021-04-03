@@ -119,6 +119,12 @@ function createPeer(opts: CreatePeerOptions) {
         throw new Error('no transports support storeRef')
     }
 
+    async function close() {
+        for (let tpt of transports) {
+            await tpt.close()
+        }
+    }
+
     return {
         identity,
         get,
@@ -128,6 +134,7 @@ function createPeer(opts: CreatePeerOptions) {
         authorize,
         peers,
         rpc: rpcEndpoint ? rpcTransport({ endpoint: rpcEndpoint }) : undefined,
+        close,
     }
 }
 

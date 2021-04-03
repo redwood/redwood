@@ -152,7 +152,21 @@ function Chat({ className }) {
         onPresentPreviewModal()
     }, [setPreviewedAttachment, onPresentPreviewModal])
 
-    let messages = (roomState || {}).messages || []
+    const numMessages = ((roomState || {}).messages || []).length
+    const [messages, setMessages] = useState([])
+    useEffect(() => {
+        let previousSender
+        let messages = ((roomState || {}).messages || []).map(msg => {
+            msg = {
+                ...msg,
+                firstByUser: previousSender !== msg.sender,
+                attachment: ((msg.attachment || {}).value || {}).value
+            }
+            previousSender = msg.sender
+            return msg
+        })
+        setMessages(messages)
+    }, [numMessages])
 
     const onClickSend = useCallback(async () => {
         if (!api) { return }
@@ -162,11 +176,13 @@ function Chat({ className }) {
     }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api])
 
     useEffect(() => {
-      // Scrolls on new messages
-      if (messageTextContainer.current) {
-        messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
-      }
-    }, [roomState])
+        // Scrolls on new messages
+        if (messageTextContainer.current) {
+            messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
+        }
+    }, [numMessages])
+
+    console.log('Chat rerender')
 
     function onChangeMessageText(e) {
         setMessageText(e.target.value)
@@ -214,17 +230,6 @@ function Chat({ className }) {
             })(i)
         }
     }
-
-    let previousSender
-    messages = messages.map(msg => {
-        msg = {
-            ...msg,
-            firstByUser: previousSender !== msg.sender,
-            attachment: ((msg.attachment || {}).value || {}).value
-        }
-        previousSender = msg.sender
-        return msg
-    })
 
     if (!selectedStateURI) {
         return <Container className={className}></Container>
