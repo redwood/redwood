@@ -31,11 +31,18 @@ function Provider({ children }) {
         let newRooms = {}
 
         for (let stateURI of Object.keys(stateTrees)) {
-            let [ server, room ] = stateURI.split('/')
+            if (stateURI === 'chat.local/servers') {
+                for (let server of Object.keys(stateTrees['chat.local/servers'].value || {})) {
+                    let registry = `${server}/registry`
+                    if (subscribedStateURIs[registry]) {
+                        continue
+                    }
+                    subscribe(registry)
+                }
+                continue
+            }
 
-            // if (server === 'chat.local') {
-            //     continue
-            // }
+            let [ server, room ] = stateURI.split('/')
 
             let isDirectMessage = server === 'chat.p2p'
             let registryStateURI

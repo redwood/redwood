@@ -124,8 +124,6 @@ function SignIn({ password, setPassword, profileNames, selectedProfile, setSelec
             setErrorMessage('')
             setLoadingText('Signing into profile...')
             await login({ profileName: selectedProfile, password })
-
-            setLoadingText('')
         } catch (err) {
             setLoadingText('')
             setErrorMessage(err.toString())

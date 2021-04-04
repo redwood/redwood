@@ -218,25 +218,25 @@ func (app *appType) Start() (err error) {
 		}()
 	}
 
-	// go func() {
-	// time.Sleep(5 * time.Second)
-	for stateURI := range config.Node.SubscribedStateURIs {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+	go func() {
+		time.Sleep(5 * time.Second)
+		for stateURI := range config.Node.SubscribedStateURIs {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
 
-		if app == nil || app.host == nil {
-			return
-		}
+			if app == nil || app.host == nil {
+				return
+			}
 
-		sub, err := app.host.Subscribe(ctx, stateURI, 0, nil, nil)
-		if err != nil {
-			app.Errorf("error subscribing to %v: %v", stateURI, err)
-			continue
+			sub, err := app.host.Subscribe(ctx, stateURI, 0, nil, nil)
+			if err != nil {
+				app.Errorf("error subscribing to %v: %v", stateURI, err)
+				continue
+			}
+			sub.Close()
+			app.Successf("subscribed to %v", stateURI)
 		}
-		sub.Close()
-		app.Successf("subscribed to %v", stateURI)
-	}
-	// }()
+	}()
 
 	klog.Info(redwood.PrettyJSON(config))
 	klog.Flush()
@@ -249,7 +249,7 @@ func (app *appType) Start() (err error) {
 }
 
 func (app *appType) monitorForDMs() {
-	// time.Sleep(5 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	sub := app.host.SubscribeStateURIs()
 	defer sub.Close()

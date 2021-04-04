@@ -14,6 +14,7 @@ import Embed from './Embed'
 import Modal, { ModalTitle, ModalContent, ModalActions } from './Modal'
 import UserAvatar from './UserAvatar'
 import useModal from '../hooks/useModal'
+import useServerRegistry from '../hooks/useServerRegistry'
 import useAPI from '../hooks/useAPI'
 import { useRedwood, useStateTree } from 'redwood/dist/main/react'
 import useNavigation from '../hooks/useNavigation'
@@ -136,7 +137,7 @@ function Chat({ className }) {
     const api = useAPI()
     const { selectedStateURI, selectedServer, selectedRoom } = useNavigation()
     const { users } = useUsers(selectedStateURI)
-    const registry = useStateTree(!!selectedServer ? `${selectedServer}/registry` : null)
+    const registry = useServerRegistry(selectedServer)
     const roomState = useStateTree(selectedStateURI)
     const [messageText, setMessageText] = useState('')
     const theme = useTheme()
@@ -180,9 +181,7 @@ function Chat({ className }) {
         if (messageTextContainer.current) {
             messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
         }
-    }, [numMessages])
-
-    console.log('Chat rerender')
+    })
 
     function onChangeMessageText(e) {
         setMessageText(e.target.value)

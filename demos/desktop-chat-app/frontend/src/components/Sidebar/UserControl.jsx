@@ -88,7 +88,7 @@ function UserControl() {
 
     return (
         <SUserControlContainer>
-            <SUserLeft disabled={!selectedStateURI} onClick={!!selectedStateURI && onPresent}>
+            <SUserLeft disabled={!selectedStateURI} onClick={!!selectedStateURI ? onPresent : null}>
             <SUserAvatar address={nodeAddress} />
                 <UsernameWrapper>
                     <Username>{!!username ? username : nodeAddress}</Username>

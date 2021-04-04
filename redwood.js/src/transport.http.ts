@@ -102,7 +102,7 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
                     }
 
                     unsubscribes.push(() => {
-                        websocketConn?.close(3333, 'client closing')
+                        websocketConn?.close()
                         websocketConn = undefined
                     })
 
