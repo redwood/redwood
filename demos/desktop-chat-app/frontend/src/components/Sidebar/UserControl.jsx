@@ -27,7 +27,7 @@ const SUserLeft = styled.div`
     padding-left: 12px;
     transition: .15s ease-in-out all;
     height: 100%;
-    cursor: pointer;
+    ${props => !props.disabled && 'cursor: pointer;'}
 
     &:hover {
         background: ${props => props.theme.color.grey[300]};
@@ -88,7 +88,7 @@ function UserControl() {
 
     return (
         <SUserControlContainer>
-            <SUserLeft onClick={onPresent}>
+            <SUserLeft disabled={!selectedStateURI} onClick={!!selectedStateURI ? onPresent : null}>
             <SUserAvatar address={nodeAddress} />
                 <UsernameWrapper>
                     <Username>{!!username ? username : nodeAddress}</Username>

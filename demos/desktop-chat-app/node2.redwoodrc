@@ -1,23 +1,22 @@
 Node:
     BootstrapPeers: []
-    SubscribedStateURIs: []
+    SubscribedStateURIs:
     MaxPeersPerSubscription: 4
-    DataRoot: ./node2_data
+    DataRoot: 
     DevMode: true
 P2PTransport:
     Enabled: true
-    KeyFile: ./node2_data/p2pkey
     ListenAddr: 0.0.0.0
-    ListenPort: 21231
+    ListenPort: 21232
     ReachableAt: ""
 HTTPTransport:
     Enabled: true
-    ListenHost: :8080
+    ListenHost: :8090
     DefaultStateURI: ""
     ReachableAt: ""
 HTTPRPC:
     Enabled: true
-    ListenHost: :8081
+    ListenHost: :8091
     Whitelist:
         Enabled: false
         PermittedAddrs: []

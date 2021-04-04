@@ -29,11 +29,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	profileRoot, err := redwood.DefaultDataRoot("redwood-webview")
+	if err != nil {
+		app.Error(err)
+		os.Exit(1)
+	}
+
 	cliApp.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:  "config",
 			Value: configPath,
 			Usage: "location of config file",
+		},
+		cli.StringFlag{
+			Name:  "root",
+			Value: profileRoot,
+			Usage: "location of the data root containing all profiles",
 		},
 		cli.UintFlag{
 			Name:  "port",
@@ -69,6 +80,15 @@ func main() {
 		// }
 
 		app.configPath = c.String("config")
+		app.profileRoot = c.String("root")
+
+		// Create the profileRoot if it doesn't exist
+		if _, err := os.Stat(app.profileRoot); os.IsNotExist(err) {
+			err := os.MkdirAll(app.profileRoot, 0777|os.ModeDir)
+			if err != nil {
+				panic(err)
+			}
+		}
 
 		port := c.Uint("port")
 		// go startGUI(port)

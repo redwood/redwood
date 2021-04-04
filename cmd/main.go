@@ -201,7 +201,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		return err
 	}
 
-	err = keyStore.Unlock(string(passwordBytes))
+	err = keyStore.Unlock(string(passwordBytes), "")
 	if err != nil {
 		return err
 	}

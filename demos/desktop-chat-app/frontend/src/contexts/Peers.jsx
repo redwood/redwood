@@ -27,7 +27,7 @@ function Provider({ children }) {
                                                            .reduce((total, each) => ({ ...total, [ each.split('/')[0] ]: true }), {})
                 )
 
-                if (peersByAddr[identity.address].lastContact) {
+                if (peersByAddr[identity.address].lastContact && peer.lastContact) {
                     peersByAddr[identity.address].lastContact = new Date(max(peersByAddr[identity.address].lastContact || 0, peer.lastContact.getTime()))
                 } else {
                     peersByAddr[identity.address].lastContact = peer.lastContact

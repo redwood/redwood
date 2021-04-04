@@ -1,22 +1,22 @@
 Node:
-    HDMnemonicPhrase: device neutral review street clean mechanic stomach curious
-        rude betray lamp tongue two curious noise fury stomach general ranch angle
-        indoor bicycle brick diary
     BootstrapPeers: []
-    SubscribedStateURIs: []
+    SubscribedStateURIs:
     MaxPeersPerSubscription: 4
-    DataRoot: ./node1_data
+    DataRoot: 
     DevMode: true
 P2PTransport:
     Enabled: true
-    KeyFile: ./node1_data/p2pkey
     ListenAddr: 0.0.0.0
     ListenPort: 21231
+    ReachableAt: ""
 HTTPTransport:
     Enabled: true
     ListenHost: :8080
-    CookieSecret: !!binary DE1R42irslrK+oKH+gicyIZDLqKUW93uMTBx1sWZLNY=
     DefaultStateURI: ""
+    ReachableAt: ""
 HTTPRPC:
     Enabled: true
     ListenHost: :8081
+    Whitelist:
+        Enabled: false
+        PermittedAddrs: []

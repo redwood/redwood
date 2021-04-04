@@ -58,7 +58,7 @@ func TestBadgerKeyStore_Unlock(t *testing.T) {
 	ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
 
 	t.Run("empty keystore unlocks successfully", func(t *testing.T) {
-		err := ks.Unlock("password")
+		err := ks.Unlock("password", "")
 		require.NoError(t, err)
 	})
 
@@ -94,7 +94,7 @@ func TestBadgerKeyStore_Unlock(t *testing.T) {
 
 	t.Run("will not unlock with an incorrect password", func(t *testing.T) {
 		ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
-		err := ks.Unlock("alsdkjflsdkjf")
+		err := ks.Unlock("alsdkjflsdkjf", "")
 		require.Error(t, err)
 	})
 
@@ -111,7 +111,7 @@ func TestBadgerKeyStore_Unlock(t *testing.T) {
 		require.Equal(t, []identity.Identity{id1, id2, id3}, ids)
 
 		ks2 := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
-		err = ks2.Unlock("password")
+		err = ks2.Unlock("password", "")
 		require.NoError(t, err)
 
 		expectedIds := ids
@@ -127,7 +127,7 @@ func TestBadgerKeyStore_NewIdentity(t *testing.T) {
 	defer db.DeleteDB()
 
 	ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
-	err := ks.Unlock("password")
+	err := ks.Unlock("password", "")
 	require.NoError(t, err)
 
 	ids, err := ks.Identities()
@@ -198,7 +198,7 @@ func TestBadgerKeyStore_SignHash(t *testing.T) {
 	defer db.DeleteDB()
 
 	ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
-	err := ks.Unlock("password")
+	err := ks.Unlock("password", "")
 	require.NoError(t, err)
 
 	ids, err := ks.Identities()
