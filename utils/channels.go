@@ -90,7 +90,7 @@ func ContextFromChan(chStop <-chan struct{}) (context.Context, context.CancelFun
 	return ctx, cancel
 }
 
-// WaitGroupChan creates a channel that closes when the provided sync.WaitGroup is done.
+// WaitGroupChan emulates a sync.WaitGroup but exposes a channel-based interface.
 type WaitGroupChan struct {
 	i         int
 	x         int

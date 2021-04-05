@@ -90,6 +90,22 @@ function Provider(props: {
                 let nodePeers = await client.rpc.peers()
                 setNodeIdentities(nodeIdentities)
                 setNodePeers(nodePeers)
+                client.rpc.subscribePeers(function(err, peerDetails) {
+                    if (err) {
+                        console.error('error in PeerStore subscription', err)
+                        return
+                    }
+                    let addrs = nodePeers.reduce((into, peer) => {
+                        for (let ident of peer.identities) {
+                            into[ident.address] = true
+                        }
+                        return into
+                    }, {} as {[addr: string]: boolean})
+                    if (!addrs[peerDetails.])
+                    setNodePeers(peers => {
+                        if
+                    })
+                })
             }
             setRedwoodClient(client)
         })()

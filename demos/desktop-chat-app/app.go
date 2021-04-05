@@ -201,7 +201,7 @@ func (app *appType) Start() (err error) {
 	if config.HTTPRPC.Enabled {
 		rwRPC := redwood.NewHTTPRPCServer(app.host)
 		rpc := &HTTPRPCServer{rwRPC, keyStore}
-		app.httpRPCServer, err = redwood.StartHTTPRPC(rpc, config.HTTPRPC)
+		app.httpRPCServer, err = redwood.StartHTTPRPC(rpc, app.host, config.HTTPRPC)
 		if err != nil {
 			return err
 		}
