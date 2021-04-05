@@ -25,7 +25,7 @@ type PeerStore interface {
 	PeersFromTransportWithAddress(transportName string, address types.Address) []*peerDetails
 	PeersServingStateURI(stateURI string) []*peerDetails
 	IsKnownPeer(dialInfo PeerDialInfo) bool
-	OnNewUnverifiedPeer(fn func(dialInfo PeerDialInfo))
+	Subscribe() *PeerStoreSubscription
 }
 
 type peerStore struct {
@@ -37,7 +37,8 @@ type peerStore struct {
 	peersWithAddress map[types.Address]map[PeerDialInfo]*peerDetails
 	unverifiedPeers  map[PeerDialInfo]struct{}
 
-	onNewUnverifiedPeer func(dialInfo PeerDialInfo)
+	subscriptions   map[*PeerStoreSubscription]struct{}
+	muSubscriptions sync.RWMutex
 }
 
 type PeerDialInfo struct {
@@ -52,6 +53,7 @@ func NewPeerStore(state *tree.DBTree) *peerStore {
 		peers:            make(map[PeerDialInfo]*peerDetails),
 		peersWithAddress: make(map[types.Address]map[PeerDialInfo]*peerDetails),
 		unverifiedPeers:  make(map[PeerDialInfo]struct{}),
+		subscriptions:    make(map[*PeerStoreSubscription]struct{}),
 	}
 
 	pds, err := s.fetchAllPeerDetails()
@@ -79,8 +81,8 @@ func NewPeerStore(state *tree.DBTree) *peerStore {
 }
 
 func (s *peerStore) Peers() []*peerDetails {
-	s.muPeers.Lock()
-	defer s.muPeers.Unlock()
+	s.muPeers.RLock()
+	defer s.muPeers.RUnlock()
 
 	var pds []*peerDetails
 	for _, pd := range s.peers {
@@ -89,8 +91,27 @@ func (s *peerStore) Peers() []*peerDetails {
 	return pds
 }
 
-func (s *peerStore) OnNewUnverifiedPeer(fn func(dialInfo PeerDialInfo)) {
-	s.onNewUnverifiedPeer = fn
+func (s *peerStore) Subscribe() *PeerStoreSubscription {
+	s.muSubscriptions.Lock()
+	defer s.muSubscriptions.Unlock()
+
+	sub := &PeerStoreSubscription{
+		peerStore: s,
+		mailbox:   utils.NewMailbox(1000),
+	}
+	s.subscriptions[sub] = struct{}{}
+
+	// Backfill the existing peer set for the subscriber
+	for _, peerDetails := range s.Peers() {
+		sub.mailbox.Deliver(peerDetails)
+	}
+	return sub
+}
+
+func (s *peerStore) stopSendingToSub(sub *PeerStoreSubscription) {
+	s.muSubscriptions.Lock()
+	defer s.muSubscriptions.Unlock()
+	delete(s.subscriptions, sub)
 }
 
 func (s *peerStore) AddDialInfos(dialInfos []PeerDialInfo) {
@@ -113,7 +134,6 @@ func (s *peerStore) AddDialInfos(dialInfos []PeerDialInfo) {
 
 			s.peers[dialInfo] = peerDetails
 			s.unverifiedPeers[dialInfo] = struct{}{}
-			s.onNewUnverifiedPeer(dialInfo)
 		}
 	}
 }
@@ -384,7 +404,17 @@ func (s *peerStore) savePeerDetails(peerDetails *peerDetails) error {
 	if err != nil {
 		return err
 	}
-	return state.Save()
+	err = state.Save()
+	if err != nil {
+		return err
+	}
+
+	s.muSubscriptions.RLock()
+	defer s.muSubscriptions.RUnlock()
+	for sub := range s.subscriptions {
+		sub.mailbox.Deliver(peerDetails)
+	}
+	return nil
 }
 
 type PeerDetails interface {
@@ -552,4 +582,26 @@ func (p *ephemeralPeerDetails) Failures() uint64 {
 
 func (p *ephemeralPeerDetails) Ready() bool {
 	return uint64(time.Now().Sub(p.lastFailure)/time.Second) >= p.failures
+}
+
+type PeerStoreSubscription struct {
+	peerStore *peerStore
+	mailbox   *utils.Mailbox
+}
+
+func (sub *PeerStoreSubscription) UpdatesAvailable() <-chan struct{} {
+	return sub.mailbox.Notify()
+}
+
+func (sub *PeerStoreSubscription) Updates() []PeerDetails {
+	available := sub.mailbox.RetrieveAll()
+	updates := make([]PeerDetails, len(available))
+	for i, x := range available {
+		updates[i] = x.(PeerDetails)
+	}
+	return updates
+}
+
+func (sub *PeerStoreSubscription) Close() {
+	sub.peerStore.stopSendingToSub(sub)
 }

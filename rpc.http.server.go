@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -21,7 +22,7 @@ import (
 	"redwood.dev/types"
 )
 
-func StartHTTPRPC(svc interface{}, config *HTTPRPCConfig) (*http.Server, error) {
+func StartHTTPRPC(svc interface{}, host Host, config *HTTPRPCConfig) (*http.Server, error) {
 	if config == nil || !config.Enabled {
 		return nil, nil
 	}
@@ -39,6 +40,7 @@ func StartHTTPRPC(svc interface{}, config *HTTPRPCConfig) (*http.Server, error) 
 		if config.Whitelist.Enabled {
 			httpServer.Handler = NewWhitelistMiddleware(config.Whitelist.PermittedAddrs, server)
 		}
+		httpServer.Handler = NewNonJSONRPCRoutes(host, httpServer.Handler)
 		httpServer.Handler = UnrestrictedCors(httpServer.Handler)
 
 		httpServer.ListenAndServe()
@@ -213,28 +215,84 @@ type (
 
 func (s *HTTPRPCServer) Peers(r *http.Request, args *RPCPeersArgs, resp *RPCPeersResponse) error {
 	for _, peer := range s.host.Peers() {
-		var identities []RPCPeerIdentity
-		for _, addr := range peer.Addresses() {
-			sigpubkey, encpubkey := peer.PublicKeys(addr)
-			identities = append(identities, RPCPeerIdentity{
-				Address:             addr,
-				SigningPublicKey:    sigpubkey,
-				EncryptingPublicKey: encpubkey,
-			})
-		}
-		var lastContact uint64
-		if !peer.LastContact().IsZero() {
-			lastContact = uint64(peer.LastContact().UTC().Unix())
-		}
-		resp.Peers = append(resp.Peers, RPCPeer{
-			Identities:  identities,
-			Transport:   peer.DialInfo().TransportName,
-			DialAddr:    peer.DialInfo().DialAddr,
-			StateURIs:   peer.StateURIs().Slice(),
-			LastContact: lastContact,
-		})
+		resp.Peers = append(resp.Peers, peerDetailsToRPCPeer(peer))
 	}
 	return nil
+}
+
+func peerDetailsToRPCPeer(peerDetails PeerDetails) RPCPeer {
+	var identities []RPCPeerIdentity
+	for _, addr := range peer.Addresses() {
+		sigpubkey, encpubkey := peer.PublicKeys(addr)
+		identities = append(identities, RPCPeerIdentity{
+			Address:             addr,
+			SigningPublicKey:    sigpubkey,
+			EncryptingPublicKey: encpubkey,
+		})
+	}
+	var lastContact uint64
+	if !peer.LastContact().IsZero() {
+		lastContact = uint64(peer.LastContact().UTC().Unix())
+	}
+	return RPCPeer{
+		Identities:  identities,
+		Transport:   peer.DialInfo().TransportName,
+		DialAddr:    peer.DialInfo().DialAddr,
+		StateURIs:   peer.StateURIs().Slice(),
+		LastContact: lastContact,
+	}
+}
+
+type nonJSONRPCRoutes struct {
+	innerHandler http.Handler
+	host         Host
+}
+
+func NewNonJSONRPCRoutes(host Host, innerHandler http.Handler) http.Handler {
+	return &nonJSONRPCRoutes{innerHandler, host}
+}
+
+func (h *nonJSONRPCRoutes) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/__peers") {
+		h.handlePeerStoreSubscription(w, r)
+	}
+	h.innerHandler.ServeHTTP(w, r)
+}
+
+func (h *nonJSONRPCRoutes) handlePeerStoreSubscription(w http.ResponseWriter, r *http.Request) {
+	conn, err := wsUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	sub := h.host.SubscribePeerStoreUpdates()
+	defer sub.Close()
+
+	for {
+		select {
+		case <-sub.UpdatesAvailable():
+		}
+
+		for _, peerDetails := range sub.Updates() {
+			msg := peerDetailsToRPCPeer(peerDetails)
+
+			bs, err := json.Marshal(msg)
+			if err != nil {
+				ctx.NewLogger("wspeersub").Errorf("error marshaling peer json for websocket: %v", err)
+				return
+			}
+
+			conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+
+			err = conn.WriteMessage(1000, bs)
+			if err != nil {
+				ctx.NewLogger("wspeersub").Errorf("error writing peers to websocket client: %v", err)
+				conn.Close()
+				return
+			}
+		}
+	}
 }
 
 type whitelistMiddleware struct {

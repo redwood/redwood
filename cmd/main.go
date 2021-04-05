@@ -227,7 +227,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 	if config.HTTPRPC.Enabled {
 		httpRPC := rw.NewHTTPRPCServer(host)
 
-		rpcServer, err := rw.StartHTTPRPC(httpRPC, config.HTTPRPC)
+		rpcServer, err := rw.StartHTTPRPC(httpRPC, host, config.HTTPRPC)
 		if err != nil {
 			return err
 		}

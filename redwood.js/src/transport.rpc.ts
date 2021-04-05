@@ -1,4 +1,4 @@
-import { RPCClient, Tx, RPCSubscribeParams, RPCIdentitiesResponse, RPCPeer, RPCPeerIdentity } from './types'
+import { RPCClient, Tx, RPCSubscribeParams, RPCIdentitiesResponse, RPCPeer, RPCPeerIdentity, SubscribePeersCallback } from './types'
 
 let theFetch: typeof fetch = typeof window !== 'undefined'
                                 ? fetch
@@ -86,6 +86,21 @@ export default function createRPCClient({ endpoint }: { endpoint: string }): RPC
                 stateURIs:   peer.StateURIs,
                 lastContact: peer.LastContact > 0 ? new Date(peer.LastContact * 1000) : null,
             }))
+        },
+
+        subscribePeers: async function (callback: SubscribePeersCallback) {
+            let websocketConn = new WebSocket(`${endpoint}/_peers`)
+            websocketConn.onmessage = function (evt) {
+                let messages = (evt.data as string).split('\n').filter(x => x.trim().length > 0)
+                for (let msg of messages) {
+                    try {
+                        let peer = JSON.parse(msg) as RPCPeer
+                        callback(null, peer)
+                    } catch (err) {
+                        callback(err, undefined as any)
+                    }
+                }
+            }
         },
     }
 }

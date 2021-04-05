@@ -22,6 +22,7 @@ export interface RPCClient {
     addPeer: (dialInfo: PeerDialInfo) => void
     privateTreeMembers: (stateURI: string) => Promise<string[]>
     peers: () => Promise<RPCPeer[]>
+    subscribePeers: (callback: SubscribePeersCallback) => void
 }
 
 export interface Transport {
@@ -138,3 +139,5 @@ export interface RPCPeerIdentity {
     signingPublicKey:    string
     encryptingPublicKey: string
 }
+
+export type SubscribePeersCallback = (err: Error | null, peer?: RPCPeer) => void

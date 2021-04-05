@@ -36,6 +36,7 @@ type Host interface {
 	Identities() ([]identity.Identity, error)
 	NewIdentity(public bool) (identity.Identity, error)
 
+	SubscribePeerStoreUpdates() *PeerStoreSubscription
 	Peers() []*peerDetails
 	ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan Peer
 	ProvidersOfRef(ctx context.Context, refID types.RefID) <-chan Peer
@@ -68,6 +69,7 @@ type host struct {
 	peerSeenTxs   map[PeerDialInfo]map[string]map[types.ID]bool // map[PeerDialInfo]map[stateURI]map[tx.ID]
 	peerSeenTxsMu sync.RWMutex
 
+	peerStoreSub     *PeerStoreSubscription
 	processPeersTask *utils.PeriodicTask
 
 	controllerHub ControllerHub
@@ -120,7 +122,29 @@ func (h *host) Start() error {
 	h.SetLogLabel("host")
 
 	// Set up the peer store
-	h.peerStore.OnNewUnverifiedPeer(h.handleNewUnverifiedPeer)
+	h.peerStoreSub = h.peerStore.Subscribe()
+	go func() {
+		for {
+			select {
+			case <-h.chStop:
+				return
+			case <-h.peerStoreSub.UpdatesAvailable():
+			}
+
+			func() {
+				ctx, cancel := utils.CombinedContext(h.chStop, 15*time.Second)
+				defer cancel()
+
+				for _, peerDetails := range h.peerStoreSub.Updates() {
+					if len(peerDetails.Addresses()) > 0 {
+						continue
+					}
+					h.verifyPeer(ctx, peerDetails)
+				}
+			}()
+		}
+	}()
+
 	h.processPeersTask = utils.NewPeriodicTask(10*time.Second, h.processPeers)
 
 	// Set up the controller Hub
@@ -189,6 +213,10 @@ func (h *host) Close() {
 	for _, tpt := range h.transports {
 		tpt.Close()
 	}
+}
+
+func (h *host) SubscribePeerStoreUpdates() *PeerStoreSubscription {
+	return h.peerStore.Subscribe()
 }
 
 func (h *host) Peers() []*peerDetails {
@@ -525,41 +553,44 @@ func (h *host) processPeers(ctx context.Context) {
 		unverifiedPeers := h.peerStore.UnverifiedPeers()
 
 		for _, unverifiedPeer := range unverifiedPeers {
-			transport := h.Transport(unverifiedPeer.DialInfo().TransportName)
-			if transport == nil {
-				// Unsupported transport
-				continue
-			}
-
-			peer, err := transport.NewPeerConn(ctx, unverifiedPeer.DialInfo().DialAddr)
-			if errors.Cause(err) == ErrPeerIsSelf {
-				continue
-			} else if errors.Cause(err) == types.ErrConnection {
-				continue
-			} else if err != nil {
-				h.Warnf("could not get peer at %v %v: %v", unverifiedPeer.DialInfo().TransportName, unverifiedPeer.DialInfo().DialAddr, err)
-				continue
-			} else if !peer.Ready() {
-				h.Debugf("skipping peer %v: failures=%v lastFailure=%vs", peer.DialInfo(), peer.Failures(), time.Now().Sub(peer.LastFailure()))
-				continue
-			}
-
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				defer peer.Close()
-
-				err := h.ChallengePeerIdentity(ctx, peer)
-				if err != nil {
-					h.Errorf("error verifying peer identity (%v): %v ", peer.DialInfo(), err)
-					return
-				}
+				h.verifyPeer(ctx, unverifiedPeer)
 			}()
 		}
 	}
 
 	wg.Done()
 	<-wg.Wait()
+}
+
+func (h *host) verifyPeer(ctx context.Context, unverifiedPeer PeerDetails) {
+	transport := h.Transport(unverifiedPeer.DialInfo().TransportName)
+	if transport == nil {
+		// Unsupported transport
+		return
+	}
+
+	peer, err := transport.NewPeerConn(ctx, unverifiedPeer.DialInfo().DialAddr)
+	if errors.Cause(err) == ErrPeerIsSelf {
+		return
+	} else if errors.Cause(err) == types.ErrConnection {
+		return
+	} else if err != nil {
+		h.Warnf("could not get peer at %v %v: %v", unverifiedPeer.DialInfo().TransportName, unverifiedPeer.DialInfo().DialAddr, err)
+		return
+	} else if !peer.Ready() {
+		h.Debugf("skipping peer %v: failures=%v lastFailure=%vs", peer.DialInfo(), peer.Failures(), time.Now().Sub(peer.LastFailure()))
+		return
+	}
+	defer peer.Close()
+
+	err = h.ChallengePeerIdentity(ctx, peer)
+	if err != nil {
+		h.Errorf("error verifying peer identity (%v): %v ", peer.DialInfo(), err)
+		return
+	}
 }
 
 type FetchHistoryOpts struct {
