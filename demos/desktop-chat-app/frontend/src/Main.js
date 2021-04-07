@@ -1,13 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import styled from 'styled-components'
 import { Redirect, useHistory } from 'react-router-dom'
+import { Code as CodeIcon } from '@material-ui/icons'
 
-import { useRedwood } from 'redwood/dist/main/react'
+import { useRedwood } from 'redwood-p2p-client/react'
 import ServerBar from './components/Sidebar/ServerBar'
 import Sidebar from './components/Sidebar'
 import Chat from './components/Chat'
 import StateTreeDebugView from './components/StateTreeDebugView'
 import ContactsModal from './components/ContactsModal'
+import Spacer from './components/Spacer'
 import useNavigation from './hooks/useNavigation'
 import useCurrentServerAndRoom from './hooks/useCurrentServerAndRoom'
 import useModal from './hooks/useModal'
@@ -77,15 +79,20 @@ function Main() {
         return <Redirect to={'/signin'} />
     }
 
+    let [showDebugView, setShowDebugView] = useState(false)
+    let onClickShowDebugView = useCallback(() => {
+        setShowDebugView(!showDebugView)
+    }, [showDebugView, setShowDebugView])
+
     return (
         <Layout>
             <SServerBar verticalPadding={serverBarVerticalPadding} />
             <HeaderAndContent>
-                <SHeaderBar />
+                <SHeaderBar onClickShowDebugView={onClickShowDebugView} />
                 <Content>
                     <Sidebar />
                     <SChat />
-                    <SStateTreeDebugView />
+                    {showDebugView && <SStateTreeDebugView />}
                 </Content>
             </HeaderAndContent>
 
@@ -119,7 +126,12 @@ const ChatTitle = styled.div`
     height: calc(100% - 12px);
 `
 
-function HeaderBar({ className }) {
+const SCodeIcon = styled(CodeIcon)`
+    padding: 12px;
+    cursor: pointer;
+`
+
+function HeaderBar({ onClickShowDebugView, className }) {
     const { selectedServer, selectedRoom } = useNavigation()
     const { currentRoom, currentServer } = useCurrentServerAndRoom()
     const roomName = useRoomName(selectedServer, selectedRoom)
@@ -127,6 +139,8 @@ function HeaderBar({ className }) {
         <HeaderBarContainer className={className}>
             <ServerTitle>{currentServer && currentServer.name} /</ServerTitle>
             <ChatTitle>{currentRoom && roomName}</ChatTitle>
+            <Spacer size="flex" />
+            <SCodeIcon style={{ color: 'white' }} onClick={onClickShowDebugView} />
         </HeaderBarContainer>
     )
 }
