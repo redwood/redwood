@@ -566,9 +566,33 @@ var replCommands = map[string]struct {
 		"list all known peers",
 		func(args []string, host redwood.Host) error {
 			if len(args) < 2 {
-				return errors.New("requires two arguments: addpeer <transport> <dial addr>")
+				return errors.New("requires 2 arguments: addpeer <transport> <dial addr>")
 			}
 			host.AddPeer(redwood.PeerDialInfo{args[0], args[1]})
+			return nil
+		},
+	},
+	"set": {
+		"set a keypath in a state tree",
+		func(args []string, host redwood.Host) error {
+			if len(args) < 3 {
+				return errors.New("requires 3 arguments: set <state URI> <keypath> <JSON value>")
+			}
+			stateURI := args[0]
+			keypath := tree.Keypath(args[1])
+			jsonVal := strings.Join(args[2:], " ")
+			var val interface{}
+			err := json.Unmarshal([]byte(jsonVal), &val)
+			if err != nil {
+				return err
+			}
+			err = host.SendTx(context.TODO(), redwood.Tx{
+				StateURI: stateURI,
+				Patches: []redwood.Patch{{
+					Keypath: keypath,
+					Val:     val,
+				}},
+			})
 			return nil
 		},
 	},
