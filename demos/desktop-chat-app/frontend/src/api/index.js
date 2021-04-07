@@ -4,7 +4,7 @@ const sync9JSSha3 = '0c87e1035db28f334cd7484b47d9e7cc285e026d4f876d24ddad78c47ac
 
 export default function(redwoodClient, ownAddress) {
     async function addPeer(transportName, dialAddr) {
-        await redwoodClient.rpc.addPeer({ TransportName: transportName, DialAddr: dialAddr })
+        await redwoodClient.rpc.addPeer({ transportName, dialAddr })
     }
 
     async function addServer(server, iconFile, provider, cloudStackOptions) {
@@ -255,6 +255,7 @@ export default function(redwoodClient, ownAddress) {
     }
 
     return {
+        addPeer,
         addServer,
         importServer,
         subscribe,
