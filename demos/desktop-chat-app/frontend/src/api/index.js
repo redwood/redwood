@@ -1,6 +1,6 @@
 import Redwood from 'redwood-p2p-client'
 
-const sync9JSSha3 = '0c87e1035db28f334cd7484b47d9e7cc285e026d4f876d24ddad78c47ac40a14'
+const sync9JSSha3 = 'dd26e14e5768a5359561bbe22aa148f65c68b7cebb33c60905d5969dd97feb92'
 
 export default function(redwoodClient, ownAddress) {
     async function addPeer(transportName, dialAddr) {
