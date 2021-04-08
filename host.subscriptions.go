@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -170,10 +171,13 @@ func (sub *writableSubscription) writeMessages() {
 		if sub.subscriptionType.Includes(SubscriptionType_States) {
 			state = msg.State
 		}
-		err = sub.subImpl.Put(context.TODO(), msg.StateURI, tx, state, msg.Leaves)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // @@TODO: make configurable?
+		defer cancel()
+
+		err = sub.subImpl.Put(ctx, msg.StateURI, tx, state, msg.Leaves)
 		if err != nil {
 			sub.host.Errorf("error writing to subscribed peer: %+v", err)
-			return
 		}
 	}
 }

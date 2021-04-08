@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
@@ -20,6 +21,7 @@ import (
 	"redwood.dev/ctx"
 	"redwood.dev/identity"
 	"redwood.dev/tree"
+	"redwood.dev/types"
 )
 
 var app = &appType{
@@ -587,6 +589,7 @@ var replCommands = map[string]struct {
 				return err
 			}
 			err = host.SendTx(context.TODO(), redwood.Tx{
+				ID:       types.RandomID(),
 				StateURI: stateURI,
 				Patches: []redwood.Patch{{
 					Keypath: keypath,

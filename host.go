@@ -540,7 +540,7 @@ func (h *host) processPeers(ctx context.Context) {
 				h.Warnf("could not get peer at %v %v: %v", unverifiedPeer.DialInfo().TransportName, unverifiedPeer.DialInfo().DialAddr, err)
 				continue
 			} else if !peer.Ready() {
-				h.Debugf("skipping peer %v: failures=%v lastFailure=%vs", peer.DialInfo(), peer.Failures(), time.Now().Sub(peer.LastFailure()))
+				h.Debugf("skipping peer %v: failures=%v lastFailure=%v", peer.DialInfo(), peer.Failures(), time.Now().Sub(peer.LastFailure()))
 				continue
 			}
 
@@ -647,7 +647,9 @@ func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription, f
 				h.Errorf("error writing initial state to peer (%v): %v", writeSub.StateURI(), err)
 			} else {
 				node, err := state.CopyToMemory(keypath, nil)
-				if err != nil {
+				if err != nil && errors.Cause(err) == types.Err404 {
+					// no-op
+				} else if err != nil {
 					h.Errorf("error writing initial state to peer (%v): %v", writeSub.StateURI(), err)
 				} else {
 					writeSub.EnqueueWrite(writeSub.StateURI(), nil, node, leaves)
