@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import styled from 'styled-components'
-import { useRedwood } from 'redwood/dist/main/react'
+import { useRedwood } from 'redwood-p2p-client/react'
 // import Button from '../Button'
 
 const SStateTreeDebugView = styled.div`

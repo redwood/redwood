@@ -1,6 +1,6 @@
 {
-  "name": "redwood",
-  "version": "0.0.1",
+  "name": "redwood-p2p-client",
+  "version": "0.1.0",
   "description": "Client for interacting with Redwood nodes",
   "main": "dist/main/index.js",
   "module": "dist/module/index.js",

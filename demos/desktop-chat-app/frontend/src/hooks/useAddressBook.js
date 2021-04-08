@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { useStateTree } from 'redwood/dist/main/react'
+import { useStateTree } from 'redwood-p2p-client/react'
 
 function useAddressBook() {
     let defaultValue = useRef({})

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useContext } from 'react'
-import { useRedwood, useStateTree } from 'redwood/dist/main/react'
+import { useRedwood, useStateTree } from 'redwood-p2p-client/react'
 import useAddressBook from './useAddressBook'
 import useUsers from './useUsers'
 
