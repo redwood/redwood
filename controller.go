@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	"redwood.dev/crypto"
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -35,7 +35,7 @@ type Controller interface {
 }
 
 type controller struct {
-	ctx.Logger
+	log.Logger
 	chStop chan struct{}
 
 	stateURI        string
@@ -71,7 +71,7 @@ func NewController(
 	refStore RefStore,
 ) (Controller, error) {
 	c := &controller{
-		Logger:          ctx.NewLogger("controller"),
+		Logger:          log.NewLogger("controller"),
 		chStop:          make(chan struct{}),
 		stateURI:        stateURI,
 		stateDBRootPath: stateDBRootPath,

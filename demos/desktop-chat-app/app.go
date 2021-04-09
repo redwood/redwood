@@ -18,14 +18,14 @@ import (
 	"github.com/pkg/errors"
 
 	"redwood.dev"
-	"redwood.dev/ctx"
 	"redwood.dev/identity"
+	"redwood.dev/log"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
 
 var app = &appType{
-	Logger:  ctx.NewLogger("app"),
+	Logger:  log.NewLogger("app"),
 	devMode: true,
 }
 
@@ -46,7 +46,7 @@ type appType struct {
 	mnemonic    string
 
 	// These are set once on startup and never change
-	ctx.Logger
+	log.Logger
 	configPath string
 	devMode    bool
 }

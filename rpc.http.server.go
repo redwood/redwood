@@ -16,7 +16,7 @@ import (
 	"github.com/pkg/errors"
 
 	"redwood.dev/crypto"
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
@@ -48,13 +48,13 @@ func StartHTTPRPC(svc interface{}, config *HTTPRPCConfig) (*http.Server, error) 
 }
 
 type HTTPRPCServer struct {
-	ctx.Logger
+	log.Logger
 	host Host
 }
 
 func NewHTTPRPCServer(host Host) *HTTPRPCServer {
 	return &HTTPRPCServer{
-		Logger: ctx.NewLogger("http rpc"),
+		Logger: log.NewLogger("http rpc"),
 		host:   host,
 	}
 }

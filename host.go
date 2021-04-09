@@ -9,15 +9,15 @@ import (
 	"github.com/pkg/errors"
 
 	"redwood.dev/crypto"
-	"redwood.dev/ctx"
 	"redwood.dev/identity"
+	"redwood.dev/log"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type Host interface {
-	ctx.Logger
+	log.Logger
 	Start() error
 	Close()
 
@@ -52,7 +52,7 @@ type Host interface {
 }
 
 type host struct {
-	ctx.Logger
+	log.Logger
 	chStop chan struct{}
 	chDone chan struct{}
 
@@ -98,7 +98,7 @@ func NewHost(
 		transportsMap[tpt.Name()] = tpt
 	}
 	h := &host{
-		Logger:                ctx.NewLogger("host"),
+		Logger:                log.NewLogger("host"),
 		chStop:                make(chan struct{}),
 		chDone:                make(chan struct{}),
 		transports:            transportsMap,

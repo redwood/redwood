@@ -16,7 +16,7 @@ import (
 	badgerpb "github.com/dgraph-io/badger/v2/pb"
 	"github.com/pkg/errors"
 
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
@@ -24,7 +24,7 @@ import (
 type DBTree struct {
 	db       *badger.DB
 	filename string
-	ctx.Logger
+	log.Logger
 }
 
 func NewDBTree(dbFilename string) (*DBTree, error) {
@@ -35,7 +35,7 @@ func NewDBTree(dbFilename string) (*DBTree, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DBTree{db, dbFilename, ctx.NewLogger("db tree")}, nil
+	return &DBTree{db, dbFilename, log.NewLogger("db tree")}, nil
 }
 
 func (t *DBTree) Close() error {
@@ -68,7 +68,7 @@ func (t *DBTree) State(mutable bool) *DBNode {
 type VersionedDBTree struct {
 	db       *badger.DB
 	filename string
-	ctx.Logger
+	log.Logger
 }
 
 func NewVersionedDBTree(dbFilename string) (*VersionedDBTree, error) {
@@ -79,7 +79,7 @@ func NewVersionedDBTree(dbFilename string) (*VersionedDBTree, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &VersionedDBTree{db, dbFilename, ctx.NewLogger("db tree")}, nil
+	return &VersionedDBTree{db, dbFilename, log.NewLogger("db tree")}, nil
 }
 
 func (t *VersionedDBTree) Close() error {

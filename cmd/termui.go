@@ -103,7 +103,7 @@ func NewTermUI() *termUI {
 
 func (tui *termUI) Start() {
 	if err := ui.Init(); err != nil {
-		log.Fatalf("failed to initialize termui: %v", err)
+		logger.Fatalf("failed to initialize termui: %v", err)
 	}
 	defer ui.Close()
 	defer tui.Stop()

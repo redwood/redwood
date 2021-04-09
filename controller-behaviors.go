@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"sort"
 
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
@@ -43,7 +43,7 @@ var indexerRegistry = map[string]IndexerConstructor{
 }
 
 type behaviorTree struct {
-	ctx.Logger
+	log.Logger
 	validatorKeypaths []tree.Keypath
 	validators        map[string]Validator
 	resolverKeypaths  []tree.Keypath
@@ -53,7 +53,7 @@ type behaviorTree struct {
 
 func newBehaviorTree() *behaviorTree {
 	return &behaviorTree{
-		Logger:     ctx.NewLogger(""),
+		Logger:     log.NewLogger(""),
 		validators: make(map[string]Validator),
 		resolvers:  make(map[string]Resolver),
 		indexers:   make(map[string]map[string]Indexer),

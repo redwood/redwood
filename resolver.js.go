@@ -9,7 +9,7 @@ import (
 
 	//"github.com/saibing/go-v8"
 
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -17,7 +17,7 @@ import (
 )
 
 type jsResolver struct {
-	ctx.Logger
+	log.Logger
 	vm            *v8go.Context
 	internalState map[string]interface{}
 }
@@ -65,7 +65,7 @@ func NewJSResolver(config tree.Node, internalState map[string]interface{}) (_ Re
 		return nil, err
 	}
 
-	return &jsResolver{Logger: ctx.NewLogger("resolver:js"), vm: v8ctx, internalState: internalState}, nil
+	return &jsResolver{Logger: log.NewLogger("resolver:js"), vm: v8ctx, internalState: internalState}, nil
 }
 
 func (r *jsResolver) InternalState() map[string]interface{} {

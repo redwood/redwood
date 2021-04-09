@@ -4,20 +4,20 @@ import (
 	"github.com/dgraph-io/badger/v2"
 	"github.com/pkg/errors"
 
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type badgerTxStore struct {
-	ctx.Logger
+	log.Logger
 	db         *badger.DB
 	dbFilename string
 }
 
 func NewBadgerTxStore(dbFilename string) TxStore {
 	return &badgerTxStore{
-		Logger:     ctx.NewLogger("txstore"),
+		Logger:     log.NewLogger("txstore"),
 		dbFilename: dbFilename,
 	}
 }

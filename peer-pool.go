@@ -7,12 +7,12 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/utils"
 )
 
 type peerPool struct {
-	ctx.Logger
+	log.Logger
 
 	concurrentConns uint64
 	peersAvailable  *utils.Mailbox
@@ -47,7 +47,7 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 	close(chProviders)
 
 	p := &peerPool{
-		Logger:          ctx.NewLogger("peer pool"),
+		Logger:          log.NewLogger("peer pool"),
 		concurrentConns: concurrentConns,
 		peersAvailable:  utils.NewMailbox(0),
 		peersInTimeout:  utils.NewMailbox(0),

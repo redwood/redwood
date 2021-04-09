@@ -30,8 +30,8 @@ import (
 	"golang.org/x/net/publicsuffix"
 
 	"redwood.dev/crypto"
-	"redwood.dev/ctx"
 	"redwood.dev/identity"
+	"redwood.dev/log"
 	"redwood.dev/nelson"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -39,7 +39,7 @@ import (
 )
 
 type httpTransport struct {
-	ctx.Logger
+	log.Logger
 	chStop chan struct{}
 
 	controllerHub   ControllerHub
@@ -90,7 +90,7 @@ func NewHTTPTransport(
 	}
 
 	t := &httpTransport{
-		Logger:                ctx.NewLogger("http"),
+		Logger:                log.NewLogger("http"),
 		chStop:                make(chan struct{}),
 		controllerHub:         controllerHub,
 		listenAddr:            listenAddr,

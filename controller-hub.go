@@ -7,7 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
@@ -37,7 +37,7 @@ type ControllerHub interface {
 }
 
 type controllerHub struct {
-	ctx.Logger
+	log.Logger
 	chStop chan struct{}
 
 	controllers   map[string]Controller
@@ -56,7 +56,7 @@ var (
 
 func NewControllerHub(dbRootPath string, txStore TxStore, refStore RefStore) ControllerHub {
 	return &controllerHub{
-		Logger:      ctx.NewLogger("controller hub"),
+		Logger:      log.NewLogger("controller hub"),
 		chStop:      make(chan struct{}),
 		controllers: make(map[string]Controller),
 		dbRootPath:  dbRootPath,

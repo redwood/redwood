@@ -9,12 +9,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"redwood.dev/ctx"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
-
-var log = ctx.NewLogger("nelson")
 
 type Frame struct {
 	tree.Node

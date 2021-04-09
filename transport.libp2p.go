@@ -35,15 +35,15 @@ import (
 	"github.com/pkg/errors"
 
 	"redwood.dev/crypto"
-	"redwood.dev/ctx"
 	"redwood.dev/identity"
+	"redwood.dev/log"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type libp2pTransport struct {
-	ctx.Logger
+	log.Logger
 	chStop chan struct{}
 	chDone chan struct{}
 
@@ -84,7 +84,7 @@ func NewLibp2pTransport(
 	peerStore PeerStore,
 ) Transport {
 	t := &libp2pTransport{
-		Logger:            ctx.NewLogger("libp2p"),
+		Logger:            log.NewLogger("libp2p"),
 		chStop:            make(chan struct{}),
 		chDone:            make(chan struct{}),
 		port:              port,
@@ -290,7 +290,7 @@ func (ds *notifyingDatastore) Put(k dstore.Key, v []byte) error {
 	if err != nil {
 		return err
 	}
-	ctx.NewLogger("libp2p datastore").Debugf("key=%v value=%v", key, string(value))
+	log.NewLogger("libp2p datastore").Debugf("key=%v value=%v", key, string(value))
 	return nil
 }
 
@@ -554,6 +554,9 @@ func (t *libp2pTransport) ProvidersOfStateURI(ctx context.Context, stateURI stri
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+
+	ctx, cancel := utils.CombinedContext(ctx, t.chStop)
+	defer cancel()
 
 	ch := make(chan Peer)
 	go func() {

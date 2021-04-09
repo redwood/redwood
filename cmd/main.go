@@ -18,16 +18,15 @@ import (
 	"github.com/brynbellomy/klog"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
-	"redwood.dev"
 
-	rw "redwood.dev"
-	"redwood.dev/ctx"
+	"redwood.dev"
 	"redwood.dev/identity"
+	"redwood.dev/log"
 	"redwood.dev/tree"
 	"redwood.dev/utils"
 )
 
-var log = ctx.NewLogger("redwood")
+var logger = log.NewLogger("redwood")
 
 func main() {
 	go func() {
@@ -40,9 +39,9 @@ func main() {
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
-	configRoot, err := rw.DefaultConfigRoot("redwood")
+	configRoot, err := redwood.DefaultConfigRoot("redwood")
 	if err != nil {
-		log.Error(err)
+		logger.Error(err)
 		os.Exit(1)
 	}
 
@@ -123,7 +122,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		return err
 	}
 
-	config, err := rw.ReadConfigAtPath("redwood", configPath)
+	config, err := redwood.ReadConfigAtPath("redwood", configPath)
 	if err != nil {
 		return err
 	}
@@ -143,14 +142,14 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 	}
 
 	var (
-		txStore       = rw.NewBadgerTxStore(config.TxDBRoot())
+		txStore       = redwood.NewBadgerTxStore(config.TxDBRoot())
 		keyStore      = identity.NewBadgerKeyStore(db, identity.DefaultScryptParams)
-		refStore      = rw.NewRefStore(config.RefDataRoot())
-		peerStore     = rw.NewPeerStore(db)
-		controllerHub = rw.NewControllerHub(config.StateDBRoot(), txStore, refStore)
+		refStore      = redwood.NewRefStore(config.RefDataRoot())
+		peerStore     = redwood.NewPeerStore(db)
+		controllerHub = redwood.NewControllerHub(config.StateDBRoot(), txStore, refStore)
 	)
 
-	var transports []rw.Transport
+	var transports []redwood.Transport
 
 	if config.P2PTransport.Enabled {
 		var bootstrapPeers []string
@@ -161,7 +160,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 			bootstrapPeers = append(bootstrapPeers, bp.DialAddresses...)
 		}
 
-		libp2pTransport := rw.NewLibp2pTransport(
+		libp2pTransport := redwood.NewLibp2pTransport(
 			config.P2PTransport.ListenPort,
 			config.P2PTransport.ReachableAt,
 			config.P2PTransport.KeyFile,
@@ -178,7 +177,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		tlsCertFilename := filepath.Join(config.Node.DataRoot, "server.crt")
 		tlsKeyFilename := filepath.Join(config.Node.DataRoot, "server.key")
 
-		httpTransport, err := rw.NewHTTPTransport(
+		httpTransport, err := redwood.NewHTTPTransport(
 			config.HTTPTransport.ListenHost,
 			config.HTTPTransport.ReachableAt,
 			config.HTTPTransport.DefaultStateURI,
@@ -196,7 +195,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		transports = append(transports, httpTransport)
 	}
 
-	host, err := rw.NewHost(transports, controllerHub, keyStore, refStore, peerStore, config)
+	host, err := redwood.NewHost(transports, controllerHub, keyStore, refStore, peerStore, config)
 	if err != nil {
 		return err
 	}
@@ -225,9 +224,9 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 	defer host.Close()
 
 	if config.HTTPRPC.Enabled {
-		httpRPC := rw.NewHTTPRPCServer(host)
+		httpRPC := redwood.NewHTTPRPCServer(host)
 
-		rpcServer, err := rw.StartHTTPRPC(httpRPC, config.HTTPRPC)
+		rpcServer, err := redwood.StartHTTPRPC(httpRPC, config.HTTPRPC)
 		if err != nil {
 			return err
 		}
@@ -237,33 +236,33 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 	for _, bootstrapPeer := range config.Node.BootstrapPeers {
 		bootstrapPeer := bootstrapPeer
 		go func() {
-			log.Infof(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
+			logger.Infof(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
 			for _, dialAddr := range bootstrapPeer.DialAddresses {
-				host.AddPeer(rw.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr})
+				host.AddPeer(redwood.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr})
 			}
 		}()
 	}
 
 	go func() {
 		time.Sleep(5 * time.Second)
-		log.Warnf("trying to subscribe %+v", config.Node.SubscribedStateURIs)
+		logger.Warnf("trying to subscribe %+v", config.Node.SubscribedStateURIs)
 		for stateURI := range config.Node.SubscribedStateURIs {
-			log.Warnf("trying to subscribe to %v", stateURI)
+			logger.Warnf("trying to subscribe to %v", stateURI)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			sub, err := host.Subscribe(ctx, stateURI, rw.SubscriptionType_Txs, nil, nil)
+			sub, err := host.Subscribe(ctx, stateURI, redwood.SubscriptionType_Txs, nil, nil)
 			if err != nil {
-				log.Errorf("error subscribing to %v: %v", stateURI, err)
+				logger.Errorf("error subscribing to %v: %v", stateURI, err)
 				continue
 			}
 			sub.Close()
-			log.Successf("subscribed to %v", stateURI)
+			logger.Successf("subscribed to %v", stateURI)
 		}
 	}()
 
-	klog.Info(rw.PrettyJSON(config))
+	klog.Info(redwood.PrettyJSON(config))
 
 	if gui {
 		go func() {
@@ -282,7 +281,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 						if err != nil {
 							panic(err)
 						}
-						states[stateURI] = rw.PrettyJSON(node)
+						states[stateURI] = redwood.PrettyJSON(node)
 					}
 					termUI.StatePane.SetStates(states)
 				case <-termUI.Done():
@@ -299,7 +298,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 	return nil
 }
 
-func ensureDataDirs(config *rw.Config) error {
+func ensureDataDirs(config *redwood.Config) error {
 	err := os.MkdirAll(config.RefDataRoot(), 0777|os.ModeDir)
 	if err != nil {
 		return err
@@ -317,7 +316,7 @@ func ensureDataDirs(config *rw.Config) error {
 	return nil
 }
 
-func inputLoop(host rw.Host) {
+func inputLoop(host redwood.Host) {
 	fmt.Println("Type \"help\" for a list of commands.")
 	fmt.Println()
 
@@ -343,7 +342,7 @@ func inputLoop(host rw.Host) {
 		}
 
 		if len(parts) < 1 {
-			log.Error("enter a command")
+			logger.Error("enter a command")
 			continue
 		} else if parts[0] == "help" {
 			fmt.Println("___ Commands _________")
@@ -358,24 +357,24 @@ func inputLoop(host rw.Host) {
 
 		cmd, exists := replCommands[parts[0]]
 		if !exists {
-			log.Error("unknown command")
+			logger.Error("unknown command")
 			continue
 		}
 
 		err := cmd.Handler(context.Background(), parts[1:], host)
 		if err != nil {
-			log.Error(err)
+			logger.Error(err)
 		}
 	}
 }
 
 var replCommands = map[string]struct {
 	HelpText string
-	Handler  func(ctx context.Context, args []string, host rw.Host) error
+	Handler  func(ctx context.Context, args []string, host redwood.Host) error
 }{
 	"stateuris": {
 		"list all known state URIs",
-		func(ctx context.Context, args []string, host rw.Host) error {
+		func(ctx context.Context, args []string, host redwood.Host) error {
 			stateURIs, err := host.Controllers().KnownStateURIs()
 			if err != nil {
 				return err
@@ -392,7 +391,7 @@ var replCommands = map[string]struct {
 	},
 	"state": {
 		"print the current state tree",
-		func(ctx context.Context, args []string, host rw.Host) error {
+		func(ctx context.Context, args []string, host redwood.Host) error {
 			if len(args) < 1 {
 				return errors.New("missing argument: state URI")
 			}
@@ -405,15 +404,15 @@ var replCommands = map[string]struct {
 			var keypath tree.Keypath
 			var rng *tree.Range
 			if len(args) > 1 {
-				_, keypath, rng, err = rw.ParsePatchPath([]byte(args[1]))
+				_, keypath, rng, err = redwood.ParsePatchPath([]byte(args[1]))
 				if err != nil {
 					return err
 				}
 			}
-			log.Debugf("stateURI: %v / keypath: %v / range: %v", stateURI, keypath, rng)
+			logger.Debugf("stateURI: %v / keypath: %v / range: %v", stateURI, keypath, rng)
 			state = state.NodeAt(keypath, rng)
-			state.DebugPrint(log.Debugf, false, 0)
-			fmt.Println(rw.PrettyJSON(state))
+			state.DebugPrint(logger.Debugf, false, 0)
+			fmt.Println(redwood.PrettyJSON(state))
 			return nil
 		},
 	},

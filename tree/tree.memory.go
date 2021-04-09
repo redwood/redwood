@@ -8,11 +8,11 @@ import (
 
 	"github.com/pkg/errors"
 
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/types"
 )
 
-var log = ctx.NewLogger("memory node")
+var logger = log.NewLogger("memory node")
 
 type MemoryNode struct {
 	keypath Keypath

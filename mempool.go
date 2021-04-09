@@ -3,7 +3,7 @@ package redwood
 import (
 	"sync"
 
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
@@ -17,7 +17,7 @@ type Mempool interface {
 }
 
 type mempool struct {
-	ctx.Logger
+	log.Logger
 	chStop chan struct{}
 	chDone chan struct{}
 
@@ -31,7 +31,7 @@ type mempool struct {
 
 func NewMempool(processCallback func(tx *Tx) processTxOutcome) *mempool {
 	return &mempool{
-		Logger:                  ctx.NewLogger("mempool"),
+		Logger:                  log.NewLogger("mempool"),
 		chStop:                  make(chan struct{}),
 		chDone:                  make(chan struct{}),
 		txs:                     newTxSortedSet(),

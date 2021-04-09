@@ -16,7 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/sha3"
 
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
@@ -38,7 +38,7 @@ type RefStore interface {
 }
 
 type refStore struct {
-	ctx.Logger
+	log.Logger
 
 	rootPath string
 	metadata *badger.DB
@@ -52,7 +52,7 @@ type refStore struct {
 
 func NewRefStore(rootPath string) RefStore {
 	return &refStore{
-		Logger:   ctx.NewLogger("refstore"),
+		Logger:   log.NewLogger("refstore"),
 		rootPath: rootPath,
 	}
 }

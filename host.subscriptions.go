@@ -345,7 +345,7 @@ func (s *multiReaderSubscription) Start() {
 
 			peer, err := s.getPeer()
 			if err != nil {
-				log.Errorf("error getting peer from pool: %v", err)
+				s.host.Errorf("error getting peer from pool: %v", err)
 				// @@TODO: exponential backoff
 				continue
 			}

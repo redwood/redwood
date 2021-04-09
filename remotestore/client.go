@@ -10,12 +10,12 @@ import (
 
 	"redwood.dev"
 	"redwood.dev/crypto"
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/types"
 )
 
 type client struct {
-	ctx.Logger
+	log.Logger
 	host       string
 	address    types.Address
 	sigprivkey crypto.SigningPrivateKey
@@ -29,7 +29,7 @@ var _ redwood.TxStore = (*client)(nil)
 
 func NewClient(host string, address types.Address, sigprivkey crypto.SigningPrivateKey) *client {
 	return &client{
-		Logger:     ctx.NewLogger("vault client"),
+		Logger:     log.NewLogger("vault client"),
 		host:       host,
 		address:    address,
 		client:     nil,

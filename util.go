@@ -12,13 +12,13 @@ import (
 	// "github.com/json-iterator/go"
 	"github.com/pkg/errors"
 
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 )
 
 //var json = jsoniter.ConfigFastest
 //var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-var log = ctx.NewLogger("hi")
+var logger = log.NewLogger("hi")
 
 func combineErrors(errs []error) string {
 	var errStrings []string

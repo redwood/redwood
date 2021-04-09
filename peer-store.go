@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 
 	"redwood.dev/crypto"
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -29,7 +29,7 @@ type PeerStore interface {
 }
 
 type peerStore struct {
-	ctx.Logger
+	log.Logger
 
 	state            *tree.DBTree
 	muPeers          sync.RWMutex
@@ -45,9 +45,13 @@ type PeerDialInfo struct {
 	DialAddr      string
 }
 
+var (
+	ErrNotReady = errors.New("not ready")
+)
+
 func NewPeerStore(state *tree.DBTree) *peerStore {
 	s := &peerStore{
-		Logger:           ctx.NewLogger("peerstore"),
+		Logger:           log.NewLogger("peerstore"),
 		state:            state,
 		peers:            make(map[PeerDialInfo]*peerDetails),
 		peersWithAddress: make(map[types.Address]map[PeerDialInfo]*peerDetails),
@@ -476,6 +480,7 @@ func (p *peerDetails) UpdateConnStats(success bool) {
 	defer p.peerStore.muPeers.Unlock()
 	now := time.Now()
 	if success {
+		p.peerStore.Successf("YEET %v %+v", p.dialInfo, errors.New(""))
 		p.lastContact = now
 		p.failures = 0
 	} else {

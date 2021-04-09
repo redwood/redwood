@@ -12,12 +12,12 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"redwood.dev/crypto"
-	"redwood.dev/ctx"
+	"redwood.dev/log"
 	"redwood.dev/types"
 )
 
 type server struct {
-	ctx.Logger
+	log.Logger
 	listenNetwork    string
 	listenHost       string
 	grpc             *grpc.Server
@@ -33,7 +33,7 @@ func NewServer(listenNetwork, listenHost, dbPath string, allowedAddresses []type
 	}
 
 	return &server{
-		Logger:           ctx.NewLogger("vault server"),
+		Logger:           log.NewLogger("vault server"),
 		listenNetwork:    listenNetwork,
 		listenHost:       listenHost,
 		grpc:             nil,

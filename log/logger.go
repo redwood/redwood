@@ -1,4 +1,4 @@
-package ctx
+package log
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"github.com/brynbellomy/klog"
 )
 
-// Logger anstracts basic logging functions.
+// Logger abstracts basic logging functions.
 type Logger interface {
 	SetLogLabel(inLabel string)
 	GetLogLabel() string
@@ -26,8 +26,6 @@ type Logger interface {
 	Fatalf(inFormat string, args ...interface{})
 }
 
-//
-// logger is an aid to logging and provides convenience functions
 type logger struct {
 	hasPrefix bool
 	logPrefix string
