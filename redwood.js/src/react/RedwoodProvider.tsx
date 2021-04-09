@@ -85,12 +85,19 @@ function Provider(props: {
             if (!!identity) {
                 await client.authorize()
             }
-            if (!!client.rpc) {
-                let nodeIdentities = await client.rpc.identities()
-                let nodePeers = await client.rpc.peers()
-                setNodeIdentities(nodeIdentities)
-                setNodePeers(nodePeers)
-            }
+            setInterval(async () => {
+                if (!!client.rpc) {
+                    try {
+                        let nodeIdentities = await client.rpc.identities()
+                        setNodeIdentities(nodeIdentities)
+                    } catch (err) { console.error(err) }
+
+                    try {
+                        let nodePeers = await client.rpc.peers()
+                        setNodePeers(nodePeers)
+                    } catch (err) { console.error(err) }
+                }
+            }, 5000)
             setRedwoodClient(client)
         })()
 

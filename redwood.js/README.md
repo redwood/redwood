@@ -10,8 +10,8 @@ WIP
 
 ```tsx
 import React, { useRef } from 'react'
-import Redwood from 'redwood'
-import { RedwoodProvider, useRedwood, useStateTree } from 'redwood/react'
+import Redwood from 'redwood-p2p-client'
+import { RedwoodProvider, useRedwood, useStateTree } from 'redwood-p2p-client/react'
 
 const identity = Redwood.identity.random()
 

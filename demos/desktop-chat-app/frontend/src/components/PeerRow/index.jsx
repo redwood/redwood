@@ -6,7 +6,7 @@ import moment from 'moment'
 
 import Input from '../Input'
 import UserAvatar from '../UserAvatar'
-import { useRedwood, useStateTree } from 'redwood/dist/main/react'
+import { useRedwood, useStateTree } from 'redwood-p2p-client/react'
 import useAPI from '../../hooks/useAPI'
 import usePeers from '../../hooks/usePeers'
 import useUsers from '../../hooks/useUsers'

@@ -60,7 +60,6 @@ function Attachment({ attachment, url, onClick, className }) {
             <Embed contentType={attachment['Content-Type']} url={url} width={200} />
         </Wrapper>
     )
-    return null
 }
 
 function DownloadLink({ href, target, children }) {

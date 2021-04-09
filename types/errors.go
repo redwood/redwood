@@ -9,4 +9,5 @@ var (
 	Err404           = errors.New("not found")
 	ErrUnimplemented = errors.New("unimplemented")
 	ErrConnection    = errors.New("connection failed")
+	ErrClosed        = errors.New("closed")
 )

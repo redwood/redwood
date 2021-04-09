@@ -9,9 +9,11 @@ import Button from '../Button'
 import SlidingPane, { Pane, PaneContent, PaneActions } from '../SlidingPane'
 import UserAvatar from '../UserAvatar'
 import Tabs from '../Tabs'
+import Select from '../Select'
+import Input, { InputLabel } from '../Input'
 import { ServerFab } from '../ServerFab'
 import PeerRow from '../PeerRow'
-import { useRedwood, useStateTree } from 'redwood/dist/main/react'
+import { useRedwood, useStateTree } from 'redwood-p2p-client/react'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
@@ -26,12 +28,20 @@ function ContactsModal({ onDismiss }) {
     let [selectedPeer, setSelectedPeer] = useState(initiallyFocusedContact)
 
     useEffect(() => {
-        setActiveStep(initiallyFocusedContact ? 1 : 0)
+        setActiveStep(initiallyFocusedContact ? 2 : 1)
         setSelectedPeer(initiallyFocusedContact)
     }, [initiallyFocusedContact])
 
+    let showAddPeer = useCallback(address => {
+        setActiveStep(0)
+    }, [setActiveStep, activeStep])
+
+    let showPeerList = useCallback(address => {
+        setActiveStep(1)
+    }, [setActiveStep, activeStep])
+
     let showPeerDetails = useCallback(address => {
-        setActiveStep(activeStep + 1)
+        setActiveStep(2)
         setSelectedPeer(address)
     }, [setActiveStep, activeStep])
 
@@ -49,11 +59,15 @@ function ContactsModal({ onDismiss }) {
     let panes = [{
         width: 480,
         height: 190,
-        content: <PeerListPane key="one" showPeerDetails={showPeerDetails} />,
+        content: <AddPeerPane key="one" showPeerList={showPeerList} />,
+    }, {
+        width: 480,
+        height: 190,
+        content: <PeerListPane key="two" showAddPeer={showAddPeer} showPeerDetails={showPeerDetails} />,
     }, {
         width: 800,
         height: 390,
-        content: <PeerDetailPane key="two" selectedPeer={selectedPeer} onClickBack={onClickBack} />,
+        content: <PeerDetailPane key="three" selectedPeer={selectedPeer} onClickBack={onClickBack} />,
     }]
 
     return (
@@ -66,7 +80,56 @@ function ContactsModal({ onDismiss }) {
     )
 }
 
-function PeerListPane({ showPeerDetails, ...props }) {
+const SInputLabel = styled(InputLabel)`
+    margin-top: 16px;
+`
+
+function AddPeerPane({ showPeerList, ...props }) {
+    let api = useAPI()
+
+    let [transport, setTransport] = useState('libp2p')
+    let onChangeTransport = useCallback(event => {
+        setTransport(event.target.value)
+    }, [setTransport])
+
+    let [dialAddr, setDialAddr] = useState()
+
+    let onClickSave = useCallback(async () => {
+        await api.addPeer(transport, dialAddr)
+        showPeerList()
+    }, [api, showPeerList, transport, dialAddr])
+
+    let onClickCancel = useCallback(() => {
+        setTransport('libp2p')
+        setDialAddr('')
+        showPeerList()
+    }, [transport, dialAddr])
+
+    return (
+        <Pane {...props}>
+            <PaneContent>
+                <Select
+                    label="Transport"
+                    value={transport}
+                    onChange={onChangeTransport}
+                    items={[
+                        { value: 'libp2p', text: 'libp2p' },
+                        { value: 'http',   text: 'http' },
+                    ]}
+                />
+                <SInputLabel label="Dial address">
+                    <Input value={dialAddr} onChange={(event) => setDialAddr(event.currentTarget.value)} />
+                </SInputLabel>
+            </PaneContent>
+            <PaneActions>
+                <Button onClick={onClickSave}>Save</Button>
+                <Button onClick={onClickCancel}>Cancel</Button>
+            </PaneActions>
+        </Pane>
+    )
+}
+
+function PeerListPane({ showAddPeer, showPeerDetails, ...props }) {
     let { peersByAddress } = usePeers()
     let peers = Object.keys(peersByAddress).map(addr => peersByAddress[addr]).filter(peer => !peer.isSelf)
     return (
@@ -76,6 +139,9 @@ function PeerListPane({ showPeerDetails, ...props }) {
                     <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
                 ))}
             </PaneContent>
+            <PaneActions>
+                <Button onClick={showAddPeer}>Add peer</Button>
+            </PaneActions>
         </Pane>
     )
 }

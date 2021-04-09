@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react'
 import styled, { useTheme } from 'styled-components'
 import * as tinycolor from 'tinycolor2'
 import strToColor from '../../utils/strToColor'
-import { useRedwood, useStateTree } from 'redwood/dist/main/react'
+import Image from '../Image'
+import { useRedwood, useStateTree } from 'redwood-p2p-client/react'
 import useUsers from '../../hooks/useUsers'
 import useServerAndRoomInfo from '../../hooks/useServerAndRoomInfo'
 import useAddressBook from '../../hooks/useAddressBook'
 import useNavigation from '../../hooks/useNavigation'
 
-const Avatar = styled.img`
+const Avatar = styled(Image)`
     user-select: none;
     border-radius: 9999px;
     width: 40px;

@@ -17,6 +17,11 @@ function Spacer({ size = 'md' }) {
             s = spacing[4]
     }
 
+    if (size === 'flex') {
+        return (
+            <div style={{ flexGrow: 1 }} />
+        )
+    }
     return (
         <StyledSpacer size={s} />
     )

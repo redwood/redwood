@@ -429,6 +429,7 @@ func (t *httpTransport) serveSubscription(w http.ResponseWriter, r *http.Request
 			return
 		}
 		wsWriteSub := &wsWritableSubscription{
+			messages: utils.NewMailbox(300), // @@TODO: configurable?
 			httpPeer: t.makePeer(nil, nil, "", address),
 			conn:     conn,
 		}
@@ -1659,6 +1660,7 @@ type wsWritableSubscription struct {
 	*httpPeer
 	conn                         *websocket.Conn
 	onAddMultiplexedSubscription func(stateURI string, keypath tree.Keypath, subscriptionType SubscriptionType, fetchHistoryOpts *FetchHistoryOpts)
+	messages                     *utils.Mailbox
 	chStop                       chan struct{}
 	chDone                       chan struct{}
 	closeOnce                    sync.Once
@@ -1667,35 +1669,49 @@ type wsWritableSubscription struct {
 var _ WritableSubscriptionImpl = (*wsWritableSubscription)(nil)
 
 func (sub *wsWritableSubscription) Put(ctx context.Context, stateURI string, tx *Tx, state tree.Node, leaves []types.ID) (err error) {
-	defer func() { sub.UpdateConnStats(err == nil) }()
-
-	select {
-	case <-sub.chStop:
-		return errors.New("can't put when closed")
-	default:
-	}
-
-	sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
-
-	w, err := sub.conn.NextWriter(websocket.TextMessage)
-	if err != nil {
-		sub.t.Errorf("error obtaining next writer: %v", err)
-		return err
-	}
-	defer w.Close()
-
 	bs, err := json.Marshal(SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
 	if err != nil {
 		sub.t.Errorf("error marshaling message json: %v", err)
 		return err
 	}
-
-	_, err = w.Write([]byte(string(bs) + "\n"))
-	if err != nil {
-		sub.t.Errorf("error writing to websocket client: %v", err)
-		return err
-	}
+	sub.messages.Deliver(bs)
 	return nil
+}
+
+func (sub *wsWritableSubscription) writePendingMessages() {
+	for _, msgBytes := range sub.messages.RetrieveAll() {
+		err := func() error {
+			select {
+			case <-sub.chStop:
+				return types.ErrClosed
+			default:
+			}
+
+			var err error
+			defer func() { sub.UpdateConnStats(err == nil) }()
+
+			sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+
+			w, err := sub.conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				return errors.Wrapf(err, "while obtaining next writer")
+			}
+			defer w.Close()
+
+			bs := append(msgBytes.([]byte), '\n')
+
+			_, err = w.Write(bs)
+			if err != nil {
+				return errors.Wrapf(err, "while writing to websocket client")
+			}
+			return nil
+		}()
+		if errors.Cause(err) == types.ErrClosed {
+			return
+		} else if err != nil {
+			sub.t.Errorf("error: %v", err)
+		}
+	}
 }
 
 func (sub *wsWritableSubscription) close() {
@@ -1723,6 +1739,9 @@ func (sub *wsWritableSubscription) start() {
 			select {
 			case <-sub.chStop:
 				return
+
+			case <-sub.messages.Notify():
+				sub.writePendingMessages()
 
 			case <-ticker.C:
 				sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))

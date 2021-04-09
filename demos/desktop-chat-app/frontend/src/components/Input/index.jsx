@@ -34,7 +34,7 @@ const SInputLabel = styled.label`
 
 export function InputLabel(props) {
     return (
-        <SInputWrapper width={props.width}>
+        <SInputWrapper width={props.width} className={props.className}>
             <SInputLabel>{props.label}</SInputLabel>
             {props.children}
         </SInputWrapper>

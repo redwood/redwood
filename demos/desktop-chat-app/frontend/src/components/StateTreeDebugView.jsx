@@ -1,14 +1,13 @@
-import React, { useState } from 'react'
+import React, { Fragment, useState } from 'react'
 import styled from 'styled-components'
-import { useRedwood } from 'redwood/dist/main/react'
-// import Button from '../Button'
+import { useRedwood } from 'redwood-p2p-client/react'
 
 const SStateTreeDebugView = styled.div`
     padding: 20px;
     background-color: #d3d3d3;
     font-family: Consolas, monospace;
     font-weight: 300;
-    height: calc(100vh - 40px);
+    height: calc(100vh - 90px);
     color: black;
 
     overflow: scroll;
@@ -23,9 +22,10 @@ const SStateTreeDebugView = styled.div`
 
 const StateURI = styled.div`
     font-weight: 700;
+    cursor: pointer;
 `
 
-const StateTree = styled.div`
+const SStateTree = styled(StateTree)`
     margin-bottom: 30px;
 `
 
@@ -47,18 +47,28 @@ function StateTreeDebugView({ className }) {
         }
     }
 
-    return null
-
     return (
         <SStateTreeDebugView className={className}>
-            <button onClick={() => setDisableMetadata(!disableMetadata)}>Toggle metadata</button>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <h2 style={{ padding: 0 }}>State trees</h2>
+                <button style={{ marginBottom: 32, cursor: 'pointer' }} onClick={() => setDisableMetadata(!disableMetadata)}>Toggle metadata</button>
+            </div>
             {Object.keys(trees).map(stateURI => (
-                <StateTree key={stateURI}>
-                    <StateURI>&gt; {stateURI}</StateURI>
-                    <pre><code>{JSON.stringify(trees[stateURI], null, '    ')}</code></pre>
-                </StateTree>
+                <SStateTree tree={trees[stateURI]} stateURI={stateURI} key={stateURI} />
             ))}
         </SStateTreeDebugView>
+    )
+}
+
+function StateTree({ tree, stateURI, className }) {
+    let [open, setOpen] = useState(false)
+    return (
+        <div className={className}>
+            <StateURI onClick={() => setOpen(!open)}>&gt; {stateURI}</StateURI>
+            {open && <div>
+                <pre><code>{JSON.stringify(tree, null, '    ')}</code></pre>
+            </div>}
+        </div>
     )
 }
 

@@ -479,10 +479,10 @@ func pushRef(destRefName string, commitId *git.Oid, client *redwood.HTTPClient) 
 			Keypath: branchKeypath.Push(tree.Keypath("HEAD")),
 			Val:     commitId.String(),
 		}, {
-			Keypath: branchKeypath.Push(tree.Keypath("reflog")),
-			Range:   &tree.Range{0, 0},
-			Val:     commitId.String(),
-		}, {
+			// 	Keypath: branchKeypath.Push(tree.Keypath("reflog")),
+			// 	Range:   &tree.Range{0, 0},
+			// 	Val:     commitId.String(),
+			// }, {
 			Keypath: branchKeypath.Push(tree.Keypath("worktree")),
 			Val: map[string]interface{}{
 				"Content-Type": "link",

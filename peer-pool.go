@@ -137,7 +137,6 @@ func (p *peerPool) handlePeersInTimeout() {
 		select {
 		case <-p.chStop:
 			return
-		case <-p.peersInTimeout.Notify():
 		case <-ticker.C:
 		}
 
