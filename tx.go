@@ -10,7 +10,7 @@ import (
 	proto "github.com/golang/protobuf/proto"
 	any "github.com/golang/protobuf/ptypes/any"
 
-	"redwood.dev/pb"
+	"redwood.dev/internal/pb"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
