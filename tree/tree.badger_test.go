@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
-	"redwood.dev/testutils"
+	"redwood.dev/internal/testutils"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )

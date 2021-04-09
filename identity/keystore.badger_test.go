@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"redwood.dev/identity"
-	"redwood.dev/testutils"
+	"redwood.dev/internal/testutils"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )

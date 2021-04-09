@@ -7,7 +7,7 @@ import (
 
 	"redwood.dev"
 	"redwood.dev/crypto"
-	"redwood.dev/testutils"
+	"redwood.dev/internal/testutils"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )

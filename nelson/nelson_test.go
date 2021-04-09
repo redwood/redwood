@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"redwood.dev/internal/testutils"
 	"redwood.dev/nelson"
-	"redwood.dev/testutils"
 	"redwood.dev/tree"
 )
 

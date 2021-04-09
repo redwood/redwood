@@ -13,8 +13,8 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"redwood.dev"
+	"redwood.dev/internal/testutils"
 	"redwood.dev/mocks"
-	"redwood.dev/testutils"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
