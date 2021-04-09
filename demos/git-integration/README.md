@@ -8,7 +8,7 @@
 - Ensure that you've run `npm i` inside the `braidjs` directory (located in the repository root)
 - Build the Git remote helper and install it into your `$PATH` (feel free to choose a different location, as long as it's in `$PATH`):
     ```sh
-    cd git-remote-helper
+    cd cmd/git-remote-helper
     go build --tags static -o /usr/local/bin/git-remote-redwood .
     ```
 
