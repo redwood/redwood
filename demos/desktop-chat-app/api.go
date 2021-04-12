@@ -16,15 +16,15 @@ import (
 	"github.com/markbates/pkger"
 	"github.com/tyler-smith/go-bip39"
 
-	"redwood.dev"
 	"redwood.dev/crypto"
+	"redwood.dev/utils"
 )
 
 var chLoggedOut = make(chan struct{}, 1)
 
 func startAPI(port uint) {
 	server := http.NewServeMux()
-	handler := redwood.UnrestrictedCors(server)
+	handler := utils.UnrestrictedCors(server)
 
 	server.HandleFunc("/api/login", loginUser)
 	server.HandleFunc("/api/logout", logoutUser)

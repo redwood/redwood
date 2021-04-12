@@ -15,7 +15,7 @@ import (
 	"github.com/urfave/cli"
 	"github.com/webview/webview"
 
-	"redwood.dev"
+	"redwood.dev/config"
 	"redwood.dev/utils"
 )
 
@@ -23,13 +23,13 @@ func main() {
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
-	configPath, err := redwood.DefaultConfigPath("redwood-webview")
+	configPath, err := config.DefaultConfigPath("redwood-webview")
 	if err != nil {
 		app.Error(err)
 		os.Exit(1)
 	}
 
-	profileRoot, err := redwood.DefaultDataRoot("redwood-webview")
+	profileRoot, err := config.DefaultDataRoot("redwood-webview")
 	if err != nil {
 		app.Error(err)
 		os.Exit(1)

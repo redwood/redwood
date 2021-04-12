@@ -12,7 +12,7 @@
 First, build the Redwood binary and place it in your `$PATH`:
 
 ```sh
-cd cmd
+cd ../cmd/redwood
 go build --tags static -o /usr/local/bin/redwood .
 ```
 

@@ -20,10 +20,11 @@ import (
 	git "github.com/brynbellomy/git2go"
 	"github.com/pkg/errors"
 
-	"redwood.dev"
 	"redwood.dev/crypto"
-	"redwood.dev/nelson"
+	"redwood.dev/state"
+	"redwood.dev/swarm/braidhttp"
 	"redwood.dev/tree"
+	"redwood.dev/tree/nelson"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
@@ -38,7 +39,7 @@ var sigkeys = func() *crypto.SigningKeypair {
 }()
 
 var StateURI string
-var RootKeypath tree.Keypath
+var RootKeypath state.Keypath
 var repo *git.Repository
 
 type M = map[string]interface{}
@@ -56,7 +57,7 @@ func main() {
 	stateURIAndPath := strings.Split(matches[2], "/")
 
 	StateURI = strings.Join(stateURIAndPath[:2], "/")
-	RootKeypath = tree.Keypath(strings.Join(stateURIAndPath[2:], string(tree.KeypathSeparator)))
+	RootKeypath = state.Keypath(strings.Join(stateURIAndPath[2:], string(state.KeypathSeparator)))
 
 	gitDir, err := filepath.Abs(filepath.Dir(GIT_DIR))
 	if err != nil {
@@ -68,7 +69,7 @@ func main() {
 		die(err)
 	}
 
-	client, err := redwood.NewHTTPClient("http://"+host, sigkeys, nil, false)
+	client, err := braidhttp.NewLightClient("http://"+host, sigkeys, nil, false)
 	if err != nil {
 		die(err)
 	}
@@ -85,7 +86,7 @@ func main() {
 	}
 }
 
-func speakGit(r io.Reader, w io.Writer, client *redwood.HTTPClient) error {
+func speakGit(r io.Reader, w io.Writer, client *braidhttp.LightClient) error {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		text := scanner.Text()
@@ -157,8 +158,8 @@ func speakGit(r io.Reader, w io.Writer, client *redwood.HTTPClient) error {
 	return scanner.Err()
 }
 
-func getRefs(client *redwood.HTTPClient) ([]string, error) {
-	stateReader, _, _, err := client.Get(StateURI, nil, RootKeypath.Push(tree.Keypath("refs/heads")), nil, true)
+func getRefs(client *braidhttp.LightClient) ([]string, error) {
+	stateReader, _, _, err := client.Get(StateURI, nil, RootKeypath.Push(state.Keypath("refs/heads")), nil, true)
 	if err != nil {
 		return nil, err
 	}
@@ -203,10 +204,10 @@ type Commit struct {
 		Email     string    `json:"email"`
 		Timestamp time.Time `json:"timestamp"`
 	} `json:"committer"`
-	Files *tree.MemoryNode `json:"files"`
+	Files *state.MemoryNode `json:"files"`
 }
 
-func fetch(client *redwood.HTTPClient, headCommitHash string) error {
+func fetch(client *braidhttp.LightClient, headCommitHash string) error {
 	odb, err := repo.Odb()
 	if err != nil {
 		return errors.WithStack(err)
@@ -220,14 +221,14 @@ func fetch(client *redwood.HTTPClient, headCommitHash string) error {
 		commitHash := stack[0]
 		stack = stack[1:]
 
-		stateReader, _, _, err := client.Get(StateURI, nil, RootKeypath.Push(tree.Keypath("commits/"+commitHash)), nil, true)
+		stateReader, _, _, err := client.Get(StateURI, nil, RootKeypath.Push(state.Keypath("commits/"+commitHash)), nil, true)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 		defer stateReader.Close()
 
 		var commit Commit
-		commit.Files = tree.NewMemoryNode().(*tree.MemoryNode)
+		commit.Files = state.NewMemoryNode().(*state.MemoryNode)
 		err = json.NewDecoder(stateReader).Decode(&commit)
 		if err != nil {
 			return err
@@ -255,7 +256,7 @@ func fetch(client *redwood.HTTPClient, headCommitHash string) error {
 	return nil
 }
 
-func fetchCommit(commitHash string, commit Commit, client *redwood.HTTPClient, odb *git.Odb, refs *sync.Map) (err error) {
+func fetchCommit(commitHash string, commit Commit, client *braidhttp.LightClient, odb *git.Odb, refs *sync.Map) (err error) {
 	defer utils.Annotate(&err, "fetchCommit")
 
 	logf("commit: %v", commitHash)
@@ -268,7 +269,7 @@ func fetchCommit(commitHash string, commit Commit, client *redwood.HTTPClient, o
 	wg := &sync.WaitGroup{}
 	chErr := make(chan error)
 
-	err = walkLinks(commit.Files, func(linkType nelson.LinkType, linkStr string, filePath tree.Keypath) error {
+	err = walkLinks(commit.Files, func(linkType nelson.LinkType, linkStr string, filePath state.Keypath) error {
 		wg.Add(1)
 
 		go func() {
@@ -280,7 +281,7 @@ func fetchCommit(commitHash string, commit Commit, client *redwood.HTTPClient, o
 				}
 			}()
 
-			refObj, _, _, err := client.Get(StateURI, nil, tree.Keypath("commits/"+commitHash+"/files").Push(filePath).Push(tree.Keypath("value")), nil, true)
+			refObj, _, _, err := client.Get(StateURI, nil, state.Keypath("commits/"+commitHash+"/files").Push(filePath).Push(state.Keypath("value")), nil, true)
 			if err != nil {
 				err = errors.WithStack(err)
 				return
@@ -302,7 +303,7 @@ func fetchCommit(commitHash string, commit Commit, client *redwood.HTTPClient, o
 			refHashStr := string(bs[len("ref:"):])
 			refEntryInterface, alreadyExists := refs.LoadOrStore(refHashStr, &refEntry{git.Oid{}, 0})
 			if !alreadyExists {
-				absFileKeypath := tree.Keypath("commits/" + commitHash + "/files").Push(filePath)
+				absFileKeypath := state.Keypath("commits/" + commitHash + "/files").Push(filePath)
 
 				ref, size, _, err := client.Get(StateURI, nil, absFileKeypath, nil, false)
 				if err != nil {
@@ -339,7 +340,7 @@ func fetchCommit(commitHash string, commit Commit, client *redwood.HTTPClient, o
 			oid := entry.oid
 			size := entry.size
 
-			mode, ok, err := commit.Files.FloatValue(filePath.Push(tree.Keypath("mode")))
+			mode, ok, err := commit.Files.FloatValue(filePath.Push(state.Keypath("mode")))
 			if err != nil {
 				err = errors.Wrap(err, "error fetching mode:")
 				return
@@ -382,19 +383,19 @@ func fetchCommit(commitHash string, commit Commit, client *redwood.HTTPClient, o
 	}
 
 	//
-	// Write the tree and all of its children to disk
+	// Write the state and all of its children to disk
 	//
-	treeOid, err := idx.WriteTreeTo(repo)
+	stateOid, err := idx.WriteTreeTo(repo)
 	if err != nil {
 		return err
 	}
-	tree, err := repo.LookupTree(treeOid)
+	state, err := repo.LookupTree(stateOid)
 	if err != nil {
 		return err
 	}
 
 	//
-	// Create a commit based on the new tree
+	// Create a commit based on the new state
 	//
 	var (
 		author    = &git.Signature{Name: commit.Author.Name, Email: commit.Author.Email, When: commit.Author.Timestamp}
@@ -416,11 +417,11 @@ func fetchCommit(commitHash string, commit Commit, client *redwood.HTTPClient, o
 		parentCommits = append(parentCommits, parentCommit)
 	}
 
-	_, err = repo.CreateCommit("", author, committer, commit.Message, tree, parentCommits...)
+	_, err = repo.CreateCommit("", author, committer, commit.Message, state, parentCommits...)
 	return err
 }
 
-func push(srcRefName string, destRefName string, client *redwood.HTTPClient) error {
+func push(srcRefName string, destRefName string, client *braidhttp.LightClient) error {
 	force := strings.HasPrefix(srcRefName, "+")
 	if force {
 		srcRefName = srcRefName[1:]
@@ -462,28 +463,28 @@ func push(srcRefName string, destRefName string, client *redwood.HTTPClient) err
 	return pushRef(destRefName, headCommitId, client)
 }
 
-func pushRef(destRefName string, commitId *git.Oid, client *redwood.HTTPClient) error {
-	branchKeypath := RootKeypath.Push(tree.Keypath(destRefName))
+func pushRef(destRefName string, commitId *git.Oid, client *braidhttp.LightClient) error {
+	branchKeypath := RootKeypath.Push(state.Keypath(destRefName))
 
 	parentID, err := types.IDFromHex(commitId.String())
 	if err != nil {
 		return err
 	}
 
-	tx := &redwood.Tx{
+	tx := &tree.Tx{
 		ID:       types.RandomID(),
 		StateURI: StateURI,
 		From:     sigkeys.Address(),
 		Parents:  []types.ID{parentID},
-		Patches: []redwood.Patch{{
-			Keypath: branchKeypath.Push(tree.Keypath("HEAD")),
+		Patches: []tree.Patch{{
+			Keypath: branchKeypath.Push(state.Keypath("HEAD")),
 			Val:     commitId.String(),
 		}, {
-			// 	Keypath: branchKeypath.Push(tree.Keypath("reflog")),
-			// 	Range:   &tree.Range{0, 0},
+			// 	Keypath: branchKeypath.Push(state.Keypath("reflog")),
+			// 	Range:   &state.Range{0, 0},
 			// 	Val:     commitId.String(),
 			// }, {
-			Keypath: branchKeypath.Push(tree.Keypath("worktree")),
+			Keypath: branchKeypath.Push(state.Keypath("workstate")),
 			Val: map[string]interface{}{
 				"Content-Type": "link",
 				"value":        "state:" + StateURI + "/commits/" + commitId.String() + "/files",
@@ -494,7 +495,7 @@ func pushRef(destRefName string, commitId *git.Oid, client *redwood.HTTPClient) 
 	return client.Put(context.Background(), tx, types.Address{}, nil)
 }
 
-func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClient) error {
+func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightClient) error {
 	commit, err := repo.LookupCommit(commitId)
 	if err != nil {
 		return errors.WithStack(err)
@@ -514,7 +515,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 		hash        types.Hash
 		mode        git.Filemode
 	}
-	type treeEntry struct {
+	type stateEntry struct {
 		oid        *git.Oid
 		objectType git.ObjectType
 		fullPath   string
@@ -522,7 +523,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	chEntries := make(chan treeEntry)
+	chEntries := make(chan stateEntry)
 	chUploaded := make(chan uploaded)
 	chErr := make(chan error)
 	var wg sync.WaitGroup
@@ -533,30 +534,30 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 			select {
 			case <-ctx.Done():
 				return -1
-			case chEntries <- treeEntry{entry.Id, entry.Type, filepath.Join(rootPath, entry.Name), entry.Filemode}:
+			case chEntries <- stateEntry{entry.Id, entry.Type, filepath.Join(rootPath, entry.Name), entry.Filemode}:
 			}
 			return 0
 		})
 	}()
 
-	for treeEntry := range chEntries {
-		if treeEntry.objectType != git.ObjectBlob {
+	for stateEntry := range chEntries {
+		if stateEntry.objectType != git.ObjectBlob {
 			continue
 		}
 
-		blob, err := repo.LookupBlob(treeEntry.oid)
+		blob, err := repo.LookupBlob(stateEntry.oid)
 		if err != nil {
 			logf("error: %v", err)
 			return errors.WithStack(err)
 		}
 
-		treeEntry := treeEntry
+		stateEntry := stateEntry
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			data := blob.Contents()
-			contentType, err := redwood.SniffContentType(treeEntry.fullPath, bytes.NewBuffer(data))
+			contentType, err := utils.SniffContentType(stateEntry.fullPath, bytes.NewBuffer(data))
 			if err != nil {
 				select {
 				case <-ctx.Done():
@@ -580,7 +581,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 			select {
 			case <-ctx.Done():
 				return
-			case chUploaded <- uploaded{treeEntry.fullPath, contentType, treeEntry.oid.String(), resp.SHA1, treeEntry.mode}:
+			case chUploaded <- uploaded{stateEntry.fullPath, contentType, stateEntry.oid.String(), resp.SHA1, stateEntry.mode}:
 			}
 		}()
 	}
@@ -608,7 +609,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 		var parents []types.ID
 		var parentStrs []string
 		if commit.ParentCount() == 0 {
-			parents = []types.ID{redwood.GenesisTxID}
+			parents = []types.ID{tree.GenesisTxID}
 		} else {
 			for i := uint(0); i < commit.ParentCount(); i++ {
 				parentStr := commit.ParentId(i).String()
@@ -630,7 +631,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 			return
 		}
 
-		tx := &redwood.Tx{
+		tx := &tree.Tx{
 			ID:         commitID,
 			StateURI:   StateURI,
 			From:       sigkeys.Address(),
@@ -638,21 +639,21 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 			Checkpoint: true,
 		}
 
-		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("commits/" + commitHash + "/parents"),
+		tx.Patches = append(tx.Patches, tree.Patch{
+			Keypath: state.Keypath("commits/" + commitHash + "/parents"),
 			Val:     parentStrs,
 		})
 
-		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("commits/" + commitHash + "/message"),
+		tx.Patches = append(tx.Patches, tree.Patch{
+			Keypath: state.Keypath("commits/" + commitHash + "/message"),
 			Val:     commit.Message(),
 		})
 		timeStr, err := commit.Time().MarshalText()
 		if err != nil {
 			return
 		}
-		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("commits/" + commitHash + "/timestamp"),
+		tx.Patches = append(tx.Patches, tree.Patch{
+			Keypath: state.Keypath("commits/" + commitHash + "/timestamp"),
 			Val:     string(timeStr),
 		})
 		author := commit.Author()
@@ -660,8 +661,8 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 		if err != nil {
 			return
 		}
-		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("commits/" + commitHash + "/author"),
+		tx.Patches = append(tx.Patches, tree.Patch{
+			Keypath: state.Keypath("commits/" + commitHash + "/author"),
 			Val: M{
 				"name":      author.Name,
 				"email":     author.Email,
@@ -673,8 +674,8 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 		if err != nil {
 			return
 		}
-		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("commits/" + commitHash + "/committer"),
+		tx.Patches = append(tx.Patches, tree.Patch{
+			Keypath: state.Keypath("commits/" + commitHash + "/committer"),
 			Val: M{
 				"name":      committer.Name,
 				"email":     committer.Email,
@@ -695,16 +696,16 @@ func pushCommit(commitId *git.Oid, destRefName string, client *redwood.HTTPClien
 				"mode":         int(uploaded.mode),
 			}, true)
 		}
-		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("commits/" + commitHash + "/files"),
+		tx.Patches = append(tx.Patches, tree.Patch{
+			Keypath: state.Keypath("commits/" + commitHash + "/files"),
 			Val:     fileTree,
 		})
 
-		tx.Patches = append(tx.Patches, redwood.Patch{
-			Keypath: tree.Keypath("refs/heads/master"),
+		tx.Patches = append(tx.Patches, tree.Patch{
+			Keypath: state.Keypath("refs/heads/master"),
 			Val: map[string]interface{}{
 				"HEAD": commitHash,
-				"worktree": map[string]interface{}{
+				"workstate": map[string]interface{}{
 					"Content-Type": "link",
 					"value":        "state:somegitprovider.org/gitdemo/commits/" + commitHash + "/files",
 				},
@@ -734,7 +735,7 @@ func logf(msg string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, msg+"\n", args...)
 }
 
-func walkLinks(n tree.Node, fn func(linkType nelson.LinkType, linkStr string, keypath tree.Keypath) error) error {
+func walkLinks(n state.Node, fn func(linkType nelson.LinkType, linkStr string, keypath state.Keypath) error) error {
 	iter := n.DepthFirstIterator(nil, false, 0)
 	defer iter.Close()
 

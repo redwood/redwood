@@ -8,13 +8,15 @@ import (
 
 	"github.com/brynbellomy/klog"
 
-	rw "redwood.dev"
+	"redwood.dev/log"
+	"redwood.dev/swarm"
+	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type app struct {
-	ctx.Context
+	log.Logger
 }
 
 func main() {
@@ -28,8 +30,8 @@ func main() {
 	})
 
 	// Make two Go hosts that will communicate with one another over libp2p
-	var host1 rw.Host
-	var host2 rw.Host
+	var host1 swarm.Host
+	var host2 swarm.Host
 
 	err := host1.Start()
 	if err != nil {
@@ -48,21 +50,21 @@ func main() {
 		Libp2pPeerID() string
 	}
 	libp2pTransport := host1.Transport("libp2p").(libp2pPeerIDer)
-	host2.AddPeer(rw.PeerDialInfo{"libp2p", "/ip4/0.0.0.0/tcp/21231/p2p/" + libp2pTransport.Libp2pPeerID()})
+	host2.AddPeer(swarm.PeerDialInfo{"libp2p", "/ip4/0.0.0.0/tcp/21231/p2p/" + libp2pTransport.Libp2pPeerID()})
 
 	time.Sleep(2 * time.Second)
 
 	// Both consumers subscribe to the StateURI
 	ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
 	go func() {
-		_, err := host2.Subscribe(ctx, "somegitprovider.org/gitdemo", rw.SubscriptionType_Txs, nil, nil)
+		_, err := host2.Subscribe(ctx, "somegitprovider.org/gitdemo", swarm.SubscriptionType_Txs, nil, nil)
 		if err != nil {
 			panic(err)
 		}
 	}()
 
 	go func() {
-		_, err := host1.Subscribe(ctx, "somegitprovider.org/gitdemo", rw.SubscriptionType_Txs, nil, nil)
+		_, err := host1.Subscribe(ctx, "somegitprovider.org/gitdemo", swarm.SubscriptionType_Txs, nil, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -73,9 +75,9 @@ func main() {
 	<-utils.AwaitInterrupt()
 }
 
-func sendTxs(host1, host2 rw.Host) {
+func sendTxs(host1, host2 swarm.Host) {
 	// Before sending any transactions, we upload some resources we're going to need
-	// into the RefStore of the node.  These resources can be referred to in the state
+	// into the blob.Store of the node.  These resources can be referred to in the state
 	// tree by their hash.
 	indexHTML, err := os.Open("./repo/index.html")
 	if err != nil {
@@ -122,12 +124,12 @@ func sendTxs(host1, host2 rw.Host) {
 	host2Addr := identities2[0].Address()
 
 	// These are just convenience utils
-	hostsByAddress := map[types.Address]rw.Host{
+	hostsByAddress := map[types.Address]swarm.Host{
 		host1Addr: host1,
 		host2Addr: host2,
 	}
 
-	sendTx := func(tx rw.Tx) {
+	sendTx := func(tx tree.Tx) {
 		host := hostsByAddress[tx.From]
 		err := host.SendTx(context.Background(), tx)
 		if err != nil {
@@ -157,12 +159,12 @@ func sendTxs(host1, host2 rw.Host) {
 		//   - A mapping of refs (usually, branches) to commit hashes.
 		//   - A permissions validator that allows anyone to write to the repo but tries to keep
 		//         people from writing to the wrong keys.
-		genesisDemo = rw.Tx{
-			ID:       rw.GenesisTxID,
+		genesisDemo = tree.Tx{
+			ID:       tree.GenesisTxID,
 			Parents:  []types.ID{},
 			From:     host1Addr,
 			StateURI: "somegitprovider.org/gitdemo",
-			Patches: []rw.Patch{
+			Patches: []tree.Patch{
 				mustParsePatch(` = {
                     "demo": {
                         "Content-Type": "link",
@@ -216,13 +218,13 @@ func sendTxs(host1, host2 rw.Host) {
 		// Finally, we submit two transactions (one to "git" and one to "git-reflog") that simulate what
 		// would happen if a user were to push their first commit to the repo.  The repo is now able to be
 		// cloned using the command "git clone redwood://localhost:21232@somegitprovider.org/gitdemo"
-		commit1Repo = rw.Tx{
+		commit1Repo = tree.Tx{
 			ID:         commit1RepoTxID,
 			Parents:    []types.ID{genesisDemo.ID},
 			From:       host1Addr,
 			StateURI:   "somegitprovider.org/gitdemo",
 			Checkpoint: true,
-			Patches: []rw.Patch{
+			Patches: []tree.Patch{
 				mustParsePatch(`.commits.` + commit1Hash + ` = {
                     "message": "First commit\n",
                     "timestamp": "` + commit1Timestamp + `",
@@ -274,8 +276,8 @@ func sendTxs(host1, host2 rw.Host) {
 	sendTx(commit1Repo)
 }
 
-func mustParsePatch(s string) rw.Patch {
-	p, err := rw.ParsePatch([]byte(s))
+func mustParsePatch(s string) tree.Patch {
+	p, err := tree.ParsePatch([]byte(s))
 	if err != nil {
 		panic(err.Error() + ": " + s)
 	}
