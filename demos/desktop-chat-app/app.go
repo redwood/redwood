@@ -17,25 +17,32 @@ import (
 	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
 
-	"redwood.dev"
-	"redwood.dev/ctx"
+	"redwood.dev/blob"
+	"redwood.dev/config"
 	"redwood.dev/identity"
+	"redwood.dev/log"
+	"redwood.dev/rpc"
+	"redwood.dev/state"
+	"redwood.dev/swarm"
+	"redwood.dev/swarm/braidhttp"
+	"redwood.dev/swarm/libp2p"
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 var app = &appType{
-	Logger:  ctx.NewLogger("app"),
+	Logger:  log.NewLogger("app"),
 	devMode: true,
 }
 
 type appType struct {
 	startStopMu   sync.Mutex
 	started       bool
-	refStore      redwood.RefStore
-	txStore       redwood.TxStore
-	host          redwood.Host
-	db            *tree.DBTree
+	blobStore     blob.Store
+	txStore       tree.TxStore
+	host          swarm.Host
+	db            *state.DBTree
 	httpRPCServer *http.Server
 	chLoggedOut   chan struct{}
 
@@ -46,7 +53,7 @@ type appType struct {
 	mnemonic    string
 
 	// These are set once on startup and never change
-	ctx.Logger
+	log.Logger
 	configPath string
 	devMode    bool
 }
@@ -66,13 +73,13 @@ func (app *appType) Start() (err error) {
 
 	app.chLoggedOut = make(chan struct{})
 
-	config, err := redwood.ReadConfigAtPath("redwood-webview", app.configPath)
+	cfg, err := config.ReadConfigAtPath("redwood-webview", app.configPath)
 	if os.IsNotExist(err) {
 		err := os.MkdirAll(filepath.Dir(app.configPath), 0777|os.ModeDir)
 		if err != nil {
 			return err
 		}
-		config, err = redwood.ReadConfigAtPath("redwood-webview", app.configPath)
+		cfg, err = config.ReadConfigAtPath("redwood-webview", app.configPath)
 		if err != nil {
 			return err
 		}
@@ -81,37 +88,37 @@ func (app *appType) Start() (err error) {
 	}
 
 	// Ignore the config file's data root and use our profileRoot + profileName
-	config.Node.DataRoot = filepath.Join(app.profileRoot, app.profileName)
+	cfg.Node.DataRoot = filepath.Join(app.profileRoot, app.profileName)
 
 	if app.devMode {
-		config.Node.DevMode = true
+		cfg.Node.DevMode = true
 	}
 
-	err = app.ensureDataDirs(config)
+	err = app.ensureDataDirs(cfg)
 	if err != nil {
 		return err
 	}
 
-	db, err := tree.NewDBTree(filepath.Join(config.Node.DataRoot, "peers"))
+	db, err := state.NewDBTree(filepath.Join(cfg.Node.DataRoot, "peers"))
 	if err != nil {
 		return err
 	}
 	app.db = db
 
 	var (
-		txStore       = redwood.NewBadgerTxStore(config.TxDBRoot())
+		txStore       = tree.NewBadgerTxStore(cfg.TxDBRoot())
 		keyStore      = identity.NewBadgerKeyStore(db, identity.DefaultScryptParams)
-		refStore      = redwood.NewRefStore(config.RefDataRoot())
-		peerStore     = redwood.NewPeerStore(db)
-		controllerHub = redwood.NewControllerHub(config.StateDBRoot(), txStore, refStore)
+		blobStore     = blob.NewDiskStore(cfg.RefDataRoot(), db)
+		peerStore     = swarm.NewPeerStore(db)
+		controllerHub = tree.NewControllerHub(cfg.StateDBRoot(), txStore, blobStore)
 	)
 	app.keyStore = keyStore
 
-	err = refStore.Start()
+	err = blobStore.Start()
 	if err != nil {
 		return err
 	}
-	app.refStore = refStore
+	app.blobStore = blobStore
 
 	err = txStore.Start()
 	if err != nil {
@@ -119,25 +126,24 @@ func (app *appType) Start() (err error) {
 	}
 	app.txStore = txStore
 
-	var transports []redwood.Transport
+	var transports []swarm.Transport
 
-	if config.P2PTransport.Enabled {
+	if cfg.P2PTransport.Enabled {
 		var bootstrapPeers []string
-		for _, bp := range config.Node.BootstrapPeers {
+		for _, bp := range cfg.Node.BootstrapPeers {
 			if bp.Transport != "libp2p" {
 				continue
 			}
 			bootstrapPeers = append(bootstrapPeers, bp.DialAddresses...)
 		}
 
-		libp2pTransport := redwood.NewLibp2pTransport(
-			config.P2PTransport.ListenPort,
-			config.P2PTransport.ReachableAt,
-			config.P2PTransport.KeyFile,
+		libp2pTransport := libp2p.NewTransport(
+			cfg.P2PTransport.ListenPort,
+			cfg.P2PTransport.ReachableAt,
 			bootstrapPeers,
 			controllerHub,
 			keyStore,
-			refStore,
+			blobStore,
 			peerStore,
 		)
 		if err != nil {
@@ -146,25 +152,25 @@ func (app *appType) Start() (err error) {
 		transports = append(transports, libp2pTransport)
 	}
 
-	if config.HTTPTransport.Enabled {
-		tlsCertFilename := filepath.Join(config.Node.DataRoot, "..", "server.crt")
-		tlsKeyFilename := filepath.Join(config.Node.DataRoot, "..", "server.key")
+	if cfg.HTTPTransport.Enabled {
+		tlsCertFilename := filepath.Join(cfg.Node.DataRoot, "..", "server.crt")
+		tlsKeyFilename := filepath.Join(cfg.Node.DataRoot, "..", "server.key")
 
 		// var cookieSecret [32]byte
-		// copy(cookieSecret[:], []byte(config.HTTPTransport.CookieSecret))
+		// copy(cookieSecret[:], []byte(cfg.HTTPTransport.CookieSecret))
 
-		httpTransport, err := redwood.NewHTTPTransport(
-			config.HTTPTransport.ListenHost,
-			config.HTTPTransport.ReachableAt,
-			config.HTTPTransport.DefaultStateURI,
+		httpTransport, err := braidhttp.NewTransport(
+			cfg.HTTPTransport.ListenHost,
+			cfg.HTTPTransport.ReachableAt,
+			cfg.HTTPTransport.DefaultStateURI,
 			controllerHub,
 			keyStore,
-			refStore,
+			blobStore,
 			peerStore,
 			// cookieSecret,
 			tlsCertFilename,
 			tlsKeyFilename,
-			config.Node.DevMode,
+			cfg.Node.DevMode,
 		)
 		if err != nil {
 			return err
@@ -174,8 +180,8 @@ func (app *appType) Start() (err error) {
 
 	err = app.keyStore.Unlock(app.password, app.mnemonic)
 	if err != nil {
-		app.refStore.Close()
-		app.refStore = nil
+		app.blobStore.Close()
+		app.blobStore = nil
 
 		app.txStore.Close()
 		app.txStore = nil
@@ -185,7 +191,7 @@ func (app *appType) Start() (err error) {
 		return err
 	}
 
-	app.host, err = redwood.NewHost(transports, controllerHub, keyStore, refStore, peerStore, config)
+	app.host, err = swarm.NewHost(transports, controllerHub, keyStore, blobStore, peerStore, cfg)
 	if err != nil {
 		return err
 	}
@@ -200,29 +206,29 @@ func (app *appType) Start() (err error) {
 		return nil
 	})
 
-	if config.HTTPRPC.Enabled {
-		rwRPC := redwood.NewHTTPRPCServer(app.host)
-		rpc := &HTTPRPCServer{rwRPC, keyStore}
-		app.httpRPCServer, err = redwood.StartHTTPRPC(rpc, config.HTTPRPC)
+	if cfg.HTTPRPC.Enabled {
+		rwRPC := rpc.NewHTTPServer(app.host)
+		server := &HTTPRPCServer{rwRPC, keyStore}
+		app.httpRPCServer, err = rpc.StartHTTPRPC(server, cfg.HTTPRPC)
 		if err != nil {
 			return err
 		}
-		app.Infof(0, "http rpc server listening on %v", config.HTTPRPC.ListenHost)
+		app.Infof(0, "http rpc server listening on %v", cfg.HTTPRPC.ListenHost)
 	}
 
-	for _, bootstrapPeer := range config.Node.BootstrapPeers {
+	for _, bootstrapPeer := range cfg.Node.BootstrapPeers {
 		bootstrapPeer := bootstrapPeer
 		go func() {
 			app.Infof(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
 			for _, dialAddr := range bootstrapPeer.DialAddresses {
-				app.host.AddPeer(redwood.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr})
+				app.host.AddPeer(swarm.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr})
 			}
 		}()
 	}
 
 	go func() {
 		time.Sleep(5 * time.Second)
-		for stateURI := range config.Node.SubscribedStateURIs {
+		for stateURI := range cfg.Node.SubscribedStateURIs {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
@@ -240,7 +246,7 @@ func (app *appType) Start() (err error) {
 		}
 	}()
 
-	klog.Info(redwood.PrettyJSON(config))
+	klog.Info(utils.PrettyJSON(cfg))
 	klog.Flush()
 
 	app.initializeLocalState()
@@ -267,7 +273,7 @@ func (app *appType) monitorForDMs() {
 
 		if strings.HasPrefix(stateURI, "chat.p2p/private-") {
 			roomName := stateURI[len("chat.p2p/"):]
-			roomKeypath := tree.Keypath("rooms").Pushs(roomName)
+			roomKeypath := state.Keypath("rooms").Pushs(roomName)
 			var found bool
 			func() {
 				dmState, err := app.host.Controllers().StateAtVersion("chat.local/dms", nil)
@@ -282,9 +288,9 @@ func (app *appType) monitorForDMs() {
 				}
 			}()
 			if !found {
-				err := app.host.SendTx(context.TODO(), redwood.Tx{
+				err := app.host.SendTx(context.TODO(), tree.Tx{
 					StateURI: "chat.local/dms",
-					Patches: []redwood.Patch{{
+					Patches: []tree.Patch{{
 						Keypath: roomKeypath,
 						Val:     true,
 					}},
@@ -313,8 +319,8 @@ func (app *appType) Close() {
 		}
 	}
 
-	app.refStore.Close()
-	app.refStore = nil
+	app.blobStore.Close()
+	app.blobStore = nil
 
 	app.txStore.Close()
 	app.txStore = nil
@@ -411,33 +417,33 @@ func (app *appType) initializeLocalState() {
 }
 
 func (app *appType) ensureState(stateURI string, checkKeypath string, value interface{}) {
-	state, err := app.host.StateAtVersion(stateURI, nil)
-	if err != nil && errors.Cause(err) != redwood.ErrNoController {
+	node, err := app.host.StateAtVersion(stateURI, nil)
+	if err != nil && errors.Cause(err) != tree.ErrNoController {
 		panic(err)
 	} else if err == nil {
-		defer state.Close()
+		defer node.Close()
 
-		exists, err := state.Exists(tree.Keypath(checkKeypath))
+		exists, err := node.Exists(state.Keypath(checkKeypath))
 		if err != nil {
 			panic(err)
 		}
 		if exists {
 			return
 		}
-		state.Close()
+		node.Close()
 	}
 
-	err = app.host.SendTx(context.Background(), redwood.Tx{
+	err = app.host.SendTx(context.Background(), tree.Tx{
 		StateURI: stateURI,
-		ID:       redwood.GenesisTxID,
-		Patches:  []redwood.Patch{{Val: value}},
+		ID:       tree.GenesisTxID,
+		Patches:  []tree.Patch{{Val: value}},
 	})
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (a *appType) ensureDataDirs(config *redwood.Config) error {
+func (a *appType) ensureDataDirs(config *config.Config) error {
 	err := os.MkdirAll(config.RefDataRoot(), 0777|os.ModeDir)
 	if err != nil {
 		return err
@@ -509,11 +515,11 @@ func (app *appType) inputLoop() {
 
 var replCommands = map[string]struct {
 	HelpText string
-	Handler  func(args []string, host redwood.Host) error
+	Handler  func(args []string, host swarm.Host) error
 }{
 	"stateuris": {
 		"list all known state URIs",
-		func(args []string, host redwood.Host) error {
+		func(args []string, host swarm.Host) error {
 			stateURIs, err := host.Controllers().KnownStateURIs()
 			if err != nil {
 				return err
@@ -530,34 +536,34 @@ var replCommands = map[string]struct {
 	},
 	"state": {
 		"print the current state tree",
-		func(args []string, host redwood.Host) error {
+		func(args []string, host swarm.Host) error {
 			if len(args) < 1 {
 				return errors.New("missing argument: state URI")
 			}
 
 			stateURI := args[0]
-			state, err := host.Controllers().StateAtVersion(stateURI, nil)
+			node, err := host.Controllers().StateAtVersion(stateURI, nil)
 			if err != nil {
 				return err
 			}
-			var keypath tree.Keypath
-			var rng *tree.Range
+			var keypath state.Keypath
+			var rng *state.Range
 			if len(args) > 1 {
-				_, keypath, rng, err = redwood.ParsePatchPath([]byte(args[1]))
+				_, keypath, rng, err = tree.ParsePatchPath([]byte(args[1]))
 				if err != nil {
 					return err
 				}
 			}
 			app.Debugf("stateURI: %v / keypath: %v / range: %v", stateURI, keypath, rng)
-			state = state.NodeAt(keypath, rng)
-			state.DebugPrint(app.Debugf, false, 0)
-			fmt.Println(redwood.PrettyJSON(state))
+			node = node.NodeAt(keypath, rng)
+			node.DebugPrint(app.Debugf, false, 0)
+			fmt.Println(utils.PrettyJSON(node))
 			return nil
 		},
 	},
 	"peers": {
 		"list all known peers",
-		func(args []string, host redwood.Host) error {
+		func(args []string, host swarm.Host) error {
 			for _, peer := range host.Peers() {
 				fmt.Println("- ", peer.Addresses(), peer.DialInfo(), peer.LastContact())
 			}
@@ -566,32 +572,32 @@ var replCommands = map[string]struct {
 	},
 	"addpeer": {
 		"list all known peers",
-		func(args []string, host redwood.Host) error {
+		func(args []string, host swarm.Host) error {
 			if len(args) < 2 {
 				return errors.New("requires 2 arguments: addpeer <transport> <dial addr>")
 			}
-			host.AddPeer(redwood.PeerDialInfo{args[0], args[1]})
+			host.AddPeer(swarm.PeerDialInfo{args[0], args[1]})
 			return nil
 		},
 	},
 	"set": {
 		"set a keypath in a state tree",
-		func(args []string, host redwood.Host) error {
+		func(args []string, host swarm.Host) error {
 			if len(args) < 3 {
 				return errors.New("requires 3 arguments: set <state URI> <keypath> <JSON value>")
 			}
 			stateURI := args[0]
-			keypath := tree.Keypath(args[1])
+			keypath := state.Keypath(args[1])
 			jsonVal := strings.Join(args[2:], " ")
 			var val interface{}
 			err := json.Unmarshal([]byte(jsonVal), &val)
 			if err != nil {
 				return err
 			}
-			err = host.SendTx(context.TODO(), redwood.Tx{
+			err = host.SendTx(context.TODO(), tree.Tx{
 				ID:       types.RandomID(),
 				StateURI: stateURI,
-				Patches: []redwood.Patch{{
+				Patches: []tree.Patch{{
 					Keypath: keypath,
 					Val:     val,
 				}},

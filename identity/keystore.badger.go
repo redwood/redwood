@@ -9,13 +9,13 @@ import (
 	"github.com/pkg/errors"
 
 	"redwood.dev/crypto"
-	"redwood.dev/tree"
+	"redwood.dev/state"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type BadgerKeyStore struct {
-	db                *tree.DBTree
+	db                *state.DBTree
 	scryptParams      ScryptParams
 	unlockedUser      *badgerUser
 	loadUserCallbacks []func(user User) error
@@ -40,7 +40,7 @@ var (
 	FastScryptParams    = ScryptParams{N: 2, P: 1}
 )
 
-func NewBadgerKeyStore(db *tree.DBTree, scryptParams ScryptParams) *BadgerKeyStore {
+func NewBadgerKeyStore(db *state.DBTree, scryptParams ScryptParams) *BadgerKeyStore {
 	return &BadgerKeyStore{
 		db:           db,
 		scryptParams: scryptParams,
@@ -54,8 +54,8 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
-	state := ks.db.State(false)
-	defer state.Close()
+	node := ks.db.State(false)
+	defer node.Close()
 
 	user, err := ks.loadUser(password)
 	if errors.Cause(err) == ErrNoUser {
@@ -349,24 +349,24 @@ func (ks *BadgerKeyStore) saveUser(user *badgerUser, password string) error {
 		return err
 	}
 
-	state := ks.db.State(true)
-	defer state.Close()
+	node := ks.db.State(true)
+	defer node.Close()
 
-	err = state.Set(tree.Keypath("keystore"), nil, cryptoJSON)
+	err = node.Set(state.Keypath("keystore"), nil, cryptoJSON)
 	if err != nil {
 		return err
 	}
 
-	return state.Save()
+	return node.Save()
 }
 
 func (ks *BadgerKeyStore) loadUser(password string) (_ *badgerUser, err error) {
 	defer utils.WithStack(&err)
 
-	state := ks.db.State(false)
-	defer state.Close()
+	node := ks.db.State(false)
+	defer node.Close()
 
-	exists, err := state.Exists(tree.Keypath("keystore"))
+	exists, err := node.Exists(state.Keypath("keystore"))
 	if err != nil {
 		return nil, err
 	} else if !exists {
@@ -374,7 +374,7 @@ func (ks *BadgerKeyStore) loadUser(password string) (_ *badgerUser, err error) {
 	}
 
 	var cryptoJSON keystore.CryptoJSON
-	err = state.NodeAt(tree.Keypath("keystore"), nil).Scan(&cryptoJSON)
+	err = node.NodeAt(state.Keypath("keystore"), nil).Scan(&cryptoJSON)
 	if err != nil {
 		return nil, err
 	}

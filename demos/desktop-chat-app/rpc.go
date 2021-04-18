@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"net/http"
 
-	"redwood.dev"
 	"redwood.dev/cloud"
 	"redwood.dev/identity"
+	"redwood.dev/rpc"
 )
 
 type HTTPRPCServer struct {
-	*redwood.HTTPRPCServer
+	*rpc.HTTPServer
 	keyStore identity.KeyStore
 }
 
@@ -110,7 +110,7 @@ type (
 )
 
 func (s *HTTPRPCServer) CloudNodeSubscribe(r *http.Request, args *CloudNodeSubscribeArgs, resp *CloudNodeSubscribeResponse) error {
-	client := redwood.NewHTTPRPCClient(args.RemoteRPCHost)
+	client := rpc.NewHTTPClient(args.RemoteRPCHost)
 	defer client.Close()
 
 	identity, err := s.keyStore.DefaultPublicIdentity()
@@ -122,5 +122,5 @@ func (s *HTTPRPCServer) CloudNodeSubscribe(r *http.Request, args *CloudNodeSubsc
 	if err != nil {
 		return err
 	}
-	return client.Subscribe(redwood.RPCSubscribeArgs{StateURI: args.StateURI, Txs: true})
+	return client.Subscribe(rpc.SubscribeArgs{StateURI: args.StateURI, Txs: true})
 }

@@ -34,6 +34,7 @@ require (
 	github.com/markbates/pkger v0.17.0
 	github.com/multiformats/go-multiaddr v0.3.1
 	github.com/multiformats/go-multihash v0.0.14
+	github.com/onsi/gomega v1.10.1
 	github.com/pkg/errors v0.9.1
 	github.com/powerman/rpc-codec v1.2.2
 	github.com/rs/cors v1.7.0
