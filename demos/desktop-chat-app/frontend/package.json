@@ -12,6 +12,7 @@
     "@testing-library/user-event": "^12.1.10",
     "clsx": "^1.1.1",
     "core-js": "^3.8.2",
+    "emoji-mart": "^3.0.1",
     "es6-promise": "^4.2.8",
     "ethers": "^5.0.32",
     "filesize.js": "^2.0.0",
@@ -24,7 +25,7 @@
     "react-dom": "^17.0.1",
     "react-router-dom": "^5.2.0",
     "react-scripts": "4.0.1",
-    "redwood-p2p-client": "^0.0.1",
+    "redwood-p2p-client": "0.1.0",
     "styled-components": "^5.2.1",
     "tinycolor2": "^1.4.2",
     "web-vitals": "^0.2.4"

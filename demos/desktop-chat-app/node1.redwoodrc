@@ -1,11 +1,15 @@
 Node:
     BootstrapPeers: []
     SubscribedStateURIs:
+      - test/test
+      - test/test1
+      - test/test2
     MaxPeersPerSubscription: 4
-    DataRoot: 
+    DataRoot: node1_data/chris
     DevMode: true
 P2PTransport:
     Enabled: true
+    KeyFile: /Users/chrispena/Library/Application Support/redwood-webview/p2p_key
     ListenAddr: 0.0.0.0
     ListenPort: 21231
     ReachableAt: ""
