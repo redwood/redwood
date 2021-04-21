@@ -178,6 +178,7 @@ function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
         if (!api) { return }
         try {
             await api.createNewChat(selectedServer, newChatName, serverRooms)
+            setNewChatName('')
             onDismiss()
             navigate(selectedServer, newChatName)
         } catch (err) {

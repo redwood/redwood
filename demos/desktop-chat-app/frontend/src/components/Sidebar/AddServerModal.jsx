@@ -458,7 +458,6 @@ function ConfirmationPane({ provider, requestValues, onClickBack, closeModal, ..
         <Pane {...props}>
             <PaneContent>
                 <PaneTitle>Confirmation</PaneTitle>
-
             </PaneContent>
 
             <PaneActions>

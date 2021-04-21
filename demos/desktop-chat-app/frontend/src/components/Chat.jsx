@@ -1,3 +1,4 @@
+import 'emoji-mart/css/emoji-mart.css'
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { IconButton, Tooltip } from '@material-ui/core'
@@ -6,6 +7,8 @@ import * as tinycolor from 'tinycolor2'
 import filesize from 'filesize.js'
 import moment from 'moment'
 import CloseIcon from '@material-ui/icons/Close'
+import EmojiEmotionsIcon from '@material-ui/icons/EmojiEmotions';
+import { Picker, Emoji } from 'emoji-mart'
 
 import Button from './Button'
 import Input from './Input'
@@ -51,6 +54,7 @@ const ControlsContainer = styled.div`
     padding-bottom: 6px;
     width: 100%;
     margin-top: 6px;
+    position: relative;
 `
 
 const MessageInput = styled(Input)`
@@ -61,7 +65,7 @@ const MessageInput = styled(Input)`
 
 const SIconButton = styled(IconButton)`
     color: ${props => props.theme.color.white} !important;
-    padding: 0 12px !important;
+    padding: 0 8px !important;
 `
 
 const HiddenInput = styled.input`
@@ -132,6 +136,12 @@ const SImgPreviewWrapper = styled.div`
     }
 `
 
+const EmptyChatContainer = styled(Container)`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+`
+
 function Chat({ className }) {
     const { nodeIdentities } = useRedwood()
     const api = useAPI()
@@ -145,6 +155,7 @@ function Chat({ className }) {
     const messageTextContainer = useRef()
     const [attachments, setAttachments] = useState([])
     const [previews, setPreviews] = useState([])
+    const [showEmojiKeyboard, setShowEmojiKeyboard] = useState(false)
 
     const { onPresent: onPresentPreviewModal } = useModal('attachment preview')
     const [previewedAttachment, setPreviewedAttachment] = useState({})
@@ -169,8 +180,16 @@ function Chat({ className }) {
         setMessages(messages)
     }, [numMessages])
 
+    const onOpenEmojis = () => {
+      setShowEmojiKeyboard(!showEmojiKeyboard)
+    }
+
+    const onSelectEmoji = (emoji) => {
+      setMessageText(messageText + emoji.colons)
+    }
+
     const onClickSend = useCallback(async () => {
-        if (!api) { return }
+        if (!api || messageText.trim() === '') { return }
         await api.sendMessage(messageText, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
         setAttachments([])
         setPreviews([])
@@ -188,7 +207,7 @@ function Chat({ className }) {
     }
 
     function onKeyDown(e) {
-        if (e.code === 'Enter') {
+        if (e.code === 'Enter' && messageText.trim() !== '') {
             onClickSend()
             setMessageText('')
         }
@@ -231,7 +250,9 @@ function Chat({ className }) {
     }
 
     if (!selectedStateURI) {
-        return <Container className={className}></Container>
+        return <EmptyChatContainer className={className}>
+          Please select a server and a chat to get started!
+        </EmptyChatContainer>
     }
 
     const ownAddress = nodeIdentities && nodeIdentities[0] ? nodeIdentities[0].address : null
@@ -266,11 +287,29 @@ function Chat({ className }) {
             <ControlsContainer>
                 <AddAttachmentButton onClick={onClickAddAttachment} style={{ color: theme.color.white }} />
                 <MessageInput onKeyDown={onKeyDown} onChange={onChangeMessageText} value={messageText} />
+                { showEmojiKeyboard ? <EmojiWrapper>
+                  <Picker
+                    useButton={false}
+                    title={'Redwood Chat'}
+                    perLine={8}
+                    set='apple'
+                    theme='dark'
+                    emojiSize={24}
+                    onSelect={onSelectEmoji}
+                  />
+                </EmojiWrapper> : null }
+                <SIconButton onClick={onOpenEmojis}><EmojiEmotionsIcon /></SIconButton>
                 <SIconButton onClick={onClickSend}><SendIcon /></SIconButton>
             </ControlsContainer>
         </Container>
     )
 }
+
+const EmojiWrapper = styled.div`
+  position: absolute;
+  top: -440px;
+  right: 20px;
+`
 
 const MessageWrapper = styled.div`
     display: flex;
@@ -351,7 +390,8 @@ function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
               <MessageSender>{displayName} <MessageTimestamp dayDisplay={dayDisplay} displayTime={displayTime} /></MessageSender>
             }
 
-            <MessageText>{msg.text}</MessageText>
+            {/* <MessageText>{msg.text}</MessageText> */}
+            <MessageParse msgText={msg.text} />
             {(msg.attachments || []).map((attachment, j) => (
               <SAttachment
                 key={`${selectedStateURI}${messageIndex},${j}`}
@@ -364,6 +404,30 @@ function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
         </MessageWrapper>
     )
 }
+
+function MessageParse({ msgText }) {
+
+  const colons = `:[a-zA-Z0-9-_+]+:`;
+  const skin = `:skin-tone-[2-6]:`;
+  const colonsRegex = new RegExp(`(${colons}${skin}|${colons})`, 'g');
+
+  let msgBlock = msgText.split(colonsRegex).filter((block) => !!block).map((block) => {
+    if (block[0] === ':' && block[block.length - 1] === ':') {
+      return <Emoji emoji={block} size={18} />
+    }
+
+    return <span style={{ whiteSpace: 'pre-wrap' }}>{block}</span>
+  })
+
+  return (
+    <SMessageParseContainer>{msgBlock}</SMessageParseContainer>
+  )
+}
+
+const SMessageParseContainer = styled.div`
+  // display: flex;
+  // align-items: center
+`
 
 const SModalContent = styled(ModalContent)`
     width: 600px;
