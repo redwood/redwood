@@ -4,20 +4,10 @@ RUN apt update
 RUN apt -y install build-essential
 RUN apt -y install pkg-config
 
-ADD go.mod go.sum /app/
-ADD *.go /app/
-ADD nelson/*.go /app/nelson/
-ADD ctx/*.go /app/ctx/
-ADD types/*.go /app/types/
-ADD tree/*.go /app/tree/
-ADD utils/*.go /app/utils/
-ADD cloud/*.go /app/cloud/
-ADD crypto/*.go /app/crypto/
-WORKDIR /app
-RUN go get -d
+ADD . /build/
 
-ADD . /app
-WORKDIR /app/demos/desktop-chat-app
+WORKDIR /build/demos/desktop-chat-app
+RUN go get -d
 RUN go build --tags headless -o /redwood-chat .
 
 
@@ -27,4 +17,4 @@ FROM golang:1.15.7-buster
 
 COPY --from=build /redwood-chat /redwood-chat
 WORKDIR /
-CMD ["/redwood-chat", "--dev", "--config", "/config/.redwoodrc"]
+CMD ["/redwood-chat"]

@@ -23,13 +23,13 @@ func main() {
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
-	configPath, err := config.DefaultConfigPath("redwood-webview")
+	configPath, err := config.DefaultConfigPath("redwood-chat")
 	if err != nil {
 		app.Error(err)
 		os.Exit(1)
 	}
 
-	profileRoot, err := config.DefaultDataRoot("redwood-webview")
+	profileRoot, err := config.DefaultDataRoot("redwood-chat")
 	if err != nil {
 		app.Error(err)
 		os.Exit(1)
@@ -91,7 +91,7 @@ func main() {
 		}
 
 		port := c.Uint("port")
-		// go startGUI(port)
+		go startGUI(port)
 		go startAPI(port)
 
 		defer app.Close()

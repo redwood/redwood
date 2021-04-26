@@ -1,4 +1,4 @@
-module github.com/brynbellomy/redwood/demos/desktop-chat-app
+module redwood.dev/demos/desktop-chat-app
 
 go 1.15
 
@@ -6,7 +6,6 @@ replace redwood.dev => ../../
 
 require (
 	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae
-	github.com/gogo/protobuf v1.3.1
 	github.com/markbates/pkger v0.17.1
 	github.com/pkg/errors v0.9.1
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef

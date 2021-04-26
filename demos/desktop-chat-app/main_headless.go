@@ -13,16 +13,23 @@ import (
 
 	"github.com/brynbellomy/klog"
 	"github.com/urfave/cli"
-	"redwood.dev/utils"
 
-	rw "redwood.dev"
+	"redwood.dev/config"
+	"redwood.dev/crypto"
+	"redwood.dev/utils"
 )
 
 func main() {
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
-	configPath, err := rw.DefaultConfigPath("redwood-chat")
+	configPath, err := config.DefaultConfigPath("redwood-chat")
+	if err != nil {
+		app.Error(err)
+		os.Exit(1)
+	}
+
+	profileRoot, err := config.DefaultDataRoot("redwood-chat")
 	if err != nil {
 		app.Error(err)
 		os.Exit(1)
@@ -34,7 +41,21 @@ func main() {
 			Value: configPath,
 			Usage: "location of config file",
 		},
-		cli.BoolFlag{
+		cli.StringFlag{
+			Name:  "root",
+			Value: profileRoot,
+			Usage: "location of the data root containing all profiles",
+		},
+		cli.StringFlag{
+			Name:  "password-file, p",
+			Usage: "location of the password file",
+		},
+		cli.UintFlag{
+			Name:  "port",
+			Value: 54231,
+			Usage: "port on which to serve UI assets",
+		},
+		cli.StringFlag{
 			Name:  "pprof",
 			Usage: "enable pprof",
 		},
@@ -61,8 +82,19 @@ func main() {
 			}()
 			runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
 		}
+
+		mnemonic, err := crypto.GenerateMnemonic()
+		if err != nil {
+			return err
+		}
+
 		app.configPath = c.String("config")
 		app.devMode = c.Bool("dev")
+		app.password = c.String("password-file")
+		app.profileRoot = c.String("root")
+		app.profileName = "default"
+		app.mnemonic = mnemonic
+
 		return app.Start()
 	}
 
