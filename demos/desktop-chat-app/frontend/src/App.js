@@ -49,9 +49,6 @@ function App() {
                                 <ModalsProvider>
                                     <Router>
                                         <Switch>
-                                            <Route exact path="/">
-                                                <Main />
-                                            </Route>
                                             <Route path="/signin">
                                                 <SignIn />
                                             </Route>
@@ -60,6 +57,9 @@ function App() {
                                             </Route>
                                             <Route path="/profiles">
                                                 <Profiles />
+                                            </Route>
+                                            <Route>
+                                                <Main />
                                             </Route>
                                         </Switch>
                                     </Router>

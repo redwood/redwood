@@ -113,8 +113,8 @@ function AddPeerPane({ showPeerList, ...props }) {
                     value={transport}
                     onChange={onChangeTransport}
                     items={[
-                        { value: 'libp2p', text: 'libp2p' },
-                        { value: 'http',   text: 'http' },
+                        { value: 'libp2p',    text: 'libp2p' },
+                        { value: 'braidhttp', text: 'http' },
                     ]}
                 />
                 <SInputLabel label="Dial address">

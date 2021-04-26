@@ -73,13 +73,13 @@ func (app *appType) Start() (err error) {
 
 	app.chLoggedOut = make(chan struct{})
 
-	cfg, err := config.ReadConfigAtPath("redwood-webview", app.configPath)
+	cfg, err := config.ReadConfigAtPath("redwood-chat", app.configPath)
 	if os.IsNotExist(err) {
 		err := os.MkdirAll(filepath.Dir(app.configPath), 0777|os.ModeDir)
 		if err != nil {
 			return err
 		}
-		cfg, err = config.ReadConfigAtPath("redwood-webview", app.configPath)
+		cfg, err = config.ReadConfigAtPath("redwood-chat", app.configPath)
 		if err != nil {
 			return err
 		}
