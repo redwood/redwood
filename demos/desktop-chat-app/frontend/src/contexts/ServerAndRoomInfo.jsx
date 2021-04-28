@@ -60,7 +60,7 @@ function Provider({ children }) {
             }
 
             if (room === 'registry' || stateURI === 'chat.local/dms') {
-                for (let room of Object.keys(stateTrees[stateURI].rooms || {})) {
+                for (let room of Object.keys((stateTrees[stateURI] || {}).rooms || {})) {
                     let roomStateURI = `${stateURI === 'chat.local/dms' ? 'chat.p2p' : server}/${room}`
                     if (subscribedStateURIs[roomStateURI]) {
                         continue
