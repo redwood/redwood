@@ -72,17 +72,25 @@ func TestPeerStore_DB(t *testing.T) {
 	)
 	err = p.SavePeerDetails(pd3)
 	require.NoError(t, err)
+	requireExpectedPeers(t, p, []swarm.PeerDetails{pd1, pd2, pd3})
 
-	pds, err = p.FetchAllPeerDetails()
+	err = p.RemovePeers([]swarm.PeerDialInfo{pd2.DialInfo()})
 	require.NoError(t, err)
-	require.Len(t, pds, 3)
+	requireExpectedPeers(t, p, []swarm.PeerDetails{pd1, pd3})
 
-	expected := []swarm.PeerDetails{pd1, pd2, pd3}
-	expectedMap := map[swarm.PeerDialInfo]swarm.PeerDetails{
-		pd1.DialInfo(): pd1,
-		pd2.DialInfo(): pd2,
-		pd3.DialInfo(): pd3,
-	}
+	err = p.RemovePeers([]swarm.PeerDialInfo{pd1.DialInfo(), pd3.DialInfo()})
+	require.NoError(t, err)
+	requireExpectedPeers(t, p, []swarm.PeerDetails{})
+}
+
+func requireExpectedPeers(t *testing.T, p *swarm.ConcretePeerStore, expected []swarm.PeerDetails) {
+	t.Helper()
+
+	pds, err := p.FetchAllPeerDetails()
+	require.NoError(t, err)
+	require.Len(t, pds, len(expected))
+
+	expectedMap := make(map[swarm.PeerDialInfo]swarm.PeerDetails)
 	for _, x := range expected {
 		expectedMap[x.DialInfo()] = x
 	}

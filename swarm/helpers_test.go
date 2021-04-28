@@ -43,6 +43,8 @@ func (p *peerPool) CopyPeers() map[PeerDialInfo]peersMapEntry {
 	return m
 }
 
+type ConcretePeerStore = peerStore
+
 func (p *peerStore) FetchAllPeerDetails() ([]*peerDetails, error) {
 	return p.fetchAllPeerDetails()
 }
