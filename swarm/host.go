@@ -659,7 +659,7 @@ func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription, f
 			} else {
 				node, err := node.CopyToMemory(keypath, nil)
 				if err != nil && errors.Cause(err) == types.Err404 {
-					// no-op
+					writeSub.EnqueueWrite(writeSub.StateURI(), nil, state.NewMemoryNode(), nil)
 				} else if err != nil {
 					h.Errorf("error writing initial state to peer (%v): %v", writeSub.StateURI(), err)
 				} else {
