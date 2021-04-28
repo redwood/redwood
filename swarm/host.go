@@ -32,6 +32,7 @@ type Host interface {
 	AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error)
 	FetchRef(ctx context.Context, ref types.RefID)
 	AddPeer(dialInfo PeerDialInfo)
+	RemovePeers(dialInfos []PeerDialInfo) error
 	Transport(name string) Transport
 	Controllers() tree.ControllerHub
 	ChallengePeerIdentity(ctx context.Context, peer Peer) error
@@ -470,6 +471,10 @@ func (h *host) txSeenByPeer(peer Peer, stateURI string, txID types.ID) bool {
 func (h *host) AddPeer(dialInfo PeerDialInfo) {
 	h.peerStore.AddDialInfos([]PeerDialInfo{dialInfo})
 	h.processPeersTask.Enqueue()
+}
+
+func (h *host) RemovePeers(dialInfos []PeerDialInfo) error {
+	return h.peerStore.RemovePeers(dialInfos)
 }
 
 func (h *host) handleNewUnverifiedPeer(dialInfo PeerDialInfo) {
