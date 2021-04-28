@@ -1,13 +1,13 @@
+// +build otto
+
 package tree
 
 import (
 	"encoding/json"
 	"io/ioutil"
 
+	"github.com/deoxxa/otto"
 	"github.com/pkg/errors"
-	"rogchap.com/v8go"
-
-	//"github.com/saibing/go-v8"
 
 	"redwood.dev/blob"
 	"redwood.dev/log"
@@ -19,7 +19,7 @@ import (
 
 type jsResolver struct {
 	log.Logger
-	vm            *v8go.Context
+	vm            *otto.Otto
 	internalState map[string]interface{}
 }
 
@@ -48,9 +48,10 @@ func NewJSResolver(config state.Node, internalState map[string]interface{}) (_ R
 		return nil, errors.WithStack(err)
 	}
 
-	v8ctx, _ := v8go.NewContext(nil)
+	vm := otto.New()
+	vm.Set("global", map[string]interface{}{})
 
-	_, err = v8ctx.RunScript("var global = {}; var newStateJSON; "+string(srcStr), "")
+	_, err = vm.Run(srcStr)
 	if err != nil {
 		return nil, err
 	}
@@ -60,13 +61,12 @@ func NewJSResolver(config state.Node, internalState map[string]interface{}) (_ R
 		return nil, err
 	}
 
-	internalStateScript := "global.init(" + string(internalStateBytes) + ")"
-	_, err = v8ctx.RunScript(internalStateScript, "")
+	_, err = vm.Call("global.init", nil, string(internalStateBytes))
 	if err != nil {
 		return nil, err
 	}
 
-	return &jsResolver{Logger: log.NewLogger("resolver:js"), vm: v8ctx, internalState: internalState}, nil
+	return &jsResolver{Logger: log.NewLogger("resolver:js"), vm: vm, internalState: internalState}, nil
 }
 
 func (r *jsResolver) InternalState() map[string]interface{} {
@@ -98,22 +98,19 @@ func (r *jsResolver) ResolveState(node state.Node, blobStore blob.Store, sender 
 	for i := range parents {
 		parentsArr = append(parentsArr, parents[i].String())
 	}
-	parentsArrJSON, _ := json.Marshal(parentsArr)
-	convertedPatchesJSON, _ := json.Marshal(convertedPatches)
 
-	script := "newStateJSON = global.resolve_state(" + string(stateJSON) + ", '" + sender.String() + "', '" + txID.String() + "', " + string(parentsArrJSON) + ", " + string(convertedPatchesJSON) + ")"
-	_, err = r.vm.RunScript(script, "")
+	val, err := r.vm.Call("global.resolve_state", nil, string(stateJSON), sender.String(), txID.String(), parentsArr, convertedPatches)
 	if err != nil {
 		return err
 	}
 
-	newStateJSONVal, err := r.vm.RunScript("newStateJSON", "")
+	x, err := val.Export()
 	if err != nil {
 		return err
 	}
 
 	var output map[string]interface{}
-	err = json.Unmarshal([]byte(newStateJSONVal.String()), &output)
+	err = json.Unmarshal([]byte(x.(string)), &output)
 	if err != nil {
 		return err
 	}
