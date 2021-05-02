@@ -230,16 +230,12 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 	}
 
 	ctx, cancel := utils.CombinedContext(ctx, h.chStop)
-	defer cancel()
 
 	var (
 		ch          = make(chan Peer)
-		wg          = utils.NewWaitGroupChan(ctx)
+		wg          sync.WaitGroup
 		alreadySent sync.Map
 	)
-
-	wg.Add(1)
-	defer wg.Done()
 
 	wg.Add(1)
 	go func() {
@@ -307,8 +303,7 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 	go func() {
 		defer close(ch)
 		defer cancel()
-		defer wg.Close()
-		<-wg.Wait()
+		wg.Wait()
 	}()
 
 	return ch

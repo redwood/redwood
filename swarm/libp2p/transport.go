@@ -515,11 +515,11 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<
 	}
 
 	ctx, cancel := utils.CombinedContext(ctx, t.chStop)
-	defer cancel()
 
 	ch := make(chan swarm.Peer)
 	go func() {
 		defer close(ch)
+		defer cancel()
 		for {
 			select {
 			case <-ctx.Done():
