@@ -31,21 +31,22 @@ func (peer *peerConn) Transport() swarm.Transport {
 	return peer.t
 }
 
-func (peer *peerConn) EnsureConnected(ctx context.Context) error {
+func (peer *peerConn) EnsureConnected(ctx context.Context) (err error) {
 	if peer.stream == nil {
+		defer func() { peer.UpdateConnStats(err == nil) }()
+
 		if len(peer.t.libp2pHost.Network().ConnsToPeer(peer.pinfo.ID)) == 0 {
-			err := peer.t.libp2pHost.Connect(ctx, peer.pinfo)
+			err = peer.t.libp2pHost.Connect(ctx, peer.pinfo)
 			if err != nil {
 				return errors.Wrapf(types.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 			}
 		}
 
-		stream, err := peer.t.libp2pHost.NewStream(ctx, peer.pinfo.ID, PROTO_MAIN)
+		var stream netp2p.Stream
+		stream, err = peer.t.libp2pHost.NewStream(ctx, peer.pinfo.ID, PROTO_MAIN)
 		if err != nil {
-			peer.UpdateConnStats(false)
 			return err
 		}
-		peer.UpdateConnStats(true)
 
 		peer.stream = stream
 	}
