@@ -491,6 +491,10 @@ func (h *host) processPeers(ctx context.Context) {
 
 		for _, tpt := range h.transports {
 			for _, peerDetails := range h.peerStore.PeersFromTransport(tpt.Name()) {
+				if !peerDetails.Ready() {
+					continue
+				}
+
 				if peerDetails.DialInfo().TransportName != tpt.Name() {
 					continue
 				}
@@ -531,6 +535,10 @@ func (h *host) processPeers(ctx context.Context) {
 		unverifiedPeers := h.peerStore.UnverifiedPeers()
 
 		for _, unverifiedPeer := range unverifiedPeers {
+			if !unverifiedPeer.Ready() {
+				continue
+			}
+
 			transport := h.Transport(unverifiedPeer.DialInfo().TransportName)
 			if transport == nil {
 				// Unsupported transport
@@ -557,7 +565,7 @@ func (h *host) processPeers(ctx context.Context) {
 
 				err := h.ChallengePeerIdentity(ctx, peer)
 				if err != nil {
-					h.Errorf("error verifying peer identity (%v): %v ", peer.DialInfo(), err)
+					h.Errorf("error verifying peer identity (%v): %v", peer.DialInfo(), err)
 					return
 				}
 			}()
