@@ -290,13 +290,8 @@ func (s *peerStore) PeersServingStateURI(stateURI string) []*peerDetails {
 func (s *peerStore) IsKnownPeer(dialInfo PeerDialInfo) bool {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
-
-	for di := range s.peers {
-		if di == dialInfo {
-			return true
-		}
-	}
-	return false
+	_, exists := s.peers[dialInfo]
+	return exists
 }
 
 func (s *peerStore) dialInfoHash(dialInfo PeerDialInfo) string {
@@ -372,6 +367,7 @@ func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDet
 		lastContact: time.Unix(int64(pd.LastContact), 0),
 		lastFailure: time.Unix(int64(pd.LastFailure), 0),
 		failures:    pd.Failures,
+		backoff:     utils.ExponentialBackoff{Min: 10 * time.Second, Max: 1 * time.Minute},
 	}, nil
 }
 
@@ -434,6 +430,7 @@ type PeerDetails interface {
 	LastFailure() time.Time
 	Failures() uint64
 	Ready() bool
+	RemainingBackoff() time.Duration
 }
 
 type peerDetails struct {
@@ -446,6 +443,7 @@ type peerDetails struct {
 	lastContact time.Time
 	lastFailure time.Time
 	failures    uint64
+	backoff     utils.ExponentialBackoff
 }
 
 type peerDetailsCodec struct {
@@ -464,6 +462,7 @@ func newPeerDetails(peerStore *peerStore, dialInfo PeerDialInfo) *peerDetails {
 		peerStore: peerStore,
 		dialInfo:  dialInfo,
 		stateURIs: utils.NewStringSet(nil),
+		backoff:   utils.ExponentialBackoff{Min: 10 * time.Second, Max: 1 * time.Minute},
 	}
 }
 
@@ -516,6 +515,7 @@ func (p *peerDetails) UpdateConnStats(success bool) {
 		p.lastContact = now
 		p.lastFailure = now
 		p.failures++
+		p.backoff.Next()
 	}
 	p.peerStore.savePeerDetails(p)
 }
@@ -538,10 +538,19 @@ func (p *peerDetails) Failures() uint64 {
 	return p.failures
 }
 
+// @@TODO: this should be configurable and probably not handled here
 func (p *peerDetails) Ready() bool {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
-	return uint64(time.Now().Sub(p.lastFailure)/time.Second) >= p.failures
+	ready, _ := p.backoff.Ready()
+	return ready
+}
+
+func (p *peerDetails) RemainingBackoff() time.Duration {
+	p.peerStore.muPeers.RLock()
+	defer p.peerStore.muPeers.RUnlock()
+	_, remaining := p.backoff.Ready()
+	return remaining
 }
 
 // @@TODO: remove this and use transport-defined unique IDs to
@@ -549,7 +558,10 @@ func (p *peerDetails) Ready() bool {
 type ephemeralPeerDetails peerDetails
 
 func NewEphemeralPeerDetails(dialInfo PeerDialInfo) *ephemeralPeerDetails {
-	return &ephemeralPeerDetails{dialInfo: dialInfo}
+	return &ephemeralPeerDetails{
+		dialInfo: dialInfo,
+		backoff:  utils.ExponentialBackoff{Min: 10 * time.Second, Max: 1 * time.Minute},
+	}
 }
 
 func (p *ephemeralPeerDetails) Addresses() []types.Address { return nil }
@@ -569,6 +581,7 @@ func (p *ephemeralPeerDetails) UpdateConnStats(success bool) {
 		p.lastContact = now
 		p.lastFailure = now
 		p.failures++
+		p.backoff.Next()
 	}
 }
 
@@ -585,5 +598,11 @@ func (p *ephemeralPeerDetails) Failures() uint64 {
 }
 
 func (p *ephemeralPeerDetails) Ready() bool {
-	return uint64(time.Now().Sub(p.lastFailure)/time.Second) >= p.failures
+	ready, _ := p.backoff.Ready()
+	return ready
+}
+
+func (p *ephemeralPeerDetails) RemainingBackoff() time.Duration {
+	_, remaining := p.backoff.Ready()
+	return remaining
 }
