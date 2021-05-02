@@ -587,6 +587,40 @@ var replCommands = map[string]struct {
 			return nil
 		},
 	},
+	"blobs": {
+		"list all blobs",
+		func(args []string, host swarm.Host) error {
+			blobIDsNeeded, err := host.BlobStore().RefsNeeded()
+			if err != nil {
+				return err
+			}
+
+			blobIDs, err := host.BlobStore().AllHashes()
+			if err != nil {
+				return err
+			}
+
+			var rows [][]string
+
+			for _, id := range blobIDsNeeded {
+				rows = append(rows, []string{id.String(), "(missing)"})
+			}
+
+			for _, id := range blobIDs {
+				rows = append(rows, []string{id.String(), ""})
+			}
+
+			table := tablewriter.NewWriter(os.Stdout)
+			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
+			table.SetCenterSeparator("|")
+			table.SetRowLine(true)
+			table.SetHeader([]string{"ID", "Status"})
+			table.AppendBulk(rows)
+			table.Render()
+
+			return nil
+		},
+	},
 	"peers": {
 		"list all known peers",
 		func(args []string, host swarm.Host) error {

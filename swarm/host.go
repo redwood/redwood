@@ -37,6 +37,8 @@ type Host interface {
 	Controllers() tree.ControllerHub
 	ChallengePeerIdentity(ctx context.Context, peer Peer) error
 
+	BlobStore() blob.Store
+
 	Identities() ([]identity.Identity, error)
 	NewIdentity(public bool) (identity.Identity, error)
 
@@ -217,6 +219,10 @@ func (h *host) NewIdentity(public bool) (identity.Identity, error) {
 
 func (h *host) StateAtVersion(stateURI string, version *types.ID) (state.Node, error) {
 	return h.Controllers().StateAtVersion(stateURI, version)
+}
+
+func (h *host) BlobStore() blob.Store {
+	return h.blobStore
 }
 
 // Returns peers discovered through any transport that have already been authenticated.
