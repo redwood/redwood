@@ -518,6 +518,29 @@ var replCommands = map[string]struct {
 	HelpText string
 	Handler  func(args []string, host swarm.Host) error
 }{
+	"libp2pid": {
+		"list your libp2p peer ID",
+		func(args []string, host swarm.Host) error {
+			peerID := host.Transport("libp2p").(interface{ Libp2pPeerID() string }).Libp2pPeerID()
+			host.Debugf("libp2p peer ID: %v", peerID)
+			return nil
+		},
+	},
+	"subscribe": {
+		"subscribe",
+		func(args []string, host swarm.Host) error {
+			if len(args) < 1 {
+				return errors.New("missing argument: state URI")
+			}
+			stateURI := args[0]
+			sub, err := host.Subscribe(context.Background(), stateURI, swarm.SubscriptionType_Txs, nil, &swarm.FetchHistoryOpts{FromTxID: tree.GenesisTxID})
+			if err != nil {
+				return err
+			}
+			defer sub.Close()
+			return nil
+		},
+	},
 	"stateuris": {
 		"list all known state URIs",
 		func(args []string, host swarm.Host) error {
