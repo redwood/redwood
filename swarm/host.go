@@ -32,6 +32,7 @@ type Host interface {
 	AddRef(reader io.ReadCloser) (types.Hash, types.Hash, error)
 	FetchRef(ctx context.Context, ref types.RefID)
 	AddPeer(dialInfo PeerDialInfo)
+	RemovePeers(dialInfos []PeerDialInfo) error
 	Transport(name string) Transport
 	Controllers() tree.ControllerHub
 	ChallengePeerIdentity(ctx context.Context, peer Peer) error
@@ -472,6 +473,10 @@ func (h *host) AddPeer(dialInfo PeerDialInfo) {
 	h.processPeersTask.Enqueue()
 }
 
+func (h *host) RemovePeers(dialInfos []PeerDialInfo) error {
+	return h.peerStore.RemovePeers(dialInfos)
+}
+
 func (h *host) handleNewUnverifiedPeer(dialInfo PeerDialInfo) {
 	h.processPeersTask.Enqueue()
 }
@@ -654,7 +659,7 @@ func (h *host) HandleWritableSubscriptionOpened(writeSub WritableSubscription, f
 			} else {
 				node, err := node.CopyToMemory(keypath, nil)
 				if err != nil && errors.Cause(err) == types.Err404 {
-					// no-op
+					writeSub.EnqueueWrite(writeSub.StateURI(), nil, state.NewMemoryNode(), nil)
 				} else if err != nil {
 					h.Errorf("error writing initial state to peer (%v): %v", writeSub.StateURI(), err)
 				} else {

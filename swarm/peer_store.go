@@ -16,6 +16,7 @@ import (
 type PeerStore interface {
 	AddDialInfos(dialInfos []PeerDialInfo)
 	AddVerifiedCredentials(dialInfo PeerDialInfo, address types.Address, sigpubkey crypto.SigningPublicKey, encpubkey crypto.EncryptingPublicKey)
+	RemovePeers(dialInfos []PeerDialInfo) error
 	UnverifiedPeers() []*peerDetails
 	Peers() []*peerDetails
 	AllDialInfos() []PeerDialInfo
@@ -182,6 +183,20 @@ func (s *peerStore) AddVerifiedCredentials(
 	if err != nil {
 		s.Warnf("could not save modifications to peerstore DB: %v", err)
 	}
+}
+
+func (s *peerStore) RemovePeers(dialInfos []PeerDialInfo) error {
+	s.muPeers.Lock()
+	defer s.muPeers.Unlock()
+
+	for _, dialInfo := range dialInfos {
+		delete(s.peers, dialInfo)
+		delete(s.unverifiedPeers, dialInfo)
+		for addr := range s.peersWithAddress {
+			delete(s.peersWithAddress[addr], dialInfo)
+		}
+	}
+	return s.deletePeers(dialInfos)
 }
 
 func (s *peerStore) PeerWithDialInfo(dialInfo PeerDialInfo) *peerDetails {
@@ -387,6 +402,21 @@ func (s *peerStore) savePeerDetails(peerDetails *peerDetails) error {
 	err := node.Set(peerKeypath, nil, pdc)
 	if err != nil {
 		return err
+	}
+	return node.Save()
+}
+
+func (s *peerStore) deletePeers(dialInfos []PeerDialInfo) error {
+	node := s.state.State(true)
+	defer node.Close()
+
+	for _, dialInfo := range dialInfos {
+		dialInfoHash := s.dialInfoHash(dialInfo)
+		peerKeypath := state.Keypath("peers").Pushs(dialInfoHash)
+		err := node.Delete(peerKeypath, nil)
+		if err != nil {
+			return err
+		}
 	}
 	return node.Save()
 }

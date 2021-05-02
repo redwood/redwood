@@ -9,6 +9,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -571,12 +572,58 @@ var replCommands = map[string]struct {
 		},
 	},
 	"addpeer": {
-		"list all known peers",
+		"add a peer",
 		func(args []string, host swarm.Host) error {
 			if len(args) < 2 {
 				return errors.New("requires 2 arguments: addpeer <transport> <dial addr>")
 			}
 			host.AddPeer(swarm.PeerDialInfo{args[0], args[1]})
+			return nil
+		},
+	},
+	"rmallpeers": {
+		"remove all peers",
+		func(args []string, host swarm.Host) error {
+			var toDelete []swarm.PeerDialInfo
+			for _, peer := range host.Peers() {
+				toDelete = append(toDelete, peer.DialInfo())
+			}
+			host.RemovePeers(toDelete)
+			return nil
+		},
+	},
+	"rmunverifiedpeers": {
+		"remove peers who haven't been verified",
+		func(args []string, host swarm.Host) error {
+			var toDelete []swarm.PeerDialInfo
+			for _, peer := range host.Peers() {
+				if len(peer.Addresses()) == 0 {
+					toDelete = append(toDelete, peer.DialInfo())
+				}
+			}
+			host.RemovePeers(toDelete)
+			return nil
+		},
+	},
+	"rmfailedpeers": {
+		"remove peers with more than a certain number of failures",
+		func(args []string, host swarm.Host) error {
+			if len(args) < 1 {
+				return errors.New("requires 1 argument: rmfailedpeers <number of failures>")
+			}
+
+			num, err := strconv.Atoi(args[0])
+			if err != nil {
+				return errors.Wrap(err, "bad argument")
+			}
+
+			var toDelete []swarm.PeerDialInfo
+			for _, peer := range host.Peers() {
+				if peer.Failures() > uint64(num) {
+					toDelete = append(toDelete, peer.DialInfo())
+				}
+			}
+			host.RemovePeers(toDelete)
 			return nil
 		},
 	},
