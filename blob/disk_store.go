@@ -131,7 +131,9 @@ func (s *diskStore) objectWithSHA1(hash types.Hash) (io.ReadCloser, int64, error
 func (s *diskStore) objectWithSHA3(sha3Hash types.Hash) (io.ReadCloser, int64, error) {
 	filename := s.filepathForSHA3Blob(sha3Hash)
 	stat, err := os.Stat(filename)
-	if err != nil {
+	if os.IsNotExist(err) {
+		return nil, 0, types.Err404
+	} else if err != nil {
 		return nil, 0, err
 	}
 
@@ -242,34 +244,25 @@ func (s *diskStore) AllHashes() ([]types.RefID, error) {
 }
 
 func (s *diskStore) RefsNeeded() ([]types.RefID, error) {
-	node := s.metadata.State(false)
-	defer node.Close()
+	var missingBlobsSlice []types.RefID
+	err := s.viewMetadata(func(node state.Node) error {
+		node = node.NodeAt(state.Keypath("missing"), nil)
 
-	iter := node.ChildIterator(state.Keypath("blob").Pushs("missing"), false, 0)
-	defer iter.Close()
+		iter := node.ChildIterator(nil, false, 0)
+		defer iter.Close()
 
-	var missingRefsSlice []types.RefID
-	for iter.Rewind(); iter.Valid(); iter.Next() {
-		var refID types.RefID
-		err := refID.UnmarshalText(iter.Node().Keypath())
-		if err != nil {
-			s.Errorf("error unmarshaling refID: %v", err)
-			continue
+		for iter.Rewind(); iter.Valid(); iter.Next() {
+			var blobID types.RefID
+			err := blobID.UnmarshalText(iter.Node().Keypath().RelativeTo(node.Keypath()))
+			if err != nil {
+				s.Errorf("error unmarshaling blobID: %v", err)
+				continue
+			}
+			missingBlobsSlice = append(missingBlobsSlice, blobID)
 		}
-		missingRefsSlice = append(missingRefsSlice, refID)
-	}
-	return missingRefsSlice, nil
-}
-
-func (s *diskStore) updateMetadata(fn func(node state.Node) error) error {
-	node := s.metadata.State(true)
-	defer node.Close()
-
-	err := fn(node.NodeAt(state.Keypath("blob"), nil))
-	if err != nil {
-		return err
-	}
-	return node.Save()
+		return nil
+	})
+	return missingBlobsSlice, err
 }
 
 func (s *diskStore) MarkRefsAsNeeded(refs []types.RefID) {
@@ -390,37 +383,55 @@ func (s *diskStore) notifyRefsSavedListeners() {
 }
 
 func (s *diskStore) sha3ForSHA1(hash types.Hash) (types.Hash, error) {
-	node := s.metadata.State(false).NodeAt(state.Keypath("metadata"), nil)
-	defer node.Close()
-
-	sha1 := hash[:20]
-
-	sha3Bytes, exists, err := node.NodeAt(state.Keypath(sha1).Pushs("sha3"), nil).BytesValue(nil)
-	if err != nil {
-		return types.Hash{}, err
-	} else if !exists {
-		return types.Hash{}, types.Err404
-	}
 	var sha3 types.Hash
-	copy(sha3[:], sha3Bytes)
-	return sha3, nil
+	err := s.viewMetadata(func(node state.Node) error {
+		sha1 := hash[:20]
+
+		sha3Bytes, exists, err := node.NodeAt(state.Keypath(sha1).Pushs("sha3"), nil).BytesValue(nil)
+		if err != nil {
+			return err
+		} else if !exists {
+			return types.Err404
+		}
+		copy(sha3[:], sha3Bytes)
+		return nil
+	})
+	return sha3, err
 }
 
 func (s *diskStore) sha1ForSHA3(hash types.Hash) (types.Hash, error) {
-	node := s.metadata.State(false).NodeAt(state.Keypath("metadata"), nil)
+	var sha1 types.Hash
+	err := s.viewMetadata(func(node state.Node) error {
+		sha3 := hash[:]
+
+		sha1Bytes, exists, err := node.NodeAt(state.Keypath(sha3).Pushs("sha1"), nil).BytesValue(nil)
+		if err != nil {
+			return err
+		} else if !exists {
+			return types.Err404
+		}
+		copy(sha1[:], sha1Bytes)
+		return nil
+	})
+	return sha1, err
+}
+
+func (s *diskStore) viewMetadata(fn func(node state.Node) error) error {
+	node := s.metadata.State(false)
 	defer node.Close()
 
-	sha3 := hash[:]
+	return fn(node.NodeAt(state.Keypath("blob"), nil))
+}
 
-	sha1Bytes, exists, err := node.NodeAt(state.Keypath(sha3).Pushs("sha1"), nil).BytesValue(nil)
+func (s *diskStore) updateMetadata(fn func(node state.Node) error) error {
+	node := s.metadata.State(true)
+	defer node.Close()
+
+	err := fn(node.NodeAt(state.Keypath("blob"), nil))
 	if err != nil {
-		return types.Hash{}, err
-	} else if !exists {
-		return types.Hash{}, types.Err404
+		return err
 	}
-	var sha1 types.Hash
-	copy(sha1[:], sha1Bytes)
-	return sha1, nil
+	return node.Save()
 }
 
 func (s *diskStore) filepathForSHA3Blob(sha3Hash types.Hash) string {
