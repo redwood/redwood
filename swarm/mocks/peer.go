@@ -306,6 +306,20 @@ func (_m *Peer) ReceiveRefPacket() (swarm.FetchRefResponseBody, error) {
 	return r0, r1
 }
 
+// RemainingBackoff provides a mock function with given fields:
+func (_m *Peer) RemainingBackoff() time.Duration {
+	ret := _m.Called()
+
+	var r0 time.Duration
+	if rf, ok := ret.Get(0).(func() time.Duration); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(time.Duration)
+	}
+
+	return r0
+}
+
 // RemoveStateURI provides a mock function with given fields: stateURI
 func (_m *Peer) RemoveStateURI(stateURI string) {
 	_m.Called(stateURI)
@@ -325,13 +339,13 @@ func (_m *Peer) RespondChallengeIdentity(verifyAddressResponse []swarm.Challenge
 	return r0
 }
 
-// SendRefHeader provides a mock function with given fields:
-func (_m *Peer) SendRefHeader() error {
-	ret := _m.Called()
+// SendRefHeader provides a mock function with given fields: haveBlob
+func (_m *Peer) SendRefHeader(haveBlob bool) error {
+	ret := _m.Called(haveBlob)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func() error); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(bool) error); ok {
+		r0 = rf(haveBlob)
 	} else {
 		r0 = ret.Error(0)
 	}

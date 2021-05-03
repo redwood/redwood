@@ -205,7 +205,7 @@ func (p *peerConn) FetchRef(refID types.RefID) error {
 	return types.ErrUnimplemented
 }
 
-func (p *peerConn) SendRefHeader() error {
+func (p *peerConn) SendRefHeader(haveBlob bool) error {
 	return types.ErrUnimplemented
 }
 

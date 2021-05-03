@@ -46,7 +46,7 @@ type Peer interface {
 
 	// Refs (referenced extrinsics)
 	FetchRef(refID types.RefID) error
-	SendRefHeader() error
+	SendRefHeader(haveBlob bool) error
 	SendRefPacket(data []byte, end bool) error
 	ReceiveRefHeader() (FetchRefResponseHeader, error)
 	ReceiveRefPacket() (FetchRefResponseBody, error)

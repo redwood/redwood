@@ -31,21 +31,22 @@ func (peer *peerConn) Transport() swarm.Transport {
 	return peer.t
 }
 
-func (peer *peerConn) EnsureConnected(ctx context.Context) error {
+func (peer *peerConn) EnsureConnected(ctx context.Context) (err error) {
 	if peer.stream == nil {
+		defer func() { peer.UpdateConnStats(err == nil) }()
+
 		if len(peer.t.libp2pHost.Network().ConnsToPeer(peer.pinfo.ID)) == 0 {
-			err := peer.t.libp2pHost.Connect(ctx, peer.pinfo)
+			err = peer.t.libp2pHost.Connect(ctx, peer.pinfo)
 			if err != nil {
 				return errors.Wrapf(types.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 			}
 		}
 
-		stream, err := peer.t.libp2pHost.NewStream(ctx, peer.pinfo.ID, PROTO_MAIN)
+		var stream netp2p.Stream
+		stream, err = peer.t.libp2pHost.NewStream(ctx, peer.pinfo.ID, PROTO_MAIN)
 		if err != nil {
-			peer.UpdateConnStats(false)
 			return err
 		}
-		peer.UpdateConnStats(true)
 
 		peer.stream = stream
 	}
@@ -132,8 +133,8 @@ func (p *peerConn) FetchRef(refID types.RefID) error {
 	return p.writeMsg(Msg{Type: MsgType_FetchRef, Payload: refID})
 }
 
-func (p *peerConn) SendRefHeader() error {
-	return p.writeMsg(Msg{Type: MsgType_FetchRefResponse, Payload: swarm.FetchRefResponse{Header: &swarm.FetchRefResponseHeader{}}})
+func (p *peerConn) SendRefHeader(haveBlob bool) error {
+	return p.writeMsg(Msg{Type: MsgType_FetchRefResponse, Payload: swarm.FetchRefResponse{Header: &swarm.FetchRefResponseHeader{Missing: !haveBlob}}})
 }
 
 func (p *peerConn) SendRefPacket(data []byte, end bool) error {
@@ -209,6 +210,7 @@ func (p *peerConn) writeMsg(msg Msg) (err error) {
 
 func (p *peerConn) readMsg() (msg Msg, err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
+	p.stream.SetReadDeadline(time.Now().Add(10 * time.Second))
 	return readMsg(p.stream)
 }
 

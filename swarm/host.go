@@ -37,6 +37,8 @@ type Host interface {
 	Controllers() tree.ControllerHub
 	ChallengePeerIdentity(ctx context.Context, peer Peer) error
 
+	BlobStore() blob.Store
+
 	Identities() ([]identity.Identity, error)
 	NewIdentity(public bool) (identity.Identity, error)
 
@@ -219,6 +221,10 @@ func (h *host) StateAtVersion(stateURI string, version *types.ID) (state.Node, e
 	return h.Controllers().StateAtVersion(stateURI, version)
 }
 
+func (h *host) BlobStore() blob.Store {
+	return h.blobStore
+}
+
 // Returns peers discovered through any transport that have already been authenticated.
 // It's not guaranteed that they actually provide the stateURI in question. These are
 // simply peers that claim to.
@@ -230,16 +236,12 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 	}
 
 	ctx, cancel := utils.CombinedContext(ctx, h.chStop)
-	defer cancel()
 
 	var (
 		ch          = make(chan Peer)
-		wg          = utils.NewWaitGroupChan(ctx)
+		wg          sync.WaitGroup
 		alreadySent sync.Map
 	)
-
-	wg.Add(1)
-	defer wg.Done()
 
 	wg.Add(1)
 	go func() {
@@ -307,8 +309,7 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 	go func() {
 		defer close(ch)
 		defer cancel()
-		defer wg.Close()
-		<-wg.Wait()
+		wg.Wait()
 	}()
 
 	return ch
@@ -316,7 +317,6 @@ func (h *host) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan 
 
 func (h *host) ProvidersOfRef(ctx context.Context, refID types.RefID) <-chan Peer {
 	ctx, cancel := utils.CombinedContext(ctx, h.chStop)
-	defer cancel()
 
 	var wg sync.WaitGroup
 	ch := make(chan Peer)
@@ -350,6 +350,7 @@ func (h *host) ProvidersOfRef(ctx context.Context, refID types.RefID) <-chan Pee
 	}
 
 	go func() {
+		defer cancel()
 		defer close(ch)
 		wg.Wait()
 	}()
@@ -496,6 +497,10 @@ func (h *host) processPeers(ctx context.Context) {
 
 		for _, tpt := range h.transports {
 			for _, peerDetails := range h.peerStore.PeersFromTransport(tpt.Name()) {
+				if !peerDetails.Ready() {
+					continue
+				}
+
 				if peerDetails.DialInfo().TransportName != tpt.Name() {
 					continue
 				}
@@ -536,6 +541,10 @@ func (h *host) processPeers(ctx context.Context) {
 		unverifiedPeers := h.peerStore.UnverifiedPeers()
 
 		for _, unverifiedPeer := range unverifiedPeers {
+			if !unverifiedPeer.Ready() {
+				continue
+			}
+
 			transport := h.Transport(unverifiedPeer.DialInfo().TransportName)
 			if transport == nil {
 				// Unsupported transport
@@ -562,7 +571,7 @@ func (h *host) processPeers(ctx context.Context) {
 
 				err := h.ChallengePeerIdentity(ctx, peer)
 				if err != nil {
-					h.Errorf("error verifying peer identity (%v): %v ", peer.DialInfo(), err)
+					h.Errorf("error verifying peer identity (%v): %v", peer.DialInfo(), err)
 					return
 				}
 			}()
@@ -1203,77 +1212,94 @@ func (h *host) fetchMissingRefs(refs []types.RefID) {
 }
 
 func (h *host) FetchRef(ctx context.Context, refID types.RefID) {
-	ctx, cancel := utils.CombinedContext(ctx, h.chStop)
-	defer cancel()
+	ctxFindProviders, cancelFindProviders := utils.CombinedContext(ctx, h.chStop, 15*time.Second)
+	defer cancelFindProviders()
 
-	for peer := range h.ProvidersOfRef(ctx, refID) {
-		err := peer.EnsureConnected(ctx)
-		if err != nil {
-			h.Errorf("error connecting to peer: %v", err)
+	for peer := range h.ProvidersOfRef(ctxFindProviders, refID) {
+		if !peer.Ready() {
 			continue
 		}
 
-		err = peer.FetchRef(refID)
-		if err != nil {
-			h.Errorf("error writing to peer: %v", err)
-			continue
-		}
+		var done bool
+		func() {
+			ctxConnect, cancelConnect := utils.CombinedContext(h.chStop, 10*time.Second)
+			defer cancelConnect()
 
-		// Not currently used
-		_, err = peer.ReceiveRefHeader()
-		if err != nil {
-			h.Errorf("error reading from peer: %v", err)
-			continue
-		}
-
-		pr, pw := io.Pipe()
-		go func() {
-			var err error
-			defer func() { pw.CloseWithError(err) }()
-
-			for {
-				select {
-				case <-ctx.Done():
-					err = ctx.Err()
-					return
-				default:
-				}
-
-				pkt, err := peer.ReceiveRefPacket()
-				if err != nil {
-					h.Errorf("error receiving ref from peer: %v", err)
-					return
-				} else if pkt.End {
-					return
-				}
-
-				var n int
-				n, err = pw.Write(pkt.Data)
-				if err != nil {
-					h.Errorf("error receiving ref from peer: %v", err)
-					return
-				} else if n < len(pkt.Data) {
-					err = io.ErrUnexpectedEOF
-					return
-				}
+			err := peer.EnsureConnected(ctxConnect)
+			if err != nil {
+				h.Errorf("error connecting to peer: %v", err)
+				return
 			}
+			cancelConnect()
+			defer peer.Close()
+
+			err = peer.FetchRef(refID)
+			if err != nil {
+				h.Errorf("error writing to peer: %v", err)
+				return
+			}
+
+			header, err := peer.ReceiveRefHeader()
+			if err != nil {
+				h.Errorf("error reading from peer: %v", err)
+				return
+			} else if header.Missing {
+				h.Errorf("peer doesn't have ref: %v", err)
+				return
+			}
+
+			pr, pw := io.Pipe()
+			go func() {
+				var err error
+				defer func() { pw.CloseWithError(err) }()
+
+				for {
+					select {
+					case <-ctx.Done():
+						err = ctx.Err()
+						return
+					default:
+					}
+
+					pkt, err := peer.ReceiveRefPacket()
+					if err != nil {
+						h.Errorf("error receiving ref from peer: %v", err)
+						return
+					} else if pkt.End {
+						return
+					}
+
+					var n int
+					n, err = pw.Write(pkt.Data)
+					if err != nil {
+						h.Errorf("error receiving ref from peer: %v", err)
+						return
+					} else if n < len(pkt.Data) {
+						err = io.ErrUnexpectedEOF
+						return
+					}
+				}
+			}()
+
+			sha1Hash, sha3Hash, err := h.blobStore.StoreObject(pr)
+			if err != nil {
+				h.Errorf("could not store ref: %v", err)
+				return
+			}
+			// @@TODO: check stored refHash against the one we requested
+
+			ctx, cancel := utils.CombinedContext(ctx, h.chStop, 10*time.Second)
+			defer cancel()
+
+			h.announceRefs(ctx, []types.RefID{
+				{HashAlg: types.SHA1, Hash: sha1Hash},
+				{HashAlg: types.SHA3, Hash: sha3Hash},
+			})
+			done = true
 		}()
-
-		sha1Hash, sha3Hash, err := h.blobStore.StoreObject(pr)
-		if err != nil {
-			h.Errorf("could not store ref: %v", err)
-			continue
+		if done {
+			return
 		}
-		// @@TODO: check stored refHash against the one we requested
-
-		ctx, cancel := utils.CombinedContext(ctx, h.chStop, 10*time.Second)
-		defer cancel()
-
-		h.announceRefs(ctx, []types.RefID{
-			{HashAlg: types.SHA1, Hash: sha1Hash},
-			{HashAlg: types.SHA3, Hash: sha3Hash},
-		})
-		return
 	}
 }
 
@@ -1302,19 +1328,22 @@ func (h *host) announceRefs(ctx context.Context, refIDs []types.RefID) {
 }
 
 const (
-	REF_CHUNK_SIZE = 1024 // @@TODO: tunable buffer size?
+	REF_CHUNK_SIZE = 100 * 1024 // @@TODO: tunable buffer size?
 )
 
 func (h *host) HandleFetchRefReceived(refID types.RefID, peer Peer) {
 	defer peer.Close()
 
 	objectReader, _, err := h.blobStore.Object(refID)
-	// @@TODO: handle the case where we don't have the ref more gracefully
 	if err != nil {
-		panic(err)
+		err = peer.SendRefHeader(false)
+		if err != nil {
+			h.Errorf("[ref server] %+v", errors.WithStack(err))
+		}
+		return
 	}
 
-	err = peer.SendRefHeader()
+	err = peer.SendRefHeader(true)
 	if err != nil {
 		h.Errorf("[ref server] %+v", errors.WithStack(err))
 		return
@@ -1322,11 +1351,13 @@ func (h *host) HandleFetchRefReceived(refID types.RefID, peer Peer) {
 
 	buf := make([]byte, REF_CHUNK_SIZE)
 	for {
+		var end bool
 		n, err := io.ReadFull(objectReader, buf)
 		if err == io.EOF {
 			break
 		} else if err == io.ErrUnexpectedEOF {
 			buf = buf[:n]
+			end = true
 		} else if err != nil {
 			h.Errorf("[ref server] %+v", err)
 			return
@@ -1336,6 +1367,9 @@ func (h *host) HandleFetchRefReceived(refID types.RefID, peer Peer) {
 		if err != nil {
 			h.Errorf("[ref server] %+v", errors.WithStack(err))
 			return
+		}
+		if end {
+			break
 		}
 	}
 

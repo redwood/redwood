@@ -78,5 +78,6 @@ func NewPeerDetails(
 		lastContact,
 		lastFailure,
 		failures,
+		utils.ExponentialBackoff{},
 	}
 }

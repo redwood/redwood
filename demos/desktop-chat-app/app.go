@@ -9,6 +9,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/brynbellomy/klog"
 	"github.com/markbates/pkger"
+	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 
 	"redwood.dev/blob"
@@ -518,6 +520,29 @@ var replCommands = map[string]struct {
 	HelpText string
 	Handler  func(args []string, host swarm.Host) error
 }{
+	"libp2pid": {
+		"list your libp2p peer ID",
+		func(args []string, host swarm.Host) error {
+			peerID := host.Transport("libp2p").(interface{ Libp2pPeerID() string }).Libp2pPeerID()
+			host.Debugf("libp2p peer ID: %v", peerID)
+			return nil
+		},
+	},
+	"subscribe": {
+		"subscribe",
+		func(args []string, host swarm.Host) error {
+			if len(args) < 1 {
+				return errors.New("missing argument: state URI")
+			}
+			stateURI := args[0]
+			sub, err := host.Subscribe(context.Background(), stateURI, swarm.SubscriptionType_Txs, nil, &swarm.FetchHistoryOpts{FromTxID: tree.GenesisTxID})
+			if err != nil {
+				return err
+			}
+			defer sub.Close()
+			return nil
+		},
+	},
 	"stateuris": {
 		"list all known state URIs",
 		func(args []string, host swarm.Host) error {
@@ -562,12 +587,103 @@ var replCommands = map[string]struct {
 			return nil
 		},
 	},
+	"blobs": {
+		"list all blobs",
+		func(args []string, host swarm.Host) error {
+			blobIDsNeeded, err := host.BlobStore().RefsNeeded()
+			if err != nil {
+				return err
+			}
+
+			blobIDs, err := host.BlobStore().AllHashes()
+			if err != nil {
+				return err
+			}
+
+			var rows [][]string
+
+			for _, id := range blobIDsNeeded {
+				rows = append(rows, []string{id.String(), "(missing)"})
+			}
+
+			for _, id := range blobIDs {
+				rows = append(rows, []string{id.String(), ""})
+			}
+
+			table := tablewriter.NewWriter(os.Stdout)
+			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
+			table.SetCenterSeparator("|")
+			table.SetRowLine(true)
+			table.SetHeader([]string{"ID", "Status"})
+			table.AppendBulk(rows)
+			table.Render()
+
+			return nil
+		},
+	},
 	"peers": {
 		"list all known peers",
 		func(args []string, host swarm.Host) error {
-			for _, peer := range host.Peers() {
-				fmt.Println("- ", peer.Addresses(), peer.DialInfo(), peer.LastContact())
+			fmtPeerRow := func(addr, dialAddr string, lastContact, lastFailure time.Time, failures uint64, remainingBackoff time.Duration, stateURIs []string) []string {
+				if len(addr) > 10 {
+					addr = addr[:4] + "..." + addr[len(addr)-4:]
+				}
+				if len(dialAddr) > 30 {
+					dialAddr = dialAddr[:30] + "..." + dialAddr[len(dialAddr)-6:]
+				}
+				lastContactStr := time.Now().Sub(lastContact).Round(1 * time.Second).String()
+				if lastContact.IsZero() {
+					lastContactStr = ""
+				}
+				lastFailureStr := time.Now().Sub(lastFailure).Round(1 * time.Second).String()
+				if lastFailure.IsZero() {
+					lastFailureStr = ""
+				}
+				failuresStr := fmt.Sprintf("%v", failures)
+				remainingBackoffStr := remainingBackoff.Round(1 * time.Second).String()
+				if remainingBackoff == 0 {
+					remainingBackoffStr = ""
+				}
+				return []string{addr, dialAddr, lastContactStr, lastFailureStr, failuresStr, remainingBackoffStr, fmt.Sprintf("%v", stateURIs)}
 			}
+
+			var data [][]string
+			for _, peer := range host.Peers() {
+				for _, addr := range peer.Addresses() {
+					data = append(data, fmtPeerRow(addr.Hex(), peer.DialInfo().DialAddr, peer.LastContact(), peer.LastFailure(), peer.Failures(), peer.RemainingBackoff(), peer.StateURIs().Slice()))
+				}
+				if len(peer.Addresses()) == 0 {
+					data = append(data, fmtPeerRow("?", peer.DialInfo().DialAddr, peer.LastContact(), peer.LastFailure(), peer.Failures(), peer.RemainingBackoff(), peer.StateURIs().Slice()))
+				}
+			}
+
+			sort.Slice(data, func(i, j int) bool {
+				cmp := strings.Compare(data[i][0], data[j][0])
+				if cmp == 0 {
+					return strings.Compare(data[i][1], data[j][1]) < 0
+				} else {
+					return cmp < 0
+				}
+			})
+
+			table := tablewriter.NewWriter(os.Stdout)
+			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
+			table.SetCenterSeparator("|")
+			table.SetRowLine(true)
+			table.SetHeader([]string{"Address", "DialAddr", "LastContact", "LastFailure", "Failures", "Backoff", "StateURIs"})
+			table.SetAutoMergeCellsByColumnIndex([]int{0, 1})
+			table.SetColumnColor(
+				tablewriter.Colors{tablewriter.Bold, tablewriter.FgCyanColor},
+				tablewriter.Colors{},
+				tablewriter.Colors{},
+				tablewriter.Colors{},
+				tablewriter.Colors{},
+				tablewriter.Colors{},
+				tablewriter.Colors{},
+			)
+			table.AppendBulk(data)
+			table.Render()
+
 			return nil
 		},
 	},
