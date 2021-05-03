@@ -81,7 +81,9 @@ type FetchRefResponse struct {
 	Body   *FetchRefResponseBody   `json:"body,omitempty"`
 }
 
-type FetchRefResponseHeader struct{}
+type FetchRefResponseHeader struct {
+	Missing bool `json:"missing,omitempty"`
+}
 
 type FetchRefResponseBody struct {
 	Data []byte `json:"data"`

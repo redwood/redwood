@@ -580,7 +580,7 @@ func (t *transport) ProvidersOfRef(ctx context.Context, refID types.RefID) (<-ch
 					continue
 				}
 
-				t.Infof(0, `found peer %v for ref "%v"`, pinfo.ID, refID.String())
+				// t.Infof(0, `found peer %v for ref "%v"`, pinfo.ID, refID.String())
 
 				peer := t.makeDisconnectedPeerConn(pinfo)
 				if peer == nil || peer.DialInfo().DialAddr == "" {

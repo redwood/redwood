@@ -133,8 +133,8 @@ func (p *peerConn) FetchRef(refID types.RefID) error {
 	return p.writeMsg(Msg{Type: MsgType_FetchRef, Payload: refID})
 }
 
-func (p *peerConn) SendRefHeader() error {
-	return p.writeMsg(Msg{Type: MsgType_FetchRefResponse, Payload: swarm.FetchRefResponse{Header: &swarm.FetchRefResponseHeader{}}})
+func (p *peerConn) SendRefHeader(haveBlob bool) error {
+	return p.writeMsg(Msg{Type: MsgType_FetchRefResponse, Payload: swarm.FetchRefResponse{Header: &swarm.FetchRefResponseHeader{Missing: !haveBlob}}})
 }
 
 func (p *peerConn) SendRefPacket(data []byte, end bool) error {
@@ -210,6 +210,7 @@ func (p *peerConn) writeMsg(msg Msg) (err error) {
 
 func (p *peerConn) readMsg() (msg Msg, err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
+	p.stream.SetReadDeadline(time.Now().Add(10 * time.Second))
 	return readMsg(p.stream)
 }
 
