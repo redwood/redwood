@@ -367,7 +367,7 @@ func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDet
 		lastContact: time.Unix(int64(pd.LastContact), 0),
 		lastFailure: time.Unix(int64(pd.LastFailure), 0),
 		failures:    pd.Failures,
-		backoff:     utils.ExponentialBackoff{Min: 10 * time.Second, Max: 1 * time.Minute},
+		backoff:     utils.ExponentialBackoff{Min: 10 * time.Second, Max: 3 * time.Minute},
 	}, nil
 }
 
@@ -462,7 +462,7 @@ func newPeerDetails(peerStore *peerStore, dialInfo PeerDialInfo) *peerDetails {
 		peerStore: peerStore,
 		dialInfo:  dialInfo,
 		stateURIs: utils.NewStringSet(nil),
-		backoff:   utils.ExponentialBackoff{Min: 10 * time.Second, Max: 1 * time.Minute},
+		backoff:   utils.ExponentialBackoff{Min: 10 * time.Second, Max: 3 * time.Minute},
 	}
 }
 
@@ -560,7 +560,7 @@ type ephemeralPeerDetails peerDetails
 func NewEphemeralPeerDetails(dialInfo PeerDialInfo) *ephemeralPeerDetails {
 	return &ephemeralPeerDetails{
 		dialInfo: dialInfo,
-		backoff:  utils.ExponentialBackoff{Min: 10 * time.Second, Max: 1 * time.Minute},
+		backoff:  utils.ExponentialBackoff{Min: 10 * time.Second, Max: 3 * time.Minute},
 	}
 }
 
