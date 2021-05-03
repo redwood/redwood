@@ -53,6 +53,7 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "pprof",
+			Value: "6060",
 			Usage: "enable pprof",
 		},
 		cli.BoolFlag{
