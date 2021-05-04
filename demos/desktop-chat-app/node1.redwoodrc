@@ -1,8 +1,33 @@
 Node:
     BootstrapPeers: []
     SubscribedStateURIs:
+      - test/ttt
+      - esss/ddd
+      - testssss/dasds
+      - fef/tes
+      - testssss/tessddd
+      - dddd/first
+      - dddefg/fes
+      - ress/tes
+      - chat.local/servers
+      - fef/registry
+      - test/tesss
+      - chat.local/dms
+      - ded/registry
+      - tessssss/dded
+      - dddaa/registry
+      - esss/registry
+      - r/new
+      - ress/registry
+      - chat.local/address-book
+      - dddefg/registry
+      - test/registry
+      - ded/eeee
+      - tessss/tesss
+      - ress/ded
+      - dddaa/ds
     MaxPeersPerSubscription: 4
-    DataRoot: 
+    DataRoot: node1_data/tim
     DevMode: true
 P2PTransport:
     Enabled: true
