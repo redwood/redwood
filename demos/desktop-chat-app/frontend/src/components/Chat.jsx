@@ -172,6 +172,7 @@ function Chat({ className }) {
     const api = useAPI()
     const { selectedStateURI, selectedServer, selectedRoom } = useNavigation()
     const { users } = useUsers(selectedStateURI)
+    console.log(users)
 
     const registry = useServerRegistry(selectedServer)
     const roomState = useStateTree(selectedStateURI)
@@ -241,6 +242,16 @@ function Chat({ className }) {
       }
       ).slice(0, 10)
     }
+
+    useEffect(async () => {
+      if (nodeIdentities) {
+        if (Object.keys(users || {}).length > 0) {
+          if (!users[nodeIdentities[0].address]) {
+            await api.updateProfile(nodeIdentities[0].address, `${selectedServer}/registry`, null, null, 'member')
+          }
+        }
+      }
+    }, [selectedStateURI, users, nodeIdentities])
 
 
     useEffect(() => {
