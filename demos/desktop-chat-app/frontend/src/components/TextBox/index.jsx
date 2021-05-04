@@ -3,6 +3,9 @@ import { Slate, Editable, withReact } from 'slate-react'
 import styled from 'styled-components'
 import { Emoji } from 'emoji-mart'
 
+import Mention from './Mention'
+import MentionSuggestion from './MentionSuggestion'
+
 
 const STextBox = styled.div`
   padding-left: 34px;
@@ -28,7 +31,8 @@ const SEditable = styled(Editable)`
 `
 
 function TextBox(props) {
-  const renderElement = useCallback(({ element, attributes, children }) => {
+  const renderElement = useCallback((props) => {
+    const { element, attributes, children } = props
     switch (element.type) {
       case 'code':
         return <pre {...attributes}>{children}</pre>;
@@ -41,6 +45,8 @@ function TextBox(props) {
         </span>
       case 'link':
         return <a href={element.url} {...attributes}>{children}</a>;
+      case 'mention':
+        return <Mention {...props} />
       default:
         return <div {...attributes}>{children}</div>;
     }
@@ -75,6 +81,14 @@ function TextBox(props) {
         // spellCheck
       />
       {props.children}
+      {props.targetMention && props.mentionUsers.length > 0 && (
+        <MentionSuggestion
+          mentionUsers={props.mentionUsers}
+          indexMention={props.indexMention}
+          mentionRef={props.mentionRef}
+          controlsRef={props.controlsRef}
+        />
+      )}
     </Slate>
   )
 }

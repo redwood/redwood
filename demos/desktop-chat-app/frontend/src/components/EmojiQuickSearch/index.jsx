@@ -4,7 +4,7 @@ import { Emoji } from 'emoji-mart'
 import emojiData from 'emoji-mart/data/apple.json'
 
 const EmojiContainer = styled.div`
-  width: calc(100% - 92px);
+  width: calc(100% - 36px);
   background: #222222;
   position: absolute;
   top: -118px;
@@ -60,6 +60,8 @@ function EmojiQuickSearch(props) {
       }
 
       if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        event.stopPropagation()
         if (filteredEmojis.length - 1 > selectedEmojiIdx) {
           setSelectedEmojiIdx(selectedEmojiIdx + 1)
         } else {
@@ -68,6 +70,8 @@ function EmojiQuickSearch(props) {
       }
 
       if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        event.stopPropagation()
         if (selectedEmojiIdx === 0) {
           setSelectedEmojiIdx(filteredEmojis.length - 1)
         } else {
@@ -79,6 +83,7 @@ function EmojiQuickSearch(props) {
         if (filteredEmojis.length > 0) {
           event.preventDefault()
           event.stopPropagation()
+          setEmojisFound(false)
           onSelectEmoji(`:${filteredEmojis[selectedEmojiIdx]}:`)
         }
       }
