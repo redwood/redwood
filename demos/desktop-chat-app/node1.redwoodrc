@@ -1,27 +1,11 @@
 Node:
     BootstrapPeers: []
     SubscribedStateURIs:
-      - chat.redwood.dev/hicamden
-      - chat.p2p/private-9a35c1f79ada02e2a56cd0941f2a6064892b22a8e9eb1e09ef74bfc299be390e
-      - test/test2
-      - chat.local/address-book
-      - chat.local/servers
-      - test/ed
-      - chat.local/dms
-      - test/tesss
-      - test/PR
-      - test/working
-      - chat.p2p/private-be836b747bc1899dbef32e193c6ff2bb62ebc847930a85af7ae2584750b41b33
-      - chat.redwood.dev/registry
-      - test/registry
-      - test/test1
-      - test/test
     MaxPeersPerSubscription: 4
-    DataRoot: node1_data/tim
+    DataRoot: 
     DevMode: true
 P2PTransport:
     Enabled: true
-    KeyFile: /Users/chrispena/Library/Application Support/redwood-webview/p2p_key
     ListenAddr: 0.0.0.0
     ListenPort: 21231
     ReachableAt: ""
