@@ -211,7 +211,7 @@ export default function(redwoodClient, ownAddress) {
         await redwoodClient.rpc.sendTx(tx)
     }
 
-    async function updateProfile(address, usersStateURI, username, photoFile) {
+    async function updateProfile(address, usersStateURI, username, photoFile, role) {
         address = address.toLowerCase()
         let patches = []
         if (photoFile) {
@@ -228,6 +228,11 @@ export default function(redwoodClient, ownAddress) {
         if (username) {
             patches.push(`.users.${address}.username = "${username}"`)
         }
+
+        if (role) {
+          patches.push(`.users.${address}.role = "${role}"`)
+        }
+        
         if (patches.length === 0) {
             return
         }
