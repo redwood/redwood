@@ -54,7 +54,6 @@ function EmojiQuickSearch(props) {
   useEffect(() => {
     const handleArrowUpDown = (event) => {
       setEmojisFound(!!filteredEmojis.length)
-      
       if (event.key !== 'ArrowDown' || event.key !== 'ArrowUp' || event.key !== 'Enter') {
         setSelectedEmojiIdx(0)
       }
@@ -76,6 +75,23 @@ function EmojiQuickSearch(props) {
           setSelectedEmojiIdx(filteredEmojis.length - 1)
         } else {
           setSelectedEmojiIdx(selectedEmojiIdx - 1)
+        }
+      }
+
+      if (event.key === ":") {
+        let isMatch = false
+        let matchIdx = 0
+        filteredEmojis.forEach((emoji, idx) => {
+          if (messageText === emoji.split('|')[0]) {
+            isMatch = true
+            matchIdx = idx
+          }
+        })
+
+        if (isMatch) {
+          event.preventDefault()
+          event.stopPropagation()
+          onSelectEmoji(`:${filteredEmojis[matchIdx]}:`) 
         }
       }
 

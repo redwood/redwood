@@ -161,6 +161,20 @@ const withMentions = editor => {
   return editor
 }
 
+const withEmojis = editor => {
+  const { isInline, isVoid } = editor
+
+  editor.isInline = element => {
+    return element.type === 'emoji' ? true : isInline(element)
+  }
+
+  editor.isVoid = element => {
+    return element.type === 'emoji' ? true : isVoid(element)
+  }
+
+  return editor
+}
+
 const EmptyChatContainer = styled(Container)`
     display: flex;
     align-items: center;
@@ -172,7 +186,6 @@ function Chat({ className }) {
     const api = useAPI()
     const { selectedStateURI, selectedServer, selectedRoom } = useNavigation()
     const { users } = useUsers(selectedStateURI)
-    console.log(users)
 
     const registry = useServerRegistry(selectedServer)
     const roomState = useStateTree(selectedStateURI)
@@ -216,7 +229,11 @@ function Chat({ className }) {
     const [messages, setMessages] = useState([])
 
     // Init Slate Editor
-    const editor = useMemo(() => withMentions(withHistory(withReact(createEditor()))), [])
+    // const editor = useMemo(() => withMentions(withHistory(withReact(createEditor()))), [])
+    const editorRef = useRef()
+    if (!editorRef.current) editorRef.current = withEmojis(withMentions(withHistory(withReact(createEditor()))))
+    const editor = editorRef.current
+
     const initFocusPoint = { path: [0, 0], offset: 0 }
     const [editorFocusPoint, setEditorFocusPoint] = useState(initFocusPoint)
 
@@ -290,32 +307,55 @@ function Chat({ className }) {
 
     const onSelectEmoji = (emoji) => {
       if (typeof emoji === 'string') {
-        for (let idx = 0; idx < emojiSearchWord.length + 1; idx++) {
-          editor.deleteBackward()
-        }
+        const [start] = Range.edges(editor.selection)
+        const wordBefore = Editor.before(editor, start, { unit: 'word' })
+        const before = wordBefore && Editor.before(editor, wordBefore)
+        const beforeRange = before && Editor.range(editor, before, start)
+        Transforms.select(editor, {
+          anchor: {
+            path: beforeRange.anchor.path,
+            offset: beforeRange.focus.offset - emojiSearchWord.length - 1
+          },
+          focus: beforeRange.focus,
+        })
 
-        editor.insertText(emoji + ' ')
+        const emojiNode = {
+          type: 'emoji',
+          value: emoji,
+          children: [{ text: '' }],
+        }
+        Transforms.insertNodes(editor, [emojiNode, {
+          text: ' '
+        }])
+        Transforms.move(editor, { distance: 2 })
       } else {
         // Set focus point from blurred
         editor.selection = { anchor: editorFocusPoint, focus: editorFocusPoint }
-        editor.insertText(emoji.colons + ' ')
-        editor.selection = {
-          anchor:  {
-            path: editorFocusPoint.path,
-            offset: editorFocusPoint.offset + emoji.colons.length + 1,
-          },
-          focus: {
-            path: editorFocusPoint.path,
-            offset: editorFocusPoint.offset + emoji.colons.length + 1,
-          }
+        const emojiNode = {
+          type: 'emoji',
+          value: emoji.colons,
+          children: [{ text: '' }],
         }
+        Transforms.insertNodes(editor, emojiNode)
+        Transforms.move(editor, { distance: 1 })
+
+        // editor.selection = {
+        //   anchor:  {
+        //     path: editorFocusPoint.path,
+        //     offset: editorFocusPoint.offset  + 1,
+        //   },
+        //   focus: {
+        //     path: editorFocusPoint.path,
+        //     offset: editorFocusPoint.offset + emoji.colons.length + 1,
+        //   }
+        // }
 
         ReactEditor.focus(editor)
 
-        setEditorFocusPoint({
-          path: editorFocusPoint.path,
-          offset: editorFocusPoint.offset + emoji.colons.length + 1,
-        })
+        // setEditorFocusPoint({
+        //   path: editorFocusPoint.path,
+        //   offset: editorFocusPoint.offset + emoji.colons.length + 1,
+        // })
         setShowEmojiKeyboard(false)
       }
     }
@@ -378,7 +418,6 @@ function Chat({ className }) {
         text: ' '
       }])
       Transforms.move(editor, { distance: 2 })
-      console.log(editor)
       setMessageText(editor.children)
     }
 
@@ -498,6 +537,7 @@ function Chat({ className }) {
       } else {
         // Emoji Handling
         if (event.code === 'Enter' && !event.shiftKey) {
+          console.log(emojisFound, emojiSearchWord)
           if (!emojisFound || (!emojisFound && emojiSearchWord)) {
             event.preventDefault()
             event.stopPropagation()
@@ -506,6 +546,7 @@ function Chat({ className }) {
 
             // Reset SlateJS cursor
             const point = { path: [0, 0], offset: 0 };
+            setEditorFocusPoint(point)
             editor.selection = { anchor: point, focus: point };
             editor.history = { redos: [], undos: [] };
 
