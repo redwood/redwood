@@ -5,6 +5,7 @@ import { Emoji } from 'emoji-mart'
 
 import Mention from './Mention'
 import MentionSuggestion from './MentionSuggestion'
+import EmojiElem from './Emoji'
 
 
 const STextBox = styled.div`
@@ -35,7 +36,7 @@ function TextBox(props) {
     const { element, attributes, children } = props
     switch (element.type) {
       case 'code':
-        return <pre {...attributes}>{children}</pre>;
+        return <pre {...attributes}>{children}</pre>
       case 'image':
         return <span {...attributes}>
           <span contentEditable={false}>
@@ -44,11 +45,13 @@ function TextBox(props) {
           {children}
         </span>
       case 'link':
-        return <a href={element.url} {...attributes}>{children}</a>;
+        return <a href={element.url} {...attributes}>{children}</a>
       case 'mention':
         return <Mention {...props} />
+      case 'emoji':
+        return <EmojiElem {...props} />
       default:
-        return <div {...attributes}>{children}</div>;
+        return <div {...attributes}>{children}</div>
     }
   }, [])
 
