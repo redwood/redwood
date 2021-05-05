@@ -1,35 +1,35 @@
 Node:
     BootstrapPeers: []
     SubscribedStateURIs:
-      - test/ttt
-      - testssss/tessddd
-      - tim/registry
-      - esss/ddd
-      - dddd/first
-      - chat.local/dms
-      - fef/tes
       - ress/ded
       - working/test
+      - chat.local/dms
+      - fef/tes
       - r/new
       - dddaa/registry
       - ded/registry
       - tim/tim
+      - test/registry
       - ded/eeee
       - chat.local/address-book
-      - test/registry
+      - ress/registry
+      - test/tesss
       - dddaa/ds
       - working/registry
       - dddefg/fes
       - tessss/tesss
-      - ress/registry
-      - test/tesss
+      - esss/registry
+      - dddefg/registry
       - tessssss/dded
       - fef/registry
       - ress/tes
       - testssss/dasds
       - chat.local/servers
-      - esss/registry
-      - dddefg/registry
+      - tim/registry
+      - test/ttt
+      - testssss/tessddd
+      - esss/ddd
+      - dddd/first
     MaxPeersPerSubscription: 4
     DataRoot: node1_data/tim
     DevMode: true
