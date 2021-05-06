@@ -1,8 +1,10 @@
-package main
+package cmdutils
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"reflect"
 	"sort"
@@ -10,11 +12,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/brynbellomy/klog"
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
+
+	"redwood.dev/log"
+	"redwood.dev/swarm"
+	"redwood.dev/tree"
+	"redwood.dev/utils"
 )
 
-type termUI struct {
+type TermUI struct {
+	host   swarm.Host
+	logger log.Logger
+
 	TabPane     *tabPane
 	LogPane     *logPane
 	StatePane   *statePane
@@ -82,14 +93,16 @@ const (
 	focusSidebar
 )
 
-func NewTermUI() *termUI {
+func NewTermUI(host swarm.Host) *TermUI {
 	tabPane := newTabPane()
 	logPane := newLogPane(30000)
 	statePane := newStatePane()
 	networkPane := newNetworkPane()
 	input := newInput()
 	sidebar := newSidebar()
-	return &termUI{
+	return &TermUI{
+		host:        host,
+		logger:      log.NewLogger("redwood"),
 		TabPane:     tabPane,
 		LogPane:     logPane,
 		StatePane:   statePane,
@@ -101,9 +114,9 @@ func NewTermUI() *termUI {
 	}
 }
 
-func (tui *termUI) Start() {
+func (tui *TermUI) Start() {
 	if err := ui.Init(); err != nil {
-		logger.Fatalf("failed to initialize termui: %v", err)
+		log.Fatalf("failed to initialize termui: %v", err)
 	}
 	defer ui.Close()
 	defer tui.Stop()
@@ -112,6 +125,9 @@ func (tui *termUI) Start() {
 
 	uiState.termWidth, uiState.termHeight = ui.TerminalDimensions()
 	tui.Layout.SetRect(0, 0, uiState.termWidth, uiState.termHeight)
+
+	tui.redirectLogs()
+	go tui.subscribeToStates()
 
 	uiEvents := ui.PollEvents()
 
@@ -158,14 +174,66 @@ Loop:
 	}
 }
 
-func (tui *termUI) Stop() {
+func (tui *TermUI) redirectLogs() {
+	flagset := flag.NewFlagSet("", flag.ContinueOnError)
+	klog.InitFlags(flagset)
+	flagset.Set("v", "2")
+	flagset.Set("log_file", "/tmp/asdf") // This is necessary to keep the logger in "single mode" -- otherwise logs will be duplicated
+	klog.SetOutput(tui.LogPane)
+	klog.SetFormatter(&FmtConstWidth{
+		FileNameCharWidth: 24,
+		UseColor:          true,
+	})
+	klog.Flush()
+}
+
+func (tui *TermUI) subscribeToStates() {
+	stateURISub := tui.host.SubscribeStateURIs()
+	defer stateURISub.Close()
+	for {
+		stateURI, err := stateURISub.Read()
+		if err != nil {
+			tui.logger.Error(err)
+			continue
+		}
+		tui.Sidebar.AddStateURI(stateURI)
+
+		sub, err := tui.host.Subscribe(context.Background(), stateURI, swarm.SubscriptionType_States, nil, &swarm.FetchHistoryOpts{FromTxID: tree.GenesisTxID})
+		if err != nil {
+			tui.logger.Error(err)
+			continue
+		}
+		defer sub.Close()
+
+		go func() {
+			for {
+				msg, err := sub.Read()
+				if err != nil {
+					tui.logger.Error(err)
+					continue
+				}
+				tui.StatePane.SetState(stateURI, utils.PrettyJSON(msg.State))
+			}
+		}()
+
+		go func() {
+			defer sub.Close()
+			<-tui.chDone
+			return
+		}()
+
+	}
+}
+
+func (tui *TermUI) Stop() {
 	tui.stopOnce.Do(func() {
+		klog.Flush()
 		close(tui.chDone)
 		ui.Clear()
 	})
 }
 
-func (tui *termUI) Done() <-chan struct{} {
+func (tui *TermUI) Done() <-chan struct{} {
 	return tui.chDone
 }
 
@@ -426,8 +494,8 @@ func (p *statePane) HandleInput(evt ui.Event) bool {
 	return false
 }
 
-func (p *statePane) SetStates(states map[string]string) {
-	uiState.states = states
+func (p *statePane) SetState(stateURI string, state string) {
+	uiState.states[stateURI] = state
 	p.RequestRefresh()
 }
 
@@ -537,8 +605,8 @@ func (s *sidebar) HandleInput(evt ui.Event) bool {
 	return false
 }
 
-func (s *sidebar) SetStateURIs(stateURIs []string) {
-	uiState.stateURIs = stateURIs
+func (s *sidebar) AddStateURI(stateURI string) {
+	uiState.stateURIs = append(uiState.stateURIs, stateURI)
 	s.RequestRefresh()
 }
 
