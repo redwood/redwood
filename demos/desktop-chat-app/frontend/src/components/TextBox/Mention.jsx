@@ -51,7 +51,7 @@ const SMention = styled.span`
 
 const SInfoCard = styled.span`
   background: #212123;
-  position: fixed;
+  position: ${props => props.absolute ? 'absolute' : 'fixed'};
   z-index: 999;
   padding: 4px 8px;
   transform: translateY(-28px);
@@ -75,6 +75,7 @@ const SInfoCard = styled.span`
       color: rgba(255,255,255,0.8);
       margin-left: 2px;
       font-weight: 400;
+      white-space: nowrap;
     }
   }
 `
@@ -104,6 +105,7 @@ function useHover() {
 
 function InfoCard({
   user,
+  absolute
 }) {
   let displayText = <span>{user.address.slice(0, 7)} <small>(public key)</small></span>
   if (user.username && !user.nickname) {
@@ -114,14 +116,14 @@ function InfoCard({
 
 
   return (
-    <SInfoCard>
+    <SInfoCard absolute={absolute}>
       <UserAvatar mentioninfocard={true} style={{ height: 16, width: 16, fontSize: 12, }} address={user.address} />
       {displayText} 
     </SInfoCard>
   )
 }
 
-function Mention({ attributes, children, element }) {
+function Mention({ attributes, children, element, style = {}, absolute }) {
   const selected = useSelected()
   const focused = useFocused()
   const [hoverRef, isHovered] = useHover()
@@ -139,9 +141,9 @@ function Mention({ attributes, children, element }) {
       contentEditable={false}
       istargeted={selected && focused}
     >
-      <SMention ref={hoverRef}>
+      <SMention ref={hoverRef} style={style}>
         @{displayText}
-        { (selected && focused) || isHovered ? <InfoCard user={user} /> : null }
+        { (selected && focused) || isHovered ? <InfoCard user={user} absolute={absolute} /> : null }
       </SMention>
       {children}
     </SSlateWrapper>

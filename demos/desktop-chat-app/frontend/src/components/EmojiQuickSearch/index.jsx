@@ -53,7 +53,6 @@ function EmojiQuickSearch(props) {
 
   useEffect(() => {
     const handleArrowUpDown = (event) => {
-      setEmojisFound(!!filteredEmojis.length)
       if (event.key !== 'ArrowDown' || event.key !== 'ArrowUp' || event.key !== 'Enter') {
         setSelectedEmojiIdx(0)
       }
@@ -110,11 +109,11 @@ function EmojiQuickSearch(props) {
     return () => {
       window.removeEventListener('keydown', handleArrowUpDown)
     }
-  }, [selectedEmojiIdx, setSelectedEmojiIdx, filteredEmojis])
+  }, [selectedEmojiIdx, setSelectedEmojiIdx, filteredEmojis, messageText])
 
   const filterEmojis = () => {
     let count = 0
-    return Object.keys(emojiData.emojis).filter((emoji) => {
+    const fEmojis = Object.keys(emojiData.emojis).filter((emoji) => {
       let emojiKeywords = emoji
       if (emojiData.emojis[emoji].j) {
         emojiKeywords = `${emoji}|${emojiData.emojis[emoji].j.join(',')}`
@@ -130,6 +129,8 @@ function EmojiQuickSearch(props) {
         return isMatch
       }
     })
+    setEmojisFound(!!fEmojis.length)
+    return fEmojis
   }
 
   if (messageText.replace(':', '').length >= 2) {

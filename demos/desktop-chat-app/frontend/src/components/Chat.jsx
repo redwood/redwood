@@ -1,5 +1,5 @@
 import 'emoji-mart/css/emoji-mart.css'
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useCallback, useRef, useEffect, Fragment } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { IconButton, Tooltip } from '@material-ui/core'
 import { SendRounded as SendIcon, AddCircleRounded as AddIcon } from '@material-ui/icons'
@@ -20,6 +20,7 @@ import Attachment from './Attachment'
 import Embed from './Embed'
 import EmojiQuickSearch from './EmojiQuickSearch'
 import TextBox from './TextBox'
+import Mention from './TextBox/Mention'
 import Modal, { ModalTitle, ModalContent, ModalActions } from './Modal'
 import UserAvatar from './UserAvatar'
 import useModal from '../hooks/useModal'
@@ -339,23 +340,7 @@ function Chat({ className }) {
         Transforms.insertNodes(editor, emojiNode)
         Transforms.move(editor, { distance: 1 })
 
-        // editor.selection = {
-        //   anchor:  {
-        //     path: editorFocusPoint.path,
-        //     offset: editorFocusPoint.offset  + 1,
-        //   },
-        //   focus: {
-        //     path: editorFocusPoint.path,
-        //     offset: editorFocusPoint.offset + emoji.colons.length + 1,
-        //   }
-        // }
-
         ReactEditor.focus(editor)
-
-        // setEditorFocusPoint({
-        //   path: editorFocusPoint.path,
-        //   offset: editorFocusPoint.offset + emoji.colons.length + 1,
-        // })
         setShowEmojiKeyboard(false)
       }
     }
@@ -405,7 +390,6 @@ function Chat({ className }) {
       }
 
       return searchWord
-
     }
 
     const insertMention = (editor, selectedUser) => {
@@ -434,31 +418,14 @@ function Chat({ className }) {
     useEffect(() => {
         // Scrolls on new messages
         if (messageTextContainer.current) {
+          setTimeout(() => {
             messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
+          }, 0)
         }
-    })
+    }, [numMessages])
 
     const serializeMessageText = useCallback(() => {
-      return messageText.map((n) => {
-        let gatherText = ''
-        n.children.forEach((child) => {
-          if (child.text) {
-            gatherText += child.text
-          }
-
-          if (child.type === 'mention') {
-            const user = child.selectedUser
-
-            if (user.username && !user.nickname) {
-              gatherText += `@${user.username}`
-            } else {
-              gatherText += `@${user.address.slice(0, 7)}`
-            }
-          }
-        })
-
-        return gatherText
-      }).join('\n')
+      return JSON.stringify(messageText)
     }, [messageText])
 
     function onChangeMessageText(textValue) {
@@ -537,7 +504,6 @@ function Chat({ className }) {
       } else {
         // Emoji Handling
         if (event.code === 'Enter' && !event.shiftKey) {
-          console.log(emojisFound, emojiSearchWord)
           if (!emojisFound || (!emojisFound && emojiSearchWord)) {
             event.preventDefault()
             event.stopPropagation()
@@ -772,7 +738,8 @@ function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
             }
 
             {/* <MessageText>{msg.text}</MessageText> */}
-            <MessageParse msgText={msg.text} />
+            {/* <MessageParse msgText={msg.text} /> */}
+            <NormalizeMessage msgText={msg.text} />
             {(msg.attachments || []).map((attachment, j) => (
               <SAttachment
                 key={`${selectedStateURI}${messageIndex},${j}`}
@@ -784,6 +751,41 @@ function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
           </MessageDetails>
         </MessageWrapper>
     )
+}
+
+const SNormalizeMessage = styled.div`
+  white-space: pre-wrap;
+  span.emoji-mart-emoji {
+    top: 4px;
+  }
+` 
+
+function NormalizeMessage({ msgText }) {
+  const [content, setContent] = useState([])
+  useEffect(() => {
+    try {
+      const msgJson = JSON.parse(msgText)
+      const contentLines = msgJson.map((msg) => {
+        return msg.children.map((msgChild) => {
+          if (msgChild.text !== undefined) {
+            return msgChild.text
+          } else if (msgChild.type === 'emoji') {
+            return <Emoji emoji={msgChild.value.replace(':', '').replace(':', '')} size={21} />
+          } else if (msgChild.type === 'mention') {
+            return <Mention element={msgChild} style={{ userSelect: 'auto' }} absolute />        
+          }
+        })
+      })
+      setContent(contentLines)
+    } catch (e) {
+      console.log('Could not render message. Defaulting to text')
+      setContent([ msgText ])
+    }
+  }, [msgText])
+
+  return <SNormalizeMessage>{content.map((item, idx) => {
+    return <Fragment>{item}<br /></Fragment>
+  })}</SNormalizeMessage>
 }
 
 function MessageParse({ msgText }) {
