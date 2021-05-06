@@ -123,7 +123,7 @@ function InfoCard({
   )
 }
 
-function Mention({ attributes, children, element, style = {}, absolute }) {
+function Mention({ attributes, children, element, style = {}, absolute, preview }) {
   const selected = useSelected()
   const focused = useFocused()
   const [hoverRef, isHovered] = useHover()
@@ -133,6 +133,10 @@ function Mention({ attributes, children, element, style = {}, absolute }) {
 
   if (user.username) {
     displayText = user.username
+  }
+
+  if (preview) {
+    return `@${displayText}`
   }
 
   return (

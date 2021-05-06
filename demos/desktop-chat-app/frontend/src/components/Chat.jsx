@@ -20,7 +20,7 @@ import Attachment from './Attachment'
 import Embed from './Embed'
 import EmojiQuickSearch from './EmojiQuickSearch'
 import TextBox from './TextBox'
-import Mention from './TextBox/Mention'
+import NormalizeMessage from './ChatHelpers/NormalizeMessage'
 import Modal, { ModalTitle, ModalContent, ModalActions } from './Modal'
 import UserAvatar from './UserAvatar'
 import useModal from '../hooks/useModal'
@@ -239,7 +239,11 @@ function Chat({ className }) {
     const [editorFocusPoint, setEditorFocusPoint] = useState(initFocusPoint)
 
     function onEditorBlur() {
-      setEditorFocusPoint(editor.selection.focus)
+      try {
+        setEditorFocusPoint(editor.selection.focus)
+      } catch (e) {
+        console.error(e)
+      }
     }
 
     let mentionUsers = []
@@ -407,12 +411,20 @@ function Chat({ className }) {
 
     const onClickSend = useCallback(async () => {
         const plainMessage = serializeMessageText()
-        if (!api || plainMessage.trim() === '') { return }
+        if (!api || !plainMessage) { return }
         // Replace with markdown serializer
         await api.sendMessage(plainMessage, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
         setAttachments([])
         setPreviews([])
         setEmojiSearchWord('')
+
+        // Reset SlateJS cursor
+        const point = { path: [0, 0], offset: 0 };
+        setEditorFocusPoint(point)
+        editor.selection = { anchor: point, focus: point };
+        editor.history = { redos: [], undos: [] };
+
+        setMessageText(initialMessageText)
     }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api])
 
     useEffect(() => {
@@ -425,7 +437,45 @@ function Chat({ className }) {
     }, [numMessages])
 
     const serializeMessageText = useCallback(() => {
-      return JSON.stringify(messageText)
+      let isEmpty = true
+      const filteredMessage = []
+      messageText.forEach((node) => {
+        if (node.children.length === 1) {
+          let trimmedNode = {}
+          if (typeof node.children[0].text === 'string') {
+            trimmedNode = {
+              ...node,
+              children: [{
+                ...node.children[0],
+                text: node.children[0].text.trim(),
+              }]
+            }
+          }
+          console.log(JSON.stringify(initialMessageText[0]), JSON.stringify(trimmedNode))
+
+          if (JSON.stringify(initialMessageText[0]) === JSON.stringify(trimmedNode)) {
+            if (!isEmpty) {
+              filteredMessage.push(trimmedNode)
+            }
+          } else {
+            isEmpty = false
+            if (JSON.stringify(trimmedNode) === '{}') {
+              filteredMessage.push(node)
+            } else {
+              filteredMessage.push(trimmedNode)
+            }
+          }
+        } else {
+          filteredMessage.push(node)
+        }
+      })
+
+      if (filteredMessage.length === 0) {
+        return false
+      }
+
+      const jsonMessage = JSON.stringify(filteredMessage)
+      return jsonMessage
     }, [messageText])
 
     function onChangeMessageText(textValue) {
@@ -509,14 +559,6 @@ function Chat({ className }) {
             event.stopPropagation()
 
             onClickSend()
-
-            // Reset SlateJS cursor
-            const point = { path: [0, 0], offset: 0 };
-            setEditorFocusPoint(point)
-            editor.selection = { anchor: point, focus: point };
-            editor.history = { redos: [], undos: [] };
-
-            setMessageText(initialMessageText)
           }
         }
       }
@@ -672,9 +714,6 @@ const MessageSender = styled.div`
     font-weight: 500;
 `
 
-const MessageText = styled.div`
-`
-
 const SMessageTimestamp = styled.span`
   font-size: 10px;
   font-weight: 300;
@@ -753,43 +792,8 @@ function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
     )
 }
 
-const SNormalizeMessage = styled.div`
-  white-space: pre-wrap;
-  span.emoji-mart-emoji {
-    top: 4px;
-  }
-` 
-
-function NormalizeMessage({ msgText }) {
-  const [content, setContent] = useState([])
-  useEffect(() => {
-    try {
-      const msgJson = JSON.parse(msgText)
-      const contentLines = msgJson.map((msg) => {
-        return msg.children.map((msgChild) => {
-          if (msgChild.text !== undefined) {
-            return msgChild.text
-          } else if (msgChild.type === 'emoji') {
-            return <Emoji emoji={msgChild.value.replace(':', '').replace(':', '')} size={21} />
-          } else if (msgChild.type === 'mention') {
-            return <Mention element={msgChild} style={{ userSelect: 'auto' }} absolute />        
-          }
-        })
-      })
-      setContent(contentLines)
-    } catch (e) {
-      console.log('Could not render message. Defaulting to text')
-      setContent([ msgText ])
-    }
-  }, [msgText])
-
-  return <SNormalizeMessage>{content.map((item, idx) => {
-    return <Fragment>{item}<br /></Fragment>
-  })}</SNormalizeMessage>
-}
 
 function MessageParse({ msgText }) {
-
   const colons = `:[a-zA-Z0-9-_+]+:`;
   const skin = `:skin-tone-[2-6]:`;
   const colonsRegex = new RegExp(`(${colons}${skin}|${colons})`, 'g');
