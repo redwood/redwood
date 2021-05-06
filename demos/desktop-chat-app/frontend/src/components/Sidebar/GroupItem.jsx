@@ -1,5 +1,8 @@
 import React from 'react'
 import styled from 'styled-components'
+import { Emoji } from 'emoji-mart'
+
+import NormalizeMessage from './../ChatHelpers/NormalizeMessage'
 
 const SItemContainer = styled.div`
     display: flex;
@@ -70,7 +73,16 @@ function GroupItem({ selected, color, avatar, name, text, time, ...props }) {
                     <ChatName selected={selected}>{name}</ChatName>
                     <STime>{time}</STime>
                 </SItemInfoSub>
-                <MostRecentMessage>{text}</MostRecentMessage>
+                {/* <MostRecentMessage>{text}</MostRecentMessage> */}
+                {/* <MostRecentMessage>
+                  <Emoji emoji={'smiley'} size={14}  />
+                  <Emoji emoji={'smiley'} size={14}  />
+                  <Emoji emoji={'smiley'} size={14}  />
+                  <Emoji emoji={'smiley'} size={14}  />
+                  <Emoji emoji={'smiley'} size={14}  />
+                  dmawl mawld mawldmawlda mwkdl kawmdkl mw
+                </MostRecentMessage> */}
+                <NormalizeMessage preview msgText={text} selected={selected} />
             </SItemInfo>
         </SItemContainer>
     )
