@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import 'emoji-mart/css/emoji-mart.css'
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { IconButton, Tooltip } from '@material-ui/core'
 import { SendRounded as SendIcon, AddCircleRounded as AddIcon } from '@material-ui/icons'
@@ -6,11 +7,19 @@ import * as tinycolor from 'tinycolor2'
 import filesize from 'filesize.js'
 import moment from 'moment'
 import CloseIcon from '@material-ui/icons/Close'
+import EmojiEmotionsIcon from '@material-ui/icons/EmojiEmotions';
+import { Picker, Emoji } from 'emoji-mart'
+import data from 'emoji-mart/data/all.json'
+import { Node, createEditor } from 'slate'
+import { withReact, ReactEditor } from 'slate-react'
+import { withHistory } from 'slate-history'
 
 import Button from './Button'
 import Input from './Input'
 import Attachment from './Attachment'
 import Embed from './Embed'
+import EmojiQuickSearch from './EmojiQuickSearch'
+import TextBox from './TextBox'
 import Modal, { ModalTitle, ModalContent, ModalActions } from './Modal'
 import UserAvatar from './UserAvatar'
 import useModal from '../hooks/useModal'
@@ -20,7 +29,8 @@ import { useRedwood, useStateTree } from 'redwood-p2p-client/react'
 import useNavigation from '../hooks/useNavigation'
 import useAddressBook from '../hooks/useAddressBook'
 import useUsers from '../hooks/useUsers'
-import strToColor from '../utils/strToColor'
+// import strToColor from '../utils/strToColor'
+
 
 const Container = styled.div`
     display: flex;
@@ -51,6 +61,7 @@ const ControlsContainer = styled.div`
     padding-bottom: 6px;
     width: 100%;
     margin-top: 6px;
+    position: relative;
 `
 
 const MessageInput = styled(Input)`
@@ -61,7 +72,8 @@ const MessageInput = styled(Input)`
 
 const SIconButton = styled(IconButton)`
     color: ${props => props.theme.color.white} !important;
-    padding: 0 12px !important;
+    padding: 0 8px !important;
+    height: 100%;
 `
 
 const HiddenInput = styled.input`
@@ -74,6 +86,9 @@ const AddAttachmentButton = styled(AddIcon)`
     cursor: pointer;
     margin-top: 4px;
     margin-left: 4px;
+    z-index: 999;
+    left: 12px;
+    bottom: 22px;
 `
 
 const UserAvatarPlaceholder = styled.div`
@@ -132,6 +147,12 @@ const SImgPreviewWrapper = styled.div`
     }
 `
 
+const EmptyChatContainer = styled(Container)`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+`
+
 function Chat({ className }) {
     const { nodeIdentities } = useRedwood()
     const api = useAPI()
@@ -139,12 +160,25 @@ function Chat({ className }) {
     const { users } = useUsers(selectedStateURI)
     const registry = useServerRegistry(selectedServer)
     const roomState = useStateTree(selectedStateURI)
-    const [messageText, setMessageText] = useState('')
+    const initialMessageText = [
+      {
+        type: 'paragraph',
+        children: [
+          {
+            text: ''
+          },
+        ],
+      },
+    ]
+    const [messageText, setMessageText] = useState(initialMessageText)
+    const [emojiSearchWord, setEmojiSearchWord] = useState('')
+    const [emojisFound, setEmojisFound] = useState(false)
     const theme = useTheme()
     const attachmentsInput = useRef()
     const messageTextContainer = useRef()
     const [attachments, setAttachments] = useState([])
     const [previews, setPreviews] = useState([])
+    const [showEmojiKeyboard, setShowEmojiKeyboard] = useState(false)
 
     const { onPresent: onPresentPreviewModal } = useModal('attachment preview')
     const [previewedAttachment, setPreviewedAttachment] = useState({})
@@ -155,6 +189,16 @@ function Chat({ className }) {
 
     const numMessages = ((roomState || {}).messages || []).length
     const [messages, setMessages] = useState([])
+
+    // Init Slate Editor
+    const editor = useMemo(() => withHistory(withReact(createEditor())), [])
+    const initFocusPoint = { path: [0, 0], offset: 0 }
+    const [editorFocusPoint, setEditorFocusPoint] = useState(initFocusPoint)
+
+    function onEditorBlur() {
+      setEditorFocusPoint(editor.selection.focus)
+    }
+
     useEffect(() => {
         let previousSender
         let messages = ((roomState || {}).messages || []).map(msg => {
@@ -169,11 +213,54 @@ function Chat({ className }) {
         setMessages(messages)
     }, [numMessages])
 
+    const onOpenEmojis = (event) => {
+      if (showEmojiKeyboard) {
+        setShowEmojiKeyboard(!showEmojiKeyboard)
+      } else {
+        setShowEmojiKeyboard(!showEmojiKeyboard)
+      }
+    }
+
+    const onSelectEmoji = (emoji) => {
+      if (typeof emoji === 'string') {
+        for (let idx = 0; idx < emojiSearchWord.length + 1; idx++) {
+          editor.deleteBackward()
+        }
+
+        editor.insertText(emoji + ' ')
+      } else {
+        // Set focus point from blurred
+        editor.selection = { anchor: editorFocusPoint, focus: editorFocusPoint }
+        editor.insertText(emoji.colons + ' ')
+        editor.selection = {
+          anchor:  {
+            path: editorFocusPoint.path,
+            offset: editorFocusPoint.offset + emoji.colons.length + 1,
+          },
+          focus: {
+            path: editorFocusPoint.path,
+            offset: editorFocusPoint.offset + emoji.colons.length + 1,
+          }
+        }
+
+        ReactEditor.focus(editor)
+
+        setEditorFocusPoint({
+          path: editorFocusPoint.path,
+          offset: editorFocusPoint.offset + emoji.colons.length + 1,
+        })
+        setShowEmojiKeyboard(false)
+      }
+    }
+
     const onClickSend = useCallback(async () => {
-        if (!api) { return }
-        await api.sendMessage(messageText, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
+        const plainMessage = serializeMessageText()
+        if (!api || plainMessage.trim() === '') { return }
+        // Replace with markdown serializer
+        await api.sendMessage(plainMessage, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
         setAttachments([])
         setPreviews([])
+        setEmojiSearchWord('')
     }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api])
 
     useEffect(() => {
@@ -183,15 +270,99 @@ function Chat({ className }) {
         }
     })
 
-    function onChangeMessageText(e) {
-        setMessageText(e.target.value)
+    const serializeMessageText = () => {
+      return messageText.map((n) => Node.string(n)).join('\n')
     }
 
-    function onKeyDown(e) {
-        if (e.code === 'Enter') {
-            onClickSend()
-            setMessageText('')
+    function onChangeMessageText(textValue) {
+        if (editor.selection) {
+          const { anchor, focus } = editor.selection
+
+          // Assure cursor isn't selecting text
+          if (anchor.offset === focus.offset && JSON.stringify(anchor.path) === JSON.stringify(focus.path)) {
+            const parentNode = editor.children[focus.path[0]]
+            const childNode = parentNode.children[focus.path[1]]
+
+            if (childNode.text) {
+              setTimeout(() => {
+                getCurrentWord(focus.offset - 1, childNode.text)
+              }, 0);
+            }
+          }
+        } 
+
+        setMessageText(textValue)
+    }
+
+    function getCurrentWord(startPos, text) {
+      if (
+        text[startPos] === " " ||
+        text[startPos] === ":" ||
+        startPos < 2
+      ) {
+        setEmojiSearchWord('')
+        return
+      }
+
+      let cursor = startPos
+      let searchWord = []
+
+      while (true) {
+        if (text[cursor] === ":" && cursor === 0) {
+          setEmojiSearchWord(searchWord.reverse().join(''))
+          break; 
         }
+
+        if (text[cursor] === ":" && text[cursor - 1] !== " ") {
+          setEmojiSearchWord('')
+          break;
+        }
+
+        if (cursor === 0 || text[cursor] === " ") {
+          setEmojiSearchWord('')
+          break;
+        }
+
+        if (
+          text[cursor] === ":" &&
+          text[cursor - 1] === " " &&
+          searchWord.length >= 2
+        ) {
+          setEmojiSearchWord(searchWord.reverse().join(''))
+          break;
+        }
+
+        if (text[cursor] !== ":") {
+          searchWord.push(text[cursor]) 
+        }
+        cursor--
+      }
+
+      return searchWord
+
+    }
+
+    function onKeyDown(event) {
+      if (event.code === 'Enter' && !event.shiftKey) {
+        if (!emojisFound || (!emojisFound && emojiSearchWord)) {
+          event.preventDefault()
+          event.stopPropagation()
+
+          // Reset SlateJS cursor
+          const point = { path: [0, 0], offset: 0 };
+          editor.selection = { anchor: point, focus: point };
+          editor.history = { redos: [], undos: [] };
+
+          setMessageText(initialMessageText)
+          onClickSend()
+        }
+      }
+
+      if (emojiSearchWord) {
+        if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
+          event.preventDefault()
+        }
+      }
     }
 
     function onClickAddAttachment() {
@@ -231,7 +402,9 @@ function Chat({ className }) {
     }
 
     if (!selectedStateURI) {
-        return <Container className={className}></Container>
+        return <EmptyChatContainer className={className}>
+          Please select a server and a chat to get started!
+        </EmptyChatContainer>
     }
 
     const ownAddress = nodeIdentities && nodeIdentities[0] ? nodeIdentities[0].address : null
@@ -265,12 +438,57 @@ function Chat({ className }) {
             </ImgPreviewContainer>
             <ControlsContainer>
                 <AddAttachmentButton onClick={onClickAddAttachment} style={{ color: theme.color.white }} />
-                <MessageInput onKeyDown={onKeyDown} onChange={onChangeMessageText} value={messageText} />
-                <SIconButton onClick={onClickSend}><SendIcon /></SIconButton>
+                {/* <MessageInput ref={messageInputRef} onKeyDown={onKeyDown} onChange={onChangeMessageText} value={messageText} /> */}
+                <TextBox
+                  onKeyDown={onKeyDown}
+                  onChange={ onChangeMessageText}
+                  value={messageText}
+                  editor={editor}
+                  onBlur={onEditorBlur}
+                >
+                  <TextBoxButtonWrapper>
+                    <SIconButton onClick={onOpenEmojis}><EmojiEmotionsIcon /></SIconButton>
+                    <SIconButton onClick={onClickSend}><SendIcon /></SIconButton>
+                  </TextBoxButtonWrapper>
+                </TextBox>
+                { showEmojiKeyboard ? <EmojiWrapper>
+                  <Picker
+                    useButton={false}
+                    title={'Redwood Chat'}
+                    perLine={8}
+                    set='apple'
+                    theme='dark'
+                    emojiSize={24}
+                    onSelect={onSelectEmoji}
+                  />
+                </EmojiWrapper> : null }
+                { emojiSearchWord ? <EmojiQuickSearch
+                  emojisFound={emojisFound}
+                  setEmojisFound={setEmojisFound}
+                  setEmojiSearchWord={setEmojiSearchWord}
+                  onSelectEmoji={onSelectEmoji}
+                  messageText={emojiSearchWord}
+                /> : null }
             </ControlsContainer>
         </Container>
     )
 }
+
+const TextBoxButtonWrapper = styled.div`
+  position: absolute;
+  right: 20px;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content;
+  height: 32px;
+`
+
+const EmojiWrapper = styled.div`
+  position: absolute;
+  top: -440px;
+  right: 20px;
+`
 
 const MessageWrapper = styled.div`
     display: flex;
@@ -351,7 +569,8 @@ function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
               <MessageSender>{displayName} <MessageTimestamp dayDisplay={dayDisplay} displayTime={displayTime} /></MessageSender>
             }
 
-            <MessageText>{msg.text}</MessageText>
+            {/* <MessageText>{msg.text}</MessageText> */}
+            <MessageParse msgText={msg.text} />
             {(msg.attachments || []).map((attachment, j) => (
               <SAttachment
                 key={`${selectedStateURI}${messageIndex},${j}`}
@@ -364,6 +583,34 @@ function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
         </MessageWrapper>
     )
 }
+
+function MessageParse({ msgText }) {
+
+  const colons = `:[a-zA-Z0-9-_+]+:`;
+  const skin = `:skin-tone-[2-6]:`;
+  const colonsRegex = new RegExp(`(${colons}${skin}|${colons})`, 'g');
+
+  let msgBlock = msgText.split(colonsRegex).filter((block) => !!block).map((block, idx) => {
+    if (data.emojis[block.replace(':', '').replace(':', '')]) {
+      if (block[0] === ':' && block[block.length - 1] === ':') {
+        return <Emoji key={idx} emoji={block} size={21} />
+      }
+    }
+
+    return block
+  })
+
+  return (
+    <SMessageParseContainer>{msgBlock}</SMessageParseContainer>
+  )
+}
+
+const SMessageParseContainer = styled.div`
+  white-space: pre-wrap;
+  span.emoji-mart-emoji {
+    top: 4px;
+  }
+`
 
 const SModalContent = styled(ModalContent)`
     width: 600px;

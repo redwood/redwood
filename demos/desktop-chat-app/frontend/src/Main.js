@@ -45,6 +45,7 @@ const SSidebar = styled(Sidebar)`
 
 const SServerBar = styled(ServerBar)`
     width: 72px;
+    min-width: 72px;
     height: calc(100% - 2 * ${props => serverBarVerticalPadding});
     background: ${props => props.theme.color.grey[600]};
 `

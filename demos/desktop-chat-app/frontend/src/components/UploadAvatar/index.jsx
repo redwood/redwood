@@ -7,6 +7,8 @@ import theme from '../../theme'
 
 const SUploadAvatarContainer = styled.div`
   width: 100%;
+  padding-top: 8px;
+  padding-bottom: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
