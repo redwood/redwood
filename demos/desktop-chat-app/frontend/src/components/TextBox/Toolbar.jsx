@@ -10,6 +10,7 @@ import FormatBoldIcon from '@material-ui/icons/FormatBold';
 import FormatItalicIcon from '@material-ui/icons/FormatItalic';
 import FormatUnderlinedIcon from '@material-ui/icons/FormatUnderlined';
 import StrikethroughSIcon from '@material-ui/icons/StrikethroughS';
+import CodeIcon from '@material-ui/icons/Code';
 
 const SMenu = styled.div`
     padding: 8px 7px 6px;
@@ -113,6 +114,7 @@ const Toolbar = ({ toggleFormat, isFormatActive }) => {
         <FormatButton toggleFormat={toggleFormat} isFormatActive={isFormatActive} format="italic" icon={<FormatItalicIcon />} />
         <FormatButton toggleFormat={toggleFormat} isFormatActive={isFormatActive} format="underlined" icon={<FormatUnderlinedIcon />} />
         <FormatButton toggleFormat={toggleFormat} isFormatActive={isFormatActive} format="strike" icon={<StrikethroughSIcon />} />
+        <FormatButton toggleFormat={toggleFormat} isFormatActive={isFormatActive} format="code" icon={<CodeIcon />} />
       </SMenu>
     </Portal>
   )
