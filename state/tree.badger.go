@@ -1318,7 +1318,7 @@ func (tx *DBNode) CopyToMemory(relKeypath Keypath, rng *Range) (n Node, err erro
 		return nil, ErrInvalidRange
 	}
 
-	mNode := NewMemoryNode().(*MemoryNode)
+	mNode := NewMemoryNode()
 
 	if rootNodeType == NodeTypeValue {
 		v, err := decodeGoValue(rootNodeType, valueType, length, rng, data)

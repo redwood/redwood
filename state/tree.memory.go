@@ -3,6 +3,7 @@ package state
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -26,7 +27,7 @@ type MemoryNode struct {
 	diff           *Diff
 }
 
-func NewMemoryNode() Node {
+func NewMemoryNode() *MemoryNode {
 	return &MemoryNode{
 		keypath:        nil,
 		rng:            nil,
@@ -37,6 +38,12 @@ func NewMemoryNode() Node {
 		copied:         false,
 		diff:           NewDiff(),
 	}
+}
+
+func NewMemoryNodeWithValue(value interface{}) *MemoryNode {
+	node := NewMemoryNode()
+	node.Set(nil, nil, value)
+	return node
 }
 
 func (n *MemoryNode) Close() {}
@@ -527,7 +534,7 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 	var newKeypaths []Keypath
 
 	// Set value types for intermediate keypaths in case they don't exist
-	{
+	if len(keypath) > 0 {
 		parts := append([]Keypath{nil}, absKeypath.Parts()...)
 		var byteIdx int
 		for i, key := range parts[:len(parts)-1] {
@@ -938,7 +945,7 @@ func (iter *memoryDepthFirstIterator) Close() {
 
 func (n *MemoryNode) UnmarshalJSON(bs []byte) error {
 	if n == nil {
-		newNode := NewMemoryNode().(*MemoryNode)
+		newNode := NewMemoryNode()
 		*n = *newNode
 	}
 
@@ -1096,4 +1103,8 @@ func (t *MemoryNode) DebugPrint(printFn func(inFormat string, args ...interface{
 		}
 	}
 	printFn(indent + "}")
+}
+
+func (t *MemoryNode) DebugFmtPrint(indentLevel int) {
+	t.DebugPrint(func(inFormat string, args ...interface{}) { fmt.Printf(inFormat, args...) }, true, indentLevel)
 }

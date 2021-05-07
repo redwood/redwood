@@ -65,8 +65,8 @@ func TestMemoryNode_Set(t *testing.T) {
 
 func TestMemoryNode_SetNode(t *testing.T) {
 	t.Run("inner state.MemoryNode", func(t *testing.T) {
-		node := state.NewMemoryNode().(*state.MemoryNode)
-		innerNode := state.NewMemoryNode().(*state.MemoryNode)
+		node := state.NewMemoryNode()
+		innerNode := state.NewMemoryNode()
 
 		err := node.Set(state.Keypath("foo"), nil, M{
 			"one":   uint64(123),
@@ -110,8 +110,8 @@ func TestMemoryNode_SetNode(t *testing.T) {
 
 func TestMemoryNode_ParentNodeFor(t *testing.T) {
 	t.Run("non-root node", func(t *testing.T) {
-		node := state.NewMemoryNode().(*state.MemoryNode)
-		innerNode := state.NewMemoryNode().(*state.MemoryNode)
+		node := state.NewMemoryNode()
+		innerNode := state.NewMemoryNode()
 
 		err := node.Set(state.Keypath("foo"), nil, M{
 			"one":   uint64(123),
@@ -137,8 +137,8 @@ func TestMemoryNode_ParentNodeFor(t *testing.T) {
 	})
 
 	t.Run("root node", func(t *testing.T) {
-		node := state.NewMemoryNode().(*state.MemoryNode)
-		innerNode := state.NewMemoryNode().(*state.MemoryNode)
+		node := state.NewMemoryNode()
+		innerNode := state.NewMemoryNode()
 
 		err := node.Set(state.Keypath("foo"), nil, M{
 			"one":   uint64(123),
@@ -189,7 +189,7 @@ func TestMemoryNode_Delete(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			node := state.NewMemoryNode().(*state.MemoryNode)
+			node := state.NewMemoryNode()
 
 			err := node.Set(test.setKeypath, test.setRange, test.fixture.input)
 			require.NoError(t, err)
