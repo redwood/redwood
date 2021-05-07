@@ -12,9 +12,13 @@ import (
 
 	"github.com/pkg/errors"
 
+	"redwood.dev/blob"
 	"redwood.dev/crypto"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
+	"redwood.dev/swarm/protoauth"
+	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -34,6 +38,12 @@ type peerConn struct {
 	}
 }
 
+var (
+	_ protoauth.AuthPeerConn = (*peerConn)(nil)
+	_ protoblob.BlobPeerConn = (*peerConn)(nil)
+	_ prototree.TreePeerConn = (*peerConn)(nil)
+)
+
 func (p *peerConn) Transport() swarm.Transport {
 	return p.t
 }
@@ -42,7 +52,7 @@ func (p *peerConn) EnsureConnected(ctx context.Context) error {
 	return nil
 }
 
-func (p *peerConn) Subscribe(ctx context.Context, stateURI string) (_ swarm.ReadableSubscription, err error) {
+func (p *peerConn) Subscribe(ctx context.Context, stateURI string) (_ prototree.ReadableSubscription, err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
 	if p.DialInfo().DialAddr == "" {
@@ -58,7 +68,7 @@ func (p *peerConn) Subscribe(ctx context.Context, stateURI string) (_ swarm.Read
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Connection", "keep-alive")
 
-	subTypeBytes, err := swarm.SubscriptionType_Txs.MarshalText()
+	subTypeBytes, err := prototree.SubscriptionType_Txs.MarshalText()
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +163,7 @@ func (p *peerConn) Ack(stateURI string, txID types.ID) (err error) {
 	return nil
 }
 
-func (p *peerConn) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error) {
+func (p *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) (err error) {
 	defer utils.WithStack(&err)
 	defer func() { p.UpdateConnStats(err == nil) }()
 
@@ -179,10 +189,10 @@ func (p *peerConn) ChallengeIdentity(challengeMsg types.ChallengeMsg) (err error
 	return nil
 }
 
-func (p *peerConn) ReceiveChallengeIdentityResponse() (_ []swarm.ChallengeIdentityResponse, err error) {
+func (p *peerConn) ReceiveChallengeIdentityResponse() (_ []protoauth.ChallengeIdentityResponse, err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
-	var verifyResp []swarm.ChallengeIdentityResponse
+	var verifyResp []protoauth.ChallengeIdentityResponse
 	err = json.NewDecoder(p.stream.ReadCloser).Decode(&verifyResp)
 	if err != nil {
 		return nil, err
@@ -190,7 +200,7 @@ func (p *peerConn) ReceiveChallengeIdentityResponse() (_ []swarm.ChallengeIdenti
 	return verifyResp, nil
 }
 
-func (p *peerConn) RespondChallengeIdentity(verifyAddressResponse []swarm.ChallengeIdentityResponse) (err error) {
+func (p *peerConn) RespondChallengeIdentity(verifyAddressResponse []protoauth.ChallengeIdentityResponse) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
 	err = json.NewEncoder(p.stream.Writer).Encode(verifyAddressResponse)
@@ -201,24 +211,24 @@ func (p *peerConn) RespondChallengeIdentity(verifyAddressResponse []swarm.Challe
 	return nil
 }
 
-func (p *peerConn) FetchRef(refID types.RefID) error {
+func (p *peerConn) FetchBlob(blobID blob.ID) error {
 	return types.ErrUnimplemented
 }
 
-func (p *peerConn) SendRefHeader(haveBlob bool) error {
+func (p *peerConn) SendBlobHeader(haveBlob bool) error {
 	return types.ErrUnimplemented
 }
 
-func (p *peerConn) SendRefPacket(data []byte, end bool) error {
+func (p *peerConn) SendBlobPacket(data []byte, end bool) error {
 	return types.ErrUnimplemented
 }
 
-func (p *peerConn) ReceiveRefHeader() (swarm.FetchRefResponseHeader, error) {
-	return swarm.FetchRefResponseHeader{}, types.ErrUnimplemented
+func (p *peerConn) ReceiveBlobHeader() (protoblob.FetchBlobResponseHeader, error) {
+	return protoblob.FetchBlobResponseHeader{}, types.ErrUnimplemented
 }
 
-func (p *peerConn) ReceiveRefPacket() (swarm.FetchRefResponseBody, error) {
-	return swarm.FetchRefResponseBody{}, types.ErrUnimplemented
+func (p *peerConn) ReceiveBlobPacket() (protoblob.FetchBlobResponseBody, error) {
+	return protoblob.FetchBlobResponseBody{}, types.ErrUnimplemented
 }
 
 func (p *peerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.PeerDialInfo) (err error) {

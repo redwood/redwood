@@ -14,6 +14,7 @@ import (
 
 	"redwood.dev/crypto"
 	"redwood.dev/swarm"
+	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
@@ -91,7 +92,7 @@ func putRequestFromTx(
 			return nil, errors.WithStack(err)
 		}
 
-		msg, err := json.Marshal(swarm.EncryptedTx{
+		msg, err := json.Marshal(prototree.EncryptedTx{
 			TxID:             tx.ID,
 			EncryptedPayload: encryptedTxBytes,
 			SenderPublicKey:  senderEncKeypair.EncryptingPublicKey.Bytes(),

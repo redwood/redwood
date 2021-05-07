@@ -15,8 +15,9 @@ import (
 
 	"redwood.dev/crypto"
 	"redwood.dev/identity"
+	"redwood.dev/log"
 	"redwood.dev/state"
-	"redwood.dev/swarm"
+	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -29,7 +30,9 @@ type httpReadableSubscription struct {
 	private bool
 }
 
-func (s *httpReadableSubscription) Read() (_ *swarm.SubscriptionMsg, err error) {
+var _ prototree.ReadableSubscription = (*httpReadableSubscription)(nil)
+
+func (s *httpReadableSubscription) Read() (_ *prototree.SubscriptionMsg, err error) {
 	defer func() { s.peer.UpdateConnStats(err == nil) }()
 
 	r := bufio.NewReader(s.stream)
@@ -40,7 +43,7 @@ func (s *httpReadableSubscription) Read() (_ *swarm.SubscriptionMsg, err error) 
 	bs = bytes.TrimPrefix(bs, []byte("data: "))
 	bs = bytes.Trim(bs, "\n ")
 
-	var msg swarm.SubscriptionMsg
+	var msg prototree.SubscriptionMsg
 	err = json.Unmarshal(bs, &msg)
 	if err != nil {
 		return nil, err
@@ -83,15 +86,59 @@ func (c *httpReadableSubscription) Close() error {
 
 type httpWritableSubscription struct {
 	*peerConn
-	typ swarm.SubscriptionType
+	stateURI  string
+	typ       prototree.SubscriptionType
+	transport *transport
+	closeOnce sync.Once
+	chClosed  chan struct{}
 }
 
-var _ swarm.WritableSubscriptionImpl = (*httpWritableSubscription)(nil)
+var _ prototree.WritableSubscriptionImpl = (*httpWritableSubscription)(nil)
+
+func newHTTPWritableSubscription(
+	stateURI string,
+	peerConn *peerConn,
+	subscriptionType prototree.SubscriptionType,
+	transport *transport,
+) *httpWritableSubscription {
+	sub := &httpWritableSubscription{
+		stateURI:  stateURI,
+		peerConn:  peerConn,
+		typ:       subscriptionType,
+		transport: transport,
+		chClosed:  make(chan struct{}),
+	}
+
+	// Listen to the closing of the http connection via the CloseNotifier
+	notify := peerConn.stream.Writer.(http.CloseNotifier).CloseNotify()
+	go func() {
+		defer sub.Close()
+		<-notify
+		transport.Infof(0, "http subscription closed (%v)", stateURI)
+	}()
+
+	return sub
+}
+
+func (sub *httpWritableSubscription) StateURI() string {
+	return sub.stateURI
+}
+
+func (sub *httpWritableSubscription) Close() error {
+	sub.closeOnce.Do(func() {
+		sub.stream.Close()
+		close(sub.chClosed)
+	})
+	return nil
+}
+
+func (sub *httpWritableSubscription) Closed() <-chan struct{} {
+	return sub.chClosed
+}
 
 func (sub *httpWritableSubscription) Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) (err error) {
-	defer func() { sub.UpdateConnStats(err == nil) }()
+	var msg *prototree.SubscriptionMsg
 
-	var msg *swarm.SubscriptionMsg
 	if tx != nil && tx.IsPrivate() {
 		marshalledTx, err := json.Marshal(tx)
 		if err != nil {
@@ -124,16 +171,16 @@ func (sub *httpWritableSubscription) Put(ctx context.Context, stateURI string, t
 			return errors.WithStack(err)
 		}
 
-		etx := &swarm.EncryptedTx{
+		etx := &prototree.EncryptedTx{
 			TxID:             tx.ID,
 			EncryptedPayload: encryptedTxBytes,
 			SenderPublicKey:  ownIdentity.Encrypting.EncryptingPublicKey.Bytes(),
 			RecipientAddress: peerSigPubkey.Address(),
 		}
 
-		msg = &swarm.SubscriptionMsg{StateURI: stateURI, EncryptedTx: etx, Leaves: leaves}
+		msg = &prototree.SubscriptionMsg{StateURI: stateURI, EncryptedTx: etx, Leaves: leaves}
 	} else {
-		msg = &swarm.SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves}
+		msg = &prototree.SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves}
 	}
 
 	bs, err := json.Marshal(msg)
@@ -146,8 +193,10 @@ func (sub *httpWritableSubscription) Put(ctx context.Context, stateURI string, t
 
 	n, err := sub.stream.Writer.Write(event)
 	if err != nil {
+		sub.Close()
 		return err
 	} else if n < len(event) {
+		sub.Close()
 		return errors.New("error writing message to http peer: didn't write enough")
 	}
 	sub.stream.Flush()
@@ -172,18 +221,37 @@ var (
 
 type wsWritableSubscription struct {
 	*peerConn
-	conn                         *websocket.Conn
-	onAddMultiplexedSubscription func(stateURI string, keypath state.Keypath, subscriptionType swarm.SubscriptionType, fetchHistoryOpts *swarm.FetchHistoryOpts)
-	messages                     *utils.Mailbox
-	chStop                       chan struct{}
-	chDone                       chan struct{}
-	closeOnce                    sync.Once
+	stateURI         string
+	conn             *websocket.Conn
+	transport        *transport
+	messages         *utils.Mailbox
+	chStop           chan struct{}
+	wgReadingWriting sync.WaitGroup
+	chClosed         chan struct{}
+	closeOnce        sync.Once
 }
 
-var _ swarm.WritableSubscriptionImpl = (*wsWritableSubscription)(nil)
+var _ prototree.WritableSubscriptionImpl = (*wsWritableSubscription)(nil)
+
+func newWSWritableSubscription(stateURI string, conn *websocket.Conn, peerConn *peerConn, transport *transport) *wsWritableSubscription {
+	return &wsWritableSubscription{
+		stateURI:  stateURI,
+		conn:      conn,
+		peerConn:  peerConn,
+		transport: transport,
+		messages:  utils.NewMailbox(300), // @@TODO: configurable?
+		chStop:    make(chan struct{}),
+		chClosed:  make(chan struct{}),
+	}
+}
+
+func (sub *wsWritableSubscription) StateURI() string {
+	return sub.stateURI
+}
 
 func (sub *wsWritableSubscription) Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) (err error) {
-	bs, err := json.Marshal(swarm.SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
+	log.NewLogger("").Debugf("PUT %v", tx)
+	bs, err := json.Marshal(prototree.SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
 	if err != nil {
 		sub.t.Errorf("error marshaling message json: %v", err)
 		return err
@@ -192,7 +260,130 @@ func (sub *wsWritableSubscription) Put(ctx context.Context, stateURI string, tx 
 	return nil
 }
 
-func (sub *wsWritableSubscription) writePendingMessages() {
+func (sub *wsWritableSubscription) Close() error {
+	sub.closeOnce.Do(func() {
+		defer close(sub.chClosed)
+
+		close(sub.chStop)
+		sub.wgReadingWriting.Wait()
+
+		sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+		err := sub.conn.WriteMessage(websocket.CloseMessage, []byte{})
+		sub.UpdateConnStats(err == nil)
+		sub.conn.Close()
+	})
+	return nil
+}
+
+func (sub *wsWritableSubscription) Closed() <-chan struct{} {
+	return sub.chClosed
+}
+
+func (sub *wsWritableSubscription) start() {
+	// sub.conn.SetPongHandler(func(string) error { sub.conn.SetReadDeadline(time.Now().Add(wsPongWait)); return nil })
+
+	ticker := time.NewTicker(wsPingPeriod)
+
+	sub.wgReadingWriting.Add(2)
+
+	go func() {
+		defer ticker.Stop()
+		defer sub.Close()
+		defer sub.wgReadingWriting.Done()
+
+		for {
+			log.NewLogger("").Debugf("CYCLE")
+			select {
+			case <-sub.chStop:
+				return
+
+			case <-sub.messages.Notify():
+				log.NewLogger("").Debugf("NOTIFY")
+				err := sub.writePendingMessages()
+				if err != nil {
+					return
+				}
+
+				// case <-ticker.C:
+				// 	log.NewLogger("").Debugf("PING")
+				// 	sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+				// 	sub.conn.SetReadDeadline(time.Now().Add(wsPongWait))
+
+				// 	err := sub.conn.WriteMessage(websocket.PingMessage, nil)
+				// 	sub.UpdateConnStats(err == nil)
+				// 	if err != nil {
+				// 		sub.t.Errorf("error pinging websocket client: %v", err)
+				// 		return
+				// 	}
+			}
+		}
+	}()
+
+	go func() {
+		defer sub.Close()
+		defer sub.wgReadingWriting.Done()
+
+		for {
+			log.NewLogger("").Debugf("READ?")
+			select {
+			case <-sub.chStop:
+				return
+			default:
+			}
+
+			_, bs, err := sub.conn.ReadMessage()
+			if err != nil {
+				sub.t.Errorf("error reading from websocket: %v", err)
+				return
+			}
+
+			var addSubMsg struct {
+				Params struct {
+					StateURI         string `json:"stateURI"`
+					Keypath          string `json:"keypath"`
+					SubscriptionType string `json:"subscriptionType"`
+					FromTxID         string `json:"fromTxID"`
+				} `json:"params"`
+			}
+			err = json.Unmarshal(bs, &addSubMsg)
+			if err != nil {
+				sub.t.Errorf("got bad multiplexed subscription request: %v", err)
+				continue
+			}
+			log.NewLogger("").Debugf("READ: %v", addSubMsg)
+			sub.t.Infof(0, "incoming websocket subscription (state uri: %v)", addSubMsg.Params.StateURI)
+
+			var subscriptionType prototree.SubscriptionType
+			if addSubMsg.Params.SubscriptionType != "" {
+				err := subscriptionType.UnmarshalText([]byte(addSubMsg.Params.SubscriptionType))
+				if err != nil {
+					sub.t.Errorf("could not parse subscription type: %v", err)
+					continue
+				}
+			}
+
+			var fetchHistoryOpts *prototree.FetchHistoryOpts
+			if addSubMsg.Params.FromTxID != "" {
+				fromTxID, err := types.IDFromHex(addSubMsg.Params.FromTxID)
+				if err != nil {
+					sub.t.Errorf("could not parse fromTxID: %v", err)
+					continue
+				}
+				fetchHistoryOpts = &prototree.FetchHistoryOpts{FromTxID: fromTxID}
+			}
+
+			sub.transport.HandleWritableSubscriptionOpened(
+				addSubMsg.Params.StateURI,
+				state.Keypath(addSubMsg.Params.Keypath),
+				subscriptionType,
+				sub,
+				fetchHistoryOpts,
+			)
+		}
+	}()
+}
+
+func (sub *wsWritableSubscription) writePendingMessages() error {
 	for _, msgBytes := range sub.messages.RetrieveAll() {
 		err := func() error {
 			select {
@@ -213,6 +404,7 @@ func (sub *wsWritableSubscription) writePendingMessages() {
 			defer w.Close()
 
 			bs := append(msgBytes.([]byte), '\n')
+			log.NewLogger("").Debugf("WRITE: %v", string(msgBytes.([]byte)))
 
 			_, err = w.Write(bs)
 			if err != nil {
@@ -220,107 +412,15 @@ func (sub *wsWritableSubscription) writePendingMessages() {
 			}
 			return nil
 		}()
-		if errors.Cause(err) == types.ErrClosed {
-			return
-		} else if err != nil {
-			sub.t.Errorf("error: %v", err)
+		// if errors.Cause(err) == types.ErrClosed {
+		//  return
+		// } else
+		if err != nil {
+			// sub.t.Errorf("error: %v", err)
+			//          sub.transport.HandleWritableSubscriptionClosed(sub)
+			//          sub.Close()
+			return err
 		}
 	}
-}
-
-func (sub *wsWritableSubscription) close() {
-	sub.closeOnce.Do(func() {
-		close(sub.chStop)
-		<-sub.chDone
-		sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
-		err := sub.conn.WriteMessage(websocket.CloseMessage, []byte{})
-		sub.UpdateConnStats(err == nil)
-		sub.conn.Close()
-	})
-}
-
-func (sub *wsWritableSubscription) start() {
-	sub.chStop = make(chan struct{})
-	sub.chDone = make(chan struct{})
-
-	ticker := time.NewTicker(wsPingPeriod)
-
-	go func() {
-		defer close(sub.chDone)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-sub.chStop:
-				return
-
-			case <-sub.messages.Notify():
-				sub.writePendingMessages()
-
-			case <-ticker.C:
-				sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
-
-				err := sub.conn.WriteMessage(websocket.PingMessage, nil)
-				sub.UpdateConnStats(err == nil)
-				if err != nil {
-					sub.t.Errorf("error pinging websocket client: %v", err)
-					sub.close()
-					return
-				}
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case <-sub.chStop:
-				return
-			default:
-			}
-
-			_, bs, err := sub.conn.ReadMessage()
-			if err != nil {
-				sub.t.Errorf("error reading from websocket: %v", err)
-				sub.close()
-				return
-			}
-
-			var addSubMsg struct {
-				Params struct {
-					StateURI         string `json:"stateURI"`
-					Keypath          string `json:"keypath"`
-					SubscriptionType string `json:"subscriptionType"`
-					FromTxID         string `json:"fromTxID"`
-				} `json:"params"`
-			}
-			err = json.Unmarshal(bs, &addSubMsg)
-			if err != nil {
-				sub.t.Errorf("got bad multiplexed subscription request: %v", err)
-				continue
-			}
-			sub.t.Infof(0, "incoming websocket subscription (state uri: %v)", addSubMsg.Params.StateURI)
-
-			var subscriptionType swarm.SubscriptionType
-			if addSubMsg.Params.SubscriptionType != "" {
-				err := subscriptionType.UnmarshalText([]byte(addSubMsg.Params.SubscriptionType))
-				if err != nil {
-					sub.t.Errorf("could not parse subscription type: %v", err)
-					continue
-				}
-			}
-
-			var fetchHistoryOpts *swarm.FetchHistoryOpts
-			if addSubMsg.Params.FromTxID != "" {
-				fromTxID, err := types.IDFromHex(addSubMsg.Params.FromTxID)
-				if err != nil {
-					sub.t.Errorf("could not parse fromTxID: %v", err)
-					continue
-				}
-				fetchHistoryOpts = &swarm.FetchHistoryOpts{FromTxID: fromTxID}
-			}
-
-			sub.onAddMultiplexedSubscription(addSubMsg.Params.StateURI, state.Keypath(addSubMsg.Params.Keypath), subscriptionType, fetchHistoryOpts)
-		}
-	}()
+	return nil
 }

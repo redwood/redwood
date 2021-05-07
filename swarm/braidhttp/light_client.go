@@ -22,7 +22,6 @@ import (
 
 	"redwood.dev/crypto"
 	"redwood.dev/state"
-	"redwood.dev/swarm"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
@@ -270,7 +269,7 @@ func (c *LightClient) Put(ctx context.Context, tx *tree.Tx, recipientAddress typ
 	return nil
 }
 
-func (c *LightClient) StoreRef(file io.Reader) (swarm.StoreRefResponse, error) {
+func (c *LightClient) StoreBlob(file io.Reader) (StoreBlobResponse, error) {
 	client := c.client()
 
 	var buf bytes.Buffer
@@ -281,35 +280,35 @@ func (c *LightClient) StoreRef(file io.Reader) (swarm.StoreRefResponse, error) {
 	h.Set("Content-Type", "application/octet-stream")
 	fileWriter, err := w.CreatePart(h)
 	if err != nil {
-		return swarm.StoreRefResponse{}, errors.WithStack(err)
+		return StoreBlobResponse{}, errors.WithStack(err)
 	}
 
 	// @@TODO: streaming?
 	_, err = io.Copy(fileWriter, file)
 	if err != nil {
-		return swarm.StoreRefResponse{}, errors.WithStack(err)
+		return StoreBlobResponse{}, errors.WithStack(err)
 	}
 	w.Close()
 
 	req, err := http.NewRequest("POST", c.dialAddr, &buf)
 	if err != nil {
-		return swarm.StoreRefResponse{}, errors.WithStack(err)
+		return StoreBlobResponse{}, errors.WithStack(err)
 	}
-	req.Header.Set("Ref", "true")
+	req.Header.Set("Blob", "true")
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return swarm.StoreRefResponse{}, errors.WithStack(err)
+		return StoreBlobResponse{}, errors.WithStack(err)
 	} else if resp.StatusCode != 200 {
-		return swarm.StoreRefResponse{}, errors.Errorf("error storing ref: (%v) %v", resp.StatusCode, resp.Status)
+		return StoreBlobResponse{}, errors.Errorf("error storing blob: (%v) %v", resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
 
-	var body swarm.StoreRefResponse
+	var body StoreBlobResponse
 	err = json.NewDecoder(resp.Body).Decode(&body)
 	if err != nil {
-		return swarm.StoreRefResponse{}, errors.WithStack(err)
+		return StoreBlobResponse{}, errors.WithStack(err)
 	}
 	return body, nil
 }
