@@ -11,6 +11,12 @@ import (
 	"redwood.dev/utils"
 )
 
+type PeerPool interface {
+	GetPeer(ctx context.Context) (_ Peer, err error)
+	ReturnPeer(peer Peer, strike bool)
+	Close()
+}
+
 type peerPool struct {
 	log.Logger
 
@@ -42,7 +48,7 @@ type peersMapEntry struct {
 	state peerState
 }
 
-func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<-chan Peer, error)) *peerPool {
+func NewPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<-chan Peer, error)) *peerPool {
 	chProviders := make(chan Peer)
 	close(chProviders)
 
