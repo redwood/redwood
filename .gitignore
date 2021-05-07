@@ -3,3 +3,5 @@ _sandbox/
 _attic/
 node_modules/
 demos/pair-programming-session/recordings
+dist/
+.envrc

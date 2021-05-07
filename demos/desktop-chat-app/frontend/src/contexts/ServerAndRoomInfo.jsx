@@ -34,7 +34,7 @@ function Provider({ children }) {
             if (stateURI === 'chat.local/servers') {
                 for (let server of Object.keys(stateTrees['chat.local/servers'].value || {})) {
                     let registry = `${server}/registry`
-                    if (subscribedStateURIs[registry]) {
+                    if (subscribedStateURIs.current[registry]) {
                         continue
                     }
                     subscribe(registry)
@@ -62,7 +62,7 @@ function Provider({ children }) {
             if (room === 'registry' || stateURI === 'chat.local/dms') {
                 for (let room of Object.keys((stateTrees[stateURI] || {}).rooms || {})) {
                     let roomStateURI = `${stateURI === 'chat.local/dms' ? 'chat.p2p' : server}/${room}`
-                    if (subscribedStateURIs[roomStateURI]) {
+                    if (subscribedStateURIs.current[roomStateURI]) {
                         continue
                     }
                     subscribe(roomStateURI)
