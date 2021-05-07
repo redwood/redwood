@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"redwood.dev/blob"
 	"redwood.dev/state"
 	"redwood.dev/types"
 )
@@ -116,17 +117,15 @@ func (frame *Frame) ValueNode() state.Node {
 	return frame.Node
 }
 
-type ReferenceResolver interface {
+type StateResolver interface {
 	StateAtVersion(stateURI string, version *types.ID) (state.Node, error)
-	RefObjectReader(refID types.RefID) (io.ReadCloser, int64, error)
 }
 
-func prettyJSON(x interface{}) string {
-	j, _ := json.MarshalIndent(x, "", "    ")
-	return string(j)
+type BlobResolver interface {
+	BlobReader(blobID blob.ID) (io.ReadCloser, int64, error)
 }
 
-func Seek(node state.Node, keypath state.Keypath, refResolver ReferenceResolver) (_ state.Node, exists bool, _ error) {
+func Seek(node state.Node, keypath state.Keypath, stateResolver StateResolver, blobResolver BlobResolver) (_ state.Node, exists bool, _ error) {
 	for {
 		isNelSONFrame, err := node.Exists(ValueKey)
 		if err != nil {
@@ -171,19 +170,19 @@ func Seek(node state.Node, keypath state.Keypath, refResolver ReferenceResolver)
 		}
 
 		linkType, linkValue := DetermineLinkType(linkStr)
-		if linkType == LinkTypeRef {
+		if linkType == LinkTypeBlob {
 			if len(keypath) > 0 {
 				return nil, false, nil
 			}
 
 			frame := &Frame{Node: node}
 
-			var refID types.RefID
-			err := refID.UnmarshalText([]byte(linkValue))
+			var blobID blob.ID
+			err := blobID.UnmarshalText([]byte(linkValue))
 			if err != nil {
 				return nil, false, err
 			}
-			reader, contentLength, err := refResolver.RefObjectReader(refID)
+			reader, contentLength, err := blobResolver.BlobReader(blobID)
 			if goerrors.Is(err, os.ErrNotExist) {
 				return nil, false, nil
 			} else if err != nil {
@@ -202,7 +201,7 @@ func Seek(node state.Node, keypath state.Keypath, refResolver ReferenceResolver)
 
 			keypath = keypath.Unshift(linkedKeypath)
 
-			root, err := refResolver.StateAtVersion(stateURI, version)
+			root, err := stateResolver.StateAtVersion(stateURI, version)
 			if err != nil {
 				return nil, false, err
 			}
@@ -219,14 +218,14 @@ func Seek(node state.Node, keypath state.Keypath, refResolver ReferenceResolver)
 			continue
 
 		} else {
-			return nil, false, errors.New("unknown link type")
+			return nil, false, errors.Errorf("unknown link type (%v)", linkStr)
 		}
 
 	}
 	return node, true, nil
 }
 
-func Resolve(outerNode state.Node, refResolver ReferenceResolver) (state.Node, bool, error) {
+func Resolve(outerNode state.Node, stateResolver StateResolver, blobResolver BlobResolver) (state.Node, bool, error) {
 	var anyMissing bool
 
 	iter := outerNode.DepthFirstIterator(nil, false, 0)
@@ -262,7 +261,7 @@ func Resolve(outerNode state.Node, refResolver ReferenceResolver) (state.Node, b
 						frame.fullyResolved = false
 						anyMissing = true
 					} else {
-						innerAnyMissing = resolveLink(frame, linkStr, refResolver)
+						innerAnyMissing = resolveLink(frame, linkStr, stateResolver, blobResolver)
 					}
 					anyMissing = anyMissing || innerAnyMissing
 					frame.fullyResolved = !anyMissing
@@ -326,16 +325,16 @@ func Resolve(outerNode state.Node, refResolver ReferenceResolver) (state.Node, b
 	return outerNode, anyMissing, nil
 }
 
-func resolveLink(frame *Frame, linkStr string, refResolver ReferenceResolver) (anyMissing bool) {
+func resolveLink(frame *Frame, linkStr string, stateResolver StateResolver, blobResolver BlobResolver) (anyMissing bool) {
 	linkType, linkValue := DetermineLinkType(linkStr)
-	if linkType == LinkTypeRef {
-		var refID types.RefID
-		err := refID.UnmarshalText([]byte(linkValue))
+	if linkType == LinkTypeBlob {
+		var blobID blob.ID
+		err := blobID.UnmarshalText([]byte(linkValue))
 		if err != nil {
 			frame.err = err
 			return true
 		}
-		reader, contentLength, err := refResolver.RefObjectReader(refID)
+		reader, contentLength, err := blobResolver.BlobReader(blobID)
 		if goerrors.Is(err, os.ErrNotExist) {
 			frame.err = types.Err404
 			return true
@@ -355,7 +354,7 @@ func resolveLink(frame *Frame, linkStr string, refResolver ReferenceResolver) (a
 			return true
 		}
 
-		root, err := refResolver.StateAtVersion(stateURI, version)
+		root, err := stateResolver.StateAtVersion(stateURI, version)
 		if err != nil {
 			frame.err = err
 			return true
@@ -366,7 +365,7 @@ func resolveLink(frame *Frame, linkStr string, refResolver ReferenceResolver) (a
 			return true
 		}
 
-		root, anyMissing, err := Resolve(root, refResolver)
+		root, anyMissing, err := Resolve(root, stateResolver, blobResolver)
 		if err != nil {
 			frame.err = err
 			return true

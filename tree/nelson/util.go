@@ -139,14 +139,16 @@ type LinkType int
 
 const (
 	LinkTypeUnknown LinkType = iota
-	LinkTypeRef
+	LinkTypeBlob
 	LinkTypeState
 	LinkTypeURL // @@TODO
 )
 
 func DetermineLinkType(linkStr string) (LinkType, string) {
-	if strings.HasPrefix(linkStr, "ref:") {
-		return LinkTypeRef, linkStr[len("ref:"):]
+	if strings.HasPrefix(linkStr, "blob:") {
+		return LinkTypeBlob, linkStr[len("blob:"):]
+	} else if strings.HasPrefix(linkStr, "ref:") {
+		return LinkTypeBlob, linkStr[len("ref:"):]
 	} else if strings.HasPrefix(linkStr, "state:") {
 		return LinkTypeState, linkStr[len("state:"):]
 	}

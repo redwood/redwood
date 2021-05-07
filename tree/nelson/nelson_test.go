@@ -27,7 +27,7 @@ func TestResolve_SimpleFrame(t *testing.T) {
 	})
 	defer db.DeleteDB()
 
-	refResolver := &refResolverMock{}
+	resolver := &resolverMock{}
 
 	root := db.StateAtVersion(nil, false)
 	defer root.Close()
@@ -35,7 +35,7 @@ func TestResolve_SimpleFrame(t *testing.T) {
 	memroot, err := root.CopyToMemory(nil, nil)
 	require.NoError(t, err)
 
-	memroot, anyMissing, err := nelson.Resolve(memroot, refResolver)
+	memroot, anyMissing, err := nelson.Resolve(memroot, resolver, resolver)
 	require.False(t, anyMissing)
 	require.NoError(t, err)
 
@@ -72,7 +72,7 @@ func TestResolve_SimpleFrameInFrame(t *testing.T) {
 	})
 	defer db.DeleteDB()
 
-	refResolver := &refResolverMock{}
+	resolver := &resolverMock{}
 
 	root := db.StateAtVersion(nil, false)
 	defer root.Close()
@@ -80,7 +80,7 @@ func TestResolve_SimpleFrameInFrame(t *testing.T) {
 	memroot, err := root.CopyToMemory(nil, nil)
 	require.NoError(t, err)
 
-	memroot, anyMissing, err := nelson.Resolve(memroot, refResolver)
+	memroot, anyMissing, err := nelson.Resolve(memroot, resolver, resolver)
 	require.False(t, anyMissing)
 	require.NoError(t, err)
 
@@ -105,14 +105,14 @@ func TestResolve_SimpleFrameInFrame(t *testing.T) {
 	require.Equal(t, uint64(12345), val)
 }
 
-func TestResolve_SimpleFrameInFrameWithRef(t *testing.T) {
+func TestResolve_SimpleFrameInFrameWithBlob(t *testing.T) {
 	db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("foo"), M{
 		"Merge-Type": M{
 			"Content-Type": "resolver/js",
 			"value": M{
 				"src": M{
 					"Content-Type": "link",
-					"value":        "ref:sha3:deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe",
+					"value":        "blob:sha3:deadbeefcafebabedeadbeefcafebabedeadbeefcafebabedeadbeefcafebabe",
 				},
 			},
 		},
@@ -120,9 +120,9 @@ func TestResolve_SimpleFrameInFrameWithRef(t *testing.T) {
 	defer db.DeleteDB()
 
 	stringReader := ioutil.NopCloser(strings.NewReader("xyzzy"))
-	refResolver := &refResolverMock{
-		refObjectReader: stringReader,
-		refObjectLength: 5,
+	resolver := &resolverMock{
+		blobReader: stringReader,
+		blobLength: 5,
 	}
 
 	root := db.StateAtVersion(nil, false)
@@ -131,7 +131,7 @@ func TestResolve_SimpleFrameInFrameWithRef(t *testing.T) {
 	memroot, err := root.CopyToMemory(nil, nil)
 	require.NoError(t, err)
 
-	memroot, anyMissing, err := nelson.Resolve(memroot, refResolver)
+	memroot, anyMissing, err := nelson.Resolve(memroot, resolver, resolver)
 	require.False(t, anyMissing)
 	require.NoError(t, err)
 
@@ -160,7 +160,7 @@ func TestResolve_SimpleFrameInFrameWithRef(t *testing.T) {
 	}
 	require.Equal(t, expected, val)
 
-	// Now, test the innermost value, which should be the strings.Reader returned by the refResolverMock
+	// Now, test the innermost value, which should be the strings.Reader returned by the resolverMock
 	node = memroot.NodeAt(state.Keypath("foo/Merge-Type/src"), nil)
 	require.IsType(t, &nelson.Frame{}, node)
 	val, exists, err = node.Value(nil, nil)
@@ -198,7 +198,7 @@ func TestResolve_LinkToSimpleState(t *testing.T) {
 	localState := localDB.StateAtVersion(nil, false)
 	otherState := otherDB.StateAtVersion(nil, false)
 
-	refResolver := &refResolverMock{
+	resolver := &resolverMock{
 		stateURIs: map[string]state.Node{
 			"otherState/someChannel": otherState,
 		},
@@ -207,7 +207,7 @@ func TestResolve_LinkToSimpleState(t *testing.T) {
 	localStateMem, err := localState.CopyToMemory(nil, nil)
 	require.NoError(t, err)
 
-	localStateMem, anyMissing, err := nelson.Resolve(localStateMem, refResolver)
+	localStateMem, anyMissing, err := nelson.Resolve(localStateMem, resolver, resolver)
 	require.False(t, anyMissing)
 	require.NoError(t, err)
 
@@ -249,7 +249,7 @@ func TestResolve_LinkToMatryoshkaState(t *testing.T) {
 	localState := localDB.StateAtVersion(nil, false)
 	otherState := otherDB.StateAtVersion(nil, false)
 
-	refResolver := &refResolverMock{
+	resolver := &resolverMock{
 		stateURIs: map[string]state.Node{
 			"otherState/someChannel": otherState,
 		},
@@ -258,7 +258,7 @@ func TestResolve_LinkToMatryoshkaState(t *testing.T) {
 	localStateMem, err := localState.CopyToMemory(nil, nil)
 	require.NoError(t, err)
 
-	localStateMem, anyMissing, err := nelson.Resolve(localStateMem, refResolver)
+	localStateMem, anyMissing, err := nelson.Resolve(localStateMem, resolver, resolver)
 	require.False(t, anyMissing)
 	require.NoError(t, err)
 
