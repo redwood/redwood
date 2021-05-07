@@ -8,7 +8,7 @@ import (
 
 	"redwood.dev/crypto"
 	"redwood.dev/state"
-	"redwood.dev/swarm"
+	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
@@ -17,23 +17,23 @@ type readableSubscription struct {
 	*peerConn
 }
 
-func (sub *readableSubscription) Read() (_ *swarm.SubscriptionMsg, err error) {
-	defer func() { sub.UpdateConnStats(err == nil) }()
+var _ prototree.ReadableSubscription = (*readableSubscription)(nil)
 
+func (sub *readableSubscription) Read() (_ *prototree.SubscriptionMsg, err error) {
 	msg, err := sub.readMsg()
 	if err != nil {
 		return nil, errors.Errorf("error reading from subscription: %v", err)
 	}
 
 	switch msg.Type {
-	case MsgType_Put:
+	case msgType_Tx:
 		tx := msg.Payload.(tree.Tx)
-		return &swarm.SubscriptionMsg{Tx: &tx}, nil
+		return &prototree.SubscriptionMsg{Tx: &tx}, nil
 
-	case MsgType_Private:
-		encryptedTx, ok := msg.Payload.(swarm.EncryptedTx)
+	case msgType_EncryptedTx:
+		encryptedTx, ok := msg.Payload.(prototree.EncryptedTx)
 		if !ok {
-			return nil, errors.Errorf("Private message: bad payload: (%T) %v", msg.Payload, msg.Payload)
+			return nil, errors.Errorf("encrypted tx: bad payload: (%T) %v", msg.Payload, msg.Payload)
 		}
 		bs, err := sub.t.keyStore.OpenMessageFrom(
 			encryptedTx.RecipientAddress,
@@ -41,30 +41,47 @@ func (sub *readableSubscription) Read() (_ *swarm.SubscriptionMsg, err error) {
 			encryptedTx.EncryptedPayload,
 		)
 		if err != nil {
-			return nil, errors.Errorf("error decrypting tx: %v", err)
+			return nil, errors.Errorf("while decrypting tx: %v", err)
 		}
 
 		var tx tree.Tx
 		err = json.Unmarshal(bs, &tx)
 		if err != nil {
-			return nil, errors.Errorf("error decoding tx: %v", err)
+			return nil, errors.Errorf("while unmarshaling encrypted tx: %v", err)
 		} else if encryptedTx.TxID != tx.ID {
-			return nil, errors.Errorf("private tx id does not match")
+			return nil, errors.Errorf("encrypted tx ID does not match")
 		}
-		return &swarm.SubscriptionMsg{Tx: &tx, EncryptedTx: &encryptedTx}, nil
+		return &prototree.SubscriptionMsg{Tx: &tx, EncryptedTx: &encryptedTx}, nil
 
 	default:
-		return nil, errors.New("protocol error, expecting MsgType_Put or MsgType_Private")
+		return nil, errors.New("protocol error, expecting msgType_Tx or msgType_EncryptedTx")
 	}
 }
 
 type writableSubscription struct {
 	*peerConn
+	stateURI string
+	chClosed chan struct{}
+}
+
+func newWritableSubscription(peerConn *peerConn, stateURI string) *writableSubscription {
+	return &writableSubscription{peerConn, stateURI, make(chan struct{})}
+}
+
+func (sub *writableSubscription) StateURI() string {
+	return sub.stateURI
+}
+
+func (sub *writableSubscription) Close() error {
+	close(sub.chClosed)
+	return nil
+}
+
+func (sub *writableSubscription) Closed() <-chan struct{} {
+	return sub.chClosed
 }
 
 func (sub *writableSubscription) Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) (err error) {
-	defer func() { sub.UpdateConnStats(err == nil) }()
-
 	err = sub.peerConn.EnsureConnected(ctx)
 	if err != nil {
 		return err

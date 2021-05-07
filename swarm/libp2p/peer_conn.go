@@ -13,8 +13,12 @@ import (
 
 	"github.com/pkg/errors"
 
+	"redwood.dev/blob"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
+	"redwood.dev/swarm/protoauth"
+	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
@@ -26,6 +30,12 @@ type peerConn struct {
 	stream netp2p.Stream
 	mu     sync.Mutex
 }
+
+var (
+	_ protoauth.AuthPeerConn = (*peerConn)(nil)
+	_ protoblob.BlobPeerConn = (*peerConn)(nil)
+	_ prototree.TreePeerConn = (*peerConn)(nil)
+)
 
 func (peer *peerConn) Transport() swarm.Transport {
 	return peer.t
@@ -53,7 +63,7 @@ func (peer *peerConn) EnsureConnected(ctx context.Context) (err error) {
 	return nil
 }
 
-func (peer *peerConn) Subscribe(ctx context.Context, stateURI string) (_ swarm.ReadableSubscription, err error) {
+func (peer *peerConn) Subscribe(ctx context.Context, stateURI string) (_ prototree.ReadableSubscription, err error) {
 	defer func() { peer.UpdateConnStats(err == nil) }()
 
 	err = peer.EnsureConnected(ctx)
@@ -62,7 +72,7 @@ func (peer *peerConn) Subscribe(ctx context.Context, stateURI string) (_ swarm.R
 		return nil, err
 	}
 
-	err = peer.writeMsg(Msg{Type: MsgType_Subscribe, Payload: stateURI})
+	err = peer.writeMsg(Msg{Type: msgType_Subscribe, Payload: stateURI})
 	if err != nil {
 		return nil, err
 	}
@@ -94,89 +104,89 @@ func (peer *peerConn) Put(ctx context.Context, tx *tree.Tx, state state.Node, le
 			return errors.WithStack(err)
 		}
 
-		etx := swarm.EncryptedTx{
+		etx := prototree.EncryptedTx{
 			TxID:             tx.ID,
 			EncryptedPayload: encryptedTxBytes,
 			SenderPublicKey:  identity.Encrypting.EncryptingPublicKey.Bytes(),
 			RecipientAddress: peerSigPubkey.Address(),
 		}
-		return peer.writeMsg(Msg{Type: MsgType_Private, Payload: etx})
+		return peer.writeMsg(Msg{Type: msgType_EncryptedTx, Payload: etx})
 	}
-	return peer.writeMsg(Msg{Type: MsgType_Put, Payload: tx})
+	return peer.writeMsg(Msg{Type: msgType_Tx, Payload: tx})
 }
 
 func (p *peerConn) Ack(stateURI string, txID types.ID) error {
-	return p.writeMsg(Msg{Type: MsgType_Ack, Payload: swarm.AckMsg{stateURI, txID}})
+	return p.writeMsg(Msg{Type: msgType_Ack, Payload: ackMsg{stateURI, txID}})
 }
 
-func (p *peerConn) ChallengeIdentity(challengeMsg types.ChallengeMsg) error {
-	return p.writeMsg(Msg{Type: MsgType_ChallengeIdentityRequest, Payload: challengeMsg})
+func (p *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) error {
+	return p.writeMsg(Msg{Type: msgType_ChallengeIdentityRequest, Payload: challengeMsg})
 }
 
-func (p *peerConn) ReceiveChallengeIdentityResponse() ([]swarm.ChallengeIdentityResponse, error) {
+func (p *peerConn) ReceiveChallengeIdentityResponse() ([]protoauth.ChallengeIdentityResponse, error) {
 	msg, err := p.readMsg()
 	if err != nil {
 		return nil, err
 	}
-	resp, ok := msg.Payload.([]swarm.ChallengeIdentityResponse)
+	resp, ok := msg.Payload.([]protoauth.ChallengeIdentityResponse)
 	if !ok {
 		return nil, swarm.ErrProtocol
 	}
 	return resp, nil
 }
 
-func (p *peerConn) RespondChallengeIdentity(challengeIdentityResponse []swarm.ChallengeIdentityResponse) error {
-	return p.writeMsg(Msg{Type: MsgType_ChallengeIdentityResponse, Payload: challengeIdentityResponse})
+func (p *peerConn) RespondChallengeIdentity(challengeIdentityResponse []protoauth.ChallengeIdentityResponse) error {
+	return p.writeMsg(Msg{Type: msgType_ChallengeIdentityResponse, Payload: challengeIdentityResponse})
 }
 
-func (p *peerConn) FetchRef(refID types.RefID) error {
-	return p.writeMsg(Msg{Type: MsgType_FetchRef, Payload: refID})
+func (p *peerConn) FetchBlob(refID blob.ID) error {
+	return p.writeMsg(Msg{Type: msgType_FetchBlob, Payload: refID})
 }
 
-func (p *peerConn) SendRefHeader(haveBlob bool) error {
-	return p.writeMsg(Msg{Type: MsgType_FetchRefResponse, Payload: swarm.FetchRefResponse{Header: &swarm.FetchRefResponseHeader{Missing: !haveBlob}}})
+func (p *peerConn) SendBlobHeader(haveBlob bool) error {
+	return p.writeMsg(Msg{Type: msgType_FetchBlobResponse, Payload: protoblob.FetchBlobResponse{Header: &protoblob.FetchBlobResponseHeader{}}})
 }
 
-func (p *peerConn) SendRefPacket(data []byte, end bool) error {
-	return p.writeMsg(Msg{Type: MsgType_FetchRefResponse, Payload: swarm.FetchRefResponse{Body: &swarm.FetchRefResponseBody{Data: data, End: end}}})
+func (p *peerConn) SendBlobPacket(data []byte, end bool) error {
+	return p.writeMsg(Msg{Type: msgType_FetchBlobResponse, Payload: protoblob.FetchBlobResponse{Body: &protoblob.FetchBlobResponseBody{Data: data, End: end}}})
 }
 
-func (p *peerConn) ReceiveRefPacket() (swarm.FetchRefResponseBody, error) {
+func (p *peerConn) ReceiveBlobPacket() (protoblob.FetchBlobResponseBody, error) {
 	msg, err := p.readMsg()
 	if err != nil {
-		return swarm.FetchRefResponseBody{}, errors.Errorf("error reading from peer: %v", err)
-	} else if msg.Type != MsgType_FetchRefResponse {
-		return swarm.FetchRefResponseBody{}, swarm.ErrProtocol
+		return protoblob.FetchBlobResponseBody{}, errors.Errorf("error reading from peer: %v", err)
+	} else if msg.Type != msgType_FetchBlobResponse {
+		return protoblob.FetchBlobResponseBody{}, swarm.ErrProtocol
 	}
 
-	resp, is := msg.Payload.(swarm.FetchRefResponse)
+	resp, is := msg.Payload.(protoblob.FetchBlobResponse)
 	if !is {
-		return swarm.FetchRefResponseBody{}, swarm.ErrProtocol
+		return protoblob.FetchBlobResponseBody{}, swarm.ErrProtocol
 	} else if resp.Body == nil {
-		return swarm.FetchRefResponseBody{}, swarm.ErrProtocol
+		return protoblob.FetchBlobResponseBody{}, swarm.ErrProtocol
 	}
 	return *resp.Body, nil
 }
 
-func (p *peerConn) ReceiveRefHeader() (swarm.FetchRefResponseHeader, error) {
+func (p *peerConn) ReceiveBlobHeader() (protoblob.FetchBlobResponseHeader, error) {
 	msg, err := p.readMsg()
 	if err != nil {
-		return swarm.FetchRefResponseHeader{}, errors.Errorf("error reading from peer: %v", err)
-	} else if msg.Type != MsgType_FetchRefResponse {
-		return swarm.FetchRefResponseHeader{}, swarm.ErrProtocol
+		return protoblob.FetchBlobResponseHeader{}, errors.Errorf("error reading from peer: %v", err)
+	} else if msg.Type != msgType_FetchBlobResponse {
+		return protoblob.FetchBlobResponseHeader{}, swarm.ErrProtocol
 	}
 
-	resp, is := msg.Payload.(swarm.FetchRefResponse)
+	resp, is := msg.Payload.(protoblob.FetchBlobResponse)
 	if !is {
-		return swarm.FetchRefResponseHeader{}, swarm.ErrProtocol
+		return protoblob.FetchBlobResponseHeader{}, swarm.ErrProtocol
 	} else if resp.Header == nil {
-		return swarm.FetchRefResponseHeader{}, swarm.ErrProtocol
+		return protoblob.FetchBlobResponseHeader{}, swarm.ErrProtocol
 	}
 	return *resp.Header, nil
 }
 
 func (p *peerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.PeerDialInfo) error {
-	return p.writeMsg(Msg{Type: MsgType_AnnouncePeers, Payload: peerDialInfos})
+	return p.writeMsg(Msg{Type: msgType_AnnouncePeers, Payload: peerDialInfos})
 }
 
 func (p *peerConn) writeMsg(msg Msg) (err error) {
