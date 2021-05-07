@@ -1,18 +1,13 @@
 import React, { useMemo, useCallback } from 'react'
-import { Slate, Editable, withReact } from 'slate-react'
+import { Text, Transforms, Editor } from 'slate'
+import { Slate, Editable } from 'slate-react'
 import styled from 'styled-components'
 import { Emoji } from 'emoji-mart'
 
 import Mention from './Mention'
 import MentionSuggestion from './MentionSuggestion'
 import EmojiElem from './Emoji'
-
-
-const STextBox = styled.div`
-  padding-left: 34px;
-  font-family: 'Noto Sans KR';
-  font-size: 14px;
-`
+import Toolbar from './Toolbar'
 
 const SEditable = styled(Editable)`
   width: 100%;
@@ -30,6 +25,47 @@ const SEditable = styled(Editable)`
   overflow-x: hidden;
   position: relative;
 `
+
+const StrikeOut = styled.span`
+  text-decoration: line-through;
+`
+
+const toggleFormat = (editor, format) => {
+  const isActive = isFormatActive(editor, format)
+  Transforms.setNodes(
+    editor,
+    { [format]: isActive ? null : true },
+    { match: Text.isText, split: true }
+  )
+}
+
+const isFormatActive = (editor, format) => {
+  const [match] = Editor.nodes(editor, {
+    match: n => n[format] === true,
+    mode: 'all',
+  })
+  return !!match
+}
+
+const Leaf = ({ attributes, children, leaf }) => {
+  if (leaf.bold) {
+    children = <strong>{children}</strong>
+  }
+
+  if (leaf.italic) {
+    children = <em>{children}</em>
+  }
+
+  if (leaf.underlined) {
+    children = <u>{children}</u>
+  }
+
+  if (leaf.strike) {
+    children = <StrikeOut>{children}</StrikeOut>
+  }
+
+  return <span {...attributes}>{children}</span>
+}
 
 function TextBox(props) {
   const renderElement = useCallback((props) => {
@@ -55,32 +91,35 @@ function TextBox(props) {
     }
   }, [])
 
-  const renderLeaf = useCallback(({ attributes, children, leaf }) => {
-    return (
-      <span
-        {...attributes}
-        style={{
-          fontWeight: leaf.bold ? 'bold' : 'normal',
-          fontStyle: leaf.italic ? 'italic' : 'normal',
-        }}
-      >
-        {children}
-      </span>
-    )
-  }, [])
-
   return (
     <Slate
       editor={props.editor}
       value={props.value}
       onChange={props.onChange}
     >
+      <Toolbar toggleFormat={toggleFormat} isFormatActive={isFormatActive} />
       <SEditable
         placeholder={'Type message here...'}
-        renderLeaf={renderLeaf}
+        renderLeaf={props => <Leaf {...props} />}
         renderElement={renderElement}
         onKeyDown={props.onKeyDown}
         onBlur={props.onBlur}
+        onDOMBeforeInput={(event) => {
+          switch (event.inputType) {
+            case 'formatBold':
+              event.preventDefault()
+              return toggleFormat(props.editor, 'bold')
+            case 'formatItalic':
+              event.preventDefault()
+              return toggleFormat(props.editor, 'italic')
+            case 'formatUnderline':
+              event.preventDefault()
+              return toggleFormat(props.editor, 'underlined')
+            case 'formatStrike':
+              event.preventDefault()
+              return toggleFormat(props.editor, 'strike')
+          }
+        }}
         // spellCheck
       />
       {props.children}

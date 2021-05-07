@@ -22,7 +22,24 @@ function NormalizeMessage({ msgText, preview, selected }) {
       const contentLines = msgJson.map((msg) => {
         return msg.children.map((msgChild) => {
           if (msgChild.text !== undefined) {
-            return msgChild.text
+            let decorator = msgChild.text
+
+            if (msgChild.bold) {
+              decorator = <b>{decorator}</b>
+            }
+            if (msgChild.italic) {
+              decorator = <em>{decorator}</em>
+            }
+
+            if (msgChild.underlined) {
+              decorator = <u>{decorator}</u>
+            }
+
+            if (msgChild.strike) {
+              decorator = <span style={{ textDecoration: 'line-through'}}>{decorator}</span>
+            }
+
+            return decorator
           } else if (msgChild.type === 'emoji') {
             return <Emoji emoji={msgChild.value.replace(':', '').replace(':', '')} size={preview ? 14 : 21} />
           } else if (msgChild.type === 'mention') {
