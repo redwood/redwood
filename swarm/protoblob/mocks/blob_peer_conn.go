@@ -260,13 +260,13 @@ func (_m *BlobPeerConn) RemoveStateURI(stateURI string) {
 	_m.Called(stateURI)
 }
 
-// SendBlobHeader provides a mock function with given fields:
-func (_m *BlobPeerConn) SendBlobHeader() error {
-	ret := _m.Called()
+// SendBlobHeader provides a mock function with given fields: haveBlob
+func (_m *BlobPeerConn) SendBlobHeader(haveBlob bool) error {
+	ret := _m.Called(haveBlob)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func() error); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(bool) error); ok {
+		r0 = rf(haveBlob)
 	} else {
 		r0 = ret.Error(0)
 	}
