@@ -20,7 +20,7 @@ export default function(redwoodClient, ownAddress) {
             'Content-Type': type,
             'value': {
                 'Content-Type': 'link',
-                'value': 'ref:sha3:' + sha3,
+                'value': 'blob:sha3:' + sha3,
             },
           }
       }
@@ -101,7 +101,7 @@ export default function(redwoodClient, ownAddress) {
                         'value': {
                             'src': {
                                 'Content-Type': 'link',
-                                'value': `ref:sha3:${sync9JSSha3}`,
+                                'value': `blob:sha3:${sync9JSSha3}`,
                             }
                         }
                     },
@@ -152,7 +152,7 @@ export default function(redwoodClient, ownAddress) {
                         'value': {
                             'src': {
                                 'Content-Type': 'link',
-                                'value': `ref:sha3:${sync9JSSha3}`,
+                                'value': `blob:sha3:${sync9JSSha3}`,
                             }
                         }
                     },
@@ -191,7 +191,7 @@ export default function(redwoodClient, ownAddress) {
                 'filename': file.name,
                 'value': {
                     'Content-Type': 'link',
-                    'value': 'ref:sha3:' + refHashes.sha3,
+                    'value': 'blob:sha3:' + refHashes.sha3,
                 },
             }))
         }
@@ -221,7 +221,7 @@ export default function(redwoodClient, ownAddress) {
                 'Content-Type': type,
                 'value': {
                     'Content-Type': 'link',
-                    'value': 'ref:sha3:' + sha3,
+                    'value': 'blob:sha3:' + sha3,
                 },
             }))
         }

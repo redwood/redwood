@@ -300,7 +300,7 @@ func fetchCommit(commitHash string, commit Commit, client *braidhttp.LightClient
 				size int64
 			}
 
-			refHashStr := string(bs[len("ref:"):])
+			refHashStr := string(bs[len("blob:"):])
 			refEntryInterface, alreadyExists := refs.LoadOrStore(refHashStr, &refEntry{git.Oid{}, 0})
 			if !alreadyExists {
 				absFileKeypath := state.Keypath("commits/" + commitHash + "/files").Push(filePath)
@@ -311,7 +311,7 @@ func fetchCommit(commitHash string, commit Commit, client *braidhttp.LightClient
 					return
 				}
 				defer ref.Close()
-				logf("ref:    %v %v", linkStr, filePath)
+				logf("blob:    %v %v", linkStr, filePath)
 
 				writeStream, err := odb.NewWriteStream(size, git.ObjectBlob)
 				if err != nil {
@@ -568,7 +568,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightCl
 				}
 			}
 
-			resp, err := client.StoreRef(bytes.NewReader(blob.Contents()))
+			resp, err := client.StoreBlob(bytes.NewReader(blob.Contents()))
 			if err != nil {
 				select {
 				case <-ctx.Done():
@@ -692,7 +692,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightCl
 			}
 			setValueAtKeypath(fileTree, strings.Split(uploaded.name, "/"), M{
 				"Content-Type": "link",
-				"value":        "ref:sha1:" + uploaded.hash.Hex()[:40],
+				"value":        "blob:sha1:" + uploaded.hash.Hex()[:40],
 				"mode":         int(uploaded.mode),
 			}, true)
 		}

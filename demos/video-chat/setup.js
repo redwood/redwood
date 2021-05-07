@@ -35,21 +35,21 @@ async function genesis() {
                     'Content-Type': 'text/html',
                     'value': {
                         'Content-Type': 'link',
-                        'value': `ref:sha3:${indexHTMLSha3}`,
+                        'value': `blob:sha3:${indexHTMLSha3}`,
                     }
                 },
                 'record.html': {
                     'Content-Type': 'text/html',
                     'value': {
                         'Content-Type': 'link',
-                        'value': `ref:sha3:${recordHTMLSha3}`,
+                        'value': `blob:sha3:${recordHTMLSha3}`,
                     }
                 },
                 'play.html': {
                     'Content-Type': 'text/html',
                     'value': {
                         'Content-Type': 'link',
-                        'value': `ref:sha3:${playHTMLSha3}`,
+                        'value': `blob:sha3:${playHTMLSha3}`,
                     }
                 },
                 'Validator': {

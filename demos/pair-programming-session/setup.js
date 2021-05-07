@@ -105,7 +105,7 @@ async function genesisCodeEditor() {
                         'value': {
                             'src': {
                                 'Content-Type': 'link',
-                                'value': `ref:sha3:${sync9JSSha3}`,
+                                'value': `blob:sha3:${sync9JSSha3}`,
                             }
                         }
                     }

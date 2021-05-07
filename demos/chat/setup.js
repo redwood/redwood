@@ -75,7 +75,7 @@ async function genesis() {
                     'Content-Type': 'text/html',
                     'value': {
                         'Content-Type': 'link',
-                        'value': `ref:sha3:${indexHTMLSha3}`,
+                        'value': `blob:sha3:${indexHTMLSha3}`,
                     }
                 }
             }),
@@ -208,7 +208,7 @@ async function genesis() {
                         'Content-Type': 'image/jpg',
                         'value': {
                             'Content-Type': 'link',
-                            'value': `ref:sha3:${memeJPGSha3}`,
+                            'value': `blob:sha3:${memeJPGSha3}`,
                         },
                     },
                 },

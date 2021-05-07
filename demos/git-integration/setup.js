@@ -135,22 +135,22 @@ async function genesis() {
                     'README.md': {
                         'Content-Type': 'link',
                         'mode': 33188,
-                        'value': `ref:sha1:${readmeMDSha1}`,
+                        'value': `blob:sha1:${readmeMDSha1}`,
                     },
                     'redwood.jpg': {
                         'Content-Type': 'link',
                         'mode': 33188,
-                        'value': `ref:sha1:${redwoodJPGSha1}`,
+                        'value': `blob:sha1:${redwoodJPGSha1}`,
                     },
                     'index.html': {
                         'Content-Type': 'link',
                         'mode': 33188,
-                        'value': `ref:sha1:${indexHTMLSha1}`,
+                        'value': `blob:sha1:${indexHTMLSha1}`,
                     },
                     'script.js': {
                         'Content-Type': 'link',
                         'mode': 33188,
-                        'value': `ref:sha1:${scriptJSSha1}`,
+                        'value': `blob:sha1:${scriptJSSha1}`,
                     }
                 }
             }),

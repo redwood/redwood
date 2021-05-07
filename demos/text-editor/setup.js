@@ -49,7 +49,7 @@ async function genesis() {
                         'value': {
                             'src': {
                                 'Content-Type': 'link',
-                                'value': `ref:sha3:${sync9JSSha3}`,
+                                'value': `blob:sha3:${sync9JSSha3}`,
                             }
                         }
                     }
@@ -58,7 +58,7 @@ async function genesis() {
                     'Content-Type': 'text/html',
                     'value': {
                         'Content-Type': 'link',
-                        'value': `ref:sha3:${indexHTMLSha3}`,
+                        'value': `blob:sha3:${indexHTMLSha3}`,
                     }
                 },
                 'Merge-Type': {

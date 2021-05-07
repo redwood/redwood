@@ -25,10 +25,10 @@ type diskStore struct {
 	metadata *state.DBTree
 	fileMu   sync.Mutex
 
-	refsNeededListeners   []func(refs []types.RefID)
-	refsNeededListenersMu sync.RWMutex
-	refsSavedListeners    []func()
-	refsSavedListenersMu  sync.RWMutex
+	blobsNeededListeners   []func(blobs []ID)
+	blobsNeededListenersMu sync.RWMutex
+	blobsSavedListeners    []func()
+	blobsSavedListenersMu  sync.RWMutex
 }
 
 var _ Store = (*diskStore)(nil)
@@ -48,18 +48,18 @@ func (s *diskStore) Start() error {
 func (s *diskStore) Close() {}
 
 func (s *diskStore) ensureRootPath() error {
-	return os.MkdirAll(filepath.Join(s.rootPath, "blobs"), 0777|os.ModeDir)
+	return os.MkdirAll(s.rootPath, 0777|os.ModeDir)
 }
 
-func (s *diskStore) HaveObject(refID types.RefID) (bool, error) {
+func (s *diskStore) HaveBlob(blobID ID) (bool, error) {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 
 	var sha3 types.Hash
-	switch refID.HashAlg {
+	switch blobID.HashAlg {
 	case types.SHA1:
 		var err error
-		sha3, err = s.sha3ForSHA1(refID.Hash)
+		sha3, err = s.sha3ForSHA1(blobID.Hash)
 		if err == types.Err404 {
 			return false, nil
 		} else if err != nil {
@@ -67,10 +67,10 @@ func (s *diskStore) HaveObject(refID types.RefID) (bool, error) {
 		}
 
 	case types.SHA3:
-		sha3 = refID.Hash
+		sha3 = blobID.Hash
 
 	default:
-		return false, errors.Errorf("unknown hash type '%v'", refID.HashAlg)
+		return false, errors.Errorf("unknown hash type '%v'", blobID.HashAlg)
 	}
 
 	_, err := os.Stat(s.filepathForSHA3Blob(sha3))
@@ -82,7 +82,7 @@ func (s *diskStore) HaveObject(refID types.RefID) (bool, error) {
 	return true, nil
 }
 
-func (s *diskStore) Object(refID types.RefID) (io.ReadCloser, int64, error) {
+func (s *diskStore) BlobReader(blobID ID) (io.ReadCloser, int64, error) {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 
@@ -91,48 +91,29 @@ func (s *diskStore) Object(refID types.RefID) (io.ReadCloser, int64, error) {
 		return nil, 0, err
 	}
 
-	switch refID.HashAlg {
+	switch blobID.HashAlg {
 	case types.SHA1:
-		return s.objectWithSHA1(refID.Hash)
+		return s.blobWithSHA1(blobID.Hash)
 	case types.SHA3:
-		return s.objectWithSHA3(refID.Hash)
+		return s.blobWithSHA3(blobID.Hash)
 	default:
-		return nil, 0, errors.Errorf("unknown hash type '%v'", refID.HashAlg)
+		return nil, 0, errors.Errorf("unknown hash type '%v'", blobID.HashAlg)
 	}
 }
 
-func (s *diskStore) ObjectFilepath(refID types.RefID) (string, error) {
-	s.fileMu.Lock()
-	defer s.fileMu.Unlock()
-
-	switch refID.HashAlg {
-	case types.SHA1:
-		sha3Hash, err := s.sha3ForSHA1(refID.Hash)
-		if err != nil {
-			return "", err
-		}
-		return s.filepathForSHA3Blob(sha3Hash), nil
-
-	case types.SHA3:
-		return s.filepathForSHA3Blob(refID.Hash), nil
-	default:
-		return "", errors.Errorf("unknown hash type '%v'", refID.HashAlg)
-	}
-}
-
-func (s *diskStore) objectWithSHA1(hash types.Hash) (io.ReadCloser, int64, error) {
+func (s *diskStore) blobWithSHA1(hash types.Hash) (io.ReadCloser, int64, error) {
 	sha3, err := s.sha3ForSHA1(hash)
 	if err != nil {
 		return nil, 0, err
 	}
-	return s.objectWithSHA3(sha3)
+	return s.blobWithSHA3(sha3)
 }
 
-func (s *diskStore) objectWithSHA3(sha3Hash types.Hash) (io.ReadCloser, int64, error) {
+func (s *diskStore) blobWithSHA3(sha3Hash types.Hash) (io.ReadCloser, int64, error) {
 	filename := s.filepathForSHA3Blob(sha3Hash)
 	stat, err := os.Stat(filename)
 	if os.IsNotExist(err) {
-		return nil, 0, types.Err404
+		return nil, 0, errors.Wrapf(types.Err404, "while looking up blob %v at %v", sha3Hash, filename)
 	} else if err != nil {
 		return nil, 0, err
 	}
@@ -145,7 +126,7 @@ func (s *diskStore) objectWithSHA3(sha3Hash types.Hash) (io.ReadCloser, int64, e
 	return f, stat.Size(), nil
 }
 
-func (s *diskStore) StoreObject(reader io.ReadCloser) (sha1Hash types.Hash, sha3Hash types.Hash, err error) {
+func (s *diskStore) StoreBlob(reader io.ReadCloser) (sha1Hash types.Hash, sha3Hash types.Hash, err error) {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 
@@ -200,18 +181,18 @@ func (s *diskStore) StoreObject(reader io.ReadCloser) (sha1Hash types.Hash, sha3
 		return sha1Hash, sha3Hash, err
 	}
 
-	s.Successf("saved ref (sha1: %v, sha3: %v)", sha1Hash.Hex(), sha3Hash.Hex())
+	s.Successf("saved blob (sha1: %v, sha3: %v)", sha1Hash.Hex(), sha3Hash.Hex())
 
-	s.unmarkRefsAsNeeded([]types.RefID{
+	s.unmarkBlobsAsNeeded([]ID{
 		{HashAlg: types.SHA1, Hash: sha1Hash},
 		{HashAlg: types.SHA3, Hash: sha3Hash},
 	})
-	s.notifyRefsSavedListeners()
+	s.notifyBlobsSavedListeners()
 
 	return sha1Hash, sha3Hash, nil
 }
 
-func (s *diskStore) AllHashes() ([]types.RefID, error) {
+func (s *diskStore) AllHashes() ([]ID, error) {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 
@@ -225,26 +206,26 @@ func (s *diskStore) AllHashes() ([]types.RefID, error) {
 		return nil, err
 	}
 
-	var refIDs []types.RefID
+	var blobIDs []ID
 	for _, match := range matches {
 		sha3Hash, err := types.HashFromHex(filepath.Base(match))
 		if err != nil {
 			// ignore (@@TODO: delete?  notify?)
 			continue
 		}
-		refIDs = append(refIDs, types.RefID{HashAlg: types.SHA3, Hash: sha3Hash})
+		blobIDs = append(blobIDs, ID{HashAlg: types.SHA3, Hash: sha3Hash})
 
 		sha1Hash, err := s.sha1ForSHA3(sha3Hash)
 		if err != nil {
 			continue
 		}
-		refIDs = append(refIDs, types.RefID{HashAlg: types.SHA1, Hash: sha1Hash})
+		blobIDs = append(blobIDs, ID{HashAlg: types.SHA1, Hash: sha1Hash})
 	}
-	return refIDs, nil
+	return blobIDs, nil
 }
 
-func (s *diskStore) RefsNeeded() ([]types.RefID, error) {
-	var missingBlobsSlice []types.RefID
+func (s *diskStore) BlobsNeeded() ([]ID, error) {
+	var missingBlobsSlice []ID
 	err := s.viewMetadata(func(node state.Node) error {
 		node = node.NodeAt(state.Keypath("missing"), nil)
 
@@ -252,7 +233,7 @@ func (s *diskStore) RefsNeeded() ([]types.RefID, error) {
 		defer iter.Close()
 
 		for iter.Rewind(); iter.Valid(); iter.Next() {
-			var blobID types.RefID
+			var blobID ID
 			err := blobID.UnmarshalText(iter.Node().Keypath().RelativeTo(node.Keypath()))
 			if err != nil {
 				s.Errorf("error unmarshaling blobID: %v", err)
@@ -265,16 +246,16 @@ func (s *diskStore) RefsNeeded() ([]types.RefID, error) {
 	return missingBlobsSlice, err
 }
 
-func (s *diskStore) MarkRefsAsNeeded(refs []types.RefID) {
-	var actuallyNeeded []types.RefID
-	for _, refID := range refs {
-		have, err := s.HaveObject(refID)
+func (s *diskStore) MarkBlobsAsNeeded(blobs []ID) {
+	var actuallyNeeded []ID
+	for _, blobID := range blobs {
+		have, err := s.HaveBlob(blobID)
 		if err != nil {
-			s.Errorf("error checking ref diskStore for ref %v: %v", refID, err)
+			s.Errorf("error checking blob diskStore for blob %v: %v", blobID, err)
 			continue
 		}
 		if !have {
-			actuallyNeeded = append(actuallyNeeded, refID)
+			actuallyNeeded = append(actuallyNeeded, blobID)
 		}
 	}
 
@@ -285,14 +266,14 @@ func (s *diskStore) MarkRefsAsNeeded(refs []types.RefID) {
 	err := s.updateMetadata(func(node state.Node) error {
 		node = node.NodeAt(state.Keypath("missing"), nil)
 
-		for _, refID := range actuallyNeeded {
-			refIDKey, err := refID.MarshalText()
+		for _, blobID := range actuallyNeeded {
+			blobIDKey, err := blobID.MarshalText()
 			if err != nil {
-				s.Errorf("can't marshal refID %+v to bytes: %v", refID, err)
+				s.Errorf("can't marshal blobID %+v to bytes: %v", blobID, err)
 				continue
 			}
 
-			err = node.Set(state.Keypath(refIDKey), nil, true)
+			err = node.Set(state.Keypath(blobIDKey), nil, true)
 			if err != nil {
 				return err
 			}
@@ -300,31 +281,31 @@ func (s *diskStore) MarkRefsAsNeeded(refs []types.RefID) {
 		return nil
 	})
 	if err != nil {
-		s.Errorf("error updating list of missing refs: %v", err)
+		s.Errorf("error updating list of missing blobs: %v", err)
 		// don't error out
 	}
 
-	allNeeded, err := s.RefsNeeded()
+	allNeeded, err := s.BlobsNeeded()
 	if err != nil {
-		s.Errorf("error fetching list of missing refs: %v", err)
+		s.Errorf("error fetching list of missing blobs: %v", err)
 		return
 	}
 
-	s.notifyRefsNeededListeners(allNeeded)
+	s.notifyBlobsNeededListeners(allNeeded)
 }
 
-func (s *diskStore) unmarkRefsAsNeeded(refs []types.RefID) {
+func (s *diskStore) unmarkBlobsAsNeeded(blobs []ID) {
 	err := s.updateMetadata(func(node state.Node) error {
 		node = node.NodeAt(state.Keypath("missing"), nil)
 
-		for _, refID := range refs {
-			refIDKey, err := refID.MarshalText()
+		for _, blobID := range blobs {
+			blobIDKey, err := blobID.MarshalText()
 			if err != nil {
-				s.Errorf("can't marshal refID %+v to string: %v", refID, err)
+				s.Errorf("can't marshal blobID %+v to string: %v", blobID, err)
 				continue
 			}
 
-			err = node.Delete(state.Keypath(refIDKey), nil)
+			err = node.Delete(state.Keypath(blobIDKey), nil)
 			if err != nil {
 				return err
 			}
@@ -332,47 +313,47 @@ func (s *diskStore) unmarkRefsAsNeeded(refs []types.RefID) {
 		return nil
 	})
 	if err != nil {
-		s.Errorf("error updating list of needed refs: %v", err)
+		s.Errorf("error updating list of needed blobs: %v", err)
 	}
 }
 
-func (s *diskStore) OnRefsNeeded(fn func(refs []types.RefID)) {
-	s.refsNeededListenersMu.Lock()
-	defer s.refsNeededListenersMu.Unlock()
-	s.refsNeededListeners = append(s.refsNeededListeners, fn)
+func (s *diskStore) OnBlobsNeeded(fn func(blobs []ID)) {
+	s.blobsNeededListenersMu.Lock()
+	defer s.blobsNeededListenersMu.Unlock()
+	s.blobsNeededListeners = append(s.blobsNeededListeners, fn)
 }
 
-func (s *diskStore) notifyRefsNeededListeners(refs []types.RefID) {
-	s.refsNeededListenersMu.RLock()
-	defer s.refsNeededListenersMu.RUnlock()
+func (s *diskStore) notifyBlobsNeededListeners(blobs []ID) {
+	s.blobsNeededListenersMu.RLock()
+	defer s.blobsNeededListenersMu.RUnlock()
 
 	var wg sync.WaitGroup
-	wg.Add(len(s.refsNeededListeners))
+	wg.Add(len(s.blobsNeededListeners))
 
-	for _, handler := range s.refsNeededListeners {
+	for _, handler := range s.blobsNeededListeners {
 		handler := handler
 		go func() {
 			defer wg.Done()
-			handler(refs)
+			handler(blobs)
 		}()
 	}
 	wg.Wait()
 }
 
-func (s *diskStore) OnRefsSaved(fn func()) {
-	s.refsSavedListenersMu.Lock()
-	defer s.refsSavedListenersMu.Unlock()
-	s.refsSavedListeners = append(s.refsSavedListeners, fn)
+func (s *diskStore) OnBlobsSaved(fn func()) {
+	s.blobsSavedListenersMu.Lock()
+	defer s.blobsSavedListenersMu.Unlock()
+	s.blobsSavedListeners = append(s.blobsSavedListeners, fn)
 }
 
-func (s *diskStore) notifyRefsSavedListeners() {
-	s.refsSavedListenersMu.RLock()
-	defer s.refsSavedListenersMu.RUnlock()
+func (s *diskStore) notifyBlobsSavedListeners() {
+	s.blobsSavedListenersMu.RLock()
+	defer s.blobsSavedListenersMu.RUnlock()
 
 	var wg sync.WaitGroup
-	wg.Add(len(s.refsSavedListeners))
+	wg.Add(len(s.blobsSavedListeners))
 
-	for _, handler := range s.refsSavedListeners {
+	for _, handler := range s.blobsSavedListeners {
 		handler := handler
 		go func() {
 			defer wg.Done()
@@ -435,14 +416,14 @@ func (s *diskStore) updateMetadata(fn func(node state.Node) error) error {
 }
 
 func (s *diskStore) filepathForSHA3Blob(sha3Hash types.Hash) string {
-	return filepath.Join(s.rootPath, "blobs", sha3Hash.Hex())
+	return filepath.Join(s.rootPath, sha3Hash.Hex())
 }
 
 // func (s *diskStore) DebugPrint() {
 // 	err := s.metadata.View(func(txn *badger.Txn) error {
 // 		iter := txn.NewIterator(badger.DefaultIteratorOptions)
 // 		defer iter.Close()
-// 		for iter.Rewind(); iter.ValidForPrefix([]byte("blob:")); iter.Next() {
+// 		for iter.Rewind(); iter.ValidForPblobix([]byte("blob:")); iter.Next() {
 // 			key := iter.Item().Key()
 // 			val, err := iter.Item().ValueCopy(nil)
 // 			if err != nil {

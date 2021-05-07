@@ -43,7 +43,7 @@ const Braid = require('../../braidjs/braid-src.js')
                 console.log(fullpath, sha3, uploaded[fullpath].size)
                 return `.streams.${braidClient.identity.address}["${path.basename(fullpath)}"] = ` + Braid.utils.JSON.stringify({
                     'Content-Type': 'link',
-                    'value': `ref:sha3:${sha3}`,
+                    'value': `blob:sha3:${sha3}`,
                 })
             })
 

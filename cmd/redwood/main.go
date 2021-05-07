@@ -150,7 +150,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 	var (
 		txStore       = tree.NewBadgerTxStore(config.TxDBRoot())
 		keyStore      = identity.NewBadgerKeyStore(db, identity.DefaultScryptParams)
-		blobStore     = blob.NewDiskStore(config.RefDataRoot(), db)
+		blobStore     = blob.NewDiskStore(config.BlobDataRoot(), db)
 		peerStore     = swarm.NewPeerStore(db)
 		controllerHub = tree.NewControllerHub(config.StateDBRoot(), txStore, blobStore)
 	)
@@ -304,7 +304,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 }
 
 func ensureDataDirs(config *config.Config) error {
-	err := os.MkdirAll(config.RefDataRoot(), 0777|os.ModeDir)
+	err := os.MkdirAll(config.BlobDataRoot(), 0777|os.ModeDir)
 	if err != nil {
 		return err
 	}

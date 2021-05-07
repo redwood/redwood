@@ -83,7 +83,7 @@ func sendTxs(host1, host2 swarm.Host) {
 	if err != nil {
 		panic(err)
 	}
-	indexHTMLHash, _, err := host1.AddRef(indexHTML)
+	indexHTMLHash, _, err := host1.AddBlob(indexHTML)
 	if err != nil {
 		panic(err)
 	}
@@ -91,7 +91,7 @@ func sendTxs(host1, host2 swarm.Host) {
 	if err != nil {
 		panic(err)
 	}
-	scriptJSHash, _, err := host1.AddRef(scriptJS)
+	scriptJSHash, _, err := host1.AddBlob(scriptJS)
 	if err != nil {
 		panic(err)
 	}
@@ -99,7 +99,7 @@ func sendTxs(host1, host2 swarm.Host) {
 	if err != nil {
 		panic(err)
 	}
-	readmeHash, _, err := host1.AddRef(readme)
+	readmeHash, _, err := host1.AddBlob(readme)
 	if err != nil {
 		panic(err)
 	}
@@ -107,7 +107,7 @@ func sendTxs(host1, host2 swarm.Host) {
 	if err != nil {
 		panic(err)
 	}
-	redwoodJpgHash, _, err := host1.AddRef(redwoodJpg)
+	redwoodJpgHash, _, err := host1.AddBlob(redwoodJpg)
 	if err != nil {
 		panic(err)
 	}
@@ -242,22 +242,22 @@ func sendTxs(host1, host2 swarm.Host) {
                         "README.md": {
                             "Content-Type": "link",
                             "mode": 33188,
-                            "value": "ref:sha1:` + readmeHash.Hex() + `"
+                            "value": "blob:sha1:` + readmeHash.Hex() + `"
                         },
                         "redwood.jpg": {
                             "Content-Type": "link",
                             "mode": 33188,
-                            "value": "ref:sha1:` + redwoodJpgHash.Hex() + `"
+                            "value": "blob:sha1:` + redwoodJpgHash.Hex() + `"
                         },
                         "index.html": {
                             "Content-Type": "link",
                             "mode": 33188,
-                            "value": "ref:sha1:` + indexHTMLHash.Hex() + `"
+                            "value": "blob:sha1:` + indexHTMLHash.Hex() + `"
                         },
                         "script.js": {
                             "Content-Type": "link",
                             "mode": 33188,
-                            "value": "ref:sha1:` + scriptJSHash.Hex() + `"
+                            "value": "blob:sha1:` + scriptJSHash.Hex() + `"
                         }
                     }
                 }`),

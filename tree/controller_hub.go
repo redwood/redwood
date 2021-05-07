@@ -32,7 +32,7 @@ type ControllerHub interface {
 	IsMember(stateURI string, addr types.Address) (bool, error)
 	Members(stateURI string) ([]types.Address, error)
 
-	RefObjectReader(refID types.RefID) (io.ReadCloser, int64, error)
+	BlobReader(refID blob.ID) (io.ReadCloser, int64, error)
 
 	OnNewState(fn func(tx *Tx, root state.Node, leaves []types.ID))
 }
@@ -188,8 +188,8 @@ func (m *controllerHub) QueryIndex(stateURI string, version *types.ID, keypath s
 	return ctrl.QueryIndex(version, keypath, indexName, queryParam, rng)
 }
 
-func (m *controllerHub) RefObjectReader(refID types.RefID) (io.ReadCloser, int64, error) {
-	return m.blobStore.Object(refID)
+func (m *controllerHub) BlobReader(refID blob.ID) (io.ReadCloser, int64, error) {
+	return m.blobStore.BlobReader(refID)
 }
 
 func (m *controllerHub) Leaves(stateURI string) ([]types.ID, error) {

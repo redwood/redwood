@@ -214,8 +214,8 @@ func (c *Config) Path() string {
 	return c.configPath
 }
 
-func (c *Config) RefDataRoot() string {
-	return filepath.Join(c.Node.DataRoot, "refs")
+func (c *Config) BlobDataRoot() string {
+	return filepath.Join(c.Node.DataRoot, "blobs")
 }
 
 func (c *Config) TxDBRoot() string {
