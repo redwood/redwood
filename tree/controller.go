@@ -21,9 +21,7 @@ type Controller interface {
 	Start() error
 	Close()
 
-	AddTx(tx *Tx, force bool) error
-	HaveTx(txID types.ID) (bool, error)
-
+	AddTx(tx *Tx) error
 	StateAtVersion(version *types.ID) state.Node
 	QueryIndex(version *types.ID, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
 	Leaves() ([]types.ID, error)
@@ -202,26 +200,24 @@ func (c *controller) Members() []types.Address {
 	return addrs
 }
 
-func (c *controller) AddTx(tx *Tx, force bool) error {
+func (c *controller) AddTx(tx *Tx) error {
 	c.addTxMu.Lock()
 	defer c.addTxMu.Unlock()
 
-	if !force {
-		// Ignore duplicates
-		exists, err := c.txStore.TxExists(tx.StateURI, tx.ID)
-		if err != nil {
-			return err
-		} else if exists {
-			c.Infof(0, "already know tx %v, skipping", tx.ID.Pretty())
-			return nil
-		}
-
-		c.Infof(0, "new tx %v (%v)", tx.ID.Pretty(), tx.Hash().String())
+	// Ignore duplicates
+	exists, err := c.txStore.TxExists(tx.StateURI, tx.ID)
+	if err != nil {
+		return err
+	} else if exists {
+		c.Infof(0, "already know tx %v, skipping", tx.ID.Pretty())
+		return nil
 	}
+
+	c.Infof(0, "new tx %v (%v)", tx.ID.Pretty(), tx.Hash().String())
 
 	// Store the tx (so we can ignore txs we've seen before)
 	tx.Status = TxStatusInMempool
-	err := c.txStore.AddTx(tx)
+	err = c.txStore.AddTx(tx)
 	if err != nil {
 		return err
 	}
@@ -751,10 +747,6 @@ func (c *controller) notifyNewStateListeners(tx *Tx, root state.Node, leaves []t
 		}()
 	}
 	wg.Wait()
-}
-
-func (c *controller) HaveTx(txID types.ID) (bool, error) {
-	return c.txStore.TxExists(c.stateURI, txID)
 }
 
 func (c *controller) QueryIndex(version *types.ID, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (node state.Node, err error) {

@@ -17,10 +17,9 @@ type ControllerHub interface {
 	Start() error
 	Close()
 
-	AddTx(tx *Tx, force bool) error
+	AddTx(tx *Tx) error
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
 	FetchTxs(stateURI string, fromTxID types.ID) TxIterator
-	HaveTx(stateURI string, txID types.ID) (bool, error)
 
 	EnsureController(stateURI string) (Controller, error)
 	KnownStateURIs() ([]string, error)
@@ -132,7 +131,7 @@ var (
 	ErrInvalidPrivateRootKey = errors.New("invalid private root key")
 )
 
-func (m *controllerHub) AddTx(tx *Tx, force bool) error {
+func (m *controllerHub) AddTx(tx *Tx) error {
 	if tx.IsPrivate() {
 		parts := strings.Split(tx.StateURI, "/")
 		if parts[len(parts)-1] != tx.PrivateRootKey() {
@@ -144,7 +143,7 @@ func (m *controllerHub) AddTx(tx *Tx, force bool) error {
 	if err != nil {
 		return err
 	}
-	return ctrl.AddTx(tx, force)
+	return ctrl.AddTx(tx)
 }
 
 func (m *controllerHub) FetchTxs(stateURI string, fromTxID types.ID) TxIterator {
@@ -153,17 +152,6 @@ func (m *controllerHub) FetchTxs(stateURI string, fromTxID types.ID) TxIterator 
 
 func (m *controllerHub) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 	return m.txStore.FetchTx(stateURI, txID)
-}
-
-func (m *controllerHub) HaveTx(stateURI string, txID types.ID) (bool, error) {
-	m.controllersMu.RLock()
-	defer m.controllersMu.RUnlock()
-
-	ctrl := m.controllers[stateURI]
-	if ctrl == nil {
-		return false, nil
-	}
-	return ctrl.HaveTx(txID)
 }
 
 func (m *controllerHub) StateAtVersion(stateURI string, version *types.ID) (state.Node, error) {
