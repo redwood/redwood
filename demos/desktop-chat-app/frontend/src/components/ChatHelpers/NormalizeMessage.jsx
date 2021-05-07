@@ -13,6 +13,13 @@ const SNormalizeMessage = styled.div`
   }
 ` 
 
+const SCode = styled.code`
+  background: #2f3340;
+  border-radius: 2px;
+  padding-left: 4px;
+  padding-right: 4px;
+`
+
 
 function NormalizeMessage({ msgText, preview, selected }) {
   const [content, setContent] = useState([])
@@ -37,6 +44,10 @@ function NormalizeMessage({ msgText, preview, selected }) {
 
             if (msgChild.strike) {
               decorator = <span style={{ textDecoration: 'line-through'}}>{decorator}</span>
+            }
+
+            if (msgChild.code) {
+              decorator = <SCode>{decorator}</SCode>
             }
 
             return decorator

@@ -30,6 +30,13 @@ const StrikeOut = styled.span`
   text-decoration: line-through;
 `
 
+const SCode = styled.code`
+  background: #2f3340;
+  border-radius: 2px;
+  padding-left: 4px;
+  padding-right: 4px;
+`
+
 const toggleFormat = (editor, format) => {
   const isActive = isFormatActive(editor, format)
   Transforms.setNodes(
@@ -64,6 +71,10 @@ const Leaf = ({ attributes, children, leaf }) => {
     children = <StrikeOut>{children}</StrikeOut>
   }
 
+  if (leaf.code) {
+    children = <SCode>{children}</SCode>
+  }
+
   return <span {...attributes}>{children}</span>
 }
 
@@ -71,15 +82,6 @@ function TextBox(props) {
   const renderElement = useCallback((props) => {
     const { element, attributes, children } = props
     switch (element.type) {
-      case 'code':
-        return <pre {...attributes}>{children}</pre>
-      case 'image':
-        return <span {...attributes}>
-          <span contentEditable={false}>
-            <Emoji emoji={'smiley'} size={21} />
-          </span>
-          {children}
-        </span>
       case 'link':
         return <a href={element.url} {...attributes}>{children}</a>
       case 'mention':
@@ -118,6 +120,9 @@ function TextBox(props) {
             case 'formatStrike':
               event.preventDefault()
               return toggleFormat(props.editor, 'strike')
+            case 'formatCode':
+              event.preventDefault()
+              return toggleFormat(props.editor, 'code')
           }
         }}
         // spellCheck
