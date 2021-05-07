@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import { Emoji } from 'emoji-mart'
-import emojiData from 'emoji-mart/data/apple.json'
+import { Twemoji } from 'react-emoji-render'
+
+import emojiData from 'emoji-mart/data/twitter.json'
 
 const EmojiContainer = styled.div`
   width: calc(100% - 36px);
@@ -32,8 +34,17 @@ const EmojiItemWrapper = styled.div`
   background: ${(props) => props.selected ? '#353434' : 'transparent'};
   span {
     &:first-child {
-      margin-right: 4px;
+      margin-right: 8px;
     }
+  }
+`
+
+const SEmoji = styled(Twemoji)`
+  color: rgba(255, 255, 255, 1);
+  > img {
+    vertical-align: -4px !important;
+    width: auto !important;
+    height: 21px !important;
   }
 `
 
@@ -153,9 +164,8 @@ function EmojiQuickSearch(props) {
       {
         filteredEmojis.map((emoji, idx) => {
           return <EmojiItemWrapper selected={selectedEmojiIdx === idx} key={idx}>
-            <Emoji emoji={emoji} size={18} /> 
+            <SEmoji svg text={`:${emoji}:`} /> 
             {emoji}
-               
           </EmojiItemWrapper>
         })
       }

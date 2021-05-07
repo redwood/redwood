@@ -1,7 +1,7 @@
 import React from 'react'
 import styled from 'styled-components'
 
-import { Emoji as EmojiMart } from 'emoji-mart'
+import { Twemoji } from 'react-emoji-render'
 
 const SEmojiWrapper = styled.span`
   vertical-align: baseline;
@@ -12,13 +12,24 @@ const SEmojiWrapper = styled.span`
   }
 `
 
+const SEmojiPreview = styled(Twemoji)`
+  color: rgba(255, 255, 255, 1);
+  > img {
+    vertical-align: -3px !important;
+    width: auto !important;
+    height: 18px !important;
+  }
+`
+
 function Emoji({ attributes, children, element }) {
   return (
     <SEmojiWrapper
       {...attributes}
       contentEditable={false}
     >
-      <EmojiMart emoji={element.value.replace(':', '').replace(':', '')} size={18} />
+      <SEmojiPreview
+        text={element.value}
+      />
       {children}
     </SEmojiWrapper>
   )

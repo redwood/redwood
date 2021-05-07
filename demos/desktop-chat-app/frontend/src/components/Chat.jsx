@@ -440,7 +440,6 @@ function Chat({ className }) {
       let isEmpty = true
       const filteredMessage = []
       messageText.forEach((node) => {
-        console.log(node)
         if (node.children.length === 1) {
           let trimmedNode = {}
           if (typeof node.children[0].text === 'string') {
@@ -667,7 +666,7 @@ function Chat({ className }) {
                     useButton={false}
                     title={'Redwood Chat'}
                     perLine={8}
-                    set='apple'
+                    set='twitter'
                     theme='dark'
                     emojiSize={24}
                     onSelect={onSelectEmoji}

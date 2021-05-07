@@ -54,7 +54,7 @@ const isFormatActive = (editor, format) => {
   return !!match
 }
 
-const Leaf = ({ attributes, children, leaf }) => {
+const Leaf = ({ attributes, children, leaf }) => { 
   if (leaf.bold) {
     children = <strong>{children}</strong>
   }

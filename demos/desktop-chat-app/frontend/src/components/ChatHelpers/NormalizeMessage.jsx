@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Fragment } from 'react'
 import { Emoji } from 'emoji-mart'
+import { Twemoji } from 'react-emoji-render'
 import styled from 'styled-components'
 
 import Mention from './../TextBox/Mention'
@@ -18,6 +19,24 @@ const SCode = styled.code`
   border-radius: 2px;
   padding-left: 4px;
   padding-right: 4px;
+`
+
+const SEmoji = styled(Twemoji)`
+  color: rgba(255, 255, 255, 1);
+  > img {
+    vertical-align: -4px !important;
+    width: auto !important;
+    height: 21px !important;
+  }
+`
+
+const SEmojiPreview = styled(Twemoji)`
+  color: rgba(255, 255, 255, 1);
+  > img {
+    vertical-align: -2px !important;
+    width: auto !important;
+    height: 14px !important;
+  }
 `
 
 
@@ -52,7 +71,15 @@ function NormalizeMessage({ msgText, preview, selected }) {
 
             return decorator
           } else if (msgChild.type === 'emoji') {
-            return <Emoji emoji={msgChild.value.replace(':', '').replace(':', '')} size={preview ? 14 : 21} />
+            if (preview) {
+              return <SEmojiPreview svg text={msgChild.value} />
+            }
+
+            return <SEmoji svg text={msgChild.value} />
+
+            // if (msgChild.value === ':smiley:') {
+            //   return <Emoji backgroundImageFn={() => emojiSheet} emoji={msgChild.value.replace(':', '').replace(':', '')} size={preview ? 14 : 21} />
+            // }
           } else if (msgChild.type === 'mention') {
             return <Mention element={msgChild} style={{ userSelect: 'auto' }} absolute preview={preview} />        
           }
