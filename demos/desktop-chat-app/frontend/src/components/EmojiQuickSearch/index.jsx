@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import { Emoji } from 'emoji-mart'
-import { Twemoji } from 'react-emoji-render'
+import { Twemoji } from 'react-emoji-render-redwood'
 
 import emojiData from 'emoji-mart/data/twitter.json'
 
@@ -164,7 +164,15 @@ function EmojiQuickSearch(props) {
       {
         filteredEmojis.map((emoji, idx) => {
           return <EmojiItemWrapper selected={selectedEmojiIdx === idx} key={idx}>
-            <SEmoji svg text={`:${emoji}:`} /> 
+            <SEmoji 
+              svg
+              text={`:${emoji}:`}
+              options={{
+                protocol: 'https',
+                baseUrl: 'twemoji.maxcdn.com/v/12.1.3/svg/',
+                ext: 'svg'
+              }} 
+            /> 
             {emoji}
           </EmojiItemWrapper>
         })

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Fragment } from 'react'
 import { Emoji } from 'emoji-mart'
-import { Twemoji } from 'react-emoji-render'
+import { Twemoji } from 'react-emoji-render-redwood'
 import styled from 'styled-components'
 
 import Mention from './../TextBox/Mention'
@@ -75,7 +75,11 @@ function NormalizeMessage({ msgText, preview, selected }) {
               return <SEmojiPreview svg text={msgChild.value} />
             }
 
-            return <SEmoji svg text={msgChild.value} />
+            return <SEmoji svg text={msgChild.value} options={{
+              protocol: 'https',
+              baseUrl: 'twemoji.maxcdn.com/v/12.1.3/svg/',
+              ext: 'svg'
+            }} />
 
             // if (msgChild.value === ':smiley:') {
             //   return <Emoji backgroundImageFn={() => emojiSheet} emoji={msgChild.value.replace(':', '').replace(':', '')} size={preview ? 14 : 21} />

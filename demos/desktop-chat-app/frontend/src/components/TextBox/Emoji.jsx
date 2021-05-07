@@ -1,7 +1,7 @@
 import React from 'react'
 import styled from 'styled-components'
 
-import { Twemoji } from 'react-emoji-render'
+import { Twemoji } from 'react-emoji-render-redwood'
 
 const SEmojiWrapper = styled.span`
   vertical-align: baseline;
