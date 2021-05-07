@@ -440,6 +440,7 @@ function Chat({ className }) {
       let isEmpty = true
       const filteredMessage = []
       messageText.forEach((node) => {
+        console.log(node)
         if (node.children.length === 1) {
           let trimmedNode = {}
           if (typeof node.children[0].text === 'string') {
