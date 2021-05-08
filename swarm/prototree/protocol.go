@@ -34,7 +34,6 @@ type TreeTransport interface {
 	OnTxReceived(handler TxReceivedCallback)
 	OnAckReceived(handler AckReceivedCallback)
 	OnWritableSubscriptionOpened(handler WritableSubscriptionOpenedCallback)
-	OnWritableSubscriptionClosed(handler WritableSubscriptionClosedCallback)
 }
 
 //go:generate mockery --name TreePeerConn --output ./mocks/ --case=underscore
@@ -86,6 +85,7 @@ func NewTreeProtocol(
 		Logger:                log.NewLogger("tree proto"),
 		transports:            transportsMap,
 		controllerHub:         controllerHub,
+		txStore:               txStore,
 		keyStore:              keyStore,
 		peerStore:             peerStore,
 		config:                config,
@@ -112,7 +112,6 @@ func (tp *treeProtocol) Start() {
 		tpt.OnTxReceived(tp.handleTxReceived)
 		tpt.OnAckReceived(tp.handleAckReceived)
 		tpt.OnWritableSubscriptionOpened(tp.handleWritableSubscriptionOpened)
-		tpt.OnWritableSubscriptionClosed(tp.handleWritableSubscriptionClosed)
 	}
 }
 
@@ -420,18 +419,13 @@ func (tp *treeProtocol) handleWritableSubscriptionOpened(
 	writeSubImpl WritableSubscriptionImpl,
 	fetchHistoryOpts *FetchHistoryOpts,
 ) {
-	tp.Warnf("1 %+v", errors.New(""))
 	writeSub := newWritableSubscription(tp, stateURI, keypath, subType, writeSubImpl)
-	tp.Warnf("2")
 
 	if subType.Includes(SubscriptionType_Txs) && fetchHistoryOpts != nil {
 		tp.handleFetchHistoryRequest(stateURI, *fetchHistoryOpts, writeSub)
-		tp.Warnf("3")
 	}
-	tp.Warnf("4")
 
 	if subType.Includes(SubscriptionType_States) {
-		tp.Warnf("5")
 		// Normalize empty keypaths
 		if keypath.Equals(state.KeypathSeparator) {
 			keypath = nil
@@ -445,26 +439,20 @@ func (tp *treeProtocol) handleWritableSubscriptionOpened(
 			return
 		} else if err == nil {
 			defer node.Close()
-			tp.Warnf("7")
 
 			leaves, err := tp.controllerHub.Leaves(stateURI)
 			if err != nil {
 				tp.Errorf("error writing initial state to peer (%v): %v", stateURI, err)
 			} else {
-				tp.Warnf("8")
 				node, err := node.CopyToMemory(keypath, nil)
 				if err != nil && errors.Cause(err) == types.Err404 {
 					// no-op
 				} else if err != nil {
 					tp.Errorf("error writing initial state to peer (%v): %v", stateURI, err)
 				} else {
-					tp.Warnf("10")
 					writeSub.EnqueueWrite(stateURI, nil, node, leaves)
-					tp.Warnf("11")
 				}
 			}
-		} else {
-			tp.Errorf("YEET %v", err)
 		}
 	}
 
@@ -757,13 +745,14 @@ func (tp *treeProtocol) broadcastToPeerConn(
 
 	err := peerConn.EnsureConnected(ctx)
 	if err != nil {
-		tp.Errorf("error connecting to peer: %v", err)
 		return
 	}
 	defer peerConn.Close()
 
 	err = peerConn.Put(ctx, tx, state, leaves)
-	if err != nil {
+	if errors.Cause(err) == types.ErrConnection {
+		return
+	} else if err != nil {
 		tp.Errorf("error writing tx to peer: %v", err)
 		return
 	}

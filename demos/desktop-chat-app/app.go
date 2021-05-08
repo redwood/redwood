@@ -194,7 +194,6 @@ func (app *appType) Start() (err error) {
 
 	err = app.keyStore.Unlock(app.password, app.mnemonic)
 	if err != nil {
-		app.Errorf("keystore %v", err)
 		app.blobStore.Close()
 		app.blobStore = nil
 
@@ -209,27 +208,20 @@ func (app *appType) Start() (err error) {
 		return err
 	}
 
-	for i, transport := range transports {
-		app.Debugf("HI 00 start %v", i)
+	for _, transport := range transports {
 		err := transport.Start()
 		if err != nil {
 			return err
 		}
-		app.Debugf("HI 00 end %v", i)
 	}
-	app.Debug("HI 11")
 
 	app.authProto = protoauth.NewAuthProtocol(transports, app.keyStore, app.peerStore)
 	app.blobProto = protoblob.NewBlobProtocol(transports, app.blobStore)
 	app.treeProto = prototree.NewTreeProtocol(transports, app.controllerHub, app.txStore, app.keyStore, app.peerStore, cfg)
-	app.Debug("HI 22")
 
-	for i, proto := range []swarm.Protocol{app.authProto, app.blobProto, app.treeProto} {
+	for _, proto := range []swarm.Protocol{app.authProto, app.blobProto, app.treeProto} {
 		proto.Start()
-		app.Debugf("HI 33 %v", i)
 	}
-
-	app.Debug("HI 55")
 
 	pkger.Walk("/frontend/build", func(path string, info os.FileInfo, err error) error {
 		app.Infof(0, "Serving %v", path)
@@ -354,9 +346,6 @@ func (app *appType) Close() {
 
 	app.txStore.Close()
 	app.txStore = nil
-
-	app.host.Close()
-	app.host = nil
 
 	app.db.Close()
 	app.db = nil

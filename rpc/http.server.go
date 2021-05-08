@@ -95,11 +95,6 @@ type (
 )
 
 func (s *HTTPServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *SubscribeResponse) (err error) {
-	defer func() {
-		log.NewLogger("RPC").Errorf("SUBSCRIBE err %v", err)
-	}()
-	log.NewLogger("RPC").Successf("SUBSCRIBE")
-
 	if s.treeProto == nil {
 		return types.ErrUnsupported
 	} else if args.StateURI == "" {

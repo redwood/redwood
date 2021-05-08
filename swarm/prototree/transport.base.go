@@ -3,7 +3,6 @@ package prototree
 import (
 	"sync"
 
-	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -13,18 +12,15 @@ type BaseTreeTransport struct {
 	muTxReceivedCallbacks                 sync.RWMutex
 	muAckReceivedCallbacks                sync.RWMutex
 	muWritableSubscriptionOpenedCallbacks sync.RWMutex
-	muWritableSubscriptionClosedCallbacks sync.RWMutex
 
 	txReceivedCallbacks                 []TxReceivedCallback
 	ackReceivedCallbacks                []AckReceivedCallback
 	writableSubscriptionOpenedCallbacks []WritableSubscriptionOpenedCallback
-	writableSubscriptionClosedCallbacks []WritableSubscriptionClosedCallback
 }
 
 type TxReceivedCallback func(tx tree.Tx, peerConn TreePeerConn)
 type AckReceivedCallback func(stateURI string, txID types.ID, peerConn TreePeerConn)
 type WritableSubscriptionOpenedCallback func(stateURI string, keypath state.Keypath, subType SubscriptionType, writeSubImpl WritableSubscriptionImpl, fetchHistoryOpts *FetchHistoryOpts)
-type WritableSubscriptionClosedCallback func(writeSub WritableSubscriptionImpl)
 
 func (t *BaseTreeTransport) OnTxReceived(handler TxReceivedCallback) {
 	t.muTxReceivedCallbacks.Lock()
@@ -42,12 +38,6 @@ func (t *BaseTreeTransport) OnWritableSubscriptionOpened(handler WritableSubscri
 	t.muWritableSubscriptionOpenedCallbacks.Lock()
 	defer t.muWritableSubscriptionOpenedCallbacks.Unlock()
 	t.writableSubscriptionOpenedCallbacks = append(t.writableSubscriptionOpenedCallbacks, handler)
-}
-
-func (t *BaseTreeTransport) OnWritableSubscriptionClosed(handler WritableSubscriptionClosedCallback) {
-	t.muWritableSubscriptionClosedCallbacks.Lock()
-	defer t.muWritableSubscriptionClosedCallbacks.Unlock()
-	t.writableSubscriptionClosedCallbacks = append(t.writableSubscriptionClosedCallbacks, handler)
 }
 
 func (t *BaseTreeTransport) HandleTxReceived(tx tree.Tx, peerConn TreePeerConn) {
@@ -85,8 +75,6 @@ func (t *BaseTreeTransport) HandleWritableSubscriptionOpened(
 	writeSubImpl WritableSubscriptionImpl,
 	fetchHistoryOpts *FetchHistoryOpts,
 ) {
-	logger := log.NewLogger("yeet")
-	logger.Successf("HandleWritableSubscriptionOpened")
 	t.muWritableSubscriptionOpenedCallbacks.RLock()
 	defer t.muWritableSubscriptionOpenedCallbacks.RUnlock()
 	var wg sync.WaitGroup
@@ -95,20 +83,6 @@ func (t *BaseTreeTransport) HandleWritableSubscriptionOpened(
 		go func() {
 			defer wg.Done()
 			handler(stateURI, keypath, subType, writeSubImpl, fetchHistoryOpts)
-		}()
-	}
-	wg.Wait()
-}
-
-func (t *BaseTreeTransport) HandleWritableSubscriptionClosed(writeSub WritableSubscriptionImpl) {
-	t.muWritableSubscriptionClosedCallbacks.RLock()
-	defer t.muWritableSubscriptionClosedCallbacks.RUnlock()
-	var wg sync.WaitGroup
-	wg.Add(len(t.writableSubscriptionClosedCallbacks))
-	for _, handler := range t.writableSubscriptionClosedCallbacks {
-		go func() {
-			defer wg.Done()
-			handler(writeSub)
 		}()
 	}
 	wg.Wait()

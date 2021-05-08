@@ -98,7 +98,6 @@ func (p *peerPool) fillPool() {
 				defer p.peersMu.Unlock()
 
 				if _, exists := p.peers[peer.DialInfo()]; !exists {
-					p.Debugf("[peer pool] found peer %v", peer.DialInfo())
 					p.peers[peer.DialInfo()] = peersMapEntry{peer, peerState_Unknown}
 					p.peersAvailable.Deliver(peer)
 				}
@@ -188,10 +187,8 @@ func (p *peerPool) GetPeer(ctx context.Context) (_ Peer, err error) {
 				} else if entry.state != peerState_Unknown {
 					panic("!available")
 				} else if !entry.peer.Ready() {
-					p.Debugf("skipping peer: failures=%v lastFailure=%v", entry.peer.Failures(), time.Now().Sub(entry.peer.LastFailure()))
 					p.peersInTimeout.Deliver(peer)
 				} else if len(entry.peer.Addresses()) == 0 {
-					p.Debugf("skipping peer: unverified (%v: %v)", entry.peer.DialInfo().TransportName, entry.peer.DialInfo().DialAddr)
 					p.peersInTimeout.Deliver(peer)
 				} else {
 					p.setPeerState(peer, peerState_InUse)

@@ -68,11 +68,6 @@ func (_m *TreeTransport) OnTxReceived(handler prototree.TxReceivedCallback) {
 	_m.Called(handler)
 }
 
-// OnWritableSubscriptionClosed provides a mock function with given fields: handler
-func (_m *TreeTransport) OnWritableSubscriptionClosed(handler prototree.WritableSubscriptionClosedCallback) {
-	_m.Called(handler)
-}
-
 // OnWritableSubscriptionOpened provides a mock function with given fields: handler
 func (_m *TreeTransport) OnWritableSubscriptionOpened(handler prototree.WritableSubscriptionOpenedCallback) {
 	_m.Called(handler)

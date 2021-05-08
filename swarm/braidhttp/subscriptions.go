@@ -15,7 +15,6 @@ import (
 
 	"redwood.dev/crypto"
 	"redwood.dev/identity"
-	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
@@ -250,7 +249,6 @@ func (sub *wsWritableSubscription) StateURI() string {
 }
 
 func (sub *wsWritableSubscription) Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) (err error) {
-	log.NewLogger("").Debugf("PUT %v", tx)
 	bs, err := json.Marshal(prototree.SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
 	if err != nil {
 		sub.t.Errorf("error marshaling message json: %v", err)
@@ -292,29 +290,26 @@ func (sub *wsWritableSubscription) start() {
 		defer sub.wgReadingWriting.Done()
 
 		for {
-			log.NewLogger("").Debugf("CYCLE")
 			select {
 			case <-sub.chStop:
 				return
 
 			case <-sub.messages.Notify():
-				log.NewLogger("").Debugf("NOTIFY")
 				err := sub.writePendingMessages()
 				if err != nil {
 					return
 				}
 
-				// case <-ticker.C:
-				// 	log.NewLogger("").Debugf("PING")
-				// 	sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
-				// 	sub.conn.SetReadDeadline(time.Now().Add(wsPongWait))
+			case <-ticker.C:
+				sub.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+				sub.conn.SetReadDeadline(time.Now().Add(wsPongWait))
 
-				// 	err := sub.conn.WriteMessage(websocket.PingMessage, nil)
-				// 	sub.UpdateConnStats(err == nil)
-				// 	if err != nil {
-				// 		sub.t.Errorf("error pinging websocket client: %v", err)
-				// 		return
-				// 	}
+				err := sub.conn.WriteMessage(websocket.PingMessage, nil)
+				sub.UpdateConnStats(err == nil)
+				if err != nil {
+					sub.t.Errorf("error pinging websocket client: %v", err)
+					return
+				}
 			}
 		}
 	}()
@@ -324,7 +319,6 @@ func (sub *wsWritableSubscription) start() {
 		defer sub.wgReadingWriting.Done()
 
 		for {
-			log.NewLogger("").Debugf("READ?")
 			select {
 			case <-sub.chStop:
 				return
@@ -350,7 +344,6 @@ func (sub *wsWritableSubscription) start() {
 				sub.t.Errorf("got bad multiplexed subscription request: %v", err)
 				continue
 			}
-			log.NewLogger("").Debugf("READ: %v", addSubMsg)
 			sub.t.Infof(0, "incoming websocket subscription (state uri: %v)", addSubMsg.Params.StateURI)
 
 			var subscriptionType prototree.SubscriptionType
@@ -404,7 +397,6 @@ func (sub *wsWritableSubscription) writePendingMessages() error {
 			defer w.Close()
 
 			bs := append(msgBytes.([]byte), '\n')
-			log.NewLogger("").Debugf("WRITE: %v", string(msgBytes.([]byte)))
 
 			_, err = w.Write(bs)
 			if err != nil {
@@ -412,13 +404,7 @@ func (sub *wsWritableSubscription) writePendingMessages() error {
 			}
 			return nil
 		}()
-		// if errors.Cause(err) == types.ErrClosed {
-		//  return
-		// } else
 		if err != nil {
-			// sub.t.Errorf("error: %v", err)
-			//          sub.transport.HandleWritableSubscriptionClosed(sub)
-			//          sub.Close()
 			return err
 		}
 	}

@@ -55,7 +55,7 @@ func (peer *peerConn) EnsureConnected(ctx context.Context) (err error) {
 		var stream netp2p.Stream
 		stream, err = peer.t.libp2pHost.NewStream(ctx, peer.pinfo.ID, PROTO_MAIN)
 		if err != nil {
-			return err
+			return errors.Wrapf(types.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 		}
 
 		peer.stream = stream
@@ -68,7 +68,6 @@ func (peer *peerConn) Subscribe(ctx context.Context, stateURI string) (_ prototr
 
 	err = peer.EnsureConnected(ctx)
 	if err != nil {
-		peer.t.Errorf("error connecting to peer: %v", err)
 		return nil, err
 	}
 

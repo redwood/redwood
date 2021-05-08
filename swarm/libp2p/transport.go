@@ -69,6 +69,10 @@ type transport struct {
 	writeSubsByPeerIDMu sync.Mutex
 }
 
+var _ prototree.TreeTransport = (*transport)(nil)
+var _ protoblob.BlobTransport = (*transport)(nil)
+var _ protoauth.AuthTransport = (*transport)(nil)
+
 const (
 	PROTO_MAIN    protocol.ID = "/redwood/main/1.0.0"
 	TransportName string      = "libp2p"
@@ -511,7 +515,7 @@ func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Pee
 	return peer, nil
 }
 
-func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<-chan swarm.Peer, error) {
+func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<-chan prototree.TreePeerConn, error) {
 	urlCid, err := cidForString("serve:" + stateURI)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -519,7 +523,7 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<
 
 	ctx, cancel := utils.CombinedContext(ctx, t.chStop)
 
-	ch := make(chan swarm.Peer)
+	ch := make(chan prototree.TreePeerConn)
 	go func() {
 		defer close(ch)
 		defer cancel()
@@ -562,13 +566,13 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<
 	return ch, nil
 }
 
-func (t *transport) ProvidersOfBlob(ctx context.Context, refID blob.ID) (<-chan swarm.Peer, error) {
+func (t *transport) ProvidersOfBlob(ctx context.Context, refID blob.ID) (<-chan protoblob.BlobPeerConn, error) {
 	refCid, err := cidForString("blob:" + refID.String())
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	ch := make(chan swarm.Peer)
+	ch := make(chan protoblob.BlobPeerConn)
 	go func() {
 		defer close(ch)
 		for {
@@ -600,7 +604,7 @@ func (t *transport) ProvidersOfBlob(ctx context.Context, refID blob.ID) (<-chan 
 	return ch, nil
 }
 
-func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan swarm.Peer, error) {
+func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan protoauth.AuthPeerConn, error) {
 	ctx, cancel := utils.CombinedContext(ctx, t.chStop)
 	defer cancel()
 
@@ -610,7 +614,7 @@ func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Addr
 		return nil, err
 	}
 
-	ch := make(chan swarm.Peer)
+	ch := make(chan protoauth.AuthPeerConn)
 
 	go func() {
 		defer close(ch)

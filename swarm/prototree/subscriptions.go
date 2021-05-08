@@ -2,10 +2,11 @@ package prototree
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"redwood.dev/log"
 	"redwood.dev/state"
@@ -143,14 +144,14 @@ func (sub *writableSubscription) Type() SubscriptionType { return sub.subscripti
 func (sub *writableSubscription) Keypath() state.Keypath { return sub.keypath }
 
 func (sub *writableSubscription) EnqueueWrite(stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) {
-	log.NewLogger("asdf").Debugf("enqueue write %+v", errors.New(""))
-	// time.Sleep(1 * time.Second)
 	sub.messages.Deliver(&SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
 }
 
 func (sub *writableSubscription) Close() error {
-	close(sub.chStop)
-	<-sub.chDone
+	sub.stopOnce.Do(func() {
+		close(sub.chStop)
+		<-sub.chDone
+	})
 	return nil
 }
 
@@ -280,7 +281,9 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 	}()
 
 	err := peer.EnsureConnected(ctx)
-	if err != nil {
+	if errors.Cause(err) == types.ErrConnection {
+		return
+	} else if err != nil {
 		s.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
 		return
 	}
@@ -293,7 +296,7 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 
 	peerSub, err := peer.Subscribe(ctx, s.stateURI)
 	if err != nil {
-		s.Errorf("error subscribing to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
+		s.Errorf("error subscribing to peer %v (stateURI: %v): %v", peer.DialInfo(), s.stateURI, err)
 		return
 	}
 	defer peerSub.Close()

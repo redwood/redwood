@@ -231,7 +231,9 @@ func (ap *authProtocol) processPeers(ctx context.Context) {
 					defer peerConn.Close()
 
 					err = peerConn.EnsureConnected(ctx)
-					if err != nil {
+					if errors.Cause(err) == types.ErrConnection {
+						return
+					} else if err != nil {
 						ap.Warnf("error connecting to %v peerConn (%v): %v", tpt.Name(), peerDetails.DialInfo().DialAddr, err)
 						return
 					}
@@ -266,10 +268,8 @@ func (ap *authProtocol) processPeers(ctx context.Context) {
 			} else if errors.Cause(err) == types.ErrConnection {
 				continue
 			} else if err != nil {
-				ap.Warnf("could not get peerConn at %v %v: %v", unverifiedPeer.DialInfo().TransportName, unverifiedPeer.DialInfo().DialAddr, err)
 				continue
 			} else if !peerConn.Ready() {
-				ap.Debugf("skipping peerConn %v: failures=%v lastFailure=%v", peerConn.DialInfo(), peerConn.Failures(), time.Now().Sub(peerConn.LastFailure()))
 				continue
 			}
 
@@ -284,9 +284,12 @@ func (ap *authProtocol) processPeers(ctx context.Context) {
 				defer authPeerConn.Close()
 
 				err := ap.ChallengePeerIdentity(ctx, authPeerConn)
-				if err != nil {
+				if errors.Cause(err) == types.ErrConnection {
+					// no-op
+				} else if errors.Cause(err) == context.Canceled {
+					// no-op
+				} else if err != nil {
 					ap.Errorf("error verifying peerConn identity (%v): %v", authPeerConn.DialInfo(), err)
-					return
 				}
 			}()
 		}

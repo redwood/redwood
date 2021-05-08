@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	"redwood.dev/crypto"
+	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -113,6 +114,8 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 	if user.Extra == nil {
 		user.Extra = make(map[string]interface{})
 	}
+
+	log.NewLogger("xyzzy").Debugf("mnemonic: %v", user.Mnemonic)
 
 	ks.unlockedUser = user
 	return ks.saveUser(ks.unlockedUser, password)
