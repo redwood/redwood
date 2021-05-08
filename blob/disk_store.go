@@ -201,7 +201,7 @@ func (s *diskStore) AllHashes() ([]ID, error) {
 		return nil, err
 	}
 
-	matches, err := filepath.Glob(filepath.Join(s.rootPath, "blobs", "*"))
+	matches, err := filepath.Glob(filepath.Join(s.rootPath, "*"))
 	if err != nil {
 		return nil, err
 	}
