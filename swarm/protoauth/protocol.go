@@ -76,6 +76,9 @@ func (ap *authProtocol) Start() {
 		ap.processPeersTask.Enqueue()
 	})
 	ap.processPeersTask = utils.NewPeriodicTask(10*time.Second, ap.processPeers)
+    for _, tpt := range ap.transports {
+        tpt.OnChallengeIdentity(ap.handleChallengeIdentity)
+    }
 }
 
 func (ap *authProtocol) Close() {
