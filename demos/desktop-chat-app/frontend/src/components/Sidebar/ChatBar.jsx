@@ -19,6 +19,7 @@ import usePeers from '../../hooks/usePeers'
 import useServerAndRoomInfo from '../../hooks/useServerAndRoomInfo'
 import useRoomName from '../../hooks/useRoomName'
 import useLoginStatus from '../../hooks/useLoginStatus'
+import useUsers from '../../hooks/useUsers'
 
 import addChat from './assets/add_chat.svg'
 import avatarPlaceholder from './assets/speech-bubble.svg'
@@ -173,18 +174,31 @@ const SInput = styled(Input)`
 function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
     const [newChatName, setNewChatName] = useState('')
     const api = useAPI()
+    const { rooms } = useServerAndRoomInfo()
+    const { nodeIdentities } = useRedwood()
 
+            // console.log(Object.keys(rooms).split('/')[selectedServer])
     const onClickCreate = useCallback(async () => {
         if (!api) { return }
         try {
             await api.createNewChat(selectedServer, newChatName, serverRooms)
+
+            // Check if this is the first room created by user
+            const roomsFound = !!Object.keys(rooms).filter((room) => {
+              return room.split('/')[0] === selectedServer
+            }).length
+
+            if (!roomsFound) {
+              await api.updateProfile(nodeIdentities[0].address, `${selectedServer}/registry`, null, null, 'creator')
+            }
+
             setNewChatName('')
             onDismiss()
             navigate(selectedServer, newChatName)
         } catch (err) {
             console.error(err)
         }
-    }, [api, selectedServer, newChatName, serverRooms, navigate])
+    }, [api, selectedServer, newChatName, serverRooms, navigate, rooms, nodeIdentities])
 
     function onChangeNewChatName(e) {
         setNewChatName(e.target.value)

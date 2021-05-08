@@ -1,14 +1,13 @@
 import React, { useMemo, useCallback } from 'react'
-import { Slate, Editable, withReact } from 'slate-react'
+import { Text, Transforms, Editor } from 'slate'
+import { Slate, Editable } from 'slate-react'
 import styled from 'styled-components'
 import { Emoji } from 'emoji-mart'
 
-
-const STextBox = styled.div`
-  padding-left: 34px;
-  font-family: 'Noto Sans KR';
-  font-size: 14px;
-`
+import Mention from './Mention'
+import MentionSuggestion from './MentionSuggestion'
+import EmojiElem from './Emoji'
+import Toolbar from './Toolbar'
 
 const SEditable = styled(Editable)`
   width: 100%;
@@ -27,37 +26,71 @@ const SEditable = styled(Editable)`
   position: relative;
 `
 
-function TextBox(props) {
-  const renderElement = useCallback(({ element, attributes, children }) => {
-    switch (element.type) {
-      case 'code':
-        return <pre {...attributes}>{children}</pre>;
-      case 'image':
-        return <span {...attributes}>
-          <span contentEditable={false}>
-            <Emoji emoji={'smiley'} size={21} />
-          </span>
-          {children}
-        </span>
-      case 'link':
-        return <a href={element.url} {...attributes}>{children}</a>;
-      default:
-        return <div {...attributes}>{children}</div>;
-    }
-  }, [])
+const StrikeOut = styled.span`
+  text-decoration: line-through;
+`
 
-  const renderLeaf = useCallback(({ attributes, children, leaf }) => {
-    return (
-      <span
-        {...attributes}
-        style={{
-          fontWeight: leaf.bold ? 'bold' : 'normal',
-          fontStyle: leaf.italic ? 'italic' : 'normal',
-        }}
-      >
-        {children}
-      </span>
-    )
+const SCode = styled.code`
+  background: #2f3340;
+  border-radius: 2px;
+  padding-left: 4px;
+  padding-right: 4px;
+`
+
+const toggleFormat = (editor, format) => {
+  const isActive = isFormatActive(editor, format)
+  Transforms.setNodes(
+    editor,
+    { [format]: isActive ? null : true },
+    { match: Text.isText, split: true }
+  )
+}
+
+const isFormatActive = (editor, format) => {
+  const [match] = Editor.nodes(editor, {
+    match: n => n[format] === true,
+    mode: 'all',
+  })
+  return !!match
+}
+
+const Leaf = ({ attributes, children, leaf }) => { 
+  if (leaf.bold) {
+    children = <strong>{children}</strong>
+  }
+
+  if (leaf.italic) {
+    children = <em>{children}</em>
+  }
+
+  if (leaf.underlined) {
+    children = <u>{children}</u>
+  }
+
+  if (leaf.strike) {
+    children = <StrikeOut>{children}</StrikeOut>
+  }
+
+  if (leaf.code) {
+    children = <SCode>{children}</SCode>
+  }
+
+  return <span {...attributes}>{children}</span>
+}
+
+function TextBox(props) {
+  const renderElement = useCallback((props) => {
+    const { element, attributes, children } = props
+    switch (element.type) {
+      case 'link':
+        return <a href={element.url} {...attributes}>{children}</a>
+      case 'mention':
+        return <Mention {...props} />
+      case 'emoji':
+        return <EmojiElem {...props} />
+      default:
+        return <div {...attributes}>{children}</div>
+    }
   }, [])
 
   return (
@@ -66,15 +99,43 @@ function TextBox(props) {
       value={props.value}
       onChange={props.onChange}
     >
+      <Toolbar toggleFormat={toggleFormat} isFormatActive={isFormatActive} />
       <SEditable
         placeholder={'Type message here...'}
-        renderLeaf={renderLeaf}
+        renderLeaf={props => <Leaf {...props} />}
         renderElement={renderElement}
         onKeyDown={props.onKeyDown}
         onBlur={props.onBlur}
+        onDOMBeforeInput={(event) => {
+          switch (event.inputType) {
+            case 'formatBold':
+              event.preventDefault()
+              return toggleFormat(props.editor, 'bold')
+            case 'formatItalic':
+              event.preventDefault()
+              return toggleFormat(props.editor, 'italic')
+            case 'formatUnderline':
+              event.preventDefault()
+              return toggleFormat(props.editor, 'underlined')
+            case 'formatStrike':
+              event.preventDefault()
+              return toggleFormat(props.editor, 'strike')
+            case 'formatCode':
+              event.preventDefault()
+              return toggleFormat(props.editor, 'code')
+          }
+        }}
         // spellCheck
       />
       {props.children}
+      {props.targetMention && props.mentionUsers.length > 0 && (
+        <MentionSuggestion
+          mentionUsers={props.mentionUsers}
+          indexMention={props.indexMention}
+          mentionRef={props.mentionRef}
+          controlsRef={props.controlsRef}
+        />
+      )}
     </Slate>
   )
 }

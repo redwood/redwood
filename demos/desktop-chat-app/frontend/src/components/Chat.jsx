@@ -1,5 +1,5 @@
 import 'emoji-mart/css/emoji-mart.css'
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useCallback, useRef, useEffect, Fragment } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { IconButton, Tooltip } from '@material-ui/core'
 import { SendRounded as SendIcon, AddCircleRounded as AddIcon } from '@material-ui/icons'
@@ -10,7 +10,7 @@ import CloseIcon from '@material-ui/icons/Close'
 import EmojiEmotionsIcon from '@material-ui/icons/EmojiEmotions';
 import { Picker, Emoji } from 'emoji-mart'
 import data from 'emoji-mart/data/all.json'
-import { Node, createEditor } from 'slate'
+import { Node, createEditor, Editor, Transforms, Range } from 'slate'
 import { withReact, ReactEditor } from 'slate-react'
 import { withHistory } from 'slate-history'
 
@@ -20,6 +20,7 @@ import Attachment from './Attachment'
 import Embed from './Embed'
 import EmojiQuickSearch from './EmojiQuickSearch'
 import TextBox from './TextBox'
+import NormalizeMessage from './ChatHelpers/NormalizeMessage'
 import Modal, { ModalTitle, ModalContent, ModalActions } from './Modal'
 import UserAvatar from './UserAvatar'
 import useModal from '../hooks/useModal'
@@ -147,6 +148,34 @@ const SImgPreviewWrapper = styled.div`
     }
 `
 
+const withMentions = editor => {
+  const { isInline, isVoid } = editor
+
+  editor.isInline = element => {
+    return element.type === 'mention' ? true : isInline(element)
+  }
+
+  editor.isVoid = element => {
+    return element.type === 'mention' ? true : isVoid(element)
+  }
+
+  return editor
+}
+
+const withEmojis = editor => {
+  const { isInline, isVoid } = editor
+
+  editor.isInline = element => {
+    return element.type === 'emoji' ? true : isInline(element)
+  }
+
+  editor.isVoid = element => {
+    return element.type === 'emoji' ? true : isVoid(element)
+  }
+
+  return editor
+}
+
 const EmptyChatContainer = styled(Container)`
     display: flex;
     align-items: center;
@@ -158,6 +187,7 @@ function Chat({ className }) {
     const api = useAPI()
     const { selectedStateURI, selectedServer, selectedRoom } = useNavigation()
     const { users } = useUsers(selectedStateURI)
+
     const registry = useServerRegistry(selectedServer)
     const roomState = useStateTree(selectedStateURI)
     const initialMessageText = [
@@ -171,14 +201,23 @@ function Chat({ className }) {
       },
     ]
     const [messageText, setMessageText] = useState(initialMessageText)
+    // Emoji Variables
     const [emojiSearchWord, setEmojiSearchWord] = useState('')
     const [emojisFound, setEmojisFound] = useState(false)
+    const [showEmojiKeyboard, setShowEmojiKeyboard] = useState(false)
+
     const theme = useTheme()
     const attachmentsInput = useRef()
     const messageTextContainer = useRef()
+    const mentionRef = useRef()
+    const controlsRef = useRef()
     const [attachments, setAttachments] = useState([])
     const [previews, setPreviews] = useState([])
-    const [showEmojiKeyboard, setShowEmojiKeyboard] = useState(false)
+
+    // Mention Variables
+    const [targetMention, setTargetMention] = useState()
+    const [indexMention, setIndexMention] = useState(0)
+    const [searchMention, setSearchMention] = useState('')
 
     const { onPresent: onPresentPreviewModal } = useModal('attachment preview')
     const [previewedAttachment, setPreviewedAttachment] = useState({})
@@ -191,13 +230,63 @@ function Chat({ className }) {
     const [messages, setMessages] = useState([])
 
     // Init Slate Editor
-    const editor = useMemo(() => withHistory(withReact(createEditor())), [])
+    // const editor = useMemo(() => withMentions(withHistory(withReact(createEditor()))), [])
+    const editorRef = useRef()
+    if (!editorRef.current) editorRef.current = withEmojis(withMentions(withHistory(withReact(createEditor()))))
+    const editor = editorRef.current
+
     const initFocusPoint = { path: [0, 0], offset: 0 }
     const [editorFocusPoint, setEditorFocusPoint] = useState(initFocusPoint)
 
     function onEditorBlur() {
-      setEditorFocusPoint(editor.selection.focus)
+      try {
+        setEditorFocusPoint(editor.selection.focus)
+      } catch (e) {
+        console.error(e)
+      }
     }
+
+    let mentionUsers = []
+    const userAddresses = Object.keys(users || {})
+    if (userAddresses.length) {
+      mentionUsers = userAddresses.map((address) => ({ ...users[address], address })).filter(user => {
+        if (!user.username && !user.nickname) {
+          return user.address.includes(searchMention.toLowerCase())
+        }
+
+        if (user.username) {
+          return user.username.toLowerCase().includes(searchMention.toLowerCase())
+        }
+
+        if (user.nickname) {
+          return user.nickname.toLowerCase().includes(searchMention.toLowerCase())
+        }
+      }
+      ).slice(0, 10)
+    }
+
+    useEffect(async () => {
+      if (nodeIdentities) {
+        if (Object.keys(users || {}).length > 0) {
+          if (!users[nodeIdentities[0].address]) {
+            await api.updateProfile(nodeIdentities[0].address, `${selectedServer}/registry`, null, null, 'member')
+          }
+        }
+      }
+    }, [selectedStateURI, users, nodeIdentities])
+
+
+    useEffect(() => {
+      if (targetMention && mentionUsers.length > 0) {
+        const el = mentionRef.current
+        const domRange = ReactEditor.toDOMRange(editor, targetMention)
+        const rect = domRange.getBoundingClientRect()
+        const topCalc = 68 + (mentionUsers.length * 28)
+
+        el.style.top = `-${topCalc}px`
+        el.style.left = '0px'
+      }
+    }, [mentionUsers.length, editor, indexMention, searchMention, targetMention])
 
     useEffect(() => {
         let previousSender
@@ -223,78 +312,44 @@ function Chat({ className }) {
 
     const onSelectEmoji = (emoji) => {
       if (typeof emoji === 'string') {
-        for (let idx = 0; idx < emojiSearchWord.length + 1; idx++) {
-          editor.deleteBackward()
-        }
+        const [start] = Range.edges(editor.selection)
+        const wordBefore = Editor.before(editor, start, { unit: 'word' })
+        const before = wordBefore && Editor.before(editor, wordBefore)
+        const beforeRange = before && Editor.range(editor, before, start)
+        Transforms.select(editor, {
+          anchor: {
+            path: beforeRange.anchor.path,
+            offset: beforeRange.focus.offset - emojiSearchWord.length - 1
+          },
+          focus: beforeRange.focus,
+        })
 
-        editor.insertText(emoji + ' ')
+        const emojiNode = {
+          type: 'emoji',
+          value: emoji,
+          children: [{ text: '' }],
+        }
+        Transforms.insertNodes(editor, [emojiNode, {
+          text: ' '
+        }])
+        Transforms.move(editor, { distance: 2 })
       } else {
         // Set focus point from blurred
         editor.selection = { anchor: editorFocusPoint, focus: editorFocusPoint }
-        editor.insertText(emoji.colons + ' ')
-        editor.selection = {
-          anchor:  {
-            path: editorFocusPoint.path,
-            offset: editorFocusPoint.offset + emoji.colons.length + 1,
-          },
-          focus: {
-            path: editorFocusPoint.path,
-            offset: editorFocusPoint.offset + emoji.colons.length + 1,
-          }
+        const emojiNode = {
+          type: 'emoji',
+          value: emoji.colons,
+          children: [{ text: '' }],
         }
+        Transforms.insertNodes(editor, emojiNode)
+        Transforms.move(editor, { distance: 1 })
 
         ReactEditor.focus(editor)
-
-        setEditorFocusPoint({
-          path: editorFocusPoint.path,
-          offset: editorFocusPoint.offset + emoji.colons.length + 1,
-        })
         setShowEmojiKeyboard(false)
       }
     }
 
-    const onClickSend = useCallback(async () => {
-        const plainMessage = serializeMessageText()
-        if (!api || plainMessage.trim() === '') { return }
-        // Replace with markdown serializer
-        await api.sendMessage(plainMessage, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
-        setAttachments([])
-        setPreviews([])
-        setEmojiSearchWord('')
-    }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api])
-
-    useEffect(() => {
-        // Scrolls on new messages
-        if (messageTextContainer.current) {
-            messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
-        }
-    })
-
-    const serializeMessageText = () => {
-      return messageText.map((n) => Node.string(n)).join('\n')
-    }
-
-    function onChangeMessageText(textValue) {
-        if (editor.selection) {
-          const { anchor, focus } = editor.selection
-
-          // Assure cursor isn't selecting text
-          if (anchor.offset === focus.offset && JSON.stringify(anchor.path) === JSON.stringify(focus.path)) {
-            const parentNode = editor.children[focus.path[0]]
-            const childNode = parentNode.children[focus.path[1]]
-
-            if (childNode.text) {
-              setTimeout(() => {
-                getCurrentWord(focus.offset - 1, childNode.text)
-              }, 0);
-            }
-          }
-        } 
-
-        setMessageText(textValue)
-    }
-
-    function getCurrentWord(startPos, text) {
+    function getCurrentEmojiWord(startPos, text) {
       if (
         text[startPos] === " " ||
         text[startPos] === ":" ||
@@ -333,28 +388,178 @@ function Chat({ className }) {
         }
 
         if (text[cursor] !== ":") {
-          searchWord.push(text[cursor]) 
+          searchWord.push(text[cursor].toLowerCase()) 
         }
         cursor--
       }
 
       return searchWord
-
     }
 
-    function onKeyDown(event) {
-      if (event.code === 'Enter' && !event.shiftKey) {
-        if (!emojisFound || (!emojisFound && emojiSearchWord)) {
-          event.preventDefault()
-          event.stopPropagation()
+    const insertMention = (editor, selectedUser) => {
+      const mention = {
+        type: 'mention',
+        selectedUser,
+        children: [{ text: '' }],
+      }
+      Transforms.insertNodes(editor, [mention, {
+        text: ' '
+      }])
+      Transforms.move(editor, { distance: 2 })
+      setMessageText(editor.children)
+    }
 
-          // Reset SlateJS cursor
-          const point = { path: [0, 0], offset: 0 };
-          editor.selection = { anchor: point, focus: point };
-          editor.history = { redos: [], undos: [] };
+    const onClickSend = useCallback(async () => {
+        const plainMessage = serializeMessageText()
+        if (!api || !plainMessage) { return }
+        // Replace with markdown serializer
+        await api.sendMessage(plainMessage, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
+        setAttachments([])
+        setPreviews([])
+        setEmojiSearchWord('')
 
-          setMessageText(initialMessageText)
-          onClickSend()
+        // Reset SlateJS cursor
+        const point = { path: [0, 0], offset: 0 };
+        setEditorFocusPoint(point)
+        editor.selection = { anchor: point, focus: point };
+        editor.history = { redos: [], undos: [] };
+
+        setMessageText(initialMessageText)
+    }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api])
+
+    useEffect(() => {
+        // Scrolls on new messages
+        if (messageTextContainer.current) {
+          setTimeout(() => {
+            messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
+          }, 0)
+        }
+    }, [numMessages])
+
+    const serializeMessageText = useCallback(() => {
+      let isEmpty = true
+      const filteredMessage = []
+      messageText.forEach((node) => {
+        if (node.children.length === 1) {
+          let trimmedNode = {}
+          if (typeof node.children[0].text === 'string') {
+            trimmedNode = {
+              ...node,
+              children: [{
+                ...node.children[0],
+                text: node.children[0].text.trim(),
+              }]
+            }
+          }
+          console.log(JSON.stringify(initialMessageText[0]), JSON.stringify(trimmedNode))
+
+          if (JSON.stringify(initialMessageText[0]) === JSON.stringify(trimmedNode)) {
+            if (!isEmpty) {
+              filteredMessage.push(trimmedNode)
+            }
+          } else {
+            isEmpty = false
+            if (JSON.stringify(trimmedNode) === '{}') {
+              filteredMessage.push(node)
+            } else {
+              filteredMessage.push(trimmedNode)
+            }
+          }
+        } else {
+          filteredMessage.push(node)
+        }
+      })
+
+      if (filteredMessage.length === 0) {
+        return false
+      }
+
+      const jsonMessage = JSON.stringify(filteredMessage)
+      return jsonMessage
+    }, [messageText])
+
+    function onChangeMessageText(textValue) {
+        setMessageText(textValue)
+        const { selection } = editor
+
+        if (selection && Range.isCollapsed(selection)) {
+          const [start] = Range.edges(selection)
+          const wordBefore = Editor.before(editor, start, { unit: 'word' })
+          const before = wordBefore && Editor.before(editor, wordBefore)
+          const beforeRange = before && Editor.range(editor, before, start)
+          const beforeText = beforeRange && Editor.string(editor, beforeRange)
+          const beforeMatch = beforeText && beforeText.match(/^@(\w+)$/)
+          const after = Editor.after(editor, start)
+          const afterRange = Editor.range(editor, start, after)
+          const afterText = Editor.string(editor, afterRange)
+          const afterMatch = afterText.match(/^(\s|$)/)
+
+          if (beforeMatch && afterMatch) {
+            setTargetMention(beforeRange)
+            setSearchMention(beforeMatch[1])
+            setIndexMention(0)
+            return
+          }
+        }
+
+        setTargetMention(null)
+
+        if (selection) {
+          const { anchor, focus } = editor.selection
+
+          // Assure cursor isn't selecting text
+          if (anchor.offset === focus.offset && JSON.stringify(anchor.path) === JSON.stringify(focus.path)) {
+            const parentNode = editor.children[focus.path[0]]
+            const childNode = parentNode.children[focus.path[1]]
+
+            if (childNode.text) {
+              setTimeout(() => {
+                getCurrentEmojiWord(focus.offset - 1, childNode.text)
+              }, 0);
+            }
+          }
+        } 
+    }
+
+    const onKeyDown = useCallback((event) => {
+      if (targetMention && mentionUsers.length > 0) {
+        switch (event.key) {
+          case 'ArrowDown':
+            event.preventDefault()
+            const prevIndex = indexMention >= mentionUsers.length - 1 ? 0 : indexMention + 1
+            setIndexMention(prevIndex)
+            break
+          case 'ArrowUp':
+            event.preventDefault()
+            const nextIndex = indexMention <= 0 ? mentionUsers.length - 1 : indexMention - 1
+            setIndexMention(nextIndex)
+            break
+          case 'Tab':
+          case 'Enter':
+            const selectedUser = mentionUsers[indexMention]
+            if (selectedUser) {
+              event.preventDefault()
+
+              Transforms.select(editor, targetMention)
+
+              insertMention(editor, selectedUser)
+              setTargetMention(null)
+            }
+            break
+          case 'Escape':
+            event.preventDefault()
+            setTargetMention(null)
+            break
+        }
+      } else {
+        // Emoji Handling
+        if (event.code === 'Enter' && !event.shiftKey) {
+          if (!emojisFound || (!emojisFound && emojiSearchWord)) {
+            event.preventDefault()
+            event.stopPropagation()
+
+            onClickSend()
+          }
         }
       }
 
@@ -363,7 +568,7 @@ function Chat({ className }) {
           event.preventDefault()
         }
       }
-    }
+    }, [messageText, emojisFound, indexMention, searchMention, targetMention])
 
     function onClickAddAttachment() {
         attachmentsInput.current.click()
@@ -436,15 +641,20 @@ function Chat({ className }) {
                 ) : null)}
                 <HiddenInput type="file" multiple ref={attachmentsInput} onChange={onChangeAttachments} />
             </ImgPreviewContainer>
-            <ControlsContainer>
+            <ControlsContainer ref={controlsRef}>
                 <AddAttachmentButton onClick={onClickAddAttachment} style={{ color: theme.color.white }} />
                 {/* <MessageInput ref={messageInputRef} onKeyDown={onKeyDown} onChange={onChangeMessageText} value={messageText} /> */}
                 <TextBox
                   onKeyDown={onKeyDown}
-                  onChange={ onChangeMessageText}
+                  onChange={onChangeMessageText}
                   value={messageText}
                   editor={editor}
                   onBlur={onEditorBlur}
+                  mentionUsers={mentionUsers}
+                  indexMention={indexMention}
+                  targetMention={targetMention}
+                  mentionRef={mentionRef}
+                  controlsRef={controlsRef}
                 >
                   <TextBoxButtonWrapper>
                     <SIconButton onClick={onOpenEmojis}><EmojiEmotionsIcon /></SIconButton>
@@ -456,7 +666,7 @@ function Chat({ className }) {
                     useButton={false}
                     title={'Redwood Chat'}
                     perLine={8}
-                    set='apple'
+                    set='twitter'
                     theme='dark'
                     emojiSize={24}
                     onSelect={onSelectEmoji}
@@ -502,9 +712,6 @@ const MessageWrapper = styled.div`
 
 const MessageSender = styled.div`
     font-weight: 500;
-`
-
-const MessageText = styled.div`
 `
 
 const SMessageTimestamp = styled.span`
@@ -570,7 +777,8 @@ function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
             }
 
             {/* <MessageText>{msg.text}</MessageText> */}
-            <MessageParse msgText={msg.text} />
+            {/* <MessageParse msgText={msg.text} /> */}
+            <NormalizeMessage msgText={msg.text} />
             {(msg.attachments || []).map((attachment, j) => (
               <SAttachment
                 key={`${selectedStateURI}${messageIndex},${j}`}
@@ -584,8 +792,8 @@ function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
     )
 }
 
-function MessageParse({ msgText }) {
 
+function MessageParse({ msgText }) {
   const colons = `:[a-zA-Z0-9-_+]+:`;
   const skin = `:skin-tone-[2-6]:`;
   const colonsRegex = new RegExp(`(${colons}${skin}|${colons})`, 'g');
