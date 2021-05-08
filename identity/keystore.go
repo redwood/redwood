@@ -9,6 +9,7 @@ import (
 
 type KeyStore interface {
 	Unlock(password string, userMnemonic string) error
+	Mnemonic() (string, error)
 	Identities() ([]Identity, error)
 	PublicIdentities() ([]Identity, error)
 	DefaultPublicIdentity() (Identity, error)

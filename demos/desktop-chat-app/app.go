@@ -536,8 +536,19 @@ var replCommands = map[string]struct {
 	HelpText string
 	Handler  func(args []string, app *appType) error
 }{
+	"mnemonic": {
+		"show your identity's mnemonic",
+		func(args []string, app *appType) error {
+			m, err := app.keyStore.Mnemonic()
+			if err != nil {
+				return err
+			}
+			app.Debugf("mnemonic: %v", m)
+			return nil
+		},
+	},
 	"libp2pid": {
-		"list your libp2p peer ID",
+		"show your libp2p peer ID",
 		func(args []string, app *appType) error {
 			if app.libp2p == nil {
 				return errors.New("libp2p is disabled")
