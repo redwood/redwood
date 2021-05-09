@@ -32,6 +32,7 @@ const EmojiItemWrapper = styled.div`
   font-weight: bold;
   border-radius: 4px;
   background: ${(props) => props.selected ? '#353434' : 'transparent'};
+  cursor: pointer;
   span {
     &:first-child {
       margin-right: 8px;
@@ -163,7 +164,17 @@ function EmojiQuickSearch(props) {
       }
       {
         filteredEmojis.map((emoji, idx) => {
-          return <EmojiItemWrapper selected={selectedEmojiIdx === idx} key={idx}>
+          return <EmojiItemWrapper
+                  selected={selectedEmojiIdx === idx}
+                  key={idx}
+                  onMouseOver={() => setSelectedEmojiIdx(idx)}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setEmojisFound(false)
+                    onSelectEmoji(`:${filteredEmojis[selectedEmojiIdx]}:`, true)
+                  }}
+                >
             <SEmoji 
               svg
               text={`:${emoji}:`}

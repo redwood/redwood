@@ -1,8 +1,8 @@
 Node:
     BootstrapPeers: []
-    SubscribedStateURIs:
+    SubscribedStateURIs: []
     MaxPeersPerSubscription: 4
-    DataRoot: 
+    DataRoot: node1_data/tim
     DevMode: true
 P2PTransport:
     Enabled: true

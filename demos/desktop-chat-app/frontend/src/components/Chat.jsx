@@ -310,8 +310,13 @@ function Chat({ className }) {
       }
     }
 
-    const onSelectEmoji = (emoji) => {
+    const onSelectEmoji = (emoji, refocus) => {
       if (typeof emoji === 'string') {
+        // Refocus editor if user clicks quick selection emoji
+        if (refocus) {
+          editor.selection = { anchor: editorFocusPoint, focus: editorFocusPoint }
+          ReactEditor.focus(editor)
+        }
         const [start] = Range.edges(editor.selection)
         const wordBefore = Editor.before(editor, start, { unit: 'word' })
         const before = wordBefore && Editor.before(editor, wordBefore)
