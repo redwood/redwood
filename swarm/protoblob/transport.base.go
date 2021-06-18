@@ -23,6 +23,7 @@ func (t *BaseBlobTransport) HandleBlobRequest(blobID blob.ID, peer BlobPeerConn)
 	var wg sync.WaitGroup
 	wg.Add(len(t.blobRequestCallbacks))
 	for _, handler := range t.blobRequestCallbacks {
+		handler := handler
 		go func() {
 			defer wg.Done()
 			handler(blobID, peer)
