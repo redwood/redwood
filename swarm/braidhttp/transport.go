@@ -173,9 +173,12 @@ func (t *transport) Start() error {
 	go func() {
 		if !t.devMode {
 			t.srv = &http.Server{
-				Addr:      t.listenAddr,
-				Handler:   utils.UnrestrictedCors(t),
-				TLSConfig: &tls.Config{},
+				Addr:    t.listenAddr,
+				Handler: utils.UnrestrictedCors(t),
+				TLSConfig: &tls.Config{
+					MinVersion: tls.VersionTLS13,
+					MaxVersion: tls.VersionTLS13,
+				},
 			}
 			err := t.srv.ListenAndServeTLS(t.tlsCertFilename, t.tlsKeyFilename)
 			if err != nil {
