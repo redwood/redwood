@@ -8,10 +8,12 @@ import (
 
 type BaseAuthTransport struct {
 	muChallengeIdentityCallbacks sync.RWMutex
-	challengeIdentityCallbacks   []func(challengeMsg ChallengeMsg, peerConn AuthPeerConn) error
+	challengeIdentityCallbacks   []ChallengeIdentityCallback
 }
 
-func (t *BaseAuthTransport) OnChallengeIdentity(handler func(challengeMsg ChallengeMsg, peerConn AuthPeerConn) error) {
+type ChallengeIdentityCallback func(challengeMsg ChallengeMsg, peerConn AuthPeerConn) error
+
+func (t *BaseAuthTransport) OnChallengeIdentity(handler ChallengeIdentityCallback) {
 	t.muChallengeIdentityCallbacks.Lock()
 	defer t.muChallengeIdentityCallbacks.Unlock()
 	t.challengeIdentityCallbacks = append(t.challengeIdentityCallbacks, handler)
@@ -27,6 +29,7 @@ func (t *BaseAuthTransport) HandleChallengeIdentity(challengeMsg ChallengeMsg, p
 	)
 	wg.Add(len(t.challengeIdentityCallbacks))
 	for _, handler := range t.challengeIdentityCallbacks {
+		handler := handler
 		go func() {
 			defer wg.Done()
 			err := handler(challengeMsg, peerConn)

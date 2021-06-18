@@ -26,7 +26,7 @@ type AuthProtocol interface {
 type AuthTransport interface {
 	swarm.Transport
 	PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan AuthPeerConn, error)
-	OnChallengeIdentity(handler func(challengeMsg ChallengeMsg, peerConn AuthPeerConn) error)
+	OnChallengeIdentity(handler ChallengeIdentityCallback)
 }
 
 //go:generate mockery --name AuthPeerConn --output ./mocks/ --case=underscore
@@ -39,13 +39,15 @@ type AuthPeerConn interface {
 
 type authProtocol struct {
 	log.Logger
+	*utils.Process
+
 	keyStore         identity.KeyStore
 	peerStore        swarm.PeerStore
 	transports       map[string]AuthTransport
 	processPeersTask *utils.PeriodicTask
 
 	chStop chan struct{}
-	chDone chan struct{}
+	wgDone sync.WaitGroup
 }
 
 func NewAuthProtocol(transports []swarm.Transport, keyStore identity.KeyStore, peerStore swarm.PeerStore) *authProtocol {
@@ -61,7 +63,6 @@ func NewAuthProtocol(transports []swarm.Transport, keyStore identity.KeyStore, p
 		keyStore:   keyStore,
 		peerStore:  peerStore,
 		chStop:     make(chan struct{}),
-		chDone:     make(chan struct{}),
 	}
 }
 
@@ -72,19 +73,21 @@ func (ap *authProtocol) Name() string {
 }
 
 func (ap *authProtocol) Start() {
+	ap.wgDone.Add(1)
 	ap.peerStore.OnNewUnverifiedPeer(func(dialInfo swarm.PeerDialInfo) {
 		ap.processPeersTask.Enqueue()
 	})
 	ap.processPeersTask = utils.NewPeriodicTask(10*time.Second, ap.processPeers)
-    for _, tpt := range ap.transports {
-        tpt.OnChallengeIdentity(ap.handleChallengeIdentity)
-    }
+	for _, tpt := range ap.transports {
+		tpt.OnChallengeIdentity(ap.handleChallengeIdentity)
+	}
 }
 
 func (ap *authProtocol) Close() {
 	ap.processPeersTask.Close()
 	close(ap.chStop)
-	<-ap.chDone
+	ap.wgDone.Done()
+	ap.wgDone.Wait()
 }
 
 func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.Address) <-chan AuthPeerConn {
@@ -99,12 +102,12 @@ func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.
 		}
 
 		wg.Add(1)
+		ap.wgDone.Add(1)
 		go func() {
 			defer wg.Done()
+			defer ap.wgDone.Done()
 			for {
 				select {
-				case <-ap.chStop:
-					return
 				case <-ctx.Done():
 					return
 				case peerConn, open := <-innerCh:
@@ -113,8 +116,6 @@ func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.
 					}
 
 					select {
-					case <-ap.chStop:
-						return
 					case <-ctx.Done():
 						return
 					case ch <- peerConn:
@@ -221,8 +222,10 @@ func (ap *authProtocol) processPeers(ctx context.Context) {
 				peerDetails := peerDetails
 
 				wg.Add(1)
+				ap.wgDone.Add(1)
 				go func() {
 					defer wg.Done()
+					defer ap.wgDone.Done()
 
 					peerConn, err := tpt.NewPeerConn(ctx, peerDetails.DialInfo().DialAddr)
 					if errors.Cause(err) == swarm.ErrPeerIsSelf {
@@ -282,8 +285,10 @@ func (ap *authProtocol) processPeers(ctx context.Context) {
 			}
 
 			wg.Add(1)
+			ap.wgDone.Add(1)
 			go func() {
 				defer wg.Done()
+				defer ap.wgDone.Done()
 				defer authPeerConn.Close()
 
 				err := ap.ChallengePeerIdentity(ctx, authPeerConn)
