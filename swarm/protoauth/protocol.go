@@ -31,7 +31,7 @@ type AuthTransport interface {
 
 //go:generate mockery --name AuthPeerConn --output ./mocks/ --case=underscore
 type AuthPeerConn interface {
-	swarm.Peer
+	swarm.PeerConn
 	ChallengeIdentity(challengeMsg ChallengeMsg) error
 	RespondChallengeIdentity(verifyAddressResponse []ChallengeIdentityResponse) error
 	ReceiveChallengeIdentityResponse() ([]ChallengeIdentityResponse, error)

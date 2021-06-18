@@ -34,15 +34,15 @@ func (_m *Transport) Name() string {
 }
 
 // NewPeerConn provides a mock function with given fields: ctx, dialAddr
-func (_m *Transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Peer, error) {
+func (_m *Transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.PeerConn, error) {
 	ret := _m.Called(ctx, dialAddr)
 
-	var r0 swarm.Peer
-	if rf, ok := ret.Get(0).(func(context.Context, string) swarm.Peer); ok {
+	var r0 swarm.PeerConn
+	if rf, ok := ret.Get(0).(func(context.Context, string) swarm.PeerConn); ok {
 		r0 = rf(ctx, dialAddr)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(swarm.Peer)
+			r0 = ret.Get(0).(swarm.PeerConn)
 		}
 	}
 

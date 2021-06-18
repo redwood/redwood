@@ -38,7 +38,7 @@ type TreeTransport interface {
 
 //go:generate mockery --name TreePeerConn --output ./mocks/ --case=underscore
 type TreePeerConn interface {
-	swarm.Peer
+	swarm.PeerConn
 	Subscribe(ctx context.Context, stateURI string) (ReadableSubscription, error)
 	Put(ctx context.Context, tx *tree.Tx, state state.Node, leaves []types.ID) error
 	Ack(stateURI string, txID types.ID) error

@@ -11,7 +11,7 @@ type Transport interface {
 	Start() error
 	Close()
 	Name() string
-	NewPeerConn(ctx context.Context, dialAddr string) (Peer, error)
+	NewPeerConn(ctx context.Context, dialAddr string) (PeerConn, error)
 }
 
 //go:generate mockery --name Protocol --output ./mocks/ --case=underscore
@@ -21,8 +21,8 @@ type Protocol interface {
 	Close()
 }
 
-//go:generate mockery --name Peer --output ./mocks/ --case=underscore
-type Peer interface {
+//go:generate mockery --name PeerConn --output ./mocks/ --case=underscore
+type PeerConn interface {
 	PeerDetails
 
 	Transport() Transport

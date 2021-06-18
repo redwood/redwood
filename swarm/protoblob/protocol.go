@@ -31,7 +31,7 @@ type BlobTransport interface {
 
 //go:generate mockery --name BlobPeerConn --output ./mocks/ --case=underscore
 type BlobPeerConn interface {
-	swarm.Peer
+	swarm.PeerConn
 	FetchBlob(blobID blob.ID) error
 	SendBlobHeader(haveBlob bool) error
 	SendBlobPacket(data []byte, end bool) error

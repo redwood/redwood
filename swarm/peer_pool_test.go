@@ -27,12 +27,12 @@ func TestPeerPool(t *testing.T) {
 	)
 
 	var (
-		peer1   = new(mocks.Peer)
-		peer2   = new(mocks.Peer)
-		peer3   = new(mocks.Peer)
-		peer4   = new(mocks.Peer)
-		peers   = []swarm.Peer{peer1, peer2, peer3, peer4}
-		chPeers = make(chan swarm.Peer)
+		peer1   = new(mocks.PeerConn)
+		peer2   = new(mocks.PeerConn)
+		peer3   = new(mocks.PeerConn)
+		peer4   = new(mocks.PeerConn)
+		peers   = []swarm.PeerConn{peer1, peer2, peer3, peer4}
+		chPeers = make(chan swarm.PeerConn)
 	)
 
 	peer1.On("DialInfo").Return(swarm.PeerDialInfo{TransportName: "test", DialAddr: "1"})
@@ -53,12 +53,12 @@ func TestPeerPool(t *testing.T) {
 	peer4.On("Close").Return(nil)
 
 	var numProvidersRequests uint32
-	pool := swarm.NewPeerPool(concurrentConns, func(ctx context.Context) (<-chan swarm.Peer, error) {
+	pool := swarm.NewPeerPool(concurrentConns, func(ctx context.Context) (<-chan swarm.PeerConn, error) {
 		atomic.AddUint32(&numProvidersRequests, 1)
 		return chPeers, nil
 	})
 
-	activePeers := make(map[swarm.Peer]struct{})
+	activePeers := make(map[swarm.PeerConn]struct{})
 
 	t.Run("requests a providers channel on startup", func(t *testing.T) {
 		require.Eventually(t, func() bool { return atomic.LoadUint32(&numProvidersRequests) == 1 }, 1*time.Second, 10*time.Millisecond)
@@ -165,7 +165,7 @@ func TestPeerPool(t *testing.T) {
 		for peer := range activePeers {
 			pool.ReturnPeer(peer, false)
 		}
-		activePeers = make(map[swarm.Peer]struct{})
+		activePeers = make(map[swarm.PeerConn]struct{})
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -183,7 +183,7 @@ func TestPeerPool(t *testing.T) {
 
 	t.Run("when the providers channel closes, the pool requests a new one", func(t *testing.T) {
 		oldChPeers := chPeers
-		chPeers = make(chan swarm.Peer)
+		chPeers = make(chan swarm.PeerConn)
 		close(oldChPeers)
 		require.Eventually(t, func() bool { return atomic.LoadUint32(&numProvidersRequests) == 2 }, 1*time.Second, 10*time.Millisecond)
 	})
@@ -200,7 +200,7 @@ func TestPeerPool_Integration(t *testing.T) {
 			rand.Seed(time.Now().UTC().Unix() + int64(i))
 
 			var (
-				chPeers   chan swarm.Peer
+				chPeers   chan swarm.PeerConn
 				chPeersMu sync.Mutex
 
 				concurrentConns = rand.Intn(10) + 1
@@ -219,9 +219,9 @@ func TestPeerPool_Integration(t *testing.T) {
 
 			chPeersMu.Lock()
 
-			pool := swarm.NewPeerPool(uint64(concurrentConns), func(ctx context.Context) (<-chan swarm.Peer, error) {
+			pool := swarm.NewPeerPool(uint64(concurrentConns), func(ctx context.Context) (<-chan swarm.PeerConn, error) {
 				defer chPeersMu.Unlock()
-				chPeers = make(chan swarm.Peer)
+				chPeers = make(chan swarm.PeerConn)
 				return chPeers, nil
 			})
 			defer pool.Close()
@@ -250,7 +250,7 @@ func TestPeerPool_Integration(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for j := 0; j < numPeers; j++ {
-					peer := new(mocks.Peer)
+					peer := new(mocks.PeerConn)
 					peer.On("DialInfo").Return(swarm.PeerDialInfo{TransportName: testutils.RandomString(t, 5), DialAddr: testutils.RandomString(t, 5)}).Maybe()
 					peer.On("Ready").Return(true).Maybe()
 					peer.On("Addresses").Return([]types.Address{testutils.RandomAddress(t)}).Maybe()
@@ -326,9 +326,9 @@ func TestPeerPool_Integration(t *testing.T) {
 					err := sem.Acquire(ctx, 1)
 					require.NoError(t, err)
 
-					var peer swarm.Peer
+					var peer swarm.PeerConn
 					activePeers.Range(func(key, val interface{}) bool {
-						peer = key.(swarm.Peer)
+						peer = key.(swarm.PeerConn)
 						return false
 					})
 					require.NotNil(t, peer)

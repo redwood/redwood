@@ -500,7 +500,7 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 	}
 }
 
-func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Peer, error) {
+func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.PeerConn, error) {
 	addr, err := ma.NewMultiaddr(dialAddr)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not parse multiaddr '%v'", dialAddr)

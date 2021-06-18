@@ -982,7 +982,7 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, address 
 	go t.HandleTxReceived(tx, peer)
 }
 
-func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Peer, error) {
+func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.PeerConn, error) {
 	if dialAddr == t.ownURL || strings.HasPrefix(dialAddr, "localhost") {
 		return nil, errors.WithStack(swarm.ErrPeerIsSelf)
 	}

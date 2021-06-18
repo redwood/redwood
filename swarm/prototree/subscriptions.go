@@ -184,8 +184,8 @@ func newMultiReaderSubscription(
 	}
 }
 
-func convertTreePeerChan(ctx context.Context, ch <-chan TreePeerConn) <-chan swarm.Peer {
-	chPeer := make(chan swarm.Peer)
+func convertTreePeerChan(ctx context.Context, ch <-chan TreePeerConn) <-chan swarm.PeerConn {
+	chPeer := make(chan swarm.PeerConn)
 	go func() {
 		defer close(chPeer)
 		for {
@@ -216,7 +216,7 @@ func (s *multiReaderSubscription) Start() {
 
 	s.peerPool = swarm.NewPeerPool(
 		s.maxConns,
-		func(ctx context.Context) (<-chan swarm.Peer, error) {
+		func(ctx context.Context) (<-chan swarm.PeerConn, error) {
 			time.Sleep(restartSearchBackoff.Next())
 			chTreePeers := s.searchForPeers(ctx, s.stateURI)
 			return convertTreePeerChan(ctx, chTreePeers), nil // Can't wait for generics
