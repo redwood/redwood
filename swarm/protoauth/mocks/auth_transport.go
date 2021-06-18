@@ -61,7 +61,7 @@ func (_m *AuthTransport) NewPeerConn(ctx context.Context, dialAddr string) (swar
 }
 
 // OnChallengeIdentity provides a mock function with given fields: handler
-func (_m *AuthTransport) OnChallengeIdentity(handler func(protoauth.ChallengeMsg, protoauth.AuthPeerConn) error) {
+func (_m *AuthTransport) OnChallengeIdentity(handler protoauth.ChallengeIdentityCallback) {
 	_m.Called(handler)
 }
 

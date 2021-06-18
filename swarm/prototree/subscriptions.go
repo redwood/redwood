@@ -44,6 +44,7 @@ type writableSubscription struct {
 	stopOnce         sync.Once
 }
 
+//go:generate mockery --name WritableSubscriptionImpl --output ./mocks/ --case=underscore
 type WritableSubscriptionImpl interface {
 	StateURI() string
 	Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) error
