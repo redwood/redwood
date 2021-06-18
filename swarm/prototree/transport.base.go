@@ -46,6 +46,7 @@ func (t *BaseTreeTransport) HandleTxReceived(tx tree.Tx, peerConn TreePeerConn) 
 	var wg sync.WaitGroup
 	wg.Add(len(t.txReceivedCallbacks))
 	for _, handler := range t.txReceivedCallbacks {
+		handler := handler
 		go func() {
 			defer wg.Done()
 			handler(tx, peerConn)
@@ -60,6 +61,7 @@ func (t *BaseTreeTransport) HandleAckReceived(stateURI string, txID types.ID, pe
 	var wg sync.WaitGroup
 	wg.Add(len(t.ackReceivedCallbacks))
 	for _, handler := range t.ackReceivedCallbacks {
+		handler := handler
 		go func() {
 			defer wg.Done()
 			handler(stateURI, txID, peerConn)
@@ -80,6 +82,7 @@ func (t *BaseTreeTransport) HandleWritableSubscriptionOpened(
 	var wg sync.WaitGroup
 	wg.Add(len(t.writableSubscriptionOpenedCallbacks))
 	for _, handler := range t.writableSubscriptionOpenedCallbacks {
+		handler := handler
 		go func() {
 			defer wg.Done()
 			handler(stateURI, keypath, subType, writeSubImpl, fetchHistoryOpts)
