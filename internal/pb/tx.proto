@@ -18,6 +18,7 @@ message Tx {
     bool checkpoint = 9;
     bytes attachment = 10;
     string status = 11;
+    uint64 confidence = 12;
 }
 
 message Patch {
