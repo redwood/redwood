@@ -21,9 +21,7 @@ type Controller interface {
 	Start() error
 	Close()
 
-	AddTx(tx *Tx, force bool) error
-	HaveTx(txID types.ID) (bool, error)
-
+	AddTx(tx *Tx) error
 	StateAtVersion(version *types.ID) state.Node
 	QueryIndex(version *types.ID, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
 	Leaves() ([]types.ID, error)
@@ -114,8 +112,8 @@ func (c *controller) Start() (err error) {
 		return err
 	}
 
-	// Listen for new refs
-	c.blobStore.OnRefsSaved(c.mempool.ForceReprocess)
+	// Listen for new blobs
+	c.blobStore.OnBlobsSaved(c.mempool.ForceReprocess)
 
 	return nil
 }
@@ -202,26 +200,24 @@ func (c *controller) Members() []types.Address {
 	return addrs
 }
 
-func (c *controller) AddTx(tx *Tx, force bool) error {
+func (c *controller) AddTx(tx *Tx) error {
 	c.addTxMu.Lock()
 	defer c.addTxMu.Unlock()
 
-	if !force {
-		// Ignore duplicates
-		exists, err := c.txStore.TxExists(tx.StateURI, tx.ID)
-		if err != nil {
-			return err
-		} else if exists {
-			c.Infof(0, "already know tx %v, skipping", tx.ID.Pretty())
-			return nil
-		}
-
-		c.Infof(0, "new tx %v (%v)", tx.ID.Pretty(), tx.Hash().String())
+	// Ignore duplicates
+	exists, err := c.txStore.TxExists(tx.StateURI, tx.ID)
+	if err != nil {
+		return err
+	} else if exists {
+		c.Infof(0, "already know tx %v, skipping", tx.ID.Pretty())
+		return nil
 	}
+
+	c.Infof(0, "new tx %v (%v)", tx.ID.Pretty(), tx.Hash().String())
 
 	// Store the tx (so we can ignore txs we've seen before)
 	tx.Status = TxStatusInMempool
-	err := c.txStore.AddTx(tx)
+	err = c.txStore.AddTx(tx)
 	if err != nil {
 		return err
 	}
@@ -235,13 +231,13 @@ func (c *controller) Mempool() *txSortedSet {
 }
 
 var (
-	ErrNoParentYet         = errors.New("no parent yet")
-	ErrPendingParent       = errors.New("parent pending validation")
-	ErrInvalidParent       = errors.New("invalid parent")
-	ErrInvalidSignature    = errors.New("invalid signature")
-	ErrInvalidTx           = errors.New("invalid tx")
-	ErrTxMissingParents    = errors.New("tx must have parents")
-	ErrMissingCriticalRefs = errors.New("missing critical refs")
+	ErrNoParentYet          = errors.New("no parent yet")
+	ErrPendingParent        = errors.New("parent pending validation")
+	ErrInvalidParent        = errors.New("invalid parent")
+	ErrInvalidSignature     = errors.New("invalid signature")
+	ErrInvalidTx            = errors.New("invalid tx")
+	ErrTxMissingParents     = errors.New("tx must have parents")
+	ErrMissingCriticalBlobs = errors.New("missing critical blobs")
 )
 
 func (c *controller) processMempoolTx(tx *Tx) processTxOutcome {
@@ -257,7 +253,7 @@ func (c *controller) processMempoolTx(tx *Tx) processTxOutcome {
 		c.Errorf("invalid tx %v: %+v: %v", tx.ID.Pretty(), err, utils.PrettyJSON(tx))
 		return processTxOutcome_Failed
 
-	case ErrPendingParent, ErrMissingCriticalRefs, ErrNoParentYet:
+	case ErrPendingParent, ErrMissingCriticalBlobs, ErrNoParentYet:
 		c.Infof(0, "readding to mempool %v (%v)", tx.ID.Pretty(), err)
 		return processTxOutcome_Retry
 
@@ -420,7 +416,7 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 		}
 	}
 
-	c.handleNewRefs(root)
+	c.handleNewBlobs(root)
 
 	err = c.updateBehaviorTree(root)
 	if err != nil {
@@ -472,17 +468,17 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 	return nil
 }
 
-func (c *controller) handleNewRefs(root state.Node) {
-	var refs []types.RefID
+func (c *controller) handleNewBlobs(root state.Node) {
+	var blobs []blob.ID
 	defer func() {
-		if len(refs) > 0 {
-			c.blobStore.MarkRefsAsNeeded(refs)
+		if len(blobs) > 0 {
+			c.blobStore.MarkBlobsAsNeeded(blobs)
 		}
 	}()
 
 	diff := root.Diff()
 
-	// Find all refs in the tree and notify the Host to start fetching them
+	// Find all blobs in the tree and notify the Host to start fetching them
 	for kp := range diff.Added {
 		keypath := state.Keypath(kp)
 		parentKeypath, key := keypath.Pop()
@@ -502,14 +498,14 @@ func (c *controller) handleNewRefs(root state.Node) {
 				continue
 			}
 			linkType, linkValue := nelson.DetermineLinkType(linkStr)
-			if linkType == nelson.LinkTypeRef {
-				var refID types.RefID
-				err := refID.UnmarshalText([]byte(linkValue))
+			if linkType == nelson.LinkTypeBlob {
+				var blobID blob.ID
+				err := blobID.UnmarshalText([]byte(linkValue))
 				if err != nil {
-					c.Errorf("error unmarshaling refID: %v", err)
+					c.Errorf("error unmarshaling blobID: %v", err)
 					continue
 				}
-				refs = append(refs, refID)
+				blobs = append(blobs, blobID)
 			}
 		}
 	}
@@ -600,18 +596,18 @@ func (c *controller) updateBehaviorTree(root state.Node) error {
 }
 
 func (c *controller) initializeResolver(behaviorTree *behaviorTree, root state.Node, resolverConfigKeypath state.Keypath) error {
-	// Resolve any refs (to code) in the resolver config object.  We copy the config so
-	// that we don't inject any refs into the state tree itself
+	// Resolve any blobs (to code) in the resolver config object.  We copy the config so
+	// that we don't inject any blobs into the state tree itself
 	config, err := root.CopyToMemory(resolverConfigKeypath, nil)
 	if err != nil {
 		return err
 	}
 
-	config, anyMissing, err := nelson.Resolve(config, c.controllerHub)
+	config, anyMissing, err := nelson.Resolve(config, c.controllerHub, c.blobStore)
 	if err != nil {
 		return err
 	} else if anyMissing {
-		return errors.WithStack(ErrMissingCriticalRefs)
+		return errors.WithStack(ErrMissingCriticalBlobs)
 	}
 
 	contentType, err := nelson.GetContentType(config)
@@ -651,18 +647,18 @@ func debugPrint(inFormat string, args ...interface{}) {
 }
 
 func (c *controller) initializeValidator(behaviorTree *behaviorTree, root state.Node, validatorConfigKeypath state.Keypath) error {
-	// Resolve any refs (to code) in the validator config object.  We copy the config so
-	// that we don't inject any refs into the state tree itself
+	// Resolve any blobs (to code) in the validator config object.  We copy the config so
+	// that we don't inject any blobs into the state tree itself
 	config, err := root.CopyToMemory(validatorConfigKeypath, nil)
 	if err != nil {
 		return err
 	}
 
-	config, anyMissing, err := nelson.Resolve(config, c.controllerHub)
+	config, anyMissing, err := nelson.Resolve(config, c.controllerHub, c.blobStore)
 	if err != nil {
 		return err
 	} else if anyMissing {
-		return errors.WithStack(ErrMissingCriticalRefs)
+		return errors.WithStack(ErrMissingCriticalBlobs)
 	}
 
 	contentType, err := nelson.GetContentType(config)
@@ -689,8 +685,8 @@ func (c *controller) initializeValidator(behaviorTree *behaviorTree, root state.
 }
 
 func (c *controller) initializeIndexer(behaviorTree *behaviorTree, root state.Node, indexerConfigKeypath state.Keypath) error {
-	// Resolve any refs (to code) in the indexer config object.  We copy the config so
-	// that we don't inject any refs into the state tree itself
+	// Resolve any blobs (to code) in the indexer config object.  We copy the config so
+	// that we don't inject any blobs into the state tree itself
 	indexConfigs, err := root.CopyToMemory(indexerConfigKeypath, nil)
 	if err != nil {
 		return err
@@ -699,11 +695,11 @@ func (c *controller) initializeIndexer(behaviorTree *behaviorTree, root state.No
 	subkeys := indexConfigs.Subkeys()
 
 	for _, indexName := range subkeys {
-		config, anyMissing, err := nelson.Resolve(indexConfigs.NodeAt(indexName, nil), c.controllerHub)
+		config, anyMissing, err := nelson.Resolve(indexConfigs.NodeAt(indexName, nil), c.controllerHub, c.blobStore)
 		if err != nil {
 			return err
 		} else if anyMissing {
-			return errors.WithStack(ErrMissingCriticalRefs)
+			return errors.WithStack(ErrMissingCriticalBlobs)
 		}
 
 		contentType, err := nelson.GetContentType(config)
@@ -753,10 +749,6 @@ func (c *controller) notifyNewStateListeners(tx *Tx, root state.Node, leaves []t
 	wg.Wait()
 }
 
-func (c *controller) HaveTx(txID types.ID) (bool, error) {
-	return c.txStore.TxExists(c.stateURI, txID)
-}
-
 func (c *controller) QueryIndex(version *types.ID, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (node state.Node, err error) {
 	defer utils.Annotate(&err, "keypath=%v index=%v index_arg=%v rng=%v", keypath, indexName, queryParam, rng)
 
@@ -788,12 +780,12 @@ func (c *controller) QueryIndex(version *types.ID, keypath state.Keypath, indexN
 			return nil, err
 		}
 
-		nodeToIndex, relKeypath, err := nelson.Unwrap(nodeToIndex)
+		nodeToIndex, err = nelson.FirstNonFrameNode(nodeToIndex, 10)
 		if err != nil {
 			return nil, err
 		}
 
-		err = c.indices.BuildIndex(version, relKeypath, nodeToIndex, indexName, indexer)
+		err = c.indices.BuildIndex(version, nodeToIndex, indexName, indexer)
 		if err != nil {
 			return nil, err
 		}

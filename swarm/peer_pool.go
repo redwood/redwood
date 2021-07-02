@@ -11,19 +11,25 @@ import (
 	"redwood.dev/utils"
 )
 
+type PeerPool interface {
+	GetPeer(ctx context.Context) (_ PeerConn, err error)
+	ReturnPeer(peer PeerConn, strike bool)
+	Close()
+}
+
 type peerPool struct {
 	log.Logger
 
 	concurrentConns uint64
 	peersAvailable  *utils.Mailbox
 	peersInTimeout  *utils.Mailbox
-	chProviders     <-chan Peer
-	chPeers         chan Peer
+	chProviders     <-chan PeerConn
+	chPeers         chan PeerConn
 	sem             *semaphore.Weighted
 	chStop          chan struct{}
 	wgDone          sync.WaitGroup
 
-	fnGetPeers func(ctx context.Context) (<-chan Peer, error)
+	fnGetPeers func(ctx context.Context) (<-chan PeerConn, error)
 
 	peers   map[PeerDialInfo]peersMapEntry
 	peersMu sync.RWMutex
@@ -38,12 +44,12 @@ const (
 )
 
 type peersMapEntry struct {
-	peer  Peer
+	peer  PeerConn
 	state peerState
 }
 
-func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<-chan Peer, error)) *peerPool {
-	chProviders := make(chan Peer)
+func NewPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<-chan PeerConn, error)) *peerPool {
+	chProviders := make(chan PeerConn)
 	close(chProviders)
 
 	p := &peerPool{
@@ -52,7 +58,7 @@ func newPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 		peersAvailable:  utils.NewMailbox(0),
 		peersInTimeout:  utils.NewMailbox(0),
 		chProviders:     chProviders,
-		chPeers:         make(chan Peer),
+		chPeers:         make(chan PeerConn),
 		chStop:          make(chan struct{}),
 		sem:             semaphore.NewWeighted(int64(concurrentConns)),
 		fnGetPeers:      fnGetPeers,
@@ -92,7 +98,6 @@ func (p *peerPool) fillPool() {
 				defer p.peersMu.Unlock()
 
 				if _, exists := p.peers[peer.DialInfo()]; !exists {
-					p.Debugf("[peer pool] found peer %v", peer.DialInfo())
 					p.peers[peer.DialInfo()] = peersMapEntry{peer, peerState_Unknown}
 					p.peersAvailable.Deliver(peer)
 				}
@@ -120,7 +125,7 @@ func (p *peerPool) deliverAvailablePeers() {
 
 		case <-p.peersAvailable.Notify():
 			for _, x := range p.peersAvailable.RetrieveAll() {
-				peer := x.(Peer)
+				peer := x.(PeerConn)
 				select {
 				case <-p.chStop:
 					return
@@ -141,7 +146,7 @@ func (p *peerPool) handlePeersInTimeout() {
 		}
 
 		for _, x := range p.peersInTimeout.RetrieveAll() {
-			peer := x.(Peer)
+			peer := x.(PeerConn)
 			if peer.Ready() && len(peer.Addresses()) > 0 {
 				p.peersAvailable.Deliver(peer)
 			} else {
@@ -151,7 +156,7 @@ func (p *peerPool) handlePeersInTimeout() {
 	}
 }
 
-func (p *peerPool) GetPeer(ctx context.Context) (_ Peer, err error) {
+func (p *peerPool) GetPeer(ctx context.Context) (_ PeerConn, err error) {
 	ctx, cancel := utils.CombinedContext(ctx, p.chStop)
 	defer cancel()
 
@@ -182,10 +187,8 @@ func (p *peerPool) GetPeer(ctx context.Context) (_ Peer, err error) {
 				} else if entry.state != peerState_Unknown {
 					panic("!available")
 				} else if !entry.peer.Ready() {
-					p.Debugf("skipping peer: failures=%v lastFailure=%v", entry.peer.Failures(), time.Now().Sub(entry.peer.LastFailure()))
 					p.peersInTimeout.Deliver(peer)
 				} else if len(entry.peer.Addresses()) == 0 {
-					p.Debugf("skipping peer: unverified (%v: %v)", entry.peer.DialInfo().TransportName, entry.peer.DialInfo().DialAddr)
 					p.peersInTimeout.Deliver(peer)
 				} else {
 					p.setPeerState(peer, peerState_InUse)
@@ -214,7 +217,7 @@ func (p *peerPool) countActivePeers() int {
 	return i
 }
 
-func (p *peerPool) ReturnPeer(peer Peer, strike bool) {
+func (p *peerPool) ReturnPeer(peer PeerConn, strike bool) {
 	p.peersMu.Lock()
 	defer p.peersMu.Unlock()
 	defer p.sem.Release(1)
@@ -230,7 +233,7 @@ func (p *peerPool) ReturnPeer(peer Peer, strike bool) {
 	}
 }
 
-func (p *peerPool) setPeerState(peer Peer, state peerState) {
+func (p *peerPool) setPeerState(peer PeerConn, state peerState) {
 	peerInfo := p.peers[peer.DialInfo()]
 	peerInfo.state = state
 	p.peers[peer.DialInfo()] = peerInfo

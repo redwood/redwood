@@ -13,18 +13,19 @@ import (
 	"redwood.dev/utils"
 )
 
+//go:generate mockery --name PeerStore --output ./mocks/ --case=underscore
 type PeerStore interface {
 	AddDialInfos(dialInfos []PeerDialInfo)
 	AddVerifiedCredentials(dialInfo PeerDialInfo, address types.Address, sigpubkey crypto.SigningPublicKey, encpubkey crypto.EncryptingPublicKey)
 	RemovePeers(dialInfos []PeerDialInfo) error
-	UnverifiedPeers() []*peerDetails
-	Peers() []*peerDetails
+	UnverifiedPeers() []PeerDetails
+	Peers() []PeerDetails
 	AllDialInfos() []PeerDialInfo
-	PeerWithDialInfo(dialInfo PeerDialInfo) *peerDetails
-	PeersWithAddress(address types.Address) []*peerDetails
-	PeersFromTransport(transportName string) []*peerDetails
-	PeersFromTransportWithAddress(transportName string, address types.Address) []*peerDetails
-	PeersServingStateURI(stateURI string) []*peerDetails
+	PeerWithDialInfo(dialInfo PeerDialInfo) PeerDetails
+	PeersWithAddress(address types.Address) []PeerDetails
+	PeersFromTransport(transportName string) []PeerDetails
+	PeersFromTransportWithAddress(transportName string, address types.Address) []PeerDetails
+	PeersServingStateURI(stateURI string) []PeerDetails
 	IsKnownPeer(dialInfo PeerDialInfo) bool
 	OnNewUnverifiedPeer(fn func(dialInfo PeerDialInfo))
 }
@@ -83,11 +84,11 @@ func NewPeerStore(state *state.DBTree) *peerStore {
 	return s
 }
 
-func (s *peerStore) Peers() []*peerDetails {
+func (s *peerStore) Peers() []PeerDetails {
 	s.muPeers.Lock()
 	defer s.muPeers.Unlock()
 
-	var pds []*peerDetails
+	var pds []PeerDetails
 	for _, pd := range s.peers {
 		pds = append(pds, pd)
 	}
@@ -199,7 +200,7 @@ func (s *peerStore) RemovePeers(dialInfos []PeerDialInfo) error {
 	return s.deletePeers(dialInfos)
 }
 
-func (s *peerStore) PeerWithDialInfo(dialInfo PeerDialInfo) *peerDetails {
+func (s *peerStore) PeerWithDialInfo(dialInfo PeerDialInfo) PeerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
@@ -209,11 +210,11 @@ func (s *peerStore) PeerWithDialInfo(dialInfo PeerDialInfo) *peerDetails {
 	return s.peers[dialInfo]
 }
 
-func (s *peerStore) UnverifiedPeers() []*peerDetails {
+func (s *peerStore) UnverifiedPeers() []PeerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	unverifiedPeers := make([]*peerDetails, len(s.unverifiedPeers))
+	unverifiedPeers := make([]PeerDetails, len(s.unverifiedPeers))
 	i := 0
 	for dialInfo := range s.unverifiedPeers {
 		unverifiedPeers[i] = s.peers[dialInfo]
@@ -233,11 +234,11 @@ func (s *peerStore) AllDialInfos() []PeerDialInfo {
 	return dialInfos
 }
 
-func (s *peerStore) PeersWithAddress(address types.Address) []*peerDetails {
+func (s *peerStore) PeersWithAddress(address types.Address) []PeerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	var peers []*peerDetails
+	var peers []PeerDetails
 	if _, exists := s.peersWithAddress[address]; exists {
 		for _, peerDetails := range s.peersWithAddress[address] {
 			peers = append(peers, peerDetails)
@@ -246,11 +247,11 @@ func (s *peerStore) PeersWithAddress(address types.Address) []*peerDetails {
 	return peers
 }
 
-func (s *peerStore) PeersFromTransport(transportName string) []*peerDetails {
+func (s *peerStore) PeersFromTransport(transportName string) []PeerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	var peers []*peerDetails
+	var peers []PeerDetails
 	for dialInfo, peerDetails := range s.peers {
 		if dialInfo.TransportName == transportName {
 			peers = append(peers, peerDetails)
@@ -259,11 +260,11 @@ func (s *peerStore) PeersFromTransport(transportName string) []*peerDetails {
 	return peers
 }
 
-func (s *peerStore) PeersFromTransportWithAddress(transport string, address types.Address) []*peerDetails {
+func (s *peerStore) PeersFromTransportWithAddress(transport string, address types.Address) []PeerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	var peers []*peerDetails
+	var peers []PeerDetails
 	if _, exists := s.peersWithAddress[address]; exists {
 		for dialInfo, peerDetails := range s.peersWithAddress[address] {
 			if dialInfo.TransportName == transport {
@@ -274,11 +275,11 @@ func (s *peerStore) PeersFromTransportWithAddress(transport string, address type
 	return peers
 }
 
-func (s *peerStore) PeersServingStateURI(stateURI string) []*peerDetails {
+func (s *peerStore) PeersServingStateURI(stateURI string) []PeerDetails {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	var peers []*peerDetails
+	var peers []PeerDetails
 	for _, peerDetails := range s.peers {
 		if peerDetails.stateURIs.Contains(stateURI) {
 			peers = append(peers, peerDetails)

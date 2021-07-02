@@ -67,7 +67,7 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
 
 		files, err := ioutil.ReadDir(app.profileRoot)
 		if err == nil {
-			// Check if profilName is unique
+			// Check if profileName is unique
 			for _, profileNames := range files {
 				if profileNames.IsDir() {
 					if strings.ToLower(profileNames.Name()) == strings.ToLower(loginRequest.ProfileName) {

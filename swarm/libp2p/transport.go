@@ -31,12 +31,19 @@ import (
 	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/swarm"
+	"redwood.dev/swarm/protoauth"
+	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type transport struct {
+	protoauth.BaseAuthTransport
+	protoblob.BaseBlobTransport
+	prototree.BaseTreeTransport
+
 	log.Logger
 	chStop chan struct{}
 	chDone chan struct{}
@@ -53,15 +60,18 @@ type transport struct {
 
 	address types.Address
 
-	host          swarm.Host
 	controllerHub tree.ControllerHub
 	peerStore     swarm.PeerStore
 	keyStore      identity.KeyStore
 	blobStore     blob.Store
 
-	writeSubsByPeerID   map[peer.ID]map[netp2p.Stream]swarm.WritableSubscription
+	writeSubsByPeerID   map[peer.ID]map[netp2p.Stream]prototree.WritableSubscriptionImpl
 	writeSubsByPeerIDMu sync.Mutex
 }
+
+var _ prototree.TreeTransport = (*transport)(nil)
+var _ protoblob.BlobTransport = (*transport)(nil)
+var _ protoauth.AuthTransport = (*transport)(nil)
 
 const (
 	PROTO_MAIN    protocol.ID = "/redwood/main/1.0.0"
@@ -87,7 +97,7 @@ func NewTransport(
 		keyStore:          keyStore,
 		blobStore:         blobStore,
 		peerStore:         peerStore,
-		writeSubsByPeerID: make(map[peer.ID]map[netp2p.Stream]swarm.WritableSubscription),
+		writeSubsByPeerID: make(map[peer.ID]map[netp2p.Stream]prototree.WritableSubscriptionImpl),
 	}
 	keyStore.OnLoadUser(t.onLoadUser)
 	keyStore.OnSaveUser(t.onSaveUser)
@@ -291,10 +301,6 @@ func (t *transport) Peers() []peerstore.PeerInfo {
 	return peerstore.PeerInfos(t.libp2pHost.Peerstore(), t.libp2pHost.Peerstore().Peers())
 }
 
-func (t *transport) SetHost(h swarm.Host) {
-	t.host = h
-}
-
 func (t *transport) Listen(network netp2p.Network, multiaddr ma.Multiaddr)      {}
 func (t *transport) ListenClose(network netp2p.Network, multiaddr ma.Multiaddr) {}
 
@@ -325,16 +331,13 @@ func (t *transport) ClosedStream(network netp2p.Network, stream netp2p.Stream) {
 		if sub, exists := writeSubs[stream]; exists && sub != nil {
 			t.Debugf("closing libp2p writable subscription (peer: %v, stateURI: %v)", peerID.Pretty(), sub.StateURI())
 			delete(t.writeSubsByPeerID[peerID], stream)
-			t.host.HandleWritableSubscriptionClosed(sub)
+			sub.Close()
 		}
 	}
 }
 
-// HandlePeerFound is the mDNS peer discovery callback
+// HandlePeerFound is the libp2p mDNS peer discovery callback
 func (t *transport) HandlePeerFound(pinfo peerstore.PeerInfo) {
-	ctx, cancel := utils.CombinedContext(t.chStop, 10*time.Second)
-	defer cancel()
-
 	// Ensure all peers discovered on the libp2p layer are in the peer store
 	if pinfo.ID == peer.ID("") {
 		return
@@ -360,6 +363,10 @@ func (t *transport) HandlePeerFound(pinfo peerstore.PeerInfo) {
 		t.Infof(0, "mDNS: peer %+v is nil", pinfo.ID.Pretty())
 		return
 	}
+
+	ctx, cancel := utils.CombinedContext(t.chStop, 10*time.Second)
+	defer cancel()
+
 	err := peer.EnsureConnected(ctx)
 	if err != nil {
 		t.Errorf("error connecting to mDNS peer %v: %v", pinfo, err)
@@ -383,7 +390,7 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 	peer := t.makeConnectedPeerConn(stream)
 
 	switch msg.Type {
-	case MsgType_Subscribe:
+	case msgType_Subscribe:
 		stateURI, ok := msg.Payload.(string)
 		if !ok {
 			t.Errorf("Subscribe message: bad payload: (%T) %v", msg.Payload, msg.Payload)
@@ -391,20 +398,20 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 		}
 		t.Infof(0, "incoming libp2p subscription (stateURI: %v)", stateURI)
 
-		writeSub := swarm.NewWritableSubscription(t.host, stateURI, nil, swarm.SubscriptionType_Txs, &writableSubscription{peer})
+		writeSub := newWritableSubscription(peer, stateURI)
 		func() {
 			t.writeSubsByPeerIDMu.Lock()
 			defer t.writeSubsByPeerIDMu.Unlock()
 			if _, exists := t.writeSubsByPeerID[peer.pinfo.ID]; !exists {
-				t.writeSubsByPeerID[peer.pinfo.ID] = make(map[netp2p.Stream]swarm.WritableSubscription)
+				t.writeSubsByPeerID[peer.pinfo.ID] = make(map[netp2p.Stream]prototree.WritableSubscriptionImpl)
 			}
 			t.writeSubsByPeerID[peer.pinfo.ID][stream] = writeSub
 		}()
 
-		fetchHistoryOpts := &swarm.FetchHistoryOpts{} // Fetch all history (@@TODO)
-		t.host.HandleWritableSubscriptionOpened(writeSub, fetchHistoryOpts)
+		fetchHistoryOpts := &prototree.FetchHistoryOpts{} // Fetch all history (@@TODO)
+		t.HandleWritableSubscriptionOpened(stateURI, nil, prototree.SubscriptionType_Txs, writeSub, fetchHistoryOpts)
 
-	case MsgType_Put:
+	case msgType_Tx:
 		defer peer.Close()
 
 		tx, ok := msg.Payload.(tree.Tx)
@@ -412,47 +419,47 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 			t.Errorf("Put message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
-		t.host.HandleTxReceived(tx, peer)
+		t.HandleTxReceived(tx, peer)
 
-	case MsgType_Ack:
+	case msgType_Ack:
 		defer peer.Close()
 
-		ackMsg, ok := msg.Payload.(swarm.AckMsg)
+		ackMsg, ok := msg.Payload.(ackMsg)
 		if !ok {
 			t.Errorf("Ack message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
-		t.host.HandleAckReceived(ackMsg.StateURI, ackMsg.TxID, peer)
+		t.HandleAckReceived(ackMsg.StateURI, ackMsg.TxID, peer)
 
-	case MsgType_ChallengeIdentityRequest:
+	case msgType_ChallengeIdentityRequest:
 		defer peer.Close()
 
-		challengeMsg, ok := msg.Payload.(types.ChallengeMsg)
+		challengeMsg, ok := msg.Payload.(protoauth.ChallengeMsg)
 		if !ok {
-			t.Errorf("MsgType_ChallengeIdentityRequest message: bad payload: (%T) %v", msg.Payload, msg.Payload)
+			t.Errorf("msgType_ChallengeIdentityRequest message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
 
-		err := t.host.HandleChallengeIdentity(challengeMsg, peer)
+		err := t.HandleChallengeIdentity(challengeMsg, peer)
 		if err != nil {
-			t.Errorf("MsgType_ChallengeIdentityRequest: error from verifyAddressHandler: %v", err)
+			t.Errorf("msgType_ChallengeIdentityRequest: error from verifyAddressHandler: %v", err)
 			return
 		}
 
-	case MsgType_FetchRef:
+	case msgType_FetchBlob:
 		defer peer.Close()
 
-		refID, ok := msg.Payload.(types.RefID)
+		refID, ok := msg.Payload.(blob.ID)
 		if !ok {
-			t.Errorf("FetchRef message: bad payload: (%T) %v", msg.Payload, msg.Payload)
+			t.Errorf("FetchBlob message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
-		t.host.HandleFetchRefReceived(refID, peer)
+		t.HandleBlobRequest(refID, peer)
 
-	case MsgType_Private:
+	case msgType_EncryptedTx:
 		defer peer.Close()
 
-		encryptedTx, ok := msg.Payload.(swarm.EncryptedTx)
+		encryptedTx, ok := msg.Payload.(prototree.EncryptedTx)
 		if !ok {
 			t.Errorf("Private message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
@@ -476,9 +483,9 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 			t.Errorf("private tx id does not match")
 			return
 		}
-		t.host.HandleTxReceived(tx, peer)
+		t.HandleTxReceived(tx, peer)
 
-	case MsgType_AnnouncePeers:
+	case msgType_AnnouncePeers:
 		defer peer.Close()
 
 		tuples, ok := msg.Payload.([]swarm.PeerDialInfo)
@@ -493,7 +500,7 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 	}
 }
 
-func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Peer, error) {
+func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.PeerConn, error) {
 	addr, err := ma.NewMultiaddr(dialAddr)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not parse multiaddr '%v'", dialAddr)
@@ -508,7 +515,7 @@ func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Pee
 	return peer, nil
 }
 
-func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<-chan swarm.Peer, error) {
+func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<-chan prototree.TreePeerConn, error) {
 	urlCid, err := cidForString("serve:" + stateURI)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -516,7 +523,7 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<
 
 	ctx, cancel := utils.CombinedContext(ctx, t.chStop)
 
-	ch := make(chan swarm.Peer)
+	ch := make(chan prototree.TreePeerConn)
 	go func() {
 		defer close(ch)
 		defer cancel()
@@ -559,13 +566,13 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<
 	return ch, nil
 }
 
-func (t *transport) ProvidersOfRef(ctx context.Context, refID types.RefID) (<-chan swarm.Peer, error) {
-	refCid, err := cidForString("ref:" + refID.String())
+func (t *transport) ProvidersOfBlob(ctx context.Context, refID blob.ID) (<-chan protoblob.BlobPeerConn, error) {
+	refCid, err := cidForString("blob:" + refID.String())
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	ch := make(chan swarm.Peer)
+	ch := make(chan protoblob.BlobPeerConn)
 	go func() {
 		defer close(ch)
 		for {
@@ -597,7 +604,7 @@ func (t *transport) ProvidersOfRef(ctx context.Context, refID types.RefID) (<-ch
 	return ch, nil
 }
 
-func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan swarm.Peer, error) {
+func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan protoauth.AuthPeerConn, error) {
 	ctx, cancel := utils.CombinedContext(ctx, t.chStop)
 	defer cancel()
 
@@ -607,7 +614,7 @@ func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Addr
 		return nil, err
 	}
 
-	ch := make(chan swarm.Peer)
+	ch := make(chan protoauth.AuthPeerConn)
 
 	go func() {
 		defer close(ch)
@@ -633,7 +640,7 @@ func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Addr
 	return ch, nil
 }
 
-// Periodically announces our repos and objects to the network.
+// Periodically announces our objects to the network.
 func (t *transport) periodicallyAnnounceContent() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -660,7 +667,7 @@ func (t *transport) periodicallyAnnounceContent() {
 
 			wg.Add(1)
 
-			// Announce the URLs we're serving
+			// Announce the state URIs we're serving
 			stateURIs, err := t.controllerHub.KnownStateURIs()
 			if err != nil {
 				t.Errorf("error fetching known state URIs from DB: %v", err)
@@ -700,7 +707,7 @@ func (t *transport) periodicallyAnnounceContent() {
 				go func() {
 					defer wg.Done()
 
-					err := t.AnnounceRef(ctx, refHash)
+					err := t.AnnounceBlob(ctx, refHash)
 					if err != nil {
 						t.Errorf("announce: error: %v", err)
 					}
@@ -740,8 +747,8 @@ func (t *transport) periodicallyAnnounceContent() {
 	}
 }
 
-func (t *transport) AnnounceRef(ctx context.Context, refID types.RefID) error {
-	c, err := cidForString("ref:" + refID.String())
+func (t *transport) AnnounceBlob(ctx context.Context, refID blob.ID) error {
+	c, err := cidForString("blob:" + refID.String())
 	if err != nil {
 		return err
 	}

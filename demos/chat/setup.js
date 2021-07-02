@@ -29,7 +29,7 @@ async function main() {
 async function genesis() {
     // Upload our index.html into the state tree so that the HTTP transport will serve it to browsers.
     let indexHTML = fs.createReadStream('./index.html')
-    let { sha3: indexHTMLSha3 } = await node1Client.storeRef(indexHTML)
+    let { sha3: indexHTMLSha3 } = await node1Client.storeBlob(indexHTML)
 
     // Send the genesis tx (notice that it contains an `index.html` key that references the uploaded file)
     let tx1 = {
@@ -75,7 +75,7 @@ async function genesis() {
                     'Content-Type': 'text/html',
                     'value': {
                         'Content-Type': 'link',
-                        'value': `ref:sha3:${indexHTMLSha3}`,
+                        'value': `blob:sha3:${indexHTMLSha3}`,
                     }
                 }
             }),
@@ -193,7 +193,7 @@ async function genesis() {
 
     // This message has an image attachment
     let memeJPG = fs.createReadStream('./meme.jpg')
-    let { sha3: memeJPGSha3 } = await node1Client.storeRef(memeJPG)
+    let { sha3: memeJPGSha3 } = await node1Client.storeBlob(memeJPG)
 
     let tx7 = {
         stateURI: 'chat.com/room-2837',
@@ -208,7 +208,7 @@ async function genesis() {
                         'Content-Type': 'image/jpg',
                         'value': {
                             'Content-Type': 'link',
-                            'value': `ref:sha3:${memeJPGSha3}`,
+                            'value': `blob:sha3:${memeJPGSha3}`,
                         },
                     },
                 },

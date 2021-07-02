@@ -13,14 +13,14 @@ export default function(redwoodClient, ownAddress) {
         let iconImgPatch = null
 
         if (iconFile) {
-          let { sha3 } = await redwoodClient.storeRef(iconFile)
+          let { sha3 } = await redwoodClient.storeBlob(iconFile)
           let { type } = iconFile
 
           iconImgPatch = {
             'Content-Type': type,
             'value': {
                 'Content-Type': 'link',
-                'value': 'ref:sha3:' + sha3,
+                'value': 'blob:sha3:' + sha3,
             },
           }
       }
@@ -101,7 +101,7 @@ export default function(redwoodClient, ownAddress) {
                         'value': {
                             'src': {
                                 'Content-Type': 'link',
-                                'value': `ref:sha3:${sync9JSSha3}`,
+                                'value': `blob:sha3:${sync9JSSha3}`,
                             }
                         }
                     },
@@ -152,7 +152,7 @@ export default function(redwoodClient, ownAddress) {
                         'value': {
                             'src': {
                                 'Content-Type': 'link',
-                                'value': `ref:sha3:${sync9JSSha3}`,
+                                'value': `blob:sha3:${sync9JSSha3}`,
                             }
                         }
                     },
@@ -184,14 +184,14 @@ export default function(redwoodClient, ownAddress) {
         let attachments = []
         if (!!files && files.length > 0) {
             attachments = (await Promise.all(
-                files.map(file => redwoodClient.storeRef(file).then(refHashes => ({ refHashes, file })))
+                files.map(file => redwoodClient.storeBlob(file).then(refHashes => ({ refHashes, file })))
             )).map(({ refHashes, file }) => ({
                 'Content-Type': file.type,
                 'Content-Length': file.size,
                 'filename': file.name,
                 'value': {
                     'Content-Type': 'link',
-                    'value': 'ref:sha3:' + refHashes.sha3,
+                    'value': 'blob:sha3:' + refHashes.sha3,
                 },
             }))
         }
@@ -215,13 +215,13 @@ export default function(redwoodClient, ownAddress) {
         address = address.toLowerCase()
         let patches = []
         if (photoFile) {
-            let { sha3 } = await redwoodClient.storeRef(photoFile)
+            let { sha3 } = await redwoodClient.storeBlob(photoFile)
             let { type } = photoFile
             patches.push(`.users.${address}.photo = ` + Redwood.utils.JSON.stringify({
                 'Content-Type': type,
                 'value': {
                     'Content-Type': 'link',
-                    'value': 'ref:sha3:' + sha3,
+                    'value': 'blob:sha3:' + sha3,
                 },
             }))
         }

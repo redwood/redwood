@@ -12,10 +12,11 @@ import (
 	"redwood.dev/types"
 )
 
-func Unwrap(node state.Node) (state.Node, state.Keypath, error) {
+// Recurses down through a series of Frame nodes until it finds a non-Frame node
+// and returns it. If maxDepth is exceeded, types.Err404 is returned.
+func FirstNonFrameNode(node state.Node, maxDepth uint64) (state.Node, error) {
 	current := node
-	currentKeypath := node.Keypath()
-	for {
+	for i := uint64(0); i < maxDepth; i++ {
 		switch n := current.(type) {
 		case *Frame:
 			current = n.Node
@@ -23,15 +24,14 @@ func Unwrap(node state.Node) (state.Node, state.Keypath, error) {
 			exists, err := n.Exists(ValueKey)
 			if err != nil {
 				// @@TODO: ??
-				return nil, nil, err
+				return nil, err
 			} else if !exists {
-				return n, currentKeypath, nil
+				return n, nil
 			}
 			current = n.NodeAt(ValueKey, nil)
-			_, currentKeypath = currentKeypath.Shift()
 		}
 	}
-	panic("unreachable")
+	return nil, types.Err404
 }
 
 func GetValueRecursive(val interface{}, keypath state.Keypath, rng *state.Range) (interface{}, bool, error) {
@@ -139,14 +139,16 @@ type LinkType int
 
 const (
 	LinkTypeUnknown LinkType = iota
-	LinkTypeRef
+	LinkTypeBlob
 	LinkTypeState
 	LinkTypeURL // @@TODO
 )
 
 func DetermineLinkType(linkStr string) (LinkType, string) {
-	if strings.HasPrefix(linkStr, "ref:") {
-		return LinkTypeRef, linkStr[len("ref:"):]
+	if strings.HasPrefix(linkStr, "blob:") {
+		return LinkTypeBlob, linkStr[len("blob:"):]
+	} else if strings.HasPrefix(linkStr, "ref:") {
+		return LinkTypeBlob, linkStr[len("ref:"):]
 	} else if strings.HasPrefix(linkStr, "state:") {
 		return LinkTypeState, linkStr[len("state:"):]
 	}

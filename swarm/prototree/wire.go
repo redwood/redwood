@@ -1,4 +1,4 @@
-package swarm
+package prototree
 
 import (
 	"strings"
@@ -64,35 +64,6 @@ func (t SubscriptionType) String() string {
 
 func (t SubscriptionType) Includes(x SubscriptionType) bool {
 	return t&x == x
-}
-
-type AckMsg struct {
-	StateURI string   `json:"stateURI"`
-	TxID     types.ID `json:"txID"`
-}
-
-type ChallengeIdentityResponse struct {
-	Signature           []byte `json:"signature"`
-	EncryptingPublicKey []byte `json:"encryptingPublicKey"`
-}
-
-type FetchRefResponse struct {
-	Header *FetchRefResponseHeader `json:"header,omitempty"`
-	Body   *FetchRefResponseBody   `json:"body,omitempty"`
-}
-
-type FetchRefResponseHeader struct {
-	Missing bool `json:"missing,omitempty"`
-}
-
-type FetchRefResponseBody struct {
-	Data []byte `json:"data"`
-	End  bool   `json:"end"`
-}
-
-type StoreRefResponse struct {
-	SHA1 types.Hash `json:"sha1"`
-	SHA3 types.Hash `json:"sha3"`
 }
 
 type EncryptedTx struct {

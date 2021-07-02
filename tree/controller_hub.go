@@ -17,10 +17,9 @@ type ControllerHub interface {
 	Start() error
 	Close()
 
-	AddTx(tx *Tx, force bool) error
+	AddTx(tx *Tx) error
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
 	FetchTxs(stateURI string, fromTxID types.ID) TxIterator
-	HaveTx(stateURI string, txID types.ID) (bool, error)
 
 	EnsureController(stateURI string) (Controller, error)
 	KnownStateURIs() ([]string, error)
@@ -32,7 +31,7 @@ type ControllerHub interface {
 	IsMember(stateURI string, addr types.Address) (bool, error)
 	Members(stateURI string) ([]types.Address, error)
 
-	RefObjectReader(refID types.RefID) (io.ReadCloser, int64, error)
+	BlobReader(refID blob.ID) (io.ReadCloser, int64, error)
 
 	OnNewState(fn func(tx *Tx, root state.Node, leaves []types.ID))
 }
@@ -132,7 +131,7 @@ var (
 	ErrInvalidPrivateRootKey = errors.New("invalid private root key")
 )
 
-func (m *controllerHub) AddTx(tx *Tx, force bool) error {
+func (m *controllerHub) AddTx(tx *Tx) error {
 	if tx.IsPrivate() {
 		parts := strings.Split(tx.StateURI, "/")
 		if parts[len(parts)-1] != tx.PrivateRootKey() {
@@ -144,7 +143,7 @@ func (m *controllerHub) AddTx(tx *Tx, force bool) error {
 	if err != nil {
 		return err
 	}
-	return ctrl.AddTx(tx, force)
+	return ctrl.AddTx(tx)
 }
 
 func (m *controllerHub) FetchTxs(stateURI string, fromTxID types.ID) TxIterator {
@@ -153,17 +152,6 @@ func (m *controllerHub) FetchTxs(stateURI string, fromTxID types.ID) TxIterator 
 
 func (m *controllerHub) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 	return m.txStore.FetchTx(stateURI, txID)
-}
-
-func (m *controllerHub) HaveTx(stateURI string, txID types.ID) (bool, error) {
-	m.controllersMu.RLock()
-	defer m.controllersMu.RUnlock()
-
-	ctrl := m.controllers[stateURI]
-	if ctrl == nil {
-		return false, nil
-	}
-	return ctrl.HaveTx(txID)
 }
 
 func (m *controllerHub) StateAtVersion(stateURI string, version *types.ID) (state.Node, error) {
@@ -188,8 +176,8 @@ func (m *controllerHub) QueryIndex(stateURI string, version *types.ID, keypath s
 	return ctrl.QueryIndex(version, keypath, indexName, queryParam, rng)
 }
 
-func (m *controllerHub) RefObjectReader(refID types.RefID) (io.ReadCloser, int64, error) {
-	return m.blobStore.Object(refID)
+func (m *controllerHub) BlobReader(refID blob.ID) (io.ReadCloser, int64, error) {
+	return m.blobStore.BlobReader(refID)
 }
 
 func (m *controllerHub) Leaves(stateURI string) ([]types.ID, error) {

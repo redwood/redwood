@@ -1318,7 +1318,7 @@ func (tx *DBNode) CopyToMemory(relKeypath Keypath, rng *Range) (n Node, err erro
 		return nil, ErrInvalidRange
 	}
 
-	mNode := NewMemoryNode().(*MemoryNode)
+	mNode := NewMemoryNode()
 
 	if rootNodeType == NodeTypeValue {
 		v, err := decodeGoValue(rootNodeType, valueType, length, rng, data)
@@ -1564,12 +1564,12 @@ func prettyJSON(x interface{}) string {
 	return string(j)
 }
 
-func (t *VersionedDBTree) BuildIndex(version *types.ID, keypath Keypath, node Node, indexName Keypath, indexer Indexer) (err error) {
+func (t *VersionedDBTree) BuildIndex(version *types.ID, node Node, indexName Keypath, indexer Indexer) (err error) {
 	defer utils.Annotate(&err, "BuildIndex")
 
 	// @@TODO: ensure NodeType is map or slice
 	// @@TODO: don't use a map[][] to count children, put it in Badger
-	index := t.IndexAtVersion(version, keypath, indexName, true)
+	index := t.IndexAtVersion(version, node.Keypath(), indexName, true)
 	defer index.Close()
 
 	iter := node.ChildIterator(nil, true, 10)

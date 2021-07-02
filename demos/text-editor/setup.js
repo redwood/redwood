@@ -31,8 +31,8 @@ async function genesis() {
     // Also upload the sync9 JS code so that we can use it as our merge resolver.
     let indexHTML = fs.createReadStream('./index.html')
     let sync9JS = fs.createReadStream('../../redwood.js/dist/resolver.sync9.redwood.js')
-    let { sha3: indexHTMLSha3 } = await node1Client.storeRef(indexHTML)
-    let { sha3: sync9JSSha3 } = await node1Client.storeRef(sync9JS)
+    let { sha3: indexHTMLSha3 } = await node1Client.storeBlob(indexHTML)
+    let { sha3: sync9JSSha3 } = await node1Client.storeBlob(sync9JS)
 
     // Send the genesis tx (notice that it contains an `index.html` key that references the uploaded file)
     let tx1 = {
@@ -49,7 +49,7 @@ async function genesis() {
                         'value': {
                             'src': {
                                 'Content-Type': 'link',
-                                'value': `ref:sha3:${sync9JSSha3}`,
+                                'value': `blob:sha3:${sync9JSSha3}`,
                             }
                         }
                     }
@@ -58,7 +58,7 @@ async function genesis() {
                     'Content-Type': 'text/html',
                     'value': {
                         'Content-Type': 'link',
-                        'value': `ref:sha3:${indexHTMLSha3}`,
+                        'value': `blob:sha3:${indexHTMLSha3}`,
                     }
                 },
                 'Merge-Type': {

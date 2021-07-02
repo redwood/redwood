@@ -13,6 +13,7 @@ import (
 
 	"redwood.dev/crypto"
 	"redwood.dev/log"
+	"redwood.dev/swarm/protoauth"
 	"redwood.dev/types"
 )
 
@@ -111,7 +112,7 @@ func (s *server) requireAuth(ctx context.Context) error {
 }
 
 func (s *server) Authenticate(authSrv RemoteStore_AuthenticateServer) error {
-	challenge, err := types.GenerateChallengeMsg()
+	challenge, err := protoauth.GenerateChallengeMsg()
 	if err != nil {
 		return err
 	}
@@ -159,44 +160,44 @@ func (s *server) Authenticate(authSrv RemoteStore_AuthenticateServer) error {
 	return err
 }
 
-func (s *server) AddTx(ctx context.Context, req *AddTxRequest) (*AddTxResponse, error) {
+func (s *server) AddMessage(ctx context.Context, req *AddMessageRequest) (*AddMessageResponse, error) {
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, err
 	}
 
-	key := append([]byte("tx:"), req.TxHash[:]...)
+	key := append([]byte("tx:"), req.Id[:]...)
 
 	err := s.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(key, req.TxBytes)
+		return txn.Set(key, req.Data)
 	})
 	if err != nil {
-		s.Errorf("failed to write tx %0x", req.TxHash)
+		s.Errorf("failed to write tx %0x", req.Id)
 		return nil, err
 	}
-	return &AddTxResponse{}, nil
+	return &AddMessageResponse{}, nil
 }
 
-func (s *server) RemoveTx(ctx context.Context, req *RemoveTxRequest) (*RemoveTxResponse, error) {
+func (s *server) RemoveMessage(ctx context.Context, req *RemoveMessageRequest) (*RemoveMessageResponse, error) {
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, err
 	}
 
-	key := append([]byte("tx:"), req.TxHash...)
+	key := append([]byte("tx:"), req.Id...)
 	err := s.db.Update(func(txn *badger.Txn) error {
 		return txn.Delete(key)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &RemoveTxResponse{}, nil
+	return &RemoveMessageResponse{}, nil
 }
 
-func (s *server) FetchTx(ctx context.Context, req *FetchTxRequest) (*FetchTxResponse, error) {
+func (s *server) FetchMessage(ctx context.Context, req *FetchMessageRequest) (*FetchMessageResponse, error) {
 	if err := s.requireAuth(ctx); err != nil {
 		return nil, err
 	}
 
-	key := append([]byte("tx:"), req.TxHash...)
+	key := append([]byte("tx:"), req.Id...)
 
 	var txBytes []byte
 	err := s.db.View(func(txn *badger.Txn) error {
@@ -213,10 +214,10 @@ func (s *server) FetchTx(ctx context.Context, req *FetchTxRequest) (*FetchTxResp
 	if err != nil {
 		return nil, err
 	}
-	return &FetchTxResponse{TxBytes: txBytes}, err
+	return &FetchMessageResponse{Data: txBytes}, err
 }
 
-func (s *server) AllTxs(req *AllTxsRequest, server RemoteStore_AllTxsServer) error {
+func (s *server) AllMessages(req *AllMessagesRequest, server RemoteStore_AllMessagesServer) error {
 	if err := s.requireAuth(server.Context()); err != nil {
 		return err
 	}
@@ -240,7 +241,7 @@ func (s *server) AllTxs(req *AllTxsRequest, server RemoteStore_AllTxsServer) err
 				return err
 			}
 
-			err = server.Send(&AllTxsResponsePacket{TxBytes: txBytes})
+			err = server.Send(&AllMessagesResponsePacket{Data: txBytes})
 			if err != nil {
 				return err
 			}

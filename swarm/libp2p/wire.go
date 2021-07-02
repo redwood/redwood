@@ -8,31 +8,40 @@ import (
 
 	"github.com/pkg/errors"
 
+	"redwood.dev/blob"
 	"redwood.dev/swarm"
+	"redwood.dev/swarm/protoauth"
+	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
 
 type Msg struct {
-	Type    MsgType     `json:"type"`
+	Type    msgType     `json:"type"`
 	Payload interface{} `json:"payload"`
 }
 
-type MsgType string
+type msgType string
 
 const (
-	MsgType_Subscribe                 MsgType = "subscribe"
-	MsgType_Unsubscribe               MsgType = "unsubscribe"
-	MsgType_Put                       MsgType = "put"
-	MsgType_Private                   MsgType = "private"
-	MsgType_Ack                       MsgType = "ack"
-	MsgType_Error                     MsgType = "error"
-	MsgType_ChallengeIdentityRequest  MsgType = "challenge identity"
-	MsgType_ChallengeIdentityResponse MsgType = "challenge identity response"
-	MsgType_FetchRef                  MsgType = "fetch ref"
-	MsgType_FetchRefResponse          MsgType = "fetch ref response"
-	MsgType_AnnouncePeers             MsgType = "announce peers"
+	msgType_Subscribe                 msgType = "subscribe"
+	msgType_Unsubscribe               msgType = "unsubscribe"
+	msgType_Tx                        msgType = "tx"
+	msgType_EncryptedTx               msgType = "encrypted tx"
+	msgType_Ack                       msgType = "ack"
+	msgType_Error                     msgType = "error"
+	msgType_ChallengeIdentityRequest  msgType = "challenge identity"
+	msgType_ChallengeIdentityResponse msgType = "challenge identity response"
+	msgType_FetchBlob                 msgType = "fetch blob"
+	msgType_FetchBlobResponse         msgType = "fetch blob response"
+	msgType_AnnouncePeers             msgType = "announce peers"
 )
+
+type ackMsg struct {
+	StateURI string   `json:"stateURI"`
+	TxID     types.ID `json:"txID"`
+}
 
 func readMsg(r io.Reader) (msg Msg, err error) {
 	size, err := readUint64(r)
@@ -84,14 +93,14 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		return err
 	}
 
-	msg.Type = MsgType(m.Type)
+	msg.Type = msgType(m.Type)
 
 	switch msg.Type {
-	case MsgType_Subscribe:
+	case msgType_Subscribe:
 		url := string(m.PayloadBytes)
 		msg.Payload = url[1 : len(url)-1] // remove quotes
 
-	case MsgType_Put:
+	case msgType_Tx:
 		var tx tree.Tx
 		err := json.Unmarshal(m.PayloadBytes, &tx)
 		if err != nil {
@@ -99,32 +108,32 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		}
 		msg.Payload = tx
 
-	case MsgType_Ack:
-		var payload swarm.AckMsg
+	case msgType_Ack:
+		var payload ackMsg
 		err := json.Unmarshal(m.PayloadBytes, &payload)
 		if err != nil {
 			return err
 		}
 		msg.Payload = payload
 
-	case MsgType_Private:
-		var ep swarm.EncryptedTx
+	case msgType_EncryptedTx:
+		var ep prototree.EncryptedTx
 		err := json.Unmarshal(m.PayloadBytes, &ep)
 		if err != nil {
 			return err
 		}
 		msg.Payload = ep
 
-	case MsgType_ChallengeIdentityRequest:
-		var challenge types.ChallengeMsg
+	case msgType_ChallengeIdentityRequest:
+		var challenge protoauth.ChallengeMsg
 		err := json.Unmarshal(m.PayloadBytes, &challenge)
 		if err != nil {
 			return err
 		}
 		msg.Payload = challenge
 
-	case MsgType_ChallengeIdentityResponse:
-		var resp []swarm.ChallengeIdentityResponse
+	case msgType_ChallengeIdentityResponse:
+		var resp []protoauth.ChallengeIdentityResponse
 		err := json.Unmarshal([]byte(m.PayloadBytes), &resp)
 		if err != nil {
 			return err
@@ -132,23 +141,23 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 
 		msg.Payload = resp
 
-	case MsgType_FetchRef:
-		var refID types.RefID
-		err := json.Unmarshal([]byte(m.PayloadBytes), &refID)
+	case msgType_FetchBlob:
+		var blobID blob.ID
+		err := json.Unmarshal([]byte(m.PayloadBytes), &blobID)
 		if err != nil {
 			return err
 		}
-		msg.Payload = refID
+		msg.Payload = blobID
 
-	case MsgType_FetchRefResponse:
-		var resp swarm.FetchRefResponse
+	case msgType_FetchBlobResponse:
+		var resp protoblob.FetchBlobResponse
 		err := json.Unmarshal([]byte(m.PayloadBytes), &resp)
 		if err != nil {
 			return err
 		}
 		msg.Payload = resp
 
-	case MsgType_AnnouncePeers:
+	case msgType_AnnouncePeers:
 		var peerDialInfos []swarm.PeerDialInfo
 		err := json.Unmarshal([]byte(m.PayloadBytes), &peerDialInfos)
 		if err != nil {

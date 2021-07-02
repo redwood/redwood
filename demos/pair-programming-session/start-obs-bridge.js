@@ -36,14 +36,14 @@ const Braid = require('../../braidjs/braid-src.js')
                     return !uploaded[fullpath] || fs.statSync(fullpath).size !== uploaded[fullpath].size
                 }).map(fullpath => {
                     let file = fs.createReadStream(fullpath)
-                    return Promise.all([ fullpath, braidClient.storeRef(file).then(hashes => hashes.sha3) ])
+                    return Promise.all([ fullpath, braidClient.storeBlob(file).then(hashes => hashes.sha3) ])
                 })
             )).map(([ fullpath, sha3 ]) => {
                 uploaded[fullpath] = { size: fs.statSync(fullpath).size, sha3 }
                 console.log(fullpath, sha3, uploaded[fullpath].size)
                 return `.streams.${braidClient.identity.address}["${path.basename(fullpath)}"] = ` + Braid.utils.JSON.stringify({
                     'Content-Type': 'link',
-                    'value': `ref:sha3:${sha3}`,
+                    'value': `blob:sha3:${sha3}`,
                 })
             })
 

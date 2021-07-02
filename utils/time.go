@@ -39,3 +39,53 @@ func (eb *ExponentialBackoff) Next() time.Duration {
 func (eb *ExponentialBackoff) Wait() {
 	time.Sleep(eb.Next())
 }
+
+func (eb *ExponentialBackoff) Reset() {
+	eb.current = eb.Min
+}
+
+type ExponentialBackoffTicker struct {
+	backoff ExponentialBackoff
+	chTick  chan time.Time
+	chStop  chan struct{}
+	chDone  chan struct{}
+}
+
+func NewExponentialBackoffTicker(min, max time.Duration) *ExponentialBackoffTicker {
+	return &ExponentialBackoffTicker{
+		backoff: ExponentialBackoff{Min: min, Max: max},
+		chTick:  make(chan time.Time),
+		chStop:  make(chan struct{}),
+		chDone:  make(chan struct{}),
+	}
+}
+
+func (t *ExponentialBackoffTicker) Start() {
+	go func() {
+		defer close(t.chDone)
+		for {
+			duration := t.backoff.Next()
+			select {
+			case <-t.chStop:
+				return
+
+			case tick := <-time.After(duration):
+				select {
+				case <-t.chStop:
+					return
+				case t.chTick <- tick:
+				case <-time.After(duration):
+				}
+			}
+		}
+	}()
+}
+
+func (t *ExponentialBackoffTicker) Stop() {
+	close(t.chStop)
+	<-t.chDone
+}
+
+func (t *ExponentialBackoffTicker) Tick() <-chan time.Time {
+	return t.chTick
+}

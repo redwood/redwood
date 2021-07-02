@@ -123,7 +123,7 @@ func (c *client) AddTx(tx *tree.Tx) error {
 	//////////////////
 
 	txHash := tx.Hash()
-	_, err = c.client.AddTx(context.TODO(), &AddTxRequest{TxHash: txHash[:], TxBytes: txBytes})
+	_, err = c.client.AddMessage(context.TODO(), &AddMessageRequest{Id: txHash[:], Data: txBytes})
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func (c *client) AllTxsForStateURI(stateURI string, fromTxID types.ID) tree.TxIt
 		chCancel: make(chan struct{}),
 	}
 
-	resp, err := c.client.AllTxs(context.TODO(), &AllTxsRequest{})
+	resp, err := c.client.AllMessages(context.TODO(), &AllMessagesRequest{})
 	if err != nil {
 		return &txIterator{err: err}
 	}
@@ -155,7 +155,7 @@ func (c *client) AllTxsForStateURI(stateURI string, fromTxID types.ID) tree.TxIt
 				return
 			}
 
-			tx, err := c.decodeTx(pkt.TxBytes)
+			tx, err := c.decodeTx(pkt.Data)
 			if err != nil {
 				txIter.err = err
 				return

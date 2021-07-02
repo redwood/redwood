@@ -279,21 +279,21 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
         })
     }
 
-    async function storeRef(file: string | Blob) {
+    async function storeBlob(file: string | Blob) {
         let formData
         if (typeof window !== 'undefined') {
             formData = new FormData()
-            formData.append('ref', file)
+            formData.append('blob', file)
         } else {
             let FormData = require('form-data')
             formData = new FormData()
-            formData.append('ref', file)
+            formData.append('blob', file)
         }
 
         const resp = await wrappedFetch(`/`, {
             method: 'POST',
             headers: {
-                'Ref': 'true',
+                'Blob': 'true',
             },
             body: formData,
         })
@@ -416,7 +416,7 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
         get,
         put,
         ack,
-        storeRef,
+        storeBlob,
         authorize,
         foundPeers,
         close,

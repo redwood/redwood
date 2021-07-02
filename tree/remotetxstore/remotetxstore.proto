@@ -3,14 +3,14 @@ syntax = "proto3";
 
 package redwood;
 
-option go_package = "remotetxstore";
+option go_package = "redwood.dev/tree/remotetxstore";
 
 service RemoteStore {
     rpc Authenticate(stream AuthenticateMessage) returns (stream AuthenticateMessage) {}
-    rpc AddTx(AddTxRequest) returns (AddTxResponse) {}
-    rpc RemoveTx(RemoveTxRequest) returns (RemoveTxResponse) {}
-    rpc FetchTx(FetchTxRequest) returns (FetchTxResponse) {}
-    rpc AllTxs(AllTxsRequest) returns (stream AllTxsResponsePacket) {}
+    rpc AddMessage(AddMessageRequest) returns (AddMessageResponse) {}
+    rpc RemoveMessage(RemoveMessageRequest) returns (RemoveMessageResponse) {}
+    rpc FetchMessage(FetchMessageRequest) returns (FetchMessageResponse) {}
+    rpc AllMessages(AllMessagesRequest) returns (stream AllMessagesResponsePacket) {}
 }
 
 message AuthenticateMessage {
@@ -29,35 +29,40 @@ message AuthenticateMessage {
     oneof payload {
         AuthenticateChallenge authenticateChallenge = 1;
         AuthenticateSignature authenticateSignature = 2;
-        AuthenticateResponse authenticateResponse = 3;
+        AuthenticateResponse  authenticateResponse  = 3;
     }
 }
 
-message AddTxRequest {
-    bytes txHash = 1;
-    bytes txBytes = 2;
+message Key {
+    repeated bytes encryptedKey = 1;
 }
 
-message AddTxResponse {}
-
-message RemoveTxRequest {
-    bytes txHash = 1;
+message AddMessageRequest {
+    bytes id = 1;
+    bytes data = 2;
 }
 
-message RemoveTxResponse {}
+message AddMessageResponse {}
 
-message FetchTxRequest {
-    bytes txHash = 1;
+message RemoveMessageRequest {
+    bytes id = 1;
 }
 
-message FetchTxResponse {
-    bytes txBytes = 1;
+message RemoveMessageResponse {}
+
+message FetchMessageRequest {
+    bytes id = 1;
 }
 
-message AllTxsRequest {}
+message FetchMessageResponse {
+    bytes data = 1;
+}
 
-message AllTxsResponsePacket {
-    bytes txBytes = 1;
+message AllMessagesRequest {}
+
+message AllMessagesResponsePacket {
+    bytes id = 1;
+    bytes data = 2;
 }
 
 

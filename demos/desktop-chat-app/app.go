@@ -29,6 +29,9 @@ import (
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/braidhttp"
 	"redwood.dev/swarm/libp2p"
+	"redwood.dev/swarm/protoauth"
+	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -42,14 +45,20 @@ var app = &appType{
 type appType struct {
 	startStopMu   sync.Mutex
 	started       bool
+	authProto     protoauth.AuthProtocol
+	blobProto     protoblob.BlobProtocol
+	treeProto     prototree.TreeProtocol
+	libp2p        swarm.Transport
+	http          swarm.Transport
 	blobStore     blob.Store
+	peerStore     swarm.PeerStore
 	txStore       tree.TxStore
-	host          swarm.Host
+	controllerHub tree.ControllerHub
+	keyStore      identity.KeyStore
 	db            *state.DBTree
 	httpRPCServer *http.Server
 	chLoggedOut   chan struct{}
 
-	keyStore    identity.KeyStore
 	password    string
 	profileRoot string
 	profileName string
@@ -64,6 +73,7 @@ type appType struct {
 func (app *appType) Start() (err error) {
 	app.startStopMu.Lock()
 	defer app.startStopMu.Unlock()
+
 	if app.started {
 		return errors.New("already started")
 	}
@@ -108,26 +118,26 @@ func (app *appType) Start() (err error) {
 	}
 	app.db = db
 
-	var (
-		txStore       = tree.NewBadgerTxStore(cfg.TxDBRoot())
-		keyStore      = identity.NewBadgerKeyStore(db, identity.DefaultScryptParams)
-		blobStore     = blob.NewDiskStore(cfg.RefDataRoot(), db)
-		peerStore     = swarm.NewPeerStore(db)
-		controllerHub = tree.NewControllerHub(cfg.StateDBRoot(), txStore, blobStore)
-	)
-	app.keyStore = keyStore
+	app.txStore = tree.NewBadgerTxStore(cfg.TxDBRoot())
+	app.keyStore = identity.NewBadgerKeyStore(db, identity.DefaultScryptParams)
+	app.blobStore = blob.NewDiskStore(cfg.BlobDataRoot(), db)
+	app.peerStore = swarm.NewPeerStore(db)
+	app.controllerHub = tree.NewControllerHub(cfg.StateDBRoot(), app.txStore, app.blobStore)
 
-	err = blobStore.Start()
+	err = app.blobStore.Start()
 	if err != nil {
 		return err
 	}
-	app.blobStore = blobStore
 
-	err = txStore.Start()
+	err = app.txStore.Start()
 	if err != nil {
 		return err
 	}
-	app.txStore = txStore
+
+	err = app.controllerHub.Start()
+	if err != nil {
+		return err
+	}
 
 	var transports []swarm.Transport
 
@@ -140,19 +150,19 @@ func (app *appType) Start() (err error) {
 			bootstrapPeers = append(bootstrapPeers, bp.DialAddresses...)
 		}
 
-		libp2pTransport := libp2p.NewTransport(
+		app.libp2p = libp2p.NewTransport(
 			cfg.P2PTransport.ListenPort,
 			cfg.P2PTransport.ReachableAt,
 			bootstrapPeers,
-			controllerHub,
-			keyStore,
-			blobStore,
-			peerStore,
+			app.controllerHub,
+			app.keyStore,
+			app.blobStore,
+			app.peerStore,
 		)
 		if err != nil {
 			return err
 		}
-		transports = append(transports, libp2pTransport)
+		transports = append(transports, app.libp2p)
 	}
 
 	if cfg.HTTPTransport.Enabled {
@@ -162,14 +172,14 @@ func (app *appType) Start() (err error) {
 		// var cookieSecret [32]byte
 		// copy(cookieSecret[:], []byte(cfg.HTTPTransport.CookieSecret))
 
-		httpTransport, err := braidhttp.NewTransport(
+		app.http, err = braidhttp.NewTransport(
 			cfg.HTTPTransport.ListenHost,
 			cfg.HTTPTransport.ReachableAt,
 			cfg.HTTPTransport.DefaultStateURI,
-			controllerHub,
-			keyStore,
-			blobStore,
-			peerStore,
+			app.controllerHub,
+			app.keyStore,
+			app.blobStore,
+			app.peerStore,
 			// cookieSecret,
 			tlsCertFilename,
 			tlsKeyFilename,
@@ -178,7 +188,7 @@ func (app *appType) Start() (err error) {
 		if err != nil {
 			return err
 		}
-		transports = append(transports, httpTransport)
+		transports = append(transports, app.http)
 	}
 
 	err = app.keyStore.Unlock(app.password, app.mnemonic)
@@ -189,19 +199,27 @@ func (app *appType) Start() (err error) {
 		app.txStore.Close()
 		app.txStore = nil
 
+		app.controllerHub.Close()
+		app.controllerHub = nil
+
 		app.db.Close()
 		app.db = nil
 		return err
 	}
 
-	app.host, err = swarm.NewHost(transports, controllerHub, keyStore, blobStore, peerStore, cfg)
-	if err != nil {
-		return err
+	for _, transport := range transports {
+		err := transport.Start()
+		if err != nil {
+			return err
+		}
 	}
 
-	err = app.host.Start()
-	if err != nil {
-		panic(err)
+	app.authProto = protoauth.NewAuthProtocol(transports, app.keyStore, app.peerStore)
+	app.blobProto = protoblob.NewBlobProtocol(transports, app.blobStore)
+	app.treeProto = prototree.NewTreeProtocol(transports, app.controllerHub, app.txStore, app.keyStore, app.peerStore, cfg)
+
+	for _, proto := range []swarm.Protocol{app.authProto, app.blobProto, app.treeProto} {
+		proto.Start()
 	}
 
 	pkger.Walk("/frontend/build", func(path string, info os.FileInfo, err error) error {
@@ -209,22 +227,22 @@ func (app *appType) Start() (err error) {
 		return nil
 	})
 
-	if cfg.HTTPRPC.Enabled {
-		rwRPC := rpc.NewHTTPServer(app.host)
-		server := &HTTPRPCServer{rwRPC, keyStore}
-		app.httpRPCServer, err = rpc.StartHTTPRPC(server, cfg.HTTPRPC)
-		if err != nil {
-			return err
-		}
-		app.Infof(0, "http rpc server listening on %v", cfg.HTTPRPC.ListenHost)
+	// if cfg.HTTPRPC.Enabled {
+	rwRPC := rpc.NewHTTPServer(app.authProto, app.blobProto, app.treeProto, app.peerStore, app.keyStore, app.controllerHub)
+	server := &HTTPRPCServer{rwRPC, app.keyStore}
+	app.httpRPCServer, err = rpc.StartHTTPRPC(server, cfg.HTTPRPC)
+	if err != nil {
+		return err
 	}
+	app.Infof(0, "http rpc server listening on %v", cfg.HTTPRPC.ListenHost)
+	// }
 
 	for _, bootstrapPeer := range cfg.Node.BootstrapPeers {
 		bootstrapPeer := bootstrapPeer
 		go func() {
 			app.Infof(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
 			for _, dialAddr := range bootstrapPeer.DialAddresses {
-				app.host.AddPeer(swarm.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr})
+				app.peerStore.AddDialInfos([]swarm.PeerDialInfo{{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr}})
 			}
 		}()
 	}
@@ -235,11 +253,11 @@ func (app *appType) Start() (err error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			if app == nil || app.host == nil {
+			if app == nil {
 				return
 			}
 
-			sub, err := app.host.Subscribe(ctx, stateURI, 0, nil, nil)
+			sub, err := app.treeProto.Subscribe(ctx, stateURI, 0, nil, nil)
 			if err != nil {
 				app.Errorf("error subscribing to %v: %v", stateURI, err)
 				continue
@@ -262,11 +280,11 @@ func (app *appType) Start() (err error) {
 func (app *appType) monitorForDMs() {
 	time.Sleep(5 * time.Second)
 
-	sub := app.host.SubscribeStateURIs()
+	sub := app.treeProto.SubscribeStateURIs()
 	defer sub.Close()
 
 	for {
-		stateURI, err := sub.Read()
+		stateURI, err := sub.Read(context.TODO())
 		if err != nil {
 			app.Debugf("error in stateURI subscription: %v", err)
 			return
@@ -279,7 +297,7 @@ func (app *appType) monitorForDMs() {
 			roomKeypath := state.Keypath("rooms").Pushs(roomName)
 			var found bool
 			func() {
-				dmState, err := app.host.Controllers().StateAtVersion("chat.local/dms", nil)
+				dmState, err := app.controllerHub.StateAtVersion("chat.local/dms", nil)
 				if err != nil {
 					panic(err)
 				}
@@ -291,7 +309,7 @@ func (app *appType) monitorForDMs() {
 				}
 			}()
 			if !found {
-				err := app.host.SendTx(context.TODO(), tree.Tx{
+				err := app.treeProto.SendTx(context.TODO(), tree.Tx{
 					StateURI: "chat.local/dms",
 					Patches: []tree.Patch{{
 						Keypath: roomKeypath,
@@ -328,9 +346,6 @@ func (app *appType) Close() {
 	app.txStore.Close()
 	app.txStore = nil
 
-	app.host.Close()
-	app.host = nil
-
 	app.db.Close()
 	app.db = nil
 }
@@ -342,7 +357,7 @@ func (app *appType) initializeLocalState() {
 	}
 	defer f.Close()
 
-	_, sync9Sha3, err := app.host.AddRef(f)
+	_, sync9Sha3, err := app.blobStore.StoreBlob(f)
 	if err != nil {
 		panic(err)
 	}
@@ -355,7 +370,7 @@ func (app *appType) initializeLocalState() {
 			"value": M{
 				"src": M{
 					"Content-Type": "link",
-					"value":        "ref:sha3:" + sync9Sha3.Hex(),
+					"value":        "blob:sha3:" + sync9Sha3.Hex(),
 				},
 			},
 		},
@@ -378,7 +393,7 @@ func (app *appType) initializeLocalState() {
 			"value": M{
 				"src": M{
 					"Content-Type": "link",
-					"value":        "ref:sha3:" + sync9Sha3.Hex(),
+					"value":        "blob:sha3:" + sync9Sha3.Hex(),
 				},
 			},
 		},
@@ -401,7 +416,7 @@ func (app *appType) initializeLocalState() {
 			"value": M{
 				"src": M{
 					"Content-Type": "link",
-					"value":        "ref:sha3:" + sync9Sha3.Hex(),
+					"value":        "blob:sha3:" + sync9Sha3.Hex(),
 				},
 			},
 		},
@@ -420,7 +435,7 @@ func (app *appType) initializeLocalState() {
 }
 
 func (app *appType) ensureState(stateURI string, checkKeypath string, value interface{}) {
-	node, err := app.host.StateAtVersion(stateURI, nil)
+	node, err := app.controllerHub.StateAtVersion(stateURI, nil)
 	if err != nil && errors.Cause(err) != tree.ErrNoController {
 		panic(err)
 	} else if err == nil {
@@ -436,7 +451,7 @@ func (app *appType) ensureState(stateURI string, checkKeypath string, value inte
 		node.Close()
 	}
 
-	err = app.host.SendTx(context.Background(), tree.Tx{
+	err = app.treeProto.SendTx(context.Background(), tree.Tx{
 		StateURI: stateURI,
 		ID:       tree.GenesisTxID,
 		Patches:  []tree.Patch{{Val: value}},
@@ -447,7 +462,7 @@ func (app *appType) ensureState(stateURI string, checkKeypath string, value inte
 }
 
 func (a *appType) ensureDataDirs(config *config.Config) error {
-	err := os.MkdirAll(config.RefDataRoot(), 0777|os.ModeDir)
+	err := os.MkdirAll(config.BlobDataRoot(), 0777|os.ModeDir)
 	if err != nil {
 		return err
 	}
@@ -509,7 +524,7 @@ func (app *appType) inputLoop() {
 			continue
 		}
 
-		err := cmd.Handler(parts[1:], app.host)
+		err := cmd.Handler(parts[1:], app)
 		if err != nil {
 			app.Error(err)
 		}
@@ -518,35 +533,57 @@ func (app *appType) inputLoop() {
 
 var replCommands = map[string]struct {
 	HelpText string
-	Handler  func(args []string, host swarm.Host) error
+	Handler  func(args []string, app *appType) error
 }{
+	"mnemonic": {
+		"show your identity's mnemonic",
+		func(args []string, app *appType) error {
+			m, err := app.keyStore.Mnemonic()
+			if err != nil {
+				return err
+			}
+			app.Debugf("mnemonic: %v", m)
+			return nil
+		},
+	},
 	"libp2pid": {
-		"list your libp2p peer ID",
-		func(args []string, host swarm.Host) error {
-			peerID := host.Transport("libp2p").(interface{ Libp2pPeerID() string }).Libp2pPeerID()
-			host.Debugf("libp2p peer ID: %v", peerID)
+		"show your libp2p peer ID",
+		func(args []string, app *appType) error {
+			if app.libp2p == nil {
+				return errors.New("libp2p is disabled")
+			}
+			peerID := app.libp2p.(interface{ Libp2pPeerID() string }).Libp2pPeerID()
+			app.Debugf("libp2p peer ID: %v", peerID)
 			return nil
 		},
 	},
 	"subscribe": {
 		"subscribe",
-		func(args []string, host swarm.Host) error {
+		func(args []string, app *appType) error {
 			if len(args) < 1 {
 				return errors.New("missing argument: state URI")
 			}
+
 			stateURI := args[0]
-			sub, err := host.Subscribe(context.Background(), stateURI, swarm.SubscriptionType_Txs, nil, &swarm.FetchHistoryOpts{FromTxID: tree.GenesisTxID})
+
+			sub, err := app.treeProto.Subscribe(
+				context.Background(),
+				stateURI,
+				prototree.SubscriptionType_Txs,
+				nil,
+				&prototree.FetchHistoryOpts{FromTxID: tree.GenesisTxID},
+			)
 			if err != nil {
 				return err
 			}
-			defer sub.Close()
+			sub.Close()
 			return nil
 		},
 	},
 	"stateuris": {
 		"list all known state URIs",
-		func(args []string, host swarm.Host) error {
-			stateURIs, err := host.Controllers().KnownStateURIs()
+		func(args []string, app *appType) error {
+			stateURIs, err := app.controllerHub.KnownStateURIs()
 			if err != nil {
 				return err
 			}
@@ -562,13 +599,13 @@ var replCommands = map[string]struct {
 	},
 	"state": {
 		"print the current state tree",
-		func(args []string, host swarm.Host) error {
+		func(args []string, app *appType) error {
 			if len(args) < 1 {
 				return errors.New("missing argument: state URI")
 			}
 
 			stateURI := args[0]
-			node, err := host.Controllers().StateAtVersion(stateURI, nil)
+			node, err := app.controllerHub.StateAtVersion(stateURI, nil)
 			if err != nil {
 				return err
 			}
@@ -589,13 +626,13 @@ var replCommands = map[string]struct {
 	},
 	"blobs": {
 		"list all blobs",
-		func(args []string, host swarm.Host) error {
-			blobIDsNeeded, err := host.BlobStore().RefsNeeded()
+		func(args []string, app *appType) error {
+			blobIDsNeeded, err := app.blobStore.BlobsNeeded()
 			if err != nil {
 				return err
 			}
 
-			blobIDs, err := host.BlobStore().AllHashes()
+			blobIDs, err := app.blobStore.AllHashes()
 			if err != nil {
 				return err
 			}
@@ -623,7 +660,7 @@ var replCommands = map[string]struct {
 	},
 	"peers": {
 		"list all known peers",
-		func(args []string, host swarm.Host) error {
+		func(args []string, app *appType) error {
 			fmtPeerRow := func(addr, dialAddr string, lastContact, lastFailure time.Time, failures uint64, remainingBackoff time.Duration, stateURIs []string) []string {
 				if len(addr) > 10 {
 					addr = addr[:4] + "..." + addr[len(addr)-4:]
@@ -648,7 +685,7 @@ var replCommands = map[string]struct {
 			}
 
 			var data [][]string
-			for _, peer := range host.Peers() {
+			for _, peer := range app.peerStore.Peers() {
 				for _, addr := range peer.Addresses() {
 					data = append(data, fmtPeerRow(addr.Hex(), peer.DialInfo().DialAddr, peer.LastContact(), peer.LastFailure(), peer.Failures(), peer.RemainingBackoff(), peer.StateURIs().Slice()))
 				}
@@ -689,41 +726,41 @@ var replCommands = map[string]struct {
 	},
 	"addpeer": {
 		"add a peer",
-		func(args []string, host swarm.Host) error {
+		func(args []string, app *appType) error {
 			if len(args) < 2 {
 				return errors.New("requires 2 arguments: addpeer <transport> <dial addr>")
 			}
-			host.AddPeer(swarm.PeerDialInfo{args[0], args[1]})
+			app.peerStore.AddDialInfos([]swarm.PeerDialInfo{{args[0], args[1]}})
 			return nil
 		},
 	},
 	"rmallpeers": {
 		"remove all peers",
-		func(args []string, host swarm.Host) error {
+		func(args []string, app *appType) error {
 			var toDelete []swarm.PeerDialInfo
-			for _, peer := range host.Peers() {
+			for _, peer := range app.peerStore.Peers() {
 				toDelete = append(toDelete, peer.DialInfo())
 			}
-			host.RemovePeers(toDelete)
+			app.peerStore.RemovePeers(toDelete)
 			return nil
 		},
 	},
 	"rmunverifiedpeers": {
 		"remove peers who haven't been verified",
-		func(args []string, host swarm.Host) error {
+		func(args []string, app *appType) error {
 			var toDelete []swarm.PeerDialInfo
-			for _, peer := range host.Peers() {
+			for _, peer := range app.peerStore.Peers() {
 				if len(peer.Addresses()) == 0 {
 					toDelete = append(toDelete, peer.DialInfo())
 				}
 			}
-			host.RemovePeers(toDelete)
+			app.peerStore.RemovePeers(toDelete)
 			return nil
 		},
 	},
 	"rmfailedpeers": {
 		"remove peers with more than a certain number of failures",
-		func(args []string, host swarm.Host) error {
+		func(args []string, app *appType) error {
 			if len(args) < 1 {
 				return errors.New("requires 1 argument: rmfailedpeers <number of failures>")
 			}
@@ -734,18 +771,18 @@ var replCommands = map[string]struct {
 			}
 
 			var toDelete []swarm.PeerDialInfo
-			for _, peer := range host.Peers() {
+			for _, peer := range app.peerStore.Peers() {
 				if peer.Failures() > uint64(num) {
 					toDelete = append(toDelete, peer.DialInfo())
 				}
 			}
-			host.RemovePeers(toDelete)
+			app.peerStore.RemovePeers(toDelete)
 			return nil
 		},
 	},
 	"set": {
 		"set a keypath in a state tree",
-		func(args []string, host swarm.Host) error {
+		func(args []string, app *appType) error {
 			if len(args) < 3 {
 				return errors.New("requires 3 arguments: set <state URI> <keypath> <JSON value>")
 			}
@@ -757,7 +794,7 @@ var replCommands = map[string]struct {
 			if err != nil {
 				return err
 			}
-			err = host.SendTx(context.TODO(), tree.Tx{
+			err = app.treeProto.SendTx(context.TODO(), tree.Tx{
 				ID:       types.RandomID(),
 				StateURI: stateURI,
 				Patches: []tree.Patch{{

@@ -17,9 +17,13 @@ import (
 
 	"redwood.dev/config"
 	"redwood.dev/crypto"
+	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
+	"redwood.dev/swarm/protoauth"
+	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -53,13 +57,30 @@ func StartHTTPRPC(svc interface{}, config *config.HTTPRPCConfig) (*http.Server, 
 
 type HTTPServer struct {
 	log.Logger
-	host swarm.Host
+	authProto     protoauth.AuthProtocol
+	blobProto     protoblob.BlobProtocol
+	treeProto     prototree.TreeProtocol
+	peerStore     swarm.PeerStore
+	keyStore      identity.KeyStore
+	controllerHub tree.ControllerHub
 }
 
-func NewHTTPServer(host swarm.Host) *HTTPServer {
+func NewHTTPServer(
+	authProto protoauth.AuthProtocol,
+	blobProto protoblob.BlobProtocol,
+	treeProto prototree.TreeProtocol,
+	peerStore swarm.PeerStore,
+	keyStore identity.KeyStore,
+	controllerHub tree.ControllerHub,
+) *HTTPServer {
 	return &HTTPServer{
-		Logger: log.NewLogger("http rpc"),
-		host:   host,
+		Logger:        log.NewLogger("http rpc"),
+		authProto:     authProto,
+		blobProto:     blobProto,
+		treeProto:     treeProto,
+		peerStore:     peerStore,
+		keyStore:      keyStore,
+		controllerHub: controllerHub,
 	}
 }
 
@@ -73,22 +94,24 @@ type (
 	SubscribeResponse struct{}
 )
 
-func (s *HTTPServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *SubscribeResponse) error {
-	if args.StateURI == "" {
+func (s *HTTPServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *SubscribeResponse) (err error) {
+	if s.treeProto == nil {
+		return types.ErrUnsupported
+	} else if args.StateURI == "" {
 		return errors.New("missing StateURI")
 	}
 
 	ctx, _ := context.WithTimeout(context.Background(), 15*time.Second)
 
-	var subscriptionType swarm.SubscriptionType
+	var subscriptionType prototree.SubscriptionType
 	if args.Txs {
-		subscriptionType |= swarm.SubscriptionType_Txs
+		subscriptionType |= prototree.SubscriptionType_Txs
 	}
 	if args.States {
-		subscriptionType |= swarm.SubscriptionType_States
+		subscriptionType |= prototree.SubscriptionType_States
 	}
 
-	sub, err := s.host.Subscribe(ctx, args.StateURI, subscriptionType, state.Keypath(args.Keypath), nil)
+	sub, err := s.treeProto.Subscribe(ctx, args.StateURI, subscriptionType, state.Keypath(args.Keypath), nil)
 	if err != nil {
 		return errors.Wrap(err, "error subscribing to "+args.StateURI)
 	}
@@ -108,7 +131,11 @@ type (
 )
 
 func (s *HTTPServer) Identities(r *http.Request, args *IdentitiesArgs, resp *IdentitiesResponse) error {
-	identities, err := s.host.Identities()
+	if s.keyStore == nil {
+		return types.ErrUnsupported
+	}
+
+	identities, err := s.keyStore.Identities()
 	if err != nil {
 		return err
 	}
@@ -128,7 +155,10 @@ type (
 )
 
 func (s *HTTPServer) NewIdentity(r *http.Request, args *NewIdentityArgs, resp *NewIdentityResponse) error {
-	identity, err := s.host.NewIdentity(args.Public)
+	if s.keyStore == nil {
+		return types.ErrUnsupported
+	}
+	identity, err := s.keyStore.NewIdentity(args.Public)
 	if err != nil {
 		return err
 	}
@@ -145,7 +175,10 @@ type (
 )
 
 func (s *HTTPServer) AddPeer(r *http.Request, args *AddPeerArgs, resp *AddPeerResponse) error {
-	s.host.AddPeer(swarm.PeerDialInfo{TransportName: args.TransportName, DialAddr: args.DialAddr})
+	if s.peerStore == nil {
+		return types.ErrUnsupported
+	}
+	s.peerStore.AddDialInfos([]swarm.PeerDialInfo{{TransportName: args.TransportName, DialAddr: args.DialAddr}})
 	return nil
 }
 
@@ -157,7 +190,10 @@ type (
 )
 
 func (s *HTTPServer) KnownStateURIs(r *http.Request, args *KnownStateURIsArgs, resp *KnownStateURIsResponse) error {
-	stateURIs, err := s.host.Controllers().KnownStateURIs()
+	if s.controllerHub == nil {
+		return types.ErrUnsupported
+	}
+	stateURIs, err := s.controllerHub.KnownStateURIs()
 	if err != nil {
 		return err
 	}
@@ -173,7 +209,10 @@ type (
 )
 
 func (s *HTTPServer) SendTx(r *http.Request, args *SendTxArgs, resp *SendTxResponse) error {
-	return s.host.SendTx(context.Background(), args.Tx)
+	if s.treeProto == nil {
+		return types.ErrUnsupported
+	}
+	return s.treeProto.SendTx(context.Background(), args.Tx)
 }
 
 type (
@@ -186,7 +225,10 @@ type (
 )
 
 func (s *HTTPServer) PrivateTreeMembers(r *http.Request, args *PrivateTreeMembersArgs, resp *PrivateTreeMembersResponse) error {
-	members, err := s.host.Controllers().Members(args.StateURI)
+	if s.controllerHub == nil {
+		return types.ErrUnsupported
+	}
+	members, err := s.controllerHub.Members(args.StateURI)
 	if err != nil {
 		return err
 	}
@@ -216,7 +258,10 @@ type (
 )
 
 func (s *HTTPServer) Peers(r *http.Request, args *PeersArgs, resp *PeersResponse) error {
-	for _, peer := range s.host.Peers() {
+	if s.peerStore == nil {
+		return types.ErrUnsupported
+	}
+	for _, peer := range s.peerStore.Peers() {
 		var identities []PeerIdentity
 		for _, addr := range peer.Addresses() {
 			sigpubkey, encpubkey := peer.PublicKeys(addr)
@@ -272,7 +317,7 @@ func (mw *whitelistMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		responseHex := r.Header.Get("Response")
 		if responseHex == "" {
 			// Wants challenge
-			challenge, err := types.GenerateChallengeMsg()
+			challenge, err := protoauth.GenerateChallengeMsg()
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

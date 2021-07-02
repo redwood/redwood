@@ -20,9 +20,9 @@ async function genesis() {
     let indexHTML = fs.createReadStream('./index.html')
     let recordHTML = fs.createReadStream('./record.html')
     let playHTML = fs.createReadStream('./play.html')
-    let { sha3: indexHTMLSha3 } = await braidClient.storeRef(indexHTML)
-    let { sha3: recordHTMLSha3 } = await braidClient.storeRef(recordHTML)
-    let { sha3: playHTMLSha3 } = await braidClient.storeRef(playHTML)
+    let { sha3: indexHTMLSha3 } = await braidClient.storeBlob(indexHTML)
+    let { sha3: recordHTMLSha3 } = await braidClient.storeBlob(recordHTML)
+    let { sha3: playHTMLSha3 } = await braidClient.storeBlob(playHTML)
 
     // Send genesis tx
     let tx = {
@@ -35,21 +35,21 @@ async function genesis() {
                     'Content-Type': 'text/html',
                     'value': {
                         'Content-Type': 'link',
-                        'value': `ref:sha3:${indexHTMLSha3}`,
+                        'value': `blob:sha3:${indexHTMLSha3}`,
                     }
                 },
                 'record.html': {
                     'Content-Type': 'text/html',
                     'value': {
                         'Content-Type': 'link',
-                        'value': `ref:sha3:${recordHTMLSha3}`,
+                        'value': `blob:sha3:${recordHTMLSha3}`,
                     }
                 },
                 'play.html': {
                     'Content-Type': 'text/html',
                     'value': {
                         'Content-Type': 'link',
-                        'value': `ref:sha3:${playHTMLSha3}`,
+                        'value': `blob:sha3:${playHTMLSha3}`,
                     }
                 },
                 'Validator': {

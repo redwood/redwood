@@ -33,6 +33,9 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
+	"redwood.dev/swarm/protoauth"
+	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/tree/nelson"
 	"redwood.dev/types"
@@ -40,6 +43,10 @@ import (
 )
 
 type transport struct {
+	protoauth.BaseAuthTransport
+	protoblob.BaseBlobTransport
+	prototree.BaseTreeTransport
+
 	log.Logger
 	chStop chan struct{}
 
@@ -63,6 +70,10 @@ type transport struct {
 	keyStore  identity.KeyStore
 	blobStore blob.Store
 }
+
+var _ prototree.TreeTransport = (*transport)(nil)
+var _ protoblob.BlobTransport = (*transport)(nil)
+var _ protoauth.AuthTransport = (*transport)(nil)
 
 const (
 	TransportName string = "braidhttp"
@@ -162,9 +173,12 @@ func (t *transport) Start() error {
 	go func() {
 		if !t.devMode {
 			t.srv = &http.Server{
-				Addr:      t.listenAddr,
-				Handler:   utils.UnrestrictedCors(t),
-				TLSConfig: &tls.Config{},
+				Addr:    t.listenAddr,
+				Handler: utils.UnrestrictedCors(t),
+				TLSConfig: &tls.Config{
+					MinVersion: tls.VersionTLS13,
+					MaxVersion: tls.VersionTLS13,
+				},
 			}
 			err := t.srv.ListenAndServeTLS(t.tlsCertFilename, t.tlsKeyFilename)
 			if err != nil {
@@ -284,8 +298,8 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "POST":
-		if r.Header.Get("Ref") == "true" {
-			t.servePostRef(w, r)
+		if r.Header.Get("Blob") == "true" {
+			t.servePostBlob(w, r)
 		}
 
 	case "ACK":
@@ -312,7 +326,7 @@ func (t *transport) serveChallengeIdentityResponse(w http.ResponseWriter, r *htt
 	}
 
 	peer := t.makePeerConn(w, nil, "", address)
-	err = t.host.HandleChallengeIdentity([]byte(challengeMsg), peer)
+	err = t.HandleChallengeIdentity([]byte(challengeMsg), peer)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -322,7 +336,7 @@ func (t *transport) serveChallengeIdentityResponse(w http.ResponseWriter, r *htt
 // Respond to a request from another node that wants us to issue them an identity
 // challenge.  This is used with browser nodes which we cannot reach out to directly.
 func (t *transport) serveChallengeIdentity(w http.ResponseWriter, r *http.Request, sessionID types.ID) {
-	challenge, err := types.GenerateChallengeMsg()
+	challenge, err := protoauth.GenerateChallengeMsg()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -376,9 +390,9 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 	var (
 		stateURI         string
 		keypath          string
-		subscriptionType swarm.SubscriptionType
-		fetchHistoryOpts *swarm.FetchHistoryOpts
-		innerWriteSub    swarm.WritableSubscriptionImpl
+		subscriptionType prototree.SubscriptionType
+		fetchHistoryOpts *prototree.FetchHistoryOpts
+		writeSub         prototree.WritableSubscriptionImpl
 	)
 	if r.URL.Path == "/ws" {
 		stateURI = r.URL.Query().Get("state_uri")
@@ -402,7 +416,7 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 				http.Error(w, "could not parse From-Tx header", http.StatusBadRequest)
 				return
 			}
-			fetchHistoryOpts = &swarm.FetchHistoryOpts{FromTxID: fromTxID}
+			fetchHistoryOpts = &prototree.FetchHistoryOpts{FromTxID: fromTxID}
 		}
 
 		t.Infof(0, "incoming websocket subscription (address: %v, state uri: %v)", address, stateURI)
@@ -412,20 +426,10 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		wsWriteSub := &wsWritableSubscription{
-			messages: utils.NewMailbox(300), // @@TODO: configurable?
-			peerConn: t.makePeerConn(nil, nil, "", address),
-			conn:     conn,
-		}
-		wsWriteSub.onAddMultiplexedSubscription =
-			func(stateURI string, keypath state.Keypath, subscriptionType swarm.SubscriptionType, fetchHistoryOpts *swarm.FetchHistoryOpts) {
-				writeSub := swarm.NewWritableSubscription(t.host, stateURI, keypath, subscriptionType, wsWriteSub)
-				t.host.HandleWritableSubscriptionOpened(writeSub, fetchHistoryOpts)
-			}
-		innerWriteSub = wsWriteSub
+		wsWriteSub := newWSWritableSubscription(stateURI, conn, t.makePeerConn(nil, nil, "", address), t)
+		writeSub = wsWriteSub
 
 		wsWriteSub.start()
-		defer wsWriteSub.close()
 
 	} else {
 		// Make sure that the writer supports flushing
@@ -458,7 +462,7 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 				http.Error(w, "could not parse From-Tx header", http.StatusBadRequest)
 				return
 			}
-			fetchHistoryOpts = &swarm.FetchHistoryOpts{FromTxID: fromTxID}
+			fetchHistoryOpts = &prototree.FetchHistoryOpts{FromTxID: fromTxID}
 		}
 
 		// Set the headers related to event streaming
@@ -467,26 +471,18 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 		w.Header().Set("Connection", "keep-alive")
 		w.Header().Set("Transfer-Encoding", "chunked")
 
-		httpWriteSub := &httpWritableSubscription{t.makePeerConn(w, f, "", address), subscriptionType}
-		innerWriteSub = httpWriteSub
-
-		// Listen to the closing of the http connection via the CloseNotifier
-		notify := w.(http.CloseNotifier).CloseNotify()
-		go func() {
-			defer httpWriteSub.Close()
-			<-notify
-			t.Infof(0, "http subscription closed (%v)", stateURI)
-		}()
+		httpWriteSub := newHTTPWritableSubscription(stateURI, t.makePeerConn(w, f, "", address), subscriptionType, t)
+		writeSub = httpWriteSub
 
 		f.Flush()
 	}
 
-	writeSub := swarm.NewWritableSubscription(t.host, stateURI, state.Keypath(keypath), subscriptionType, innerWriteSub)
-	t.host.HandleWritableSubscriptionOpened(writeSub, fetchHistoryOpts)
+	defer writeSub.Close()
+	t.HandleWritableSubscriptionOpened(stateURI, state.Keypath(keypath), subscriptionType, writeSub, fetchHistoryOpts)
 
 	// Block until the subscription is canceled so that net/http doesn't close the connection
 	select {
-	case <-writeSub.Done():
+	case <-writeSub.Closed():
 	case <-t.chStop:
 	}
 }
@@ -668,7 +664,7 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 		} else {
 			var exists bool
-			node, exists, err = nelson.Seek(node, keypath, t.controllerHub)
+			node, exists, err = nelson.Seek(node, keypath, t.controllerHub, t.blobStore)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 				return
@@ -687,7 +683,7 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			node, anyMissing, err = nelson.Resolve(node, t.controllerHub)
+			node, anyMissing, err = nelson.Resolve(node, t.controllerHub, t.blobStore)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 				return
@@ -797,13 +793,13 @@ func (t *transport) serveAck(w http.ResponseWriter, r *http.Request, address typ
 
 	stateURI := r.Header.Get("State-URI")
 
-	t.host.HandleAckReceived(stateURI, txID, t.makePeerConn(w, nil, "", address))
+	t.HandleAckReceived(stateURI, txID, t.makePeerConn(w, nil, "", address))
 }
 
 func (t *transport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, address types.Address) {
 	t.Infof(0, "incoming private tx")
 
-	var encryptedTx swarm.EncryptedTx
+	var encryptedTx prototree.EncryptedTx
 	err := json.NewDecoder(r.Body).Decode(&encryptedTx)
 	if err != nil {
 		panic(err)
@@ -829,11 +825,11 @@ func (t *transport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 
-	t.host.HandleTxReceived(tx, t.makePeerConn(w, nil, "", address))
+	t.HandleTxReceived(tx, t.makePeerConn(w, nil, "", address))
 }
 
-func (t *transport) servePostRef(w http.ResponseWriter, r *http.Request) {
-	t.Infof(0, "incoming ref")
+func (t *transport) servePostBlob(w http.ResponseWriter, r *http.Request) {
+	t.Infof(0, "incoming blob")
 
 	err := r.ParseForm()
 	if err != nil {
@@ -841,20 +837,20 @@ func (t *transport) servePostRef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, _, err := r.FormFile("ref")
+	file, _, err := r.FormFile("blob")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
-	sha1Hash, sha3Hash, err := t.blobStore.StoreObject(file)
+	sha1Hash, sha3Hash, err := t.blobStore.StoreBlob(file)
 	if err != nil {
-		t.Errorf("error storing ref: %v", err)
+		t.Errorf("error storing blob: %v", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	utils.RespondJSON(w, swarm.StoreRefResponse{SHA1: sha1Hash, SHA3: sha3Hash})
+	utils.RespondJSON(w, StoreBlobResponse{SHA1: sha1Hash, SHA3: sha3Hash})
 }
 
 func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, address types.Address) {
@@ -986,21 +982,17 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, address 
 	////////////////////////////////
 
 	peer := t.makePeerConn(w, nil, "", address)
-	go t.host.HandleTxReceived(tx, peer)
+	go t.HandleTxReceived(tx, peer)
 }
 
-func (t *transport) SetHost(h swarm.Host) {
-	t.host = h
-}
-
-func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Peer, error) {
+func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.PeerConn, error) {
 	if dialAddr == t.ownURL || strings.HasPrefix(dialAddr, "localhost") {
 		return nil, errors.WithStack(swarm.ErrPeerIsSelf)
 	}
 	return t.makePeerConn(nil, nil, dialAddr, types.Address{}), nil
 }
 
-func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_ <-chan swarm.Peer, err error) {
+func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_ <-chan prototree.TreePeerConn, err error) {
 	defer utils.WithStack(&err)
 
 	providers, err := t.tryFetchProvidersFromAuthoritativeHost(stateURI)
@@ -1014,7 +1006,7 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_
 		providers = append(providers, "http://"+u.Hostname())
 	}
 
-	ch := make(chan swarm.Peer)
+	ch := make(chan prototree.TreePeerConn)
 	go func() {
 		defer close(ch)
 		for _, providerURL := range providers {
@@ -1071,15 +1063,15 @@ func (t *transport) tryFetchProvidersFromAuthoritativeHost(stateURI string) ([]s
 	return providers, nil
 }
 
-func (t *transport) ProvidersOfRef(ctx context.Context, refID types.RefID) (<-chan swarm.Peer, error) {
+func (t *transport) ProvidersOfBlob(ctx context.Context, blobID blob.ID) (<-chan protoblob.BlobPeerConn, error) {
 	return nil, types.ErrUnimplemented
 }
 
-func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan swarm.Peer, error) {
+func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan protoauth.AuthPeerConn, error) {
 	return nil, types.ErrUnimplemented
 }
 
-func (t *transport) AnnounceRef(ctx context.Context, refID types.RefID) error {
+func (t *transport) AnnounceBlob(ctx context.Context, blobID blob.ID) error {
 	return types.ErrUnimplemented
 }
 

@@ -5,7 +5,7 @@ export interface RedwoodClient {
     get: ({ stateURI, keypath, raw }: GetParams) => Promise<any>
     subscribe: (params: SubscribeParams) => Promise<UnsubscribeFunc>
     put: (tx: Tx) => Promise<void>
-    storeRef: (file: string | Blob) => Promise<StoreRefResponse>
+    storeBlob: (file: string | Blob) => Promise<StoreBlobResponse>
     authorize: () => Promise<void>
     peers: () => Promise<PeersMap>
     rpc?: RPCClient
@@ -29,7 +29,7 @@ export interface Transport {
     get?: ({ stateURI, keypath, raw }: GetParams) => Promise<any>
     put: (tx: Tx) => Promise<void>
     ack: (txID: string) => Promise<void>
-    storeRef?: (file: string | Blob) => Promise<StoreRefResponse>
+    storeBlob?: (file: string | Blob) => Promise<StoreBlobResponse>
     authorize: (identity: Identity) => Promise<void>
     foundPeers: (peers: PeersMap) => void
     transportName: () => string
@@ -110,7 +110,7 @@ export interface GetParams {
     raw?: boolean
 }
 
-export interface StoreRefResponse {
+export interface StoreBlobResponse {
     sha1: string
     sha3: string
 }

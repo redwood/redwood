@@ -5,7 +5,7 @@ require('isomorphic-fetch')
 
 async function main() {
     let sync9JS = fs.createReadStream('./sync9.js')
-    let { sha3 } = await storeRef(sync9JS)
+    let { sha3 } = await storeBlob(sync9JS)
     console.log('sync9 sha3:', sha3)
 
     // let tx = {
@@ -39,14 +39,14 @@ async function main() {
     process.exit(0)
 }
 
-async function storeRef(file) {
+async function storeBlob(file) {
     let formData
     formData = new FormData()
-    formData.append('ref', file)
+    formData.append('blob', file)
 
     const resp = await fetch('http://localhost:8080', {
         method:  'PUT',
-        headers: { 'Ref': 'true' },
+        headers: { 'Blob': 'true' },
         body:    formData,
     })
 

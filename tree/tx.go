@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	prototypes "github.com/gogo/protobuf/types"
 	proto "github.com/golang/protobuf/proto"
-	any "github.com/golang/protobuf/ptypes/any"
 
 	"redwood.dev/internal/pb"
 	"redwood.dev/state"
@@ -174,7 +174,7 @@ func (tx Tx) MarshalProto() ([]byte, error) {
 		patches[i] = &pb.Patch{
 			Keypath: []byte(patch.Keypath),
 			Range:   rng,
-			Value:   &any.Any{Value: valueBytes},
+			Value:   &prototypes.Any{Value: valueBytes},
 		}
 	}
 

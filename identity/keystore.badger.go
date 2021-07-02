@@ -118,6 +118,16 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 	return ks.saveUser(ks.unlockedUser, password)
 }
 
+func (ks *BadgerKeyStore) Mnemonic() (string, error) {
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
+
+	if ks.unlockedUser == nil {
+		return "", errors.WithStack(ErrLocked)
+	}
+	return ks.unlockedUser.Mnemonic, nil
+}
+
 func (ks *BadgerKeyStore) Identities() (_ []Identity, err error) {
 	defer utils.WithStack(&err)
 

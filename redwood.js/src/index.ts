@@ -13,7 +13,7 @@ import {
     SubscribeParams,
     GetParams,
     Tx,
-    StoreRefResponse,
+    StoreBlobResponse,
 } from './types'
 
 export * from './types'
@@ -110,13 +110,13 @@ function createPeer(opts: CreatePeerOptions) {
         }
     }
 
-    async function storeRef(file: string | Blob) {
+    async function storeBlob(file: string | Blob) {
         for (let tpt of transports) {
-            if (tpt.storeRef) {
-                return tpt.storeRef(file)
+            if (tpt.storeBlob) {
+                return tpt.storeBlob(file)
             }
         }
-        throw new Error('no transports support storeRef')
+        throw new Error('no transports support storeBlob')
     }
 
     async function close() {
@@ -130,7 +130,7 @@ function createPeer(opts: CreatePeerOptions) {
         get,
         subscribe,
         put,
-        storeRef,
+        storeBlob,
         authorize,
         peers,
         rpc: rpcEndpoint ? rpcTransport({ endpoint: rpcEndpoint }) : undefined,

@@ -10,4 +10,5 @@ var (
 	ErrUnimplemented = errors.New("unimplemented")
 	ErrConnection    = errors.New("connection failed")
 	ErrClosed        = errors.New("closed")
+	ErrUnsupported   = errors.New("unsupported")
 )
