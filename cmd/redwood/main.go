@@ -28,6 +28,9 @@ import (
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/braidhttp"
 	"redwood.dev/swarm/libp2p"
+	"redwood.dev/swarm/protoauth"
+	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/utils"
 )
@@ -155,6 +158,21 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		controllerHub = tree.NewControllerHub(config.StateDBRoot(), txStore, blobStore)
 	)
 
+	err = blobStore.Start()
+	if err != nil {
+		return err
+	}
+
+	err = txStore.Start()
+	if err != nil {
+		return err
+	}
+
+	err = controllerHub.Start()
+	if err != nil {
+		return err
+	}
+
 	var transports []swarm.Transport
 
 	if config.P2PTransport.Enabled {
@@ -200,9 +218,35 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		transports = append(transports, httpTransport)
 	}
 
-	host, err := swarm.NewHost(transports, controllerHub, keyStore, blobStore, peerStore, config)
+	err = keyStore.Unlock(string(passwordBytes), "")
 	if err != nil {
+		blobStore.Close()
+		blobStore = nil
+
+		txStore.Close()
+		txStore = nil
+
+		controllerHub.Close()
+		controllerHub = nil
+
+		db.Close()
+		db = nil
 		return err
+	}
+
+	for _, transport := range transports {
+		err := transport.Start()
+		if err != nil {
+			return err
+		}
+	}
+
+	authProto := protoauth.NewAuthProtocol(transports, keyStore, peerStore)
+	blobProto := protoblob.NewBlobProtocol(transports, blobStore)
+	treeProto := prototree.NewTreeProtocol(transports, controllerHub, txStore, keyStore, peerStore, config)
+
+	for _, proto := range []swarm.Protocol{authProto, blobProto, treeProto} {
+		proto.Start()
 	}
 
 	err = keyStore.Unlock(string(passwordBytes), "")
@@ -210,26 +254,8 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		return err
 	}
 
-	err = blobStore.Start()
-	if err != nil {
-		return err
-	}
-	defer blobStore.Close()
-
-	err = txStore.Start()
-	if err != nil {
-		return err
-	}
-	defer txStore.Close()
-
-	err = host.Start()
-	if err != nil {
-		return err
-	}
-	defer host.Close()
-
 	if config.HTTPRPC.Enabled {
-		httpRPC := rpc.NewHTTPServer(host)
+		httpRPC := rpc.NewHTTPServer(authProto, blobProto, treeProto, peerStore, keyStore, controllerHub)
 
 		rpcServer, err := rpc.StartHTTPRPC(httpRPC, config.HTTPRPC)
 		if err != nil {
@@ -243,7 +269,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		go func() {
 			logger.Infof(0, "connecting to bootstrap peer: %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
 			for _, dialAddr := range bootstrapPeer.DialAddresses {
-				host.AddPeer(swarm.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr})
+				peerStore.AddDialInfos([]swarm.PeerDialInfo{{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr}})
 			}
 		}()
 	}
@@ -257,7 +283,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			sub, err := host.Subscribe(ctx, stateURI, swarm.SubscriptionType_Txs, nil, nil)
+			sub, err := treeProto.Subscribe(ctx, stateURI, prototree.SubscriptionType_Txs, nil, nil)
 			if err != nil {
 				logger.Errorf("error subscribing to %v: %v", stateURI, err)
 				continue
@@ -274,7 +300,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 			for {
 				select {
 				case <-time.After(3 * time.Second):
-					stateURIs, err := host.Controllers().KnownStateURIs()
+					stateURIs, err := controllerHub.KnownStateURIs()
 					if err != nil {
 						continue
 					}
@@ -282,7 +308,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 					termUI.Sidebar.SetStateURIs(stateURIs)
 					states := make(map[string]string)
 					for _, stateURI := range stateURIs {
-						node, err := host.Controllers().StateAtVersion(stateURI, nil)
+						node, err := controllerHub.StateAtVersion(stateURI, nil)
 						if err != nil {
 							panic(err)
 						}
@@ -297,7 +323,7 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		<-termUI.Done()
 
 	} else {
-		go inputLoop(host)
+		go inputLoop(controllerHub, peerStore)
 		<-utils.AwaitInterrupt()
 	}
 	return nil
@@ -321,7 +347,7 @@ func ensureDataDirs(config *config.Config) error {
 	return nil
 }
 
-func inputLoop(host swarm.Host) {
+func inputLoop(controllerHub tree.ControllerHub, peerStore swarm.PeerStore) {
 	fmt.Println("Type \"help\" for a list of commands.")
 	fmt.Println()
 
@@ -366,7 +392,7 @@ func inputLoop(host swarm.Host) {
 			continue
 		}
 
-		err := cmd.Handler(context.Background(), parts[1:], host)
+		err := cmd.Handler(context.Background(), parts[1:], controllerHub, peerStore)
 		if err != nil {
 			logger.Error(err)
 		}
@@ -375,12 +401,12 @@ func inputLoop(host swarm.Host) {
 
 var replCommands = map[string]struct {
 	HelpText string
-	Handler  func(ctx context.Context, args []string, host swarm.Host) error
+	Handler  func(ctx context.Context, args []string, controllerHub tree.ControllerHub, peerStore swarm.PeerStore) error
 }{
 	"stateuris": {
 		"list all known state URIs",
-		func(ctx context.Context, args []string, host swarm.Host) error {
-			stateURIs, err := host.Controllers().KnownStateURIs()
+		func(ctx context.Context, args []string, controllerHub tree.ControllerHub, peerStore swarm.PeerStore) error {
+			stateURIs, err := controllerHub.KnownStateURIs()
 			if err != nil {
 				return err
 			}
@@ -396,13 +422,13 @@ var replCommands = map[string]struct {
 	},
 	"state": {
 		"print the current state tree",
-		func(ctx context.Context, args []string, host swarm.Host) error {
+		func(ctx context.Context, args []string, controllerHub tree.ControllerHub, peerStore swarm.PeerStore) error {
 			if len(args) < 1 {
 				return errors.New("missing argument: state URI")
 			}
 
 			stateURI := args[0]
-			node, err := host.Controllers().StateAtVersion(stateURI, nil)
+			node, err := controllerHub.StateAtVersion(stateURI, nil)
 			if err != nil {
 				return err
 			}
@@ -423,11 +449,11 @@ var replCommands = map[string]struct {
 	},
 	"peers": {
 		"list all known peers",
-		func(ctx context.Context, args []string, host swarm.Host) error {
+		func(ctx context.Context, args []string, controllerHub tree.ControllerHub, peerStore swarm.PeerStore) error {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
 			defer w.Flush()
 			fmt.Fprintf(w, "Addrs\tDial info\tLast contact\tLast failure\tFailures\n")
-			for _, peer := range host.Peers() {
+			for _, peer := range peerStore.Peers() {
 				var lastContact, lastFailure string
 				if !peer.LastContact().IsZero() {
 					lastContact = time.Now().Sub(peer.LastContact()).String()
@@ -442,11 +468,11 @@ var replCommands = map[string]struct {
 	},
 	"addpeer": {
 		"list all known peers",
-		func(ctx context.Context, args []string, host swarm.Host) error {
+		func(ctx context.Context, args []string, controllerHub tree.ControllerHub, peerStore swarm.PeerStore) error {
 			if len(args) < 2 {
 				return errors.New("requires two arguments: addpeer <transport> <dial addr>")
 			}
-			host.AddPeer(swarm.PeerDialInfo{args[0], args[1]})
+			peerStore.AddDialInfos([]swarm.PeerDialInfo{{args[0], args[1]}})
 			return nil
 		},
 	},

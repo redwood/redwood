@@ -12,8 +12,9 @@ require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/ethereum/go-ethereum v1.9.25
 	github.com/gizak/termui/v3 v3.1.0
-	github.com/gogo/protobuf v1.3.1
-	github.com/golang/protobuf v1.4.2
+	github.com/gogo/protobuf v1.3.2
+	github.com/golang/protobuf v1.5.2
+	github.com/google/protobuf v3.17.3+incompatible // indirect
 	github.com/gorilla/rpc v1.2.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
@@ -41,15 +42,19 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
 	github.com/urfave/cli v1.22.1
+	github.com/whyrusleeping/mdns v0.0.0-20190826153040-b9b60ed33aa9 // indirect
 	github.com/yhat/wsutil v0.0.0-20170731153501-1d66fa95c997
 	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036
 	go.uber.org/multierr v1.5.0
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-	golang.org/x/net v0.0.0-20200822124328-c89045814202
-	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
-	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
-	google.golang.org/grpc v1.31.1
+	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
+	golang.org/x/oauth2 v0.0.0-20210628180205-a41e5a781914
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	google.golang.org/genproto v0.0.0-20210701191553-46259e63a0a9 // indirect
+	google.golang.org/grpc v1.39.0
+	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+	k8s.io/client-go v0.18.3 // indirect
 	rogchap.com/v8go v0.5.0
 )
 

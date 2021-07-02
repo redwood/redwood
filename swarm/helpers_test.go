@@ -10,8 +10,6 @@ import (
 	"redwood.dev/utils"
 )
 
-var NewPeerPool = newPeerPool
-
 const (
 	PeerState_Unknown = peerState_Unknown
 	PeerState_Strike  = peerState_Strike

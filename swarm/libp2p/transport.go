@@ -640,7 +640,7 @@ func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Addr
 	return ch, nil
 }
 
-// Periodically announces our repos and objects to the network.
+// Periodically announces our objects to the network.
 func (t *transport) periodicallyAnnounceContent() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -667,7 +667,7 @@ func (t *transport) periodicallyAnnounceContent() {
 
 			wg.Add(1)
 
-			// Announce the URLs we're serving
+			// Announce the state URIs we're serving
 			stateURIs, err := t.controllerHub.KnownStateURIs()
 			if err != nil {
 				t.Errorf("error fetching known state URIs from DB: %v", err)

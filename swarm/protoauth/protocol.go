@@ -16,6 +16,7 @@ import (
 )
 
 //go:generate mockery --name AuthProtocol --output ./mocks/ --case=underscore
+
 type AuthProtocol interface {
 	swarm.Protocol
 	PeersClaimingAddress(ctx context.Context, address types.Address) <-chan AuthPeerConn
@@ -39,7 +40,6 @@ type AuthPeerConn interface {
 
 type authProtocol struct {
 	log.Logger
-	*utils.Process
 
 	keyStore         identity.KeyStore
 	peerStore        swarm.PeerStore

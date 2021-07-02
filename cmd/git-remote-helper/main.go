@@ -228,7 +228,7 @@ func fetch(client *braidhttp.LightClient, headCommitHash string) error {
 		defer stateReader.Close()
 
 		var commit Commit
-		commit.Files = state.NewMemoryNode().(*state.MemoryNode)
+		commit.Files = state.NewMemoryNode()
 		err = json.NewDecoder(stateReader).Decode(&commit)
 		if err != nil {
 			return err

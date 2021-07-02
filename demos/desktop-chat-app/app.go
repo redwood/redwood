@@ -54,12 +54,11 @@ type appType struct {
 	peerStore     swarm.PeerStore
 	txStore       tree.TxStore
 	controllerHub tree.ControllerHub
-	host          swarm.Host
+	keyStore      identity.KeyStore
 	db            *state.DBTree
 	httpRPCServer *http.Server
 	chLoggedOut   chan struct{}
 
-	keyStore    identity.KeyStore
 	password    string
 	profileRoot string
 	profileName string
@@ -228,15 +227,15 @@ func (app *appType) Start() (err error) {
 		return nil
 	})
 
-	if cfg.HTTPRPC.Enabled {
-		rwRPC := rpc.NewHTTPServer(app.authProto, app.blobProto, app.treeProto, app.peerStore, app.keyStore, app.controllerHub)
-		server := &HTTPRPCServer{rwRPC, app.keyStore}
-		app.httpRPCServer, err = rpc.StartHTTPRPC(server, cfg.HTTPRPC)
-		if err != nil {
-			return err
-		}
-		app.Infof(0, "http rpc server listening on %v", cfg.HTTPRPC.ListenHost)
+	// if cfg.HTTPRPC.Enabled {
+	rwRPC := rpc.NewHTTPServer(app.authProto, app.blobProto, app.treeProto, app.peerStore, app.keyStore, app.controllerHub)
+	server := &HTTPRPCServer{rwRPC, app.keyStore}
+	app.httpRPCServer, err = rpc.StartHTTPRPC(server, cfg.HTTPRPC)
+	if err != nil {
+		return err
 	}
+	app.Infof(0, "http rpc server listening on %v", cfg.HTTPRPC.ListenHost)
+	// }
 
 	for _, bootstrapPeer := range cfg.Node.BootstrapPeers {
 		bootstrapPeer := bootstrapPeer
