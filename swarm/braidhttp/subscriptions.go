@@ -125,7 +125,7 @@ func (sub *httpWritableSubscription) StateURI() string {
 
 func (sub *httpWritableSubscription) Close() error {
 	sub.closeOnce.Do(func() {
-		sub.stream.Close()
+		sub.peerConn.Close()
 		close(sub.chClosed)
 	})
 	return nil
