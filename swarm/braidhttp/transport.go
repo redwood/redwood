@@ -298,8 +298,8 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "POST":
-		if r.Header.Get("Ref") == "true" {
-			t.servePostRef(w, r)
+		if r.Header.Get("Blob") == "true" {
+			t.servePostBlob(w, r)
 		}
 
 	case "ACK":
@@ -828,8 +828,8 @@ func (t *transport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, a
 	t.HandleTxReceived(tx, t.makePeerConn(w, nil, "", address))
 }
 
-func (t *transport) servePostRef(w http.ResponseWriter, r *http.Request) {
-	t.Infof(0, "incoming ref")
+func (t *transport) servePostBlob(w http.ResponseWriter, r *http.Request) {
+	t.Infof(0, "incoming blob")
 
 	err := r.ParseForm()
 	if err != nil {
@@ -837,7 +837,7 @@ func (t *transport) servePostRef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, _, err := r.FormFile("ref")
+	file, _, err := r.FormFile("blob")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

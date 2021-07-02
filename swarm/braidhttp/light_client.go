@@ -276,7 +276,7 @@ func (c *LightClient) StoreBlob(file io.Reader) (StoreBlobResponse, error) {
 	w := multipart.NewWriter(&buf)
 
 	h := make(textproto.MIMEHeader)
-	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, "ref", "ref"))
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, "blob", "blob"))
 	h.Set("Content-Type", "application/octet-stream")
 	fileWriter, err := w.CreatePart(h)
 	if err != nil {

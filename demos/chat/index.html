@@ -294,7 +294,7 @@
     async function sendMessage() {
         var attachment = null
         if (inputFile.files.length > 0) {
-            var refHashes = await braidClient.storeRef(inputFile.files[0])
+            var refHashes = await braidClient.storeBlob(inputFile.files[0])
             attachment = {
                 'Content-Type': inputFile.files[0].type,
                 'value': {

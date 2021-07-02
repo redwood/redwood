@@ -484,7 +484,7 @@ func pushRef(destRefName string, commitId *git.Oid, client *braidhttp.LightClien
 			// 	Range:   &state.Range{0, 0},
 			// 	Val:     commitId.String(),
 			// }, {
-			Keypath: branchKeypath.Push(state.Keypath("workstate")),
+			Keypath: branchKeypath.Push(state.Keypath("worktree")),
 			Val: map[string]interface{}{
 				"Content-Type": "link",
 				"value":        "state:" + StateURI + "/commits/" + commitId.String() + "/files",
@@ -692,7 +692,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightCl
 			}
 			setValueAtKeypath(fileTree, strings.Split(uploaded.name, "/"), M{
 				"Content-Type": "link",
-				"value":        "blob:sha1:" + uploaded.hash.Hex()[:40],
+				"value":        "blob:sha1:" + uploaded.hash.Hex(),
 				"mode":         int(uploaded.mode),
 			}, true)
 		}
@@ -705,7 +705,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightCl
 			Keypath: state.Keypath("refs/heads/master"),
 			Val: map[string]interface{}{
 				"HEAD": commitHash,
-				"workstate": map[string]interface{}{
+				"worktree": map[string]interface{}{
 					"Content-Type": "link",
 					"value":        "state:somegitprovider.org/gitdemo/commits/" + commitHash + "/files",
 				},

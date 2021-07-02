@@ -89,7 +89,7 @@ async function genesisChat() {
 
 async function genesisCodeEditor() {
     let sync9JS = fs.createReadStream('../../braidjs/dist/sync9-otto.js')
-    let { sha3: sync9JSSha3 } = await braidClient.storeRef(sync9JS)
+    let { sha3: sync9JSSha3 } = await braidClient.storeBlob(sync9JS)
 
     await braidClient.put({
         stateURI: 'p2pair.local/editor',
