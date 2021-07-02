@@ -307,6 +307,7 @@ func (bp *blobProtocol) handleBlobRequest(blobID blob.ID, peer BlobPeerConn) {
 		}
 		return
 	}
+	defer blobReader.Close()
 
 	err = peer.SendBlobHeader(true)
 	if err != nil {
