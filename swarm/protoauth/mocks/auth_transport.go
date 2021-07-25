@@ -6,6 +6,8 @@ import (
 	context "context"
 
 	mock "github.com/stretchr/testify/mock"
+	process "redwood.dev/process"
+
 	protoauth "redwood.dev/swarm/protoauth"
 
 	swarm "redwood.dev/swarm"
@@ -18,9 +20,71 @@ type AuthTransport struct {
 	mock.Mock
 }
 
-// Close provides a mock function with given fields:
-func (_m *AuthTransport) Close() {
+// Autoclose provides a mock function with given fields:
+func (_m *AuthTransport) Autoclose() {
 	_m.Called()
+}
+
+// Close provides a mock function with given fields:
+func (_m *AuthTransport) Close() error {
+	ret := _m.Called()
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func() error); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Ctx provides a mock function with given fields:
+func (_m *AuthTransport) Ctx() context.Context {
+	ret := _m.Called()
+
+	var r0 context.Context
+	if rf, ok := ret.Get(0).(func() context.Context); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(context.Context)
+		}
+	}
+
+	return r0
+}
+
+// Done provides a mock function with given fields:
+func (_m *AuthTransport) Done() <-chan struct{} {
+	ret := _m.Called()
+
+	var r0 <-chan struct{}
+	if rf, ok := ret.Get(0).(func() <-chan struct{}); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(<-chan struct{})
+		}
+	}
+
+	return r0
+}
+
+// Go provides a mock function with given fields: name, fn
+func (_m *AuthTransport) Go(name string, fn func(context.Context)) <-chan struct{} {
+	ret := _m.Called(name, fn)
+
+	var r0 <-chan struct{}
+	if rf, ok := ret.Get(0).(func(string, func(context.Context)) <-chan struct{}); ok {
+		r0 = rf(name, fn)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(<-chan struct{})
+		}
+	}
+
+	return r0
 }
 
 // Name provides a mock function with given fields:
@@ -32,6 +96,22 @@ func (_m *AuthTransport) Name() string {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// NewChild provides a mock function with given fields: ctx, name
+func (_m *AuthTransport) NewChild(ctx context.Context, name string) *process.Process {
+	ret := _m.Called(ctx, name)
+
+	var r0 *process.Process
+	if rf, ok := ret.Get(0).(func(context.Context, string) *process.Process); ok {
+		r0 = rf(ctx, name)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*process.Process)
+		}
 	}
 
 	return r0
@@ -86,6 +166,36 @@ func (_m *AuthTransport) PeersClaimingAddress(ctx context.Context, address types
 	}
 
 	return r0, r1
+}
+
+// ProcessTree provides a mock function with given fields:
+func (_m *AuthTransport) ProcessTree() map[string]interface{} {
+	ret := _m.Called()
+
+	var r0 map[string]interface{}
+	if rf, ok := ret.Get(0).(func() map[string]interface{}); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]interface{})
+		}
+	}
+
+	return r0
+}
+
+// SpawnChild provides a mock function with given fields: ctx, child
+func (_m *AuthTransport) SpawnChild(ctx context.Context, child process.Spawnable) error {
+	ret := _m.Called(ctx, child)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, process.Spawnable) error); ok {
+		r0 = rf(ctx, child)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // Start provides a mock function with given fields:

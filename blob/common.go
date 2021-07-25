@@ -22,6 +22,8 @@ type Store interface {
 	MarkBlobsAsNeeded(refs []ID)
 	OnBlobsNeeded(fn func(refs []ID))
 	OnBlobsSaved(fn func())
+
+	DebugPrint()
 }
 
 type ID struct {

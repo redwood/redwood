@@ -112,7 +112,11 @@ func newHTTPWritableSubscription(
 	notify := peerConn.stream.Writer.(http.CloseNotifier).CloseNotify()
 	go func() {
 		defer sub.Close()
-		<-notify
+		select {
+		case <-sub.chClosed:
+			return
+		case <-notify:
+		}
 		transport.Infof(0, "http subscription closed (%v)", stateURI)
 	}()
 
@@ -200,6 +204,10 @@ func (sub *httpWritableSubscription) Put(ctx context.Context, stateURI string, t
 	}
 	sub.stream.Flush()
 	return nil
+}
+
+func (sub httpWritableSubscription) String() string {
+	return sub.DialInfo().TransportName + " " + sub.DialInfo().DialAddr + " (" + sub.stateURI + ")"
 }
 
 const (
@@ -409,4 +417,8 @@ func (sub *wsWritableSubscription) writePendingMessages() error {
 		}
 	}
 	return nil
+}
+
+func (sub wsWritableSubscription) String() string {
+	return sub.DialInfo().TransportName + "-ws " + sub.DialInfo().DialAddr + " (" + sub.stateURI + ")"
 }

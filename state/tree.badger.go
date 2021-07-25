@@ -407,10 +407,10 @@ func (tx *DBNode) UintValue(keypath Keypath) (uint64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
-		return 0, false, nil
+		return 0, true, nil
 	}
-	u, isFloat := val.(uint64)
-	if isFloat {
+	u, isUint := val.(uint64)
+	if isUint {
 		return u, true, nil
 	}
 	return 0, false, nil
@@ -423,10 +423,10 @@ func (tx *DBNode) IntValue(keypath Keypath) (int64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
-		return 0, false, nil
+		return 0, true, nil
 	}
-	i, isFloat := val.(int64)
-	if isFloat {
+	i, isInt := val.(int64)
+	if isInt {
 		return i, true, nil
 	}
 	return 0, false, nil
@@ -439,7 +439,7 @@ func (tx *DBNode) FloatValue(keypath Keypath) (float64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
-		return 0, false, nil
+		return 0, true, nil
 	}
 	f, isFloat := val.(float64)
 	if isFloat {
@@ -455,7 +455,7 @@ func (tx *DBNode) BoolValue(keypath Keypath) (bool, bool, error) {
 	if err != nil {
 		return false, false, err
 	} else if !exists {
-		return false, false, nil
+		return false, true, nil
 	}
 	b, isBool := val.(bool)
 	if isBool {
@@ -471,7 +471,7 @@ func (tx *DBNode) StringValue(keypath Keypath) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	} else if !exists {
-		return "", false, nil
+		return "", true, nil
 	}
 	s, isString := val.(string)
 	if !isString {
@@ -487,7 +487,7 @@ func (tx *DBNode) BytesValue(keypath Keypath) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, err
 	} else if !exists {
-		return nil, false, nil
+		return nil, true, nil
 	}
 	bs, isBytes := val.([]byte)
 	if !isBytes {
@@ -503,7 +503,7 @@ func (tx *DBNode) MapValue(keypath Keypath) (map[string]interface{}, bool, error
 	if err != nil {
 		return nil, false, err
 	} else if !exists {
-		return nil, false, nil
+		return nil, true, nil
 	}
 	m, isMap := val.(map[string]interface{})
 	if !isMap {
@@ -519,7 +519,7 @@ func (tx *DBNode) SliceValue(keypath Keypath) ([]interface{}, bool, error) {
 	if err != nil {
 		return nil, false, err
 	} else if !exists {
-		return nil, false, nil
+		return nil, true, nil
 	}
 	s, isSlice := val.([]interface{})
 	if !isSlice {
@@ -650,6 +650,10 @@ func (node *DBNode) Scan(into interface{}) error {
 			}
 			z := structomancer.NewWithType(rval.Type(), StructTag)
 			for _, fieldName := range z.FieldNames() {
+				if fieldName == "-" {
+					continue
+				}
+
 				ptr, err := z.PointerToFieldV(rval, fieldName)
 				if err != nil {
 					return err

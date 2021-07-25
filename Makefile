@@ -1,11 +1,10 @@
 
 
 .PHONY: build
-build:
+build: redwood.js/dist
 	go build --tags static ./cmd/redwood
 
-.PHONY: build-js
-build-js:
+redwood.js/dist:
 	cd redwood.js && \
 	yarn && \
 	yarn build:main

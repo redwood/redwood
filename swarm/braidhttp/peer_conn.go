@@ -95,7 +95,7 @@ func (p *peerConn) Subscribe(ctx context.Context, stateURI string) (_ prototree.
 func (p *peerConn) Put(ctx context.Context, tx *tree.Tx, state state.Node, leaves []types.ID) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
-	ctx, cancel := utils.CombinedContext(ctx, 10*time.Second, p.t.chStop)
+	ctx, cancel := context.WithTimeout(p.t.Ctx(), 10*time.Second)
 	defer cancel()
 
 	if p.DialInfo().DialAddr == "" {
@@ -146,7 +146,7 @@ func (p *peerConn) Ack(stateURI string, txID types.ID) (err error) {
 		return errors.WithStack(err)
 	}
 
-	ctx, cancel := utils.CombinedContext(10*time.Second, p.t.chStop)
+	ctx, cancel := context.WithTimeout(p.t.Ctx(), 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "ACK", p.DialInfo().DialAddr, bytes.NewReader(txIDBytes))
@@ -172,7 +172,7 @@ func (p *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) (err e
 		return nil
 	}
 
-	ctx, cancel := utils.CombinedContext(10*time.Second, p.t.chStop)
+	ctx, cancel := context.WithTimeout(p.t.Ctx(), 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "AUTHORIZE", p.DialInfo().DialAddr, nil)
@@ -239,7 +239,7 @@ func (p *peerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.Peer
 		return nil
 	}
 
-	ctx, cancel := utils.CombinedContext(ctx, 10*time.Second, p.t.chStop)
+	ctx, cancel := context.WithTimeout(p.t.Ctx(), 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "HEAD", p.DialInfo().DialAddr, nil)

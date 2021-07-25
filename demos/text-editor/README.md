@@ -27,13 +27,13 @@ Then, start the first Redwood node:
 
 ```sh
 $ cd ../demos/text-editor
-$ redwood --config ./node1.redwoodrc --password-file ./password.txt
+$ redwood --config ./node1.redwoodrc --password-file ./password.txt --subscribe docs.redwood.dev/document-3192
 ```
 
 Then, open another terminal and start the second Redwood node:
 
 ```sh
-$ redwood --config ./node2.redwoodrc --password-file ./password.txt
+$ redwood --config ./node2.redwoodrc --password-file ./password.txt --subscribe docs.redwood.dev/document-3192
 ```
 
 Lastly, open another terminal and run the `setup.js` script:

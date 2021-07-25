@@ -2,79 +2,10 @@ package utils
 
 import (
 	"context"
-	"math/rand"
 	"reflect"
 	"sync/atomic"
 	"time"
 )
-
-type PeriodicTask struct {
-	interval time.Duration
-	mailbox  *Mailbox
-	taskFn   func(ctx context.Context)
-	chStop   chan struct{}
-	chDone   chan struct{}
-	i        int
-}
-
-func NewPeriodicTask(interval time.Duration, taskFn func(ctx context.Context)) *PeriodicTask {
-	i := rand.Intn(10000)
-	task := &PeriodicTask{
-		interval,
-		NewMailbox(1),
-		taskFn,
-		make(chan struct{}),
-		make(chan struct{}),
-		i,
-	}
-
-	go func() {
-		defer close(task.chDone)
-
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-task.chStop:
-				return
-			default:
-			}
-
-			select {
-			case <-ticker.C:
-				task.Enqueue()
-
-			case <-task.mailbox.Notify():
-				for {
-					x := task.mailbox.Retrieve()
-					if x == nil {
-						break
-					}
-					func() {
-						ctx, cancel := CombinedContext(task.chStop, interval)
-						defer cancel()
-						task.taskFn(ctx)
-					}()
-				}
-
-			case <-task.chStop:
-				return
-			}
-		}
-	}()
-
-	return task
-}
-
-func (task *PeriodicTask) Enqueue() {
-	task.mailbox.Deliver(struct{}{})
-}
-
-func (task *PeriodicTask) Close() {
-	close(task.chStop)
-	<-task.chDone
-}
 
 // ContextFromChan creates a context that finishes when the provided channel
 // receives or is closed.
@@ -231,6 +162,30 @@ func CombinedContext(signals ...interface{}) (context.Context, context.CancelFun
 		_, _, _ = reflect.Select(cases)
 	}()
 
-	// return ctx, cancel
 	return context.WithCancel(ctx)
+}
+
+type ChanContext chan struct{}
+
+var _ context.Context = ChanContext(nil)
+
+func (ch ChanContext) Deadline() (deadline time.Time, ok bool) {
+	return time.Time{}, false
+}
+
+func (ch ChanContext) Done() <-chan struct{} {
+	return ch
+}
+
+func (ch ChanContext) Err() error {
+	select {
+	case <-ch:
+		return context.Canceled
+	default:
+		return nil
+	}
+}
+
+func (ch ChanContext) Value(key interface{}) interface{} {
+	return nil
 }

@@ -180,3 +180,41 @@ func TestCombinedContext(t *testing.T) {
 		}
 	})
 }
+
+func TestChanContext(t *testing.T) {
+	ctx := utils.ChanContext(make(chan struct{}))
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		close(ctx)
+	}()
+
+	select {
+	case <-time.After(5 * time.Second):
+		t.Fatal("fail")
+	case <-ctx.Done():
+	}
+
+	ctx = utils.ChanContext(make(chan struct{}))
+	ctx2, _ := context.WithTimeout(ctx, 1*time.Second)
+
+	select {
+	case <-time.After(5 * time.Second):
+		t.Fatal("fail")
+	case <-ctx2.Done():
+	}
+
+	ctx = utils.ChanContext(make(chan struct{}))
+	ctx2, cancel := context.WithTimeout(ctx, 3*time.Second)
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		cancel()
+	}()
+
+	select {
+	case <-time.After(5 * time.Second):
+		t.Fatal("fail")
+	case <-ctx2.Done():
+	}
+}

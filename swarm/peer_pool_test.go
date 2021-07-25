@@ -57,6 +57,8 @@ func TestPeerPool(t *testing.T) {
 		atomic.AddUint32(&numProvidersRequests, 1)
 		return chPeers, nil
 	})
+	pool.Start()
+	defer pool.Close()
 
 	activePeers := make(map[swarm.PeerConn]struct{})
 
@@ -224,6 +226,7 @@ func TestPeerPool_Integration(t *testing.T) {
 				chPeers = make(chan swarm.PeerConn)
 				return chPeers, nil
 			})
+			pool.Start()
 			defer pool.Close()
 
 			wg := utils.NewWaitGroupChan(context.TODO())

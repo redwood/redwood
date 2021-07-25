@@ -15,7 +15,7 @@ import (
 )
 
 func TestBadgerKeyStore_ErrorsWhenLocked(t *testing.T) {
-	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.InsecureScryptParams)
 
 	_, err := ks.Identities()
 	require.True(t, errors.Cause(err) == identity.ErrLocked)
@@ -50,7 +50,7 @@ func TestBadgerKeyStore_ErrorsWhenLocked(t *testing.T) {
 
 func TestBadgerKeyStore_Unlock(t *testing.T) {
 	t.Run("empty keystore unlocks successfully", func(t *testing.T) {
-		ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
+		ks := identity.NewBadgerKeyStore(t.TempDir(), identity.InsecureScryptParams)
 		defer ks.Close()
 
 		err := ks.Unlock("password", "")
@@ -58,7 +58,7 @@ func TestBadgerKeyStore_Unlock(t *testing.T) {
 	})
 
 	t.Run("empty keystore creates a default public identity when unlocked", func(t *testing.T) {
-		ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
+		ks := identity.NewBadgerKeyStore(t.TempDir(), identity.InsecureScryptParams)
 		defer ks.Close()
 
 		err := ks.Unlock("password", "")
@@ -94,14 +94,14 @@ func TestBadgerKeyStore_Unlock(t *testing.T) {
 	t.Run("will not unlock with an incorrect password", func(t *testing.T) {
 		dir := t.TempDir()
 		func() {
-			ks := identity.NewBadgerKeyStore(dir, identity.FastScryptParams)
+			ks := identity.NewBadgerKeyStore(dir, identity.InsecureScryptParams)
 			defer ks.Close()
 
 			err := ks.Unlock("password", "")
 			require.NoError(t, err)
 		}()
 
-		ks := identity.NewBadgerKeyStore(dir, identity.FastScryptParams)
+		ks := identity.NewBadgerKeyStore(dir, identity.InsecureScryptParams)
 		err := ks.Unlock("alsdkjflsdkjf", "")
 		require.Error(t, err)
 	})
@@ -110,7 +110,7 @@ func TestBadgerKeyStore_Unlock(t *testing.T) {
 		dir := t.TempDir()
 		var ids []identity.Identity
 		func() {
-			ks := identity.NewBadgerKeyStore(dir, identity.FastScryptParams)
+			ks := identity.NewBadgerKeyStore(dir, identity.InsecureScryptParams)
 			defer ks.Close()
 
 			err := ks.Unlock("password", "")
@@ -131,7 +131,7 @@ func TestBadgerKeyStore_Unlock(t *testing.T) {
 			require.Equal(t, []identity.Identity{id1, id2, id3}, ids)
 		}()
 
-		ks := identity.NewBadgerKeyStore(dir, identity.FastScryptParams)
+		ks := identity.NewBadgerKeyStore(dir, identity.InsecureScryptParams)
 		err := ks.Unlock("password", "")
 		require.NoError(t, err)
 
@@ -144,7 +144,7 @@ func TestBadgerKeyStore_Unlock(t *testing.T) {
 }
 
 func TestBadgerKeyStore_NewIdentity(t *testing.T) {
-	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.InsecureScryptParams)
 	err := ks.Unlock("password", "")
 	require.NoError(t, err)
 
@@ -212,7 +212,7 @@ func TestBadgerKeyStore_NewIdentity(t *testing.T) {
 }
 
 func TestBadgerKeyStore_SignHash(t *testing.T) {
-	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.InsecureScryptParams)
 	err := ks.Unlock("password", "")
 	require.NoError(t, err)
 

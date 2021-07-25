@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useStateTree } from 'redwood-p2p-client/react'
+import { useStateTree } from '@redwood.dev/client/react'
 
 function useJoinedServers() {
     const joinedServersTree = useStateTree('chat.local/servers')

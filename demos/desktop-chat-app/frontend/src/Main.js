@@ -3,7 +3,7 @@ import styled from 'styled-components'
 import { Redirect, useHistory } from 'react-router-dom'
 import { Code as CodeIcon } from '@material-ui/icons'
 
-import { useRedwood } from 'redwood-p2p-client/react'
+import { useRedwood } from '@redwood.dev/client/react'
 import ServerBar from './components/Sidebar/ServerBar'
 import Sidebar from './components/Sidebar'
 import Chat from './components/Chat'

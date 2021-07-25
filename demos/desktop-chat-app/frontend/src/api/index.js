@@ -1,4 +1,4 @@
-import Redwood from 'redwood-p2p-client'
+import Redwood from '@redwood.dev/client'
 
 const sync9JSSha3 = 'dd26e14e5768a5359561bbe22aa148f65c68b7cebb33c60905d5969dd97feb92'
 

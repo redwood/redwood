@@ -4,21 +4,14 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+
+	"redwood.dev/process"
 )
 
 //go:generate mockery --name Transport --output ./mocks/ --case=underscore
 type Transport interface {
-	Start() error
-	Close()
-	Name() string
+	process.Interface
 	NewPeerConn(ctx context.Context, dialAddr string) (PeerConn, error)
-}
-
-//go:generate mockery --name Protocol --output ./mocks/ --case=underscore
-type Protocol interface {
-	Name() string
-	Start()
-	Close()
 }
 
 //go:generate mockery --name PeerConn --output ./mocks/ --case=underscore

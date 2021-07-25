@@ -8,6 +8,7 @@ let node1Identity = Redwood.identity.random()
 let node1Client = Redwood.createPeer({
     identity: node1Identity,
     httpHost: 'http://localhost:8080',
+    rpcEndpoint: 'http://localhost:8081',
     onFoundPeersCallback: (peers) => {}
 })
 
@@ -15,6 +16,7 @@ let node2Identity = Redwood.identity.random()
 let node2Client = Redwood.createPeer({
     identity: node2Identity,
     httpHost: 'http://localhost:9090',
+    rpcEndpoint: 'http://localhost:9091',
     onFoundPeersCallback: (peers) => {}
 })
 
@@ -27,6 +29,9 @@ async function main() {
 }
 
 async function genesis() {
+    await node1Client.rpc.subscribe({ stateURI: 'docs.redwood.dev/document-3192' })
+    await node2Client.rpc.subscribe({ stateURI: 'docs.redwood.dev/document-3192' })
+
     // Upload our index.html into the state tree so that the HTTP transport will serve it to browsers.
     // Also upload the sync9 JS code so that we can use it as our merge resolver.
     let indexHTML = fs.createReadStream('./index.html')

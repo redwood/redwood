@@ -1,6 +1,6 @@
 {
   "name": "@redwood.dev/client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Client for interacting with Redwood nodes",
   "main": "dist/main/index.js",
   "module": "dist/module/index.js",
@@ -16,7 +16,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/brynbellomy/redwood.git"
+    "url": "https://github.com/redwood/redwood.git"
   },
   "keywords": [
     "p2p"
@@ -24,9 +24,9 @@
   "author": "Bryn Bellomy",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/brynbellomy/redwood/issues"
+    "url": "https://github.com/redwood/redwood/issues"
   },
-  "homepage": "https://github.com/brynbellomy/redwood",
+  "homepage": "https://github.com/redwood/redwood",
   "devDependencies": {
     "@babel/cli": "7.12.10",
     "@babel/core": "7.12.10",

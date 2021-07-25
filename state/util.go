@@ -221,6 +221,9 @@ func walkGoValue(tree interface{}, fn func(keypath Keypath, val interface{}) err
 			case kind == reflect.Struct || (kind == reflect.Ptr && rval.Type().Elem().Kind() == reflect.Struct):
 				z := structomancer.NewWithType(rval.Type(), StructTag)
 				for _, fieldName := range z.FieldNames() {
+					if fieldName == "-" {
+						continue
+					}
 					rval, err := z.GetFieldValueV(rval, fieldName)
 					if err != nil {
 						return err

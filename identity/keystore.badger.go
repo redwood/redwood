@@ -37,8 +37,8 @@ type badgerUser struct {
 type ScryptParams struct{ N, P int }
 
 var (
-	DefaultScryptParams = ScryptParams{N: keystore.StandardScryptN, P: keystore.StandardScryptP}
-	FastScryptParams    = ScryptParams{N: 2, P: 1}
+	DefaultScryptParams  = ScryptParams{N: keystore.StandardScryptN, P: keystore.StandardScryptP}
+	InsecureScryptParams = ScryptParams{N: 2, P: 1}
 )
 
 func NewBadgerKeyStore(dbFilename string, scryptParams ScryptParams) *BadgerKeyStore {

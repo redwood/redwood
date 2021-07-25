@@ -88,3 +88,7 @@ func (sub *writableSubscription) Put(ctx context.Context, stateURI string, tx *t
 	}
 	return sub.peerConn.Put(ctx, tx, state, leaves)
 }
+
+func (sub writableSubscription) String() string {
+	return sub.DialInfo().TransportName + " " + sub.DialInfo().DialAddr + " (" + sub.stateURI + ")"
+}

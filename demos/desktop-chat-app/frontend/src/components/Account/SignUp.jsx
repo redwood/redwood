@@ -1,7 +1,7 @@
 import React, { Fragment, useState, useEffect, useCallback } from 'react'
 import styled from 'styled-components'
 import { Link, useHistory, Redirect } from 'react-router-dom'
-import { useRedwood } from 'redwood-p2p-client/react'
+import { useRedwood } from '@redwood.dev/client/react'
 
 import Input, { InputLabel } from './../Input'
 import Button from './../Button'

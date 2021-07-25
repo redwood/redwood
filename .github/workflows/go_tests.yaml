@@ -19,7 +19,7 @@ jobs:
             - name: Download Go vendor packages
               run: go mod download
             - name: Build redwood.js
-              run: make build-js
+              run: make build
             - name: Run tests
               run: go test -v --tags static ./...
 

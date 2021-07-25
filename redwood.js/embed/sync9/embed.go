@@ -1,4 +1,4 @@
-package redwoodjs
+package sync9
 
 import (
 	_ "embed"

@@ -183,7 +183,7 @@ func Seek(node state.Node, keypath state.Keypath, stateResolver StateResolver, b
 				return nil, false, err
 			}
 			reader, contentLength, err := blobResolver.BlobReader(blobID)
-			if goerrors.Is(err, os.ErrNotExist) {
+			if errors.Cause(err) == types.Err404 {
 				return nil, false, nil
 			} else if err != nil {
 				return nil, false, err

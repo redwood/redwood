@@ -7,13 +7,12 @@ import (
 	"net/http"
 
 	"redwood.dev/cloud"
-	"redwood.dev/identity"
 	"redwood.dev/rpc"
 )
 
 type HTTPRPCServer struct {
 	*rpc.HTTPServer
-	keyStore identity.KeyStore
+	app *App
 }
 
 type (
@@ -81,7 +80,7 @@ func (s *HTTPRPCServer) CreateCloudStack(r *http.Request, args *CreateCloudStack
 		return err
 	}
 
-	identity, err := s.keyStore.DefaultPublicIdentity()
+	identity, err := s.app.KeyStore.DefaultPublicIdentity()
 	if err != nil {
 		return err
 	}
@@ -113,12 +112,12 @@ func (s *HTTPRPCServer) CloudNodeSubscribe(r *http.Request, args *CloudNodeSubsc
 	client := rpc.NewHTTPClient(args.RemoteRPCHost)
 	defer client.Close()
 
-	identity, err := s.keyStore.DefaultPublicIdentity()
+	identity, err := s.app.KeyStore.DefaultPublicIdentity()
 	if err != nil {
 		return err
 	}
 
-	err = client.Authorize(identity.Signing)
+	err = client.Authorize(identity.SigKeypair)
 	if err != nil {
 		return err
 	}
