@@ -9,9 +9,8 @@
     "dev": "webpack --progress --watch --env dev",
     "dev-amd": "webpack --progress --watch --env dev --amd",
     "build": "yarn build:main && yarn build:module",
-    "build:main": "tsc -p tsconfig.json && browserify ./dist/main/browser.js > ./dist/browser.js && browserify --external react ./dist/main/react/index.js > ./dist/react.js && browserify ./dist/main/resolver.sync9.redwood.js > ./dist/resolver.sync9.redwood.js",
+    "build:main": "tsc -p tsconfig.json && browserify ./dist/main/browser.js > ./dist/browser.js && browserify --external react ./dist/main/react/index.js > ./dist/react.js && browserify ./dist/main/resolver.sync9.redwood.js > ./dist/resolver.sync9.redwood.js && cp dist/browser.js embed/redwoodjs/browser.js && cp dist/resolver.sync9.redwood.js embed/sync9/redwood.js",
     "build:module": "tsc -p tsconfig.module.json",
-    "build:pkger": "cd .. && pkger; cd -",
     "test": "./node_modules/.bin/jest",
     "test-watch": "./node_modules/.bin/jest --watch"
   },

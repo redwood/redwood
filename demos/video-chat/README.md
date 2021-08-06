@@ -3,7 +3,7 @@
 
 **Prerequisites**
 
-- Go 1.13
+- Go 1.16
 - Node.js 10+
 - Ensure that you've run `npm i` inside the `braidjs` directory (located in the repository root)
 

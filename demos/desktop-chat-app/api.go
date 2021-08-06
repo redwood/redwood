@@ -3,6 +3,7 @@
 package main
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/markbates/pkger"
 	"github.com/tyler-smith/go-bip39"
 
 	"redwood.dev/crypto"
@@ -166,10 +166,11 @@ func logoutUser(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "WORKED!")
 }
 
+//go:embed build
+var staticAssets embed.FS
+
 func serveHome(w http.ResponseWriter, r *http.Request) {
-	path := filepath.Join("/frontend/build", r.URL.Path)
-	fmt.Println("PATH: ", path)
-	switch filepath.Ext(path) {
+	switch filepath.Ext(r.URL.Path) {
 	case ".html":
 		w.Header().Add("Content-Type", "text/html")
 	case ".js":
@@ -182,7 +183,7 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "text/plain")
 	}
 
-	indexHTML, err := pkger.Open(path)
+	indexHTML, err := staticAssets.Open(r.URL.Path)
 	if err != nil {
 		panic(err) // @@TODO
 	}
