@@ -61,6 +61,13 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 		return err
 	}
 	ks.db = db
+	defer func() {
+		if err != nil {
+			_ = ks.db.Close()
+			ks.db = nil
+			ks.unlockedUser = nil
+		}
+	}()
 
 	node := ks.db.State(false)
 	defer node.Close()
@@ -118,6 +125,16 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 
 	ks.unlockedUser = user
 	return ks.saveUser(ks.unlockedUser, password)
+}
+
+func (ks *BadgerKeyStore) Close() error {
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
+
+	err := ks.db.Close()
+	ks.db = nil
+	ks.unlockedUser = nil
+	return err
 }
 
 func (ks *BadgerKeyStore) Mnemonic() (string, error) {
