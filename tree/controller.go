@@ -28,7 +28,7 @@ type Controller interface {
 
 	IsPrivate() (bool, error)
 	IsMember(addr types.Address) (bool, error)
-	Members() []types.Address
+	Members() (utils.AddressSet, error)
 
 	OnNewState(fn func(tx *Tx, state state.Node, leaves []types.ID))
 }
@@ -55,6 +55,9 @@ type controller struct {
 
 	mempool Mempool
 	addTxMu sync.Mutex
+
+	members   utils.AddressSet
+	isPrivate bool
 }
 
 var (
@@ -80,6 +83,7 @@ func NewController(
 		controllerHub:    controllerHub,
 		txStore:          txStore,
 		blobStore:        blobStore,
+		behaviorTree:     newBehaviorTree(),
 	}
 	return c, nil
 }
@@ -103,6 +107,16 @@ func (c *controller) Start() (err error) {
 		return err
 	}
 	c.indices = indices
+
+	// Load private/members from DB
+	c.isPrivate, err = c.IsPrivate()
+	if err != nil {
+		return err
+	}
+	c.members, err = c.Members()
+	if err != nil {
+		return err
+	}
 
 	// Add root resolver
 	c.behaviorTree.addResolver(state.Keypath(nil), &dumbResolver{})
@@ -176,8 +190,8 @@ func (c *controller) IsMember(addr types.Address) (bool, error) {
 	return is, nil
 }
 
-func (c *controller) Members() []types.Address {
-	var addrs []types.Address
+func (c *controller) Members() (utils.AddressSet, error) {
+	addrs := utils.NewAddressSet(nil)
 
 	state := c.StateAtVersion(nil)
 	defer state.Close()
@@ -188,18 +202,18 @@ func (c *controller) Members() []types.Address {
 	for iter.Rewind(); iter.Valid(); iter.Next() {
 		addrHex, ok, err := iter.Node().StringValue(nil)
 		if err != nil {
-			continue
+			return nil, err
 		} else if !ok {
 			continue
 		}
 
 		addr, err := types.AddressFromHex(addrHex)
 		if err != nil {
-			continue
+			return nil, err
 		}
-		addrs = append(addrs, addr)
+		addrs.Add(addr)
 	}
-	return addrs
+	return addrs, nil
 }
 
 func (c *controller) AddTx(tx *Tx) error {
@@ -240,6 +254,7 @@ var (
 	ErrInvalidTx            = errors.New("invalid tx")
 	ErrTxMissingParents     = errors.New("tx must have parents")
 	ErrMissingCriticalBlobs = errors.New("missing critical blobs")
+	ErrSenderIsNotAMember   = errors.New("tx sender is not a member of state URI")
 )
 
 func (c *controller) processMempoolTx(tx *Tx) processTxOutcome {
@@ -295,6 +310,8 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 		return ErrInvalidSignature
 	} else if sigPubKey.Address() != tx.From {
 		return errors.Wrapf(ErrInvalidSignature, "address doesn't match (expected=%v received=%v)", tx.From.Hex(), sigPubKey.Address().Hex())
+	} else if c.isPrivate && !c.members.Contains(sigPubKey.Address()) {
+		return errors.Wrapf(ErrSenderIsNotAMember, "tx=%v stateURI=%v sender=%v", tx.ID, tx.StateURI, sigPubKey.Address())
 	}
 
 	root := c.states.StateAtVersion(nil, true)
@@ -425,6 +442,11 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 		return err
 	}
 
+	err = c.updateMembers(root)
+	if err != nil {
+		return err
+	}
+
 	err = root.Save()
 	if err != nil {
 		return err
@@ -511,6 +533,35 @@ func (c *controller) handleNewBlobs(root state.Node) {
 			}
 		}
 	}
+}
+
+func (c *controller) updateMembers(root state.Node) error {
+	is, err := c.IsPrivate()
+	if err != nil {
+		return err
+	} else if !is {
+		return nil
+	}
+
+	diff := root.Diff()
+
+	for kp := range diff.Removed {
+		if !state.Keypath(kp).Part(0).Equals(MembersKeypath) {
+			continue
+		}
+		addr := types.AddressFromBytes([]byte(state.Keypath(kp).Part(1)))
+		c.members.Remove(addr)
+	}
+
+	for kp := range diff.Added {
+		if !state.Keypath(kp).Part(0).Equals(MembersKeypath) {
+			continue
+		}
+		addr := types.AddressFromBytes([]byte(state.Keypath(kp).Part(1)))
+		c.members.Add(addr)
+	}
+
+	return nil
 }
 
 func (c *controller) updateBehaviorTree(root state.Node) error {

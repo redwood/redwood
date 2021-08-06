@@ -11,6 +11,7 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type ControllerHub interface {
@@ -29,7 +30,7 @@ type ControllerHub interface {
 
 	IsPrivate(stateURI string) (bool, error)
 	IsMember(stateURI string, addr types.Address) (bool, error)
-	Members(stateURI string) ([]types.Address, error)
+	Members(stateURI string) (utils.AddressSet, error)
 
 	BlobReader(refID blob.ID) (io.ReadCloser, int64, error)
 
@@ -207,7 +208,7 @@ func (m *controllerHub) IsMember(stateURI string, addr types.Address) (bool, err
 	return ctrl.IsMember(addr)
 }
 
-func (m *controllerHub) Members(stateURI string) ([]types.Address, error) {
+func (m *controllerHub) Members(stateURI string) (utils.AddressSet, error) {
 	m.controllersMu.RLock()
 	defer m.controllersMu.RUnlock()
 
@@ -215,7 +216,7 @@ func (m *controllerHub) Members(stateURI string) ([]types.Address, error) {
 	if ctrl == nil {
 		return nil, errors.Wrapf(ErrNoController, stateURI)
 	}
-	return ctrl.Members(), nil
+	return ctrl.Members()
 }
 
 func (m *controllerHub) OnNewState(fn func(tx *Tx, root state.Node, leaves []types.ID)) {
