@@ -1,4 +1,6 @@
 dist
+embed/redwoodjs/*.js
+embed/sync9/*.js
 
 # Logs
 logs

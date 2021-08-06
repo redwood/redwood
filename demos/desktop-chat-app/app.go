@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,7 +17,6 @@ import (
 	"time"
 
 	"github.com/brynbellomy/klog"
-	"github.com/markbates/pkger"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 
@@ -24,6 +24,7 @@ import (
 	"redwood.dev/config"
 	"redwood.dev/identity"
 	"redwood.dev/log"
+	"redwood.dev/redwood.js/embed/sync9"
 	"redwood.dev/rpc"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
@@ -222,11 +223,6 @@ func (app *appType) Start() (err error) {
 		proto.Start()
 	}
 
-	pkger.Walk("/frontend/build", func(path string, info os.FileInfo, err error) error {
-		app.Infof(0, "Serving %v", path)
-		return nil
-	})
-
 	// if cfg.HTTPRPC.Enabled {
 	rwRPC := rpc.NewHTTPServer(app.authProto, app.blobProto, app.treeProto, app.peerStore, app.keyStore, app.controllerHub)
 	server := &HTTPRPCServer{rwRPC, app.keyStore}
@@ -351,13 +347,7 @@ func (app *appType) Close() {
 }
 
 func (app *appType) initializeLocalState() {
-	f, err := pkger.Open("/sync9.js")
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
-	_, sync9Sha3, err := app.blobStore.StoreBlob(f)
+	_, sync9Sha3, err := app.blobStore.StoreBlob(bytes.NewReader(sync9.RedwoodResolverSrc))
 	if err != nil {
 		panic(err)
 	}

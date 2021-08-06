@@ -22,7 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/markbates/pkger"
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 	"golang.org/x/net/publicsuffix"
@@ -31,6 +30,7 @@ import (
 	"redwood.dev/crypto"
 	"redwood.dev/identity"
 	"redwood.dev/log"
+	"redwood.dev/redwood.js/embed/redwoodjs"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/protoauth"
@@ -488,13 +488,7 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 }
 
 func (t *transport) serveRedwoodJS(w http.ResponseWriter, r *http.Request) {
-	f, err := pkger.Open("/redwood.js/dist/browser.js")
-	if err != nil {
-		http.Error(w, "can't find redwood.js", http.StatusNotFound)
-		return
-	}
-	defer f.Close()
-	http.ServeContent(w, r, "./redwood.js", time.Now(), f)
+	http.ServeContent(w, r, "./redwood.js", time.Now(), bytes.NewReader(redwoodjs.BrowserSrc))
 	return
 }
 
