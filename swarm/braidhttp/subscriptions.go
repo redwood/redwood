@@ -55,7 +55,7 @@ func (s *httpReadableSubscription) Read() (_ *prototree.SubscriptionMsg, err err
 
 		bs, err = s.peer.t.keyStore.OpenMessageFrom(
 			msg.EncryptedTx.RecipientAddress,
-			crypto.EncryptingPublicKeyFromBytes(msg.EncryptedTx.SenderPublicKey),
+			crypto.AsymEncPubkeyFromBytes(msg.EncryptedTx.SenderPublicKey),
 			msg.EncryptedTx.EncryptedPayload,
 		)
 		if err != nil {
@@ -173,7 +173,7 @@ func (sub *httpWritableSubscription) Put(ctx context.Context, stateURI string, t
 		etx := &prototree.EncryptedTx{
 			TxID:             tx.ID,
 			EncryptedPayload: encryptedTxBytes,
-			SenderPublicKey:  ownIdentity.Encrypting.EncryptingPublicKey.Bytes(),
+			SenderPublicKey:  ownIdentity.AsymEncKeypair.AsymEncPubkey.Bytes(),
 			RecipientAddress: peerSigPubkey.Address(),
 		}
 

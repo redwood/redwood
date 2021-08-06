@@ -37,7 +37,7 @@ func (sub *readableSubscription) Read() (_ *prototree.SubscriptionMsg, err error
 		}
 		bs, err := sub.t.keyStore.OpenMessageFrom(
 			encryptedTx.RecipientAddress,
-			crypto.EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
+			crypto.AsymEncPubkeyFromBytes(encryptedTx.SenderPublicKey),
 			encryptedTx.EncryptedPayload,
 		)
 		if err != nil {

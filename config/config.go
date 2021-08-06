@@ -226,6 +226,10 @@ func (c *Config) StateDBRoot() string {
 	return filepath.Join(c.Node.DataRoot, "states")
 }
 
+func (c *Config) KeyStoreRoot() string {
+	return filepath.Join(c.Node.DataRoot, "keystore")
+}
+
 type Duration time.Duration
 
 func (d Duration) MarshalText() ([]byte, error) {

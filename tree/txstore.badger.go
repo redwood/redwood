@@ -5,27 +5,38 @@ import (
 	"github.com/pkg/errors"
 
 	"redwood.dev/log"
+	"redwood.dev/state"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type badgerTxStore struct {
 	log.Logger
-	db         *badger.DB
-	dbFilename string
+	db               *badger.DB
+	dbFilename       string
+	encryptionConfig *state.EncryptionConfig
 }
 
-func NewBadgerTxStore(dbFilename string) TxStore {
+func NewBadgerTxStore(dbFilename string, encryptionConfig *state.EncryptionConfig) TxStore {
 	return &badgerTxStore{
-		Logger:     log.NewLogger("txstore"),
-		dbFilename: dbFilename,
+		Logger:           log.NewLogger("txstore"),
+		dbFilename:       dbFilename,
+		encryptionConfig: encryptionConfig,
 	}
 }
 
 func (p *badgerTxStore) Start() error {
 	p.Infof(0, "opening txstore at %v", p.dbFilename)
+
 	opts := badger.DefaultOptions(p.dbFilename)
 	opts.Logger = nil
+	if p.encryptionConfig != nil {
+		opts.EncryptionKey = p.encryptionConfig.Key.Bytes()
+		opts.EncryptionKeyRotationDuration = p.encryptionConfig.KeyRotationInterval
+		opts.IndexCacheSize = 100 << 20 // @@TODO: make configurable
+	}
+	opts.KeepL0InMemory = true // @@TODO: make configurable
+
 	db, err := badger.Open(opts)
 	if err != nil {
 		return err

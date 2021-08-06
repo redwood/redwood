@@ -60,7 +60,7 @@ func NewPeerDetails(
 	dialInfo PeerDialInfo,
 	addresses utils.AddressSet,
 	sigpubkeys map[types.Address]crypto.SigningPublicKey,
-	encpubkeys map[types.Address]crypto.EncryptingPublicKey,
+	encpubkeys map[types.Address]crypto.AsymEncPubkey,
 	stateURIs utils.StringSet,
 	lastContact time.Time,
 	lastFailure time.Time,

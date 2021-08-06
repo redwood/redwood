@@ -31,27 +31,27 @@ func RandomAddress(t *testing.T) types.Address {
 func RandomSigningPublicKey(t *testing.T) crypto.SigningPublicKey {
 	t.Helper()
 
-	k, err := crypto.GenerateSigningKeypair()
+	k, err := crypto.GenerateSigKeypair()
 	require.NoError(t, err)
 	return k.SigningPublicKey
 }
 
-func RandomEncryptingPublicKey(t *testing.T) crypto.EncryptingPublicKey {
+func RandomAsymEncPubkey(t *testing.T) crypto.AsymEncPubkey {
 	t.Helper()
 
-	k, err := crypto.GenerateEncryptingKeypair()
+	k, err := crypto.GenerateAsymEncKeypair()
 	require.NoError(t, err)
-	return k.EncryptingPublicKey
+	return k.AsymEncPubkey
 }
 
 func RandomIdentity(t *testing.T) identity.Identity {
 	t.Helper()
 
-	sigkeys, err := crypto.GenerateSigningKeypair()
+	sigkeys, err := crypto.GenerateSigKeypair()
 	require.NoError(t, err)
-	enckeys, err := crypto.GenerateEncryptingKeypair()
+	enckeys, err := crypto.GenerateAsymEncKeypair()
 	require.NoError(t, err)
-	return identity.Identity{Signing: sigkeys, Encrypting: enckeys}
+	return identity.Identity{SigKeypair: sigkeys, AsymEncKeypair: enckeys}
 }
 
 func RandomTime(t *testing.T) time.Time {

@@ -9,28 +9,29 @@ import (
 	"github.com/pkg/errors"
 
 	"redwood.dev/crypto"
+	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type BadgerKeyStore struct {
-	db                *state.DBTree
-	scryptParams      ScryptParams
-	unlockedUser      *badgerUser
-	loadUserCallbacks []func(user User) error
-	saveUserCallbacks []func(user User) error
-	mu                sync.RWMutex
+	log.Logger
+	dbFilename   string
+	db           *state.DBTree
+	scryptParams ScryptParams
+	unlockedUser *badgerUser
+	mu           sync.RWMutex
 }
 
 type badgerUser struct {
-	Password               string
-	Mnemonic               string
-	Identities             []Identity
-	PublicIdentities       map[uint32]struct{}
-	AddressesToIndices     map[types.Address]uint32
-	LocalEncryptingKeypair *crypto.EncryptingKeypair
-	Extra                  map[string]interface{}
+	Password           string
+	Mnemonic           string
+	LocalSymEncKey     crypto.SymEncKey
+	Identities         []Identity
+	PublicIdentities   map[uint32]struct{}
+	AddressesToIndices map[types.Address]uint32
+	Extra              map[string]interface{}
 }
 
 type ScryptParams struct{ N, P int }
@@ -40,9 +41,10 @@ var (
 	FastScryptParams    = ScryptParams{N: 2, P: 1}
 )
 
-func NewBadgerKeyStore(db *state.DBTree, scryptParams ScryptParams) *BadgerKeyStore {
+func NewBadgerKeyStore(dbFilename string, scryptParams ScryptParams) *BadgerKeyStore {
 	return &BadgerKeyStore{
-		db:           db,
+		Logger:       log.NewLogger("keystore"),
+		dbFilename:   dbFilename,
 		scryptParams: scryptParams,
 	}
 }
@@ -53,6 +55,19 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
+
+	db, err := state.NewDBTree(ks.dbFilename, nil)
+	if err != nil {
+		return err
+	}
+	ks.db = db
+	defer func() {
+		if err != nil {
+			_ = ks.db.Close()
+			ks.db = nil
+			ks.unlockedUser = nil
+		}
+	}()
 
 	node := ks.db.State(false)
 	defer node.Close()
@@ -72,38 +87,30 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 			}
 		}
 
-		sigkeys, err := crypto.SigningKeypairFromHDMnemonic(mnemonic, 0)
+		sigkeys, err := crypto.SigKeypairFromHDMnemonic(mnemonic, 0)
 		if err != nil {
 			return err
 		}
 
-		enckeys, err := crypto.GenerateEncryptingKeypair()
+		enckeys, err := crypto.GenerateAsymEncKeypair()
 		if err != nil {
 			return err
 		}
 
-		localEnckeys, err := crypto.GenerateEncryptingKeypair()
+		symenckey, err := crypto.NewSymEncKey()
 		if err != nil {
 			return err
 		}
 
 		ks.unlockedUser = &badgerUser{
-			Password:               password,
-			Mnemonic:               mnemonic,
-			Identities:             []Identity{{Public: true, Signing: sigkeys, Encrypting: enckeys}},
-			PublicIdentities:       map[uint32]struct{}{0: struct{}{}},
-			AddressesToIndices:     map[types.Address]uint32{sigkeys.Address(): 0},
-			LocalEncryptingKeypair: localEnckeys,
-			Extra:                  map[string]interface{}{},
+			Password:           password,
+			Mnemonic:           mnemonic,
+			LocalSymEncKey:     symenckey,
+			Identities:         []Identity{{Public: true, SigKeypair: sigkeys, AsymEncKeypair: enckeys}},
+			PublicIdentities:   map[uint32]struct{}{0: struct{}{}},
+			AddressesToIndices: map[types.Address]uint32{sigkeys.Address(): 0},
+			Extra:              map[string]interface{}{},
 		}
-
-		for _, fn := range ks.loadUserCallbacks {
-			err := fn(ks.unlockedUser)
-			if err != nil {
-				return err
-			}
-		}
-
 		return ks.saveUser(ks.unlockedUser, password)
 
 	} else if err != nil {
@@ -114,8 +121,20 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 		user.Extra = make(map[string]interface{})
 	}
 
+	ks.Infof(0, "keystore unlocked")
+
 	ks.unlockedUser = user
 	return ks.saveUser(ks.unlockedUser, password)
+}
+
+func (ks *BadgerKeyStore) Close() error {
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
+
+	err := ks.db.Close()
+	ks.db = nil
+	ks.unlockedUser = nil
+	return err
 }
 
 func (ks *BadgerKeyStore) Mnemonic() (string, error) {
@@ -215,18 +234,18 @@ func (ks *BadgerKeyStore) NewIdentity(public bool) (_ Identity, err error) {
 	}
 
 	numIdentities := uint32(len(ks.unlockedUser.Identities))
-	sigkeys, err := crypto.SigningKeypairFromHDMnemonic(ks.unlockedUser.Mnemonic, numIdentities)
+	sigkeys, err := crypto.SigKeypairFromHDMnemonic(ks.unlockedUser.Mnemonic, numIdentities)
 	if err != nil {
 		return Identity{}, err
 	}
-	enckeys, err := crypto.GenerateEncryptingKeypair()
+	enckeys, err := crypto.GenerateAsymEncKeypair()
 	if err != nil {
 		return Identity{}, err
 	}
 	identity := Identity{
-		Public:     public,
-		Signing:    sigkeys,
-		Encrypting: enckeys,
+		Public:         public,
+		SigKeypair:     sigkeys,
+		AsymEncKeypair: enckeys,
 	}
 	ks.unlockedUser.Identities = append(ks.unlockedUser.Identities, identity)
 	ks.unlockedUser.AddressesToIndices[sigkeys.Address()] = numIdentities
@@ -248,7 +267,7 @@ func (ks *BadgerKeyStore) SignHash(usingIdentity types.Address, data types.Hash)
 	if err != nil {
 		return nil, err
 	}
-	return identity.Signing.SignHash(data)
+	return identity.SigKeypair.SignHash(data)
 }
 
 func (ks *BadgerKeyStore) VerifySignature(usingIdentity types.Address, hash types.Hash, signature []byte) (_ bool, err error) {
@@ -258,82 +277,93 @@ func (ks *BadgerKeyStore) VerifySignature(usingIdentity types.Address, hash type
 	if err != nil {
 		return false, err
 	}
-	return identity.Signing.VerifySignature(hash, signature), nil
+	return identity.SigKeypair.VerifySignature(hash, signature), nil
 }
 
-func (ks *BadgerKeyStore) SealMessageFor(usingIdentity types.Address, recipientPubKey crypto.EncryptingPublicKey, msg []byte) (_ []byte, err error) {
+func (ks *BadgerKeyStore) SealMessageFor(usingIdentity types.Address, recipientPubKey crypto.AsymEncPubkey, msg []byte) (_ []byte, err error) {
 	defer utils.WithStack(&err)
 
 	identity, err := ks.IdentityWithAddress(usingIdentity)
 	if err != nil {
 		return nil, err
 	}
-	return identity.Encrypting.SealMessageFor(recipientPubKey, msg)
+	return identity.AsymEncKeypair.SealMessageFor(recipientPubKey, msg)
 }
 
-func (ks *BadgerKeyStore) OpenMessageFrom(usingIdentity types.Address, senderPublicKey crypto.EncryptingPublicKey, msgEncrypted []byte) (_ []byte, err error) {
+func (ks *BadgerKeyStore) OpenMessageFrom(usingIdentity types.Address, senderPublicKey crypto.AsymEncPubkey, msgEncrypted []byte) (_ []byte, err error) {
 	defer utils.WithStack(&err)
 
 	identity, err := ks.IdentityWithAddress(usingIdentity)
 	if err != nil {
 		return nil, err
 	}
-	return identity.Encrypting.OpenMessageFrom(senderPublicKey, msgEncrypted)
+	return identity.AsymEncKeypair.OpenMessageFrom(senderPublicKey, msgEncrypted)
 }
 
-func (ks *BadgerKeyStore) OnLoadUser(fn UserCallback) {
+func (ks *BadgerKeyStore) LocalSymEncKey() crypto.SymEncKey {
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
+	return ks.unlockedUser.LocalSymEncKey
+}
+
+func (ks *BadgerKeyStore) SymmetricallyEncrypt(plaintext []byte) (crypto.SymEncMsg, error) {
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
+	return ks.unlockedUser.LocalSymEncKey.Encrypt(plaintext)
+}
+
+func (ks *BadgerKeyStore) SymmetricallyDecrypt(ciphertext crypto.SymEncMsg) ([]byte, error) {
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
+	return ks.unlockedUser.LocalSymEncKey.Decrypt(ciphertext)
+}
+
+func (ks *BadgerKeyStore) ExtraUserData(key string) (interface{}, bool, error) {
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
+
+	if ks.unlockedUser == nil {
+		return nil, false, ErrLocked
+	}
+	val, exists := ks.unlockedUser.Extra[key]
+	return val, exists, nil
+}
+
+func (ks *BadgerKeyStore) SaveExtraUserData(key string, value interface{}) error {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
-	ks.loadUserCallbacks = append(ks.loadUserCallbacks, fn)
-}
 
-func (ks *BadgerKeyStore) OnSaveUser(fn UserCallback) {
-	ks.mu.Lock()
-	defer ks.mu.Unlock()
-	ks.saveUserCallbacks = append(ks.saveUserCallbacks, fn)
-}
-
-func (user *badgerUser) ExtraData(key string) (interface{}, bool) {
-	val, exists := user.Extra[key]
-	return val, exists
-}
-
-func (user *badgerUser) SaveExtraData(key string, value interface{}) {
-	user.Extra[key] = value
+	if ks.unlockedUser == nil {
+		return ErrLocked
+	}
+	ks.unlockedUser.Extra[key] = value
+	return ks.saveUser(ks.unlockedUser, ks.unlockedUser.Password)
 }
 
 type encryptedBadgerUser struct {
-	Mnemonic               string
-	NumIdentities          uint32
-	PublicIdentities       map[uint32]struct{}
-	EncryptingKeys         map[uint32]dbEncryptingKeypair
-	LocalEncryptingKeypair dbEncryptingKeypair
-	Extra                  map[string]interface{}
+	Mnemonic         string
+	NumIdentities    uint32
+	PublicIdentities map[uint32]struct{}
+	AsymEncKeypair   map[uint32]dbAsymEncKeypair
+	LocalSymEncKey   []byte
+	Extra            map[string]interface{}
 }
 
-type dbEncryptingKeypair struct {
+type dbAsymEncKeypair struct {
 	Public  []byte
 	Private []byte
 }
 
 func (ks *BadgerKeyStore) saveUser(user *badgerUser, password string) error {
-	// Allow other parts of the codebase to add data to the encrypted payload
-	for _, fn := range ks.saveUserCallbacks {
-		err := fn(user)
-		if err != nil {
-			return err
-		}
-	}
-
 	publicIdentities := make(map[uint32]struct{})
-	encryptingKeys := make(map[uint32]dbEncryptingKeypair, len(user.Identities))
+	asymEncKeys := make(map[uint32]dbAsymEncKeypair, len(user.Identities))
 	for i, identity := range user.Identities {
 		if identity.Public {
 			publicIdentities[uint32(i)] = struct{}{}
 		}
-		encryptingKeys[uint32(i)] = dbEncryptingKeypair{
-			Public:  identity.Encrypting.EncryptingPublicKey.Bytes(),
-			Private: identity.Encrypting.EncryptingPrivateKey.Bytes(),
+		asymEncKeys[uint32(i)] = dbAsymEncKeypair{
+			Public:  identity.AsymEncKeypair.AsymEncPubkey.Bytes(),
+			Private: identity.AsymEncKeypair.AsymEncPrivkey.Bytes(),
 		}
 	}
 
@@ -341,12 +371,9 @@ func (ks *BadgerKeyStore) saveUser(user *badgerUser, password string) error {
 		Mnemonic:         user.Mnemonic,
 		NumIdentities:    uint32(len(user.Identities)),
 		PublicIdentities: publicIdentities,
-		EncryptingKeys:   encryptingKeys,
-		LocalEncryptingKeypair: dbEncryptingKeypair{
-			Public:  user.LocalEncryptingKeypair.EncryptingPublicKey.Bytes(),
-			Private: user.LocalEncryptingKeypair.EncryptingPrivateKey.Bytes(),
-		},
-		Extra: user.Extra,
+		AsymEncKeypair:   asymEncKeys,
+		LocalSymEncKey:   user.LocalSymEncKey[:],
+		Extra:            user.Extra,
 	}
 
 	bs, err := json.Marshal(encryptedUser)
@@ -415,7 +442,7 @@ func (ks *BadgerKeyStore) loadUser(password string) (_ *badgerUser, err error) {
 		addressesToIndices = make(map[types.Address]uint32, encryptedUser.NumIdentities)
 	)
 	for i := uint32(0); i < encryptedUser.NumIdentities; i++ {
-		sigkeys, err := crypto.SigningKeypairFromHDMnemonic(encryptedUser.Mnemonic, i)
+		sigkeys, err := crypto.SigKeypairFromHDMnemonic(encryptedUser.Mnemonic, i)
 		if err != nil {
 			return nil, err
 		}
@@ -425,36 +452,27 @@ func (ks *BadgerKeyStore) loadUser(password string) (_ *badgerUser, err error) {
 			publicIdentities[i] = struct{}{}
 		}
 		identities[i] = Identity{
-			Public:  public,
-			Signing: sigkeys,
-			Encrypting: &crypto.EncryptingKeypair{
-				EncryptingPublicKey:  crypto.EncryptingPublicKeyFromBytes(encryptedUser.EncryptingKeys[i].Public),
-				EncryptingPrivateKey: crypto.EncryptingPrivateKeyFromBytes(encryptedUser.EncryptingKeys[i].Private),
+			Public:     public,
+			SigKeypair: sigkeys,
+			AsymEncKeypair: &crypto.AsymEncKeypair{
+				AsymEncPubkey:  crypto.AsymEncPubkeyFromBytes(encryptedUser.AsymEncKeypair[i].Public),
+				AsymEncPrivkey: crypto.AsymEncPrivkeyFromBytes(encryptedUser.AsymEncKeypair[i].Private),
 			},
 		}
 		addressesToIndices[sigkeys.Address()] = i
 	}
 
+	var localSymEncKey crypto.SymEncKey
+	copy(localSymEncKey[:], encryptedUser.LocalSymEncKey)
+
 	user := &badgerUser{
 		Password:           password,
 		Mnemonic:           encryptedUser.Mnemonic,
+		LocalSymEncKey:     localSymEncKey,
 		Identities:         identities,
 		PublicIdentities:   publicIdentities,
 		AddressesToIndices: addressesToIndices,
-		LocalEncryptingKeypair: &crypto.EncryptingKeypair{
-			EncryptingPublicKey:  crypto.EncryptingPublicKeyFromBytes(encryptedUser.LocalEncryptingKeypair.Public),
-			EncryptingPrivateKey: crypto.EncryptingPrivateKeyFromBytes(encryptedUser.LocalEncryptingKeypair.Private),
-		},
-		Extra: encryptedUser.Extra,
+		Extra:              encryptedUser.Extra,
 	}
-
-	// Allow other parts of the codebase to read data from the encrypted payload
-	for _, fn := range ks.loadUserCallbacks {
-		err := fn(user)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return user, nil
 }

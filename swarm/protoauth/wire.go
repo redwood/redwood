@@ -29,6 +29,6 @@ func (c *ChallengeMsg) UnmarshalJSON(bs []byte) error {
 }
 
 type ChallengeIdentityResponse struct {
-	Signature           []byte `json:"signature"`
-	EncryptingPublicKey []byte `json:"encryptingPublicKey"`
+	Signature     []byte `json:"signature"`
+	AsymEncPubkey []byte `json:"encryptingPublicKey"`
 }

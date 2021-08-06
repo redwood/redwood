@@ -19,18 +19,12 @@ type KeyStore interface {
 	NewIdentity(public bool) (Identity, error)
 	SignHash(usingIdentity types.Address, data types.Hash) ([]byte, error)
 	VerifySignature(usingIdentity types.Address, hash types.Hash, signature []byte) (bool, error)
-	SealMessageFor(usingIdentity types.Address, recipientPubKey crypto.EncryptingPublicKey, msg []byte) ([]byte, error)
-	OpenMessageFrom(usingIdentity types.Address, senderPublicKey crypto.EncryptingPublicKey, msgEncrypted []byte) ([]byte, error)
+	SealMessageFor(usingIdentity types.Address, recipientPubKey crypto.AsymEncPubkey, msg []byte) ([]byte, error)
+	OpenMessageFrom(usingIdentity types.Address, senderPublicKey crypto.AsymEncPubkey, msgEncrypted []byte) ([]byte, error)
+	LocalSymEncKey() crypto.SymEncKey
 
-	OnLoadUser(fn UserCallback)
-	OnSaveUser(fn UserCallback)
-}
-
-type UserCallback func(user User) error
-
-type User interface {
-	ExtraData(key string) (interface{}, bool)
-	SaveExtraData(key string, value interface{})
+	ExtraUserData(key string) (interface{}, bool, error)
+	SaveExtraUserData(key string, value interface{}) error
 }
 
 var (
@@ -40,19 +34,19 @@ var (
 )
 
 type Identity struct {
-	Public     bool
-	Signing    *crypto.SigningKeypair
-	Encrypting *crypto.EncryptingKeypair
+	Public         bool
+	SigKeypair     *crypto.SigKeypair
+	AsymEncKeypair *crypto.AsymEncKeypair
 }
 
 func (i Identity) Address() types.Address {
-	return i.Signing.Address()
+	return i.SigKeypair.Address()
 }
 
 func (i Identity) SignHash(hash types.Hash) ([]byte, error) {
-	return i.Signing.SignHash(hash)
+	return i.SigKeypair.SignHash(hash)
 }
 
 func (i Identity) VerifySignature(hash types.Hash, signature []byte) bool {
-	return i.Signing.VerifySignature(hash, signature)
+	return i.SigKeypair.VerifySignature(hash, signature)
 }

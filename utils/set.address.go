@@ -24,6 +24,11 @@ func (s AddressSet) Remove(val types.Address) AddressSet {
 	return s
 }
 
+func (s AddressSet) Contains(val types.Address) bool {
+	_, exists := s[val]
+	return exists
+}
+
 func (s AddressSet) Any() types.Address {
 	for x := range s {
 		return x

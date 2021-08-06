@@ -15,10 +15,7 @@ import (
 )
 
 func TestBadgerKeyStore_ErrorsWhenLocked(t *testing.T) {
-	db := testutils.SetupDBTree(t)
-	defer db.DeleteDB()
-
-	ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
 
 	_, err := ks.Identities()
 	require.True(t, errors.Cause(err) == identity.ErrLocked)
@@ -52,81 +49,102 @@ func TestBadgerKeyStore_ErrorsWhenLocked(t *testing.T) {
 }
 
 func TestBadgerKeyStore_Unlock(t *testing.T) {
-	db := testutils.SetupDBTree(t)
-	defer db.DeleteDB()
-
-	ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
-
 	t.Run("empty keystore unlocks successfully", func(t *testing.T) {
+		ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
+		defer ks.Close()
+
 		err := ks.Unlock("password", "")
 		require.NoError(t, err)
 	})
 
-	var id1 identity.Identity
-
 	t.Run("empty keystore creates a default public identity when unlocked", func(t *testing.T) {
+		ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
+		defer ks.Close()
+
+		err := ks.Unlock("password", "")
+		require.NoError(t, err)
+
 		identities, err := ks.Identities()
 		require.NoError(t, err)
 		require.Len(t, identities, 1)
 
-		id1 = identities[0]
+		id := identities[0]
 
-		require.NotEqual(t, types.Address{}, id1.Address())
-		require.True(t, id1.Public)
+		require.NotEqual(t, types.Address{}, id.Address())
+		require.True(t, id.Public)
 
 		pubIds, err := ks.PublicIdentities()
 		require.NoError(t, err)
 		require.Len(t, pubIds, 1)
-		require.Equal(t, pubIds[0], id1)
+		require.Equal(t, pubIds[0], id)
 
 		defaultId, err := ks.DefaultPublicIdentity()
 		require.NoError(t, err)
-		require.Equal(t, defaultId, id1)
+		require.Equal(t, defaultId, id)
 
-		idWithAddr, err := ks.IdentityWithAddress(id1.Address())
+		idWithAddr, err := ks.IdentityWithAddress(id.Address())
 		require.NoError(t, err)
-		require.Equal(t, idWithAddr, id1)
+		require.Equal(t, idWithAddr, id)
 
-		exists, err := ks.IdentityExists(id1.Address())
+		exists, err := ks.IdentityExists(id.Address())
 		require.NoError(t, err)
 		require.True(t, exists)
 	})
 
 	t.Run("will not unlock with an incorrect password", func(t *testing.T) {
-		ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
+		dir := t.TempDir()
+		func() {
+			ks := identity.NewBadgerKeyStore(dir, identity.FastScryptParams)
+			defer ks.Close()
+
+			err := ks.Unlock("password", "")
+			require.NoError(t, err)
+		}()
+
+		ks := identity.NewBadgerKeyStore(dir, identity.FastScryptParams)
 		err := ks.Unlock("alsdkjflsdkjf", "")
 		require.Error(t, err)
 	})
 
 	t.Run("fetches existing identities from the DB", func(t *testing.T) {
-		id2, err := ks.NewIdentity(true)
-		require.NoError(t, err)
+		dir := t.TempDir()
+		var ids []identity.Identity
+		func() {
+			ks := identity.NewBadgerKeyStore(dir, identity.FastScryptParams)
+			defer ks.Close()
 
-		id3, err := ks.NewIdentity(false)
-		require.NoError(t, err)
+			err := ks.Unlock("password", "")
+			require.NoError(t, err)
 
-		ids, err := ks.Identities()
-		require.NoError(t, err)
-		require.Len(t, ids, 3)
-		require.Equal(t, []identity.Identity{id1, id2, id3}, ids)
+			id1, err := ks.DefaultPublicIdentity()
+			require.NoError(t, err)
 
-		ks2 := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
-		err = ks2.Unlock("password", "")
+			id2, err := ks.NewIdentity(true)
+			require.NoError(t, err)
+
+			id3, err := ks.NewIdentity(false)
+			require.NoError(t, err)
+
+			ids, err = ks.Identities()
+			require.NoError(t, err)
+			require.Len(t, ids, 3)
+			require.Equal(t, []identity.Identity{id1, id2, id3}, ids)
+		}()
+
+		ks := identity.NewBadgerKeyStore(dir, identity.FastScryptParams)
+		err := ks.Unlock("password", "")
 		require.NoError(t, err)
 
 		expectedIds := ids
 
-		ids, err = ks2.Identities()
+		ids, err = ks.Identities()
 		require.NoError(t, err)
 		require.Equal(t, expectedIds, ids)
 	})
 }
 
 func TestBadgerKeyStore_NewIdentity(t *testing.T) {
-	db := testutils.SetupDBTree(t)
-	defer db.DeleteDB()
-
-	ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
 	err := ks.Unlock("password", "")
 	require.NoError(t, err)
 
@@ -194,10 +212,7 @@ func TestBadgerKeyStore_NewIdentity(t *testing.T) {
 }
 
 func TestBadgerKeyStore_SignHash(t *testing.T) {
-	db := testutils.SetupDBTree(t)
-	defer db.DeleteDB()
-
-	ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
 	err := ks.Unlock("password", "")
 	require.NoError(t, err)
 
@@ -218,13 +233,13 @@ func TestBadgerKeyStore_SignHash(t *testing.T) {
 		sig, err := ks.SignHash(id1.Address(), hash)
 		require.NoError(t, err)
 
-		valid := id1.Signing.VerifySignature(hash, sig)
+		valid := id1.SigKeypair.VerifySignature(hash, sig)
 		require.True(t, valid)
 
-		valid = id2.Signing.VerifySignature(hash, sig)
+		valid = id2.SigKeypair.VerifySignature(hash, sig)
 		require.False(t, valid)
 
-		valid = id3.Signing.VerifySignature(hash, sig)
+		valid = id3.SigKeypair.VerifySignature(hash, sig)
 		require.False(t, valid)
 	})
 }

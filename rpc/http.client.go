@@ -44,7 +44,7 @@ func (c *HTTPClient) Close() error {
 	return c.rpcClient.Close()
 }
 
-func (c *HTTPClient) Authorize(signingKeypair *crypto.SigningKeypair) error {
+func (c *HTTPClient) Authorize(signingKeypair *crypto.SigKeypair) error {
 	req, err := http.NewRequest("AUTHORIZE", c.dialAddr, nil)
 	if err != nil {
 		return err

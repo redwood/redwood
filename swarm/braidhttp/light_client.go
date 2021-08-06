@@ -28,13 +28,13 @@ import (
 
 type LightClient struct {
 	dialAddr  string
-	sigkeys   *crypto.SigningKeypair
-	enckeys   *crypto.EncryptingKeypair
+	sigkeys   *crypto.SigKeypair
+	enckeys   *crypto.AsymEncKeypair
 	cookieJar http.CookieJar
 	tls       bool
 }
 
-func NewLightClient(dialAddr string, sigkeys *crypto.SigningKeypair, enckeys *crypto.EncryptingKeypair, tls bool) (*LightClient, error) {
+func NewLightClient(dialAddr string, sigkeys *crypto.SigKeypair, enckeys *crypto.AsymEncKeypair, tls bool) (*LightClient, error) {
 	cookieJar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
@@ -245,7 +245,7 @@ func (c *LightClient) Get(stateURI string, version *types.ID, keypath state.Keyp
 	return resp.Body, int64(contentLength), parents, nil
 }
 
-func (c *LightClient) Put(ctx context.Context, tx *tree.Tx, recipientAddress types.Address, recipientEncPubkey crypto.EncryptingPublicKey) error {
+func (c *LightClient) Put(ctx context.Context, tx *tree.Tx, recipientAddress types.Address, recipientEncPubkey crypto.AsymEncPubkey) error {
 	if len(tx.Sig) == 0 {
 		sig, err := c.sigkeys.SignHash(tx.Hash())
 		if err != nil {

@@ -232,7 +232,7 @@ func (s *HTTPServer) PrivateTreeMembers(r *http.Request, args *PrivateTreeMember
 	if err != nil {
 		return err
 	}
-	resp.Members = members
+	resp.Members = members.Slice()
 	return nil
 }
 
@@ -251,9 +251,9 @@ type (
 		LastContact uint64
 	}
 	PeerIdentity struct {
-		Address             types.Address
-		SigningPublicKey    crypto.SigningPublicKey
-		EncryptingPublicKey crypto.EncryptingPublicKey
+		Address          types.Address
+		SigningPublicKey crypto.SigningPublicKey
+		AsymEncPubkey    crypto.AsymEncPubkey
 	}
 )
 
@@ -266,9 +266,9 @@ func (s *HTTPServer) Peers(r *http.Request, args *PeersArgs, resp *PeersResponse
 		for _, addr := range peer.Addresses() {
 			sigpubkey, encpubkey := peer.PublicKeys(addr)
 			identities = append(identities, PeerIdentity{
-				Address:             addr,
-				SigningPublicKey:    sigpubkey,
-				EncryptingPublicKey: encpubkey,
+				Address:          addr,
+				SigningPublicKey: sigpubkey,
+				AsymEncPubkey:    encpubkey,
 			})
 		}
 		var lastContact uint64

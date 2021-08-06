@@ -73,9 +73,9 @@ func putRequestFromTx(
 	requestContext context.Context,
 	tx *tree.Tx,
 	dialAddr string,
-	senderEncKeypair *crypto.EncryptingKeypair,
+	senderEncKeypair *crypto.AsymEncKeypair,
 	recipientAddress types.Address,
-	recipientEncPubkey crypto.EncryptingPublicKey,
+	recipientEncPubkey crypto.AsymEncPubkey,
 ) (*http.Request, error) {
 	if tx.IsPrivate() {
 		if recipientEncPubkey == nil {
@@ -95,7 +95,7 @@ func putRequestFromTx(
 		msg, err := json.Marshal(prototree.EncryptedTx{
 			TxID:             tx.ID,
 			EncryptedPayload: encryptedTxBytes,
-			SenderPublicKey:  senderEncKeypair.EncryptingPublicKey.Bytes(),
+			SenderPublicKey:  senderEncKeypair.AsymEncPubkey.Bytes(),
 			RecipientAddress: recipientAddress,
 		})
 		if err != nil {

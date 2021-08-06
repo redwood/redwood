@@ -122,13 +122,15 @@ func NewTransport(
 		blobStore:             blobStore,
 		peerStore:             peerStore,
 	}
-	keyStore.OnLoadUser(t.onLoadUser)
-	keyStore.OnSaveUser(t.onSaveUser)
 	return t, nil
 }
 
-func (t *transport) onLoadUser(user identity.User) error {
-	maybeSecret, exists := user.ExtraData("http:cookiesecret")
+func (t *transport) findOrCreateCookieSecret() error {
+	maybeSecret, exists, err := t.keyStore.ExtraUserData("http:cookiesecret")
+	if err != nil {
+		return err
+	}
+
 	cookieSecret, isBytes := maybeSecret.([]byte)
 	if !exists || !isBytes {
 		cookieSecret := make([]byte, 32)
@@ -138,22 +140,15 @@ func (t *transport) onLoadUser(user identity.User) error {
 		}
 	}
 	copy(t.cookieSecret[:], cookieSecret)
-	return nil
-}
-
-func (t *transport) onSaveUser(user identity.User) error {
-	user.SaveExtraData("http:cookiesecret", t.cookieSecret)
-	return nil
+	return t.keyStore.SaveExtraUserData("http:cookiesecret", t.cookieSecret)
 }
 
 func (t *transport) Start() error {
 	t.Infof(0, "opening http transport at %v", t.listenAddr)
 
-	if t.cookieSecret == [32]byte{} {
-		_, err := rand.Read(t.cookieSecret[:])
-		if err != nil {
-			return err
-		}
+	err := t.findOrCreateCookieSecret()
+	if err != nil {
+		return err
 	}
 
 	// Update our node's info in the peer store
@@ -164,9 +159,9 @@ func (t *transport) Start() error {
 	for _, identity := range identities {
 		t.peerStore.AddVerifiedCredentials(
 			swarm.PeerDialInfo{TransportName: TransportName, DialAddr: t.ownURL},
-			identity.Signing.SigningPublicKey.Address(),
-			identity.Signing.SigningPublicKey,
-			identity.Encrypting.EncryptingPublicKey,
+			identity.SigKeypair.SigningPublicKey.Address(),
+			identity.SigKeypair.SigningPublicKey,
+			identity.AsymEncKeypair.AsymEncPubkey,
 		)
 	}
 
@@ -801,7 +796,7 @@ func (t *transport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, a
 
 	bs, err := t.keyStore.OpenMessageFrom(
 		encryptedTx.RecipientAddress,
-		crypto.EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
+		crypto.AsymEncPubkeyFromBytes(encryptedTx.SenderPublicKey),
 		encryptedTx.EncryptedPayload,
 	)
 	if err != nil {
