@@ -40,11 +40,12 @@ type controllerHub struct {
 	log.Logger
 	chStop chan struct{}
 
-	controllers   map[string]Controller
-	controllersMu sync.RWMutex
-	txStore       TxStore
-	blobStore     blob.Store
-	dbRootPath    string
+	controllers      map[string]Controller
+	controllersMu    sync.RWMutex
+	txStore          TxStore
+	blobStore        blob.Store
+	dbRootPath       string
+	encryptionConfig *state.EncryptionConfig
 
 	newStateListeners   []func(tx *Tx, root state.Node, leaves []types.ID)
 	newStateListenersMu sync.RWMutex
@@ -54,7 +55,7 @@ var (
 	ErrNoController = errors.New("no controller for that stateURI")
 )
 
-func NewControllerHub(dbRootPath string, txStore TxStore, blobStore blob.Store) ControllerHub {
+func NewControllerHub(dbRootPath string, txStore TxStore, blobStore blob.Store, encryptionConfig *state.EncryptionConfig) ControllerHub {
 	return &controllerHub{
 		Logger:      log.NewLogger("controller hub"),
 		chStop:      make(chan struct{}),
@@ -105,7 +106,7 @@ func (m *controllerHub) EnsureController(stateURI string) (Controller, error) {
 	if ctrl == nil {
 		// Set up the controller
 		var err error
-		ctrl, err = NewController(stateURI, m.dbRootPath, m, m.txStore, m.blobStore)
+		ctrl, err = NewController(stateURI, m.dbRootPath, m.encryptionConfig, m, m.txStore, m.blobStore)
 		if err != nil {
 			return nil, err
 		}

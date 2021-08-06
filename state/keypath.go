@@ -170,6 +170,10 @@ func (k Keypath) Pushs(part string) Keypath {
 	return k.Push(Keypath(part))
 }
 
+func (k Keypath) Pushb(part []byte) Keypath {
+	return k.Push(Keypath(part))
+}
+
 func (k Keypath) PushIndex(idx uint64) Keypath {
 	return k.Push(EncodeSliceIndex(idx))
 }

@@ -14,7 +14,7 @@ func SetupDBTree(t *testing.T) *state.DBTree {
 	t.Helper()
 
 	i := rand.Int()
-	db, err := state.NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i))
+	db, err := state.NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i), nil)
 	require.NoError(t, err)
 	return db
 }
@@ -24,7 +24,7 @@ func SetupDBTreeWithValue(t *testing.T, keypath state.Keypath, val interface{}) 
 
 	i := rand.Int()
 
-	db, err := state.NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i))
+	db, err := state.NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i), nil)
 	require.NoError(t, err)
 
 	state := db.State(true)
@@ -40,7 +40,7 @@ func SetupVersionedDBTree(t *testing.T) *state.VersionedDBTree {
 	t.Helper()
 
 	i := rand.Int()
-	db, err := state.NewVersionedDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i))
+	db, err := state.NewVersionedDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i), nil)
 	require.NoError(t, err)
 	return db
 }
@@ -50,7 +50,7 @@ func SetupVersionedDBTreeWithValue(t *testing.T, keypath state.Keypath, val inte
 
 	i := rand.Int()
 
-	db, err := state.NewVersionedDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i))
+	db, err := state.NewVersionedDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i), nil)
 	require.NoError(t, err)
 
 	state := db.StateAtVersion(nil, true)

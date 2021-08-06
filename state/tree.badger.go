@@ -10,12 +10,14 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/brynbellomy/go-structomancer"
 	"github.com/dgraph-io/badger/v2"
 	badgerpb "github.com/dgraph-io/badger/v2/pb"
 	"github.com/pkg/errors"
 
+	"redwood.dev/crypto"
 	"redwood.dev/log"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -27,9 +29,20 @@ type DBTree struct {
 	log.Logger
 }
 
-func NewDBTree(dbFilename string) (*DBTree, error) {
+type EncryptionConfig struct {
+	Key                 crypto.SymEncKey
+	KeyRotationInterval time.Duration
+}
+
+func NewDBTree(dbFilename string, encryptionConfig *EncryptionConfig) (*DBTree, error) {
 	opts := badger.DefaultOptions(dbFilename)
 	opts.Logger = nil
+	if encryptionConfig != nil {
+		opts.EncryptionKey = encryptionConfig.Key.Bytes()
+		opts.EncryptionKeyRotationDuration = encryptionConfig.KeyRotationInterval
+		opts.IndexCacheSize = 100 << 20 // @@TODO: make configurable
+	}
+	opts.KeepL0InMemory = true // @@TODO: make configurable
 
 	db, err := badger.Open(opts)
 	if err != nil {
@@ -71,9 +84,15 @@ type VersionedDBTree struct {
 	log.Logger
 }
 
-func NewVersionedDBTree(dbFilename string) (*VersionedDBTree, error) {
+func NewVersionedDBTree(dbFilename string, encryptionConfig *EncryptionConfig) (*VersionedDBTree, error) {
 	opts := badger.DefaultOptions(dbFilename)
 	opts.Logger = nil
+	if encryptionConfig != nil {
+		opts.EncryptionKey = encryptionConfig.Key.Bytes()
+		opts.EncryptionKeyRotationDuration = encryptionConfig.KeyRotationInterval
+		opts.IndexCacheSize = 100 << 20 // @@TODO: make configurable
+	}
+	opts.KeepL0InMemory = true // @@TODO: make configurable
 
 	db, err := badger.Open(opts)
 	if err != nil {

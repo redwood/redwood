@@ -37,8 +37,9 @@ type controller struct {
 	log.Logger
 	chStop chan struct{}
 
-	stateURI        string
-	stateDBRootPath string
+	stateURI         string
+	stateDBRootPath  string
+	encryptionConfig *state.EncryptionConfig
 
 	controllerHub ControllerHub
 	txStore       TxStore
@@ -65,19 +66,20 @@ var (
 func NewController(
 	stateURI string,
 	stateDBRootPath string,
+	encryptionConfig *state.EncryptionConfig,
 	controllerHub ControllerHub,
 	txStore TxStore,
 	blobStore blob.Store,
 ) (Controller, error) {
 	c := &controller{
-		Logger:          log.NewLogger("controller"),
-		chStop:          make(chan struct{}),
-		stateURI:        stateURI,
-		stateDBRootPath: stateDBRootPath,
-		controllerHub:   controllerHub,
-		txStore:         txStore,
-		blobStore:       blobStore,
-		behaviorTree:    newBehaviorTree(),
+		Logger:           log.NewLogger("controller"),
+		chStop:           make(chan struct{}),
+		stateURI:         stateURI,
+		stateDBRootPath:  stateDBRootPath,
+		encryptionConfig: encryptionConfig,
+		controllerHub:    controllerHub,
+		txStore:          txStore,
+		blobStore:        blobStore,
 	}
 	return c, nil
 }
@@ -90,13 +92,13 @@ func (c *controller) Start() (err error) {
 	}()
 
 	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(c.stateURI)
-	states, err := state.NewVersionedDBTree(filepath.Join(c.stateDBRootPath, stateURIClean))
+	states, err := state.NewVersionedDBTree(filepath.Join(c.stateDBRootPath, stateURIClean), c.encryptionConfig)
 	if err != nil {
 		return err
 	}
 	c.states = states
 
-	indices, err := state.NewVersionedDBTree(filepath.Join(c.stateDBRootPath, stateURIClean+"_indices"))
+	indices, err := state.NewVersionedDBTree(filepath.Join(c.stateDBRootPath, stateURIClean+"_indices"), c.encryptionConfig)
 	if err != nil {
 		return err
 	}
