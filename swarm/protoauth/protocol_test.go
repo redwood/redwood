@@ -223,19 +223,19 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 			require.NoError(t, err)
 			resp := []protoauth.ChallengeIdentityResponse{
 				{
-					Signature:           sig1,
-					EncryptingPublicKey: identity1.Encrypting.EncryptingPublicKey.Bytes(),
+					Signature:     sig1,
+					AsymEncPubkey: identity1.AsymEncKeypair.AsymEncPubkey.Bytes(),
 				},
 				{
-					Signature:           sig2,
-					EncryptingPublicKey: identity2.Encrypting.EncryptingPublicKey.Bytes(),
+					Signature:     sig2,
+					AsymEncPubkey: identity2.AsymEncKeypair.AsymEncPubkey.Bytes(),
 				},
 			}
 			call.ReturnArguments = mock.Arguments{resp, nil}
 		})
 
-		peerStore.On("AddVerifiedCredentials", dialInfo, identity1.Address(), identity1.Signing.SigningPublicKey, identity1.Encrypting.EncryptingPublicKey).Once()
-		peerStore.On("AddVerifiedCredentials", dialInfo, identity2.Address(), identity2.Signing.SigningPublicKey, identity2.Encrypting.EncryptingPublicKey).Once()
+		peerStore.On("AddVerifiedCredentials", dialInfo, identity1.Address(), identity1.SigKeypair.SigningPublicKey, identity1.AsymEncKeypair.AsymEncPubkey).Once()
+		peerStore.On("AddVerifiedCredentials", dialInfo, identity2.Address(), identity2.SigKeypair.SigningPublicKey, identity2.AsymEncKeypair.AsymEncPubkey).Once()
 
 		err := proto.ChallengePeerIdentity(context.Background(), peerConn)
 		require.NoError(t, err)
@@ -423,18 +423,18 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 
 			resp := []protoauth.ChallengeIdentityResponse{
 				{
-					Signature:           sig1,
-					EncryptingPublicKey: identity1.Encrypting.EncryptingPublicKey.Bytes(),
+					Signature:     sig1,
+					AsymEncPubkey: identity1.AsymEncKeypair.AsymEncPubkey.Bytes(),
 				},
 				{
-					Signature:           badSig2,
-					EncryptingPublicKey: identity2.Encrypting.EncryptingPublicKey.Bytes(),
+					Signature:     badSig2,
+					AsymEncPubkey: identity2.AsymEncKeypair.AsymEncPubkey.Bytes(),
 				},
 			}
 			call.ReturnArguments = mock.Arguments{resp, nil}
 		})
 
-		peerStore.On("AddVerifiedCredentials", dialInfo, identity1.Address(), identity1.Signing.SigningPublicKey, identity1.Encrypting.EncryptingPublicKey).Once()
+		peerStore.On("AddVerifiedCredentials", dialInfo, identity1.Address(), identity1.SigKeypair.SigningPublicKey, identity1.AsymEncKeypair.AsymEncPubkey).Once()
 
 		err := proto.ChallengePeerIdentity(context.Background(), peerConn)
 		require.Error(t, err)

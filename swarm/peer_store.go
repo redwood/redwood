@@ -16,7 +16,7 @@ import (
 //go:generate mockery --name PeerStore --output ./mocks/ --case=underscore
 type PeerStore interface {
 	AddDialInfos(dialInfos []PeerDialInfo)
-	AddVerifiedCredentials(dialInfo PeerDialInfo, address types.Address, sigpubkey crypto.SigningPublicKey, encpubkey crypto.EncryptingPublicKey)
+	AddVerifiedCredentials(dialInfo PeerDialInfo, address types.Address, sigpubkey crypto.SigningPublicKey, encpubkey crypto.AsymEncPubkey)
 	RemovePeers(dialInfos []PeerDialInfo) error
 	UnverifiedPeers() []PeerDetails
 	Peers() []PeerDetails
@@ -119,7 +119,10 @@ func (s *peerStore) AddDialInfos(dialInfos []PeerDialInfo) {
 
 			s.peers[dialInfo] = peerDetails
 			s.unverifiedPeers[dialInfo] = struct{}{}
-			s.onNewUnverifiedPeer(dialInfo)
+
+			if s.onNewUnverifiedPeer != nil {
+				s.onNewUnverifiedPeer(dialInfo)
+			}
 		}
 	}
 }
@@ -128,7 +131,7 @@ func (s *peerStore) AddVerifiedCredentials(
 	dialInfo PeerDialInfo,
 	address types.Address,
 	sigpubkey crypto.SigningPublicKey,
-	encpubkey crypto.EncryptingPublicKey,
+	encpubkey crypto.AsymEncPubkey,
 ) {
 	if address.IsZero() {
 		panic("cannot add verified peer without credentials")
@@ -160,7 +163,7 @@ func (s *peerStore) AddVerifiedCredentials(
 		pd.sigpubkeys = make(map[types.Address]crypto.SigningPublicKey)
 	}
 	if pd.encpubkeys == nil {
-		pd.encpubkeys = make(map[types.Address]crypto.EncryptingPublicKey)
+		pd.encpubkeys = make(map[types.Address]crypto.AsymEncPubkey)
 	}
 	if sigpubkey != nil {
 		pd.sigpubkeys[address] = sigpubkey
@@ -339,7 +342,7 @@ func (s *peerStore) fetchPeerDetails(dialInfo PeerDialInfo) (*peerDetails, error
 
 func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDetails, error) {
 	sigpubkeys := make(map[types.Address]crypto.SigningPublicKey, len(pd.Sigpubkeys))
-	encpubkeys := make(map[types.Address]crypto.EncryptingPublicKey, len(pd.Encpubkeys))
+	encpubkeys := make(map[types.Address]crypto.AsymEncPubkey, len(pd.Encpubkeys))
 	for addrStr, bytes := range pd.Sigpubkeys {
 		addr, err := types.AddressFromHex(addrStr)
 		if err != nil {
@@ -355,7 +358,7 @@ func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDet
 		if err != nil {
 			return nil, err
 		}
-		encpubkeys[addr] = crypto.EncryptingPublicKeyFromBytes(bytes)
+		encpubkeys[addr] = crypto.AsymEncPubkeyFromBytes(bytes)
 	}
 
 	return &peerDetails{
@@ -421,7 +424,7 @@ func (s *peerStore) deletePeers(dialInfos []PeerDialInfo) error {
 type PeerDetails interface {
 	Addresses() []types.Address
 	DialInfo() PeerDialInfo
-	PublicKeys(addr types.Address) (crypto.SigningPublicKey, crypto.EncryptingPublicKey)
+	PublicKeys(addr types.Address) (crypto.SigningPublicKey, crypto.AsymEncPubkey)
 	AddStateURI(stateURI string)
 	RemoveStateURI(stateURI string)
 	StateURIs() utils.StringSet
@@ -439,7 +442,7 @@ type peerDetails struct {
 	dialInfo    PeerDialInfo
 	addresses   utils.AddressSet
 	sigpubkeys  map[types.Address]crypto.SigningPublicKey
-	encpubkeys  map[types.Address]crypto.EncryptingPublicKey
+	encpubkeys  map[types.Address]crypto.AsymEncPubkey
 	stateURIs   utils.StringSet
 	lastContact time.Time
 	lastFailure time.Time
@@ -473,7 +476,7 @@ func (p *peerDetails) Addresses() []types.Address {
 	return p.addresses.Slice()
 }
 
-func (p *peerDetails) PublicKeys(addr types.Address) (crypto.SigningPublicKey, crypto.EncryptingPublicKey) {
+func (p *peerDetails) PublicKeys(addr types.Address) (crypto.SigningPublicKey, crypto.AsymEncPubkey) {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
 	return p.sigpubkeys[addr], p.encpubkeys[addr]
@@ -566,7 +569,7 @@ func NewEphemeralPeerDetails(dialInfo PeerDialInfo) *ephemeralPeerDetails {
 }
 
 func (p *ephemeralPeerDetails) Addresses() []types.Address { return nil }
-func (p *ephemeralPeerDetails) PublicKeys(addr types.Address) (crypto.SigningPublicKey, crypto.EncryptingPublicKey) {
+func (p *ephemeralPeerDetails) PublicKeys(addr types.Address) (crypto.SigningPublicKey, crypto.AsymEncPubkey) {
 	return nil, nil
 }
 func (p *ephemeralPeerDetails) DialInfo() PeerDialInfo         { return p.dialInfo }

@@ -106,7 +106,7 @@ func (peer *peerConn) Put(ctx context.Context, tx *tree.Tx, state state.Node, le
 		etx := prototree.EncryptedTx{
 			TxID:             tx.ID,
 			EncryptedPayload: encryptedTxBytes,
-			SenderPublicKey:  identity.Encrypting.EncryptingPublicKey.Bytes(),
+			SenderPublicKey:  identity.AsymEncKeypair.AsymEncPubkey.Bytes(),
 			RecipientAddress: peerSigPubkey.Address(),
 		}
 		return peer.writeMsg(Msg{Type: msgType_EncryptedTx, Payload: etx})

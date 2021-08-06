@@ -108,7 +108,7 @@ func (tp *treeProtocol) Start() {
 	tp.controllerHub.OnNewState(tp.handleNewState)
 
 	for _, tpt := range tp.transports {
-		tp.Warnf("registering %v", tpt.Name())
+		tp.Infof(0, "registering %v", tpt.Name())
 		tpt.OnTxReceived(tp.handleTxReceived)
 		tpt.OnAckReceived(tp.handleAckReceived)
 		tpt.OnWritableSubscriptionOpened(tp.handleWritableSubscriptionOpened)

@@ -110,7 +110,7 @@ func (p *peerConn) Put(ctx context.Context, tx *tree.Tx, state state.Node, leave
 
 	var (
 		peerSigPubkey crypto.SigningPublicKey
-		peerEncPubkey crypto.EncryptingPublicKey
+		peerEncPubkey crypto.AsymEncPubkey
 	)
 	if tx.IsPrivate() {
 		peerAddrs := types.OverlappingAddresses(tx.Recipients, p.Addresses())
@@ -120,7 +120,7 @@ func (p *peerConn) Put(ctx context.Context, tx *tree.Tx, state state.Node, leave
 		peerSigPubkey, peerEncPubkey = p.PublicKeys(peerAddrs[0])
 	}
 
-	req, err := putRequestFromTx(ctx, tx, p.DialInfo().DialAddr, identity.Encrypting, peerSigPubkey.Address(), peerEncPubkey)
+	req, err := putRequestFromTx(ctx, tx, p.DialInfo().DialAddr, identity.AsymEncKeypair, peerSigPubkey.Address(), peerEncPubkey)
 	if err != nil {
 		return errors.WithStack(err)
 	}

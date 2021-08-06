@@ -163,7 +163,7 @@ func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn Auth
 		if err != nil {
 			return err
 		}
-		encpubkey := crypto.EncryptingPublicKeyFromBytes(proof.EncryptingPublicKey)
+		encpubkey := crypto.AsymEncPubkeyFromBytes(proof.AsymEncPubkey)
 
 		ap.peerStore.AddVerifiedCredentials(peerConn.DialInfo(), sigpubkey.Address(), sigpubkey, encpubkey)
 	}
@@ -188,8 +188,8 @@ func (ap *authProtocol) handleChallengeIdentity(challengeMsg ChallengeMsg, peerC
 			return err
 		}
 		responses = append(responses, ChallengeIdentityResponse{
-			Signature:           sig,
-			EncryptingPublicKey: identity.Encrypting.EncryptingPublicKey.Bytes(),
+			Signature:     sig,
+			AsymEncPubkey: identity.AsymEncKeypair.AsymEncPubkey.Bytes(),
 		})
 	}
 	return peerConn.RespondChallengeIdentity(responses)

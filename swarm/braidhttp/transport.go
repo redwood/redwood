@@ -164,9 +164,9 @@ func (t *transport) Start() error {
 	for _, identity := range identities {
 		t.peerStore.AddVerifiedCredentials(
 			swarm.PeerDialInfo{TransportName: TransportName, DialAddr: t.ownURL},
-			identity.Signing.SigningPublicKey.Address(),
-			identity.Signing.SigningPublicKey,
-			identity.Encrypting.EncryptingPublicKey,
+			identity.SigKeypair.SigningPublicKey.Address(),
+			identity.SigKeypair.SigningPublicKey,
+			identity.AsymEncKeypair.AsymEncPubkey,
 		)
 	}
 
@@ -801,7 +801,7 @@ func (t *transport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, a
 
 	bs, err := t.keyStore.OpenMessageFrom(
 		encryptedTx.RecipientAddress,
-		crypto.EncryptingPublicKeyFromBytes(encryptedTx.SenderPublicKey),
+		crypto.AsymEncPubkeyFromBytes(encryptedTx.SenderPublicKey),
 		encryptedTx.EncryptedPayload,
 	)
 	if err != nil {

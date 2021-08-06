@@ -30,8 +30,8 @@ import (
 )
 
 // @@TODO: read keys from config
-var sigkeys = func() *crypto.SigningKeypair {
-	sigkeys, err := crypto.GenerateSigningKeypair()
+var sigkeys = func() *crypto.SigKeypair {
+	sigkeys, err := crypto.GenerateSigKeypair()
 	if err != nil {
 		panic(err)
 	}

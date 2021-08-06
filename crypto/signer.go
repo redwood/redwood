@@ -17,7 +17,7 @@ import (
 )
 
 type (
-	SigningKeypair struct {
+	SigKeypair struct {
 		SigningPrivateKey
 		SigningPublicKey
 	}
@@ -108,23 +108,23 @@ func (privkey *signingPrivateKey) String() string {
 	return hex.EncodeToString(privkey.Bytes())
 }
 
-func GenerateSigningKeypair() (*SigningKeypair, error) {
+func GenerateSigKeypair() (*SigKeypair, error) {
 	pk, err := crypto.GenerateKey()
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	return &SigningKeypair{
+	return &SigKeypair{
 		SigningPrivateKey: &signingPrivateKey{pk},
 		SigningPublicKey:  &signingPublicKey{&pk.PublicKey},
 	}, nil
 }
 
-func SigningKeypairFromHex(s string) (*SigningKeypair, error) {
+func SigKeypairFromHex(s string) (*SigKeypair, error) {
 	pk, err := crypto.HexToECDSA(s)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	return &SigningKeypair{
+	return &SigKeypair{
 		SigningPrivateKey: &signingPrivateKey{pk},
 		SigningPublicKey:  &signingPublicKey{&pk.PublicKey},
 	}, nil
@@ -158,7 +158,7 @@ func GenerateMnemonic() (string, error) {
 
 var DefaultHDDerivationPathPrefix = accounts.DerivationPath{44, 60, 0, 0}
 
-func SigningKeypairFromHDMnemonic(mnemonic string, accountIndex uint32) (*SigningKeypair, error) {
+func SigKeypairFromHDMnemonic(mnemonic string, accountIndex uint32) (*SigKeypair, error) {
 	if mnemonic == "" {
 		return nil, errors.New("mnemonic is required")
 	} else if !bip39.IsMnemonicValid(mnemonic) {
@@ -187,7 +187,7 @@ func SigningKeypairFromHDMnemonic(mnemonic string, accountIndex uint32) (*Signin
 	}
 	ecdsaPrivKey := ecPrivKey.ToECDSA()
 
-	return &SigningKeypair{
+	return &SigKeypair{
 		SigningPrivateKey: &signingPrivateKey{ecdsaPrivKey},
 		SigningPublicKey:  &signingPublicKey{&ecdsaPrivKey.PublicKey},
 	}, nil
