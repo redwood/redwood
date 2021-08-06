@@ -232,7 +232,7 @@ func (s *HTTPServer) PrivateTreeMembers(r *http.Request, args *PrivateTreeMember
 	if err != nil {
 		return err
 	}
-	resp.Members = members
+	resp.Members = members.Slice()
 	return nil
 }
 

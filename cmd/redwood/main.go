@@ -145,33 +145,47 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		return err
 	}
 
-	db, err := state.NewDBTree(filepath.Join(config.Node.DataRoot, "shared"))
+	keyStore := identity.NewBadgerKeyStore(config.KeyStoreRoot(), identity.DefaultScryptParams)
+	err = keyStore.Unlock(string(passwordBytes), "")
 	if err != nil {
 		return err
 	}
 
+	encryptionConfig := &state.EncryptionConfig{
+		Key:                 keyStore.LocalSymEncKey(),
+		KeyRotationInterval: 24 * time.Hour, // @@TODO: make configurable
+	}
+
+	db, err := state.NewDBTree(filepath.Join(config.Node.DataRoot, "shared"), encryptionConfig)
+	if err != nil {
+		return err
+	}
+	defer closeIfError(&err, db)
+
 	var (
-		txStore       = tree.NewBadgerTxStore(config.TxDBRoot())
-		keyStore      = identity.NewBadgerKeyStore(db, identity.DefaultScryptParams)
-		blobStore     = blob.NewDiskStore(config.BlobDataRoot(), db)
+		txStore       = tree.NewBadgerTxStore(config.TxDBRoot(), encryptionConfig)
+		blobStore     = blob.NewBadgerStore(config.BlobDataRoot(), encryptionConfig)
 		peerStore     = swarm.NewPeerStore(db)
-		controllerHub = tree.NewControllerHub(config.StateDBRoot(), txStore, blobStore)
+		controllerHub = tree.NewControllerHub(config.StateDBRoot(), txStore, blobStore, encryptionConfig)
 	)
 
 	err = blobStore.Start()
 	if err != nil {
 		return err
 	}
+	defer closeIfError(&err, blobStore)
 
 	err = txStore.Start()
 	if err != nil {
 		return err
 	}
+	defer closeIfError(&err, txStore)
 
 	err = controllerHub.Start()
 	if err != nil {
 		return err
 	}
+	defer closeIfError(&err, controllerHub)
 
 	var transports []swarm.Transport
 
@@ -218,22 +232,6 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		transports = append(transports, httpTransport)
 	}
 
-	err = keyStore.Unlock(string(passwordBytes), "")
-	if err != nil {
-		blobStore.Close()
-		blobStore = nil
-
-		txStore.Close()
-		txStore = nil
-
-		controllerHub.Close()
-		controllerHub = nil
-
-		db.Close()
-		db = nil
-		return err
-	}
-
 	for _, transport := range transports {
 		err := transport.Start()
 		if err != nil {
@@ -247,11 +245,6 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 
 	for _, proto := range []swarm.Protocol{authProto, blobProto, treeProto} {
 		proto.Start()
-	}
-
-	err = keyStore.Unlock(string(passwordBytes), "")
-	if err != nil {
-		return err
 	}
 
 	if config.HTTPRPC.Enabled {
@@ -327,6 +320,23 @@ func run(configPath, passwordFile string, gui, dev bool) (err error) {
 		<-utils.AwaitInterrupt()
 	}
 	return nil
+}
+
+func closeIfError(err *error, x interface{}) {
+	type closer interface {
+		Close()
+	}
+	type closerWithError interface {
+		Close() error
+	}
+	if *err != nil {
+		switch x := x.(type) {
+		case closer:
+			x.Close()
+		case closerWithError:
+			x.Close()
+		}
+	}
 }
 
 func ensureDataDirs(config *config.Config) error {
