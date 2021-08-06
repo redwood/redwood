@@ -18,7 +18,7 @@ func TestBadgerKeyStore_ErrorsWhenLocked(t *testing.T) {
 	db := testutils.SetupDBTree(t)
 	defer db.DeleteDB()
 
-	ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
 
 	_, err := ks.Identities()
 	require.True(t, errors.Cause(err) == identity.ErrLocked)
@@ -55,7 +55,7 @@ func TestBadgerKeyStore_Unlock(t *testing.T) {
 	db := testutils.SetupDBTree(t)
 	defer db.DeleteDB()
 
-	ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
 
 	t.Run("empty keystore unlocks successfully", func(t *testing.T) {
 		err := ks.Unlock("password", "")
@@ -93,7 +93,7 @@ func TestBadgerKeyStore_Unlock(t *testing.T) {
 	})
 
 	t.Run("will not unlock with an incorrect password", func(t *testing.T) {
-		ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
+		ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
 		err := ks.Unlock("alsdkjflsdkjf", "")
 		require.Error(t, err)
 	})
@@ -110,7 +110,7 @@ func TestBadgerKeyStore_Unlock(t *testing.T) {
 		require.Len(t, ids, 3)
 		require.Equal(t, []identity.Identity{id1, id2, id3}, ids)
 
-		ks2 := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
+		ks2 := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
 		err = ks2.Unlock("password", "")
 		require.NoError(t, err)
 
@@ -126,7 +126,7 @@ func TestBadgerKeyStore_NewIdentity(t *testing.T) {
 	db := testutils.SetupDBTree(t)
 	defer db.DeleteDB()
 
-	ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
 	err := ks.Unlock("password", "")
 	require.NoError(t, err)
 
@@ -197,7 +197,7 @@ func TestBadgerKeyStore_SignHash(t *testing.T) {
 	db := testutils.SetupDBTree(t)
 	defer db.DeleteDB()
 
-	ks := identity.NewBadgerKeyStore(db, identity.FastScryptParams)
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.FastScryptParams)
 	err := ks.Unlock("password", "")
 	require.NoError(t, err)
 
@@ -218,13 +218,13 @@ func TestBadgerKeyStore_SignHash(t *testing.T) {
 		sig, err := ks.SignHash(id1.Address(), hash)
 		require.NoError(t, err)
 
-		valid := id1.Signing.VerifySignature(hash, sig)
+		valid := id1.SigKeypair.VerifySignature(hash, sig)
 		require.True(t, valid)
 
-		valid = id2.Signing.VerifySignature(hash, sig)
+		valid = id2.SigKeypair.VerifySignature(hash, sig)
 		require.False(t, valid)
 
-		valid = id3.Signing.VerifySignature(hash, sig)
+		valid = id3.SigKeypair.VerifySignature(hash, sig)
 		require.False(t, valid)
 	})
 }

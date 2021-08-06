@@ -21,16 +21,10 @@ type KeyStore interface {
 	VerifySignature(usingIdentity types.Address, hash types.Hash, signature []byte) (bool, error)
 	SealMessageFor(usingIdentity types.Address, recipientPubKey crypto.AsymEncPubkey, msg []byte) ([]byte, error)
 	OpenMessageFrom(usingIdentity types.Address, senderPublicKey crypto.AsymEncPubkey, msgEncrypted []byte) ([]byte, error)
+	LocalSymEncKey() crypto.SymEncKey
 
-	OnLoadUser(fn UserCallback)
-	OnSaveUser(fn UserCallback)
-}
-
-type UserCallback func(user User) error
-
-type User interface {
-	ExtraData(key string) (interface{}, bool)
-	SaveExtraData(key string, value interface{})
+	ExtraUserData(key string) (interface{}, bool, error)
+	SaveExtraUserData(key string, value interface{}) error
 }
 
 var (

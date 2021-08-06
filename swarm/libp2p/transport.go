@@ -87,7 +87,7 @@ func NewTransport(
 	blobStore blob.Store,
 	peerStore swarm.PeerStore,
 ) swarm.Transport {
-	t := &transport{
+	return &transport{
 		Logger:            log.NewLogger("libp2p"),
 		chStop:            make(chan struct{}),
 		chDone:            make(chan struct{}),
@@ -99,49 +99,15 @@ func NewTransport(
 		peerStore:         peerStore,
 		writeSubsByPeerID: make(map[peer.ID]map[netp2p.Stream]prototree.WritableSubscriptionImpl),
 	}
-	keyStore.OnLoadUser(t.onLoadUser)
-	keyStore.OnSaveUser(t.onSaveUser)
-	return t
-}
-
-func (t *transport) onLoadUser(user identity.User) (err error) {
-	defer utils.WithStack(&err)
-
-	maybeKey, exists := user.ExtraData("libp2p:p2pkey")
-	p2pkeyBytes, isString := maybeKey.(string)
-	if exists && isString {
-		bs, err := hex.DecodeString(p2pkeyBytes)
-		if err != nil {
-			return err
-		}
-		p2pKey, err := cryptop2p.UnmarshalPrivateKey(bs)
-		if err != nil {
-			return err
-		}
-		t.p2pKey = p2pKey
-		return nil
-	}
-
-	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Secp256k1, 0)
-	if err != nil {
-		return err
-	}
-	t.p2pKey = p2pKey
-	return nil
-}
-
-func (t *transport) onSaveUser(user identity.User) error {
-	bs, err := cryptop2p.MarshalPrivateKey(t.p2pKey)
-	if err != nil {
-		return err
-	}
-	hexKey := hex.EncodeToString(bs)
-	user.SaveExtraData("libp2p:p2pkey", hexKey)
-	return nil
 }
 
 func (t *transport) Start() error {
 	t.Infof(0, "opening libp2p on port %v", t.port)
+
+	err := t.findOrCreateP2PKey()
+	if err != nil {
+		return err
+	}
 
 	peerID, err := peer.IDFromPublicKey(t.p2pKey.GetPublic())
 	if err != nil {
@@ -279,6 +245,40 @@ func (t *transport) Close() {
 	if err != nil {
 		t.Errorf("error closing libp2p host: %v", err)
 	}
+}
+
+func (t *transport) findOrCreateP2PKey() error {
+	maybeKey, exists, err := t.keyStore.ExtraUserData("libp2p:p2pkey")
+	if err != nil {
+		return err
+	}
+
+	p2pkeyBytes, isString := maybeKey.(string)
+	if exists && isString {
+		bs, err := hex.DecodeString(p2pkeyBytes)
+		if err != nil {
+			return err
+		}
+		p2pKey, err := cryptop2p.UnmarshalPrivateKey(bs)
+		if err != nil {
+			return err
+		}
+		t.p2pKey = p2pKey
+		return nil
+	}
+
+	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Secp256k1, 0)
+	if err != nil {
+		return err
+	}
+	t.p2pKey = p2pKey
+
+	bs, err := cryptop2p.MarshalPrivateKey(p2pKey)
+	if err != nil {
+		return err
+	}
+	hexKey := hex.EncodeToString(bs)
+	return t.keyStore.SaveExtraUserData("libp2p:p2pkey", hexKey)
 }
 
 func (t *transport) Name() string {
