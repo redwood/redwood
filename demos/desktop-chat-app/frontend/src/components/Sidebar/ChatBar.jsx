@@ -189,7 +189,7 @@ function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
             }).length
 
             if (!roomsFound) {
-              await api.updateProfile(nodeIdentities[0].address, `${selectedServer}/registry`, null, null, 'creator')
+              await api.updateProfile(nodeIdentities[1].address, `${selectedServer}/registry`, null, null, 'creator')
             }
 
             setNewChatName('')
@@ -245,7 +245,7 @@ function NewDMModal({ serverRooms, onDismiss, navigate }) {
 
     useEffect(() => {
         if (nodeIdentities && nodeIdentities.length > 0) {
-            setSender(nodeIdentities[0].address)
+            setSender(nodeIdentities[1].address)
         }
     }, [nodeIdentities])
 

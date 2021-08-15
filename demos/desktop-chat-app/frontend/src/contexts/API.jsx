@@ -12,7 +12,7 @@ function Provider({ children }) {
         if (!redwoodClient) {
             return
         }
-        let ownAddress = nodeIdentities && nodeIdentities.length > 0 ? nodeIdentities[0].address : null
+        let ownAddress = nodeIdentities && nodeIdentities.length > 0 ? nodeIdentities[1].address : null
         setAPI(createAPI(redwoodClient, ownAddress))
     }, [redwoodClient, nodeIdentities])
 

@@ -70,7 +70,7 @@ function UserControl() {
     let { users, usersStateURI } = useUsers(selectedStateURI)
     let [username, setUsername] = useState(null)
     let [userPhotoURL, setUserPhotoURL] = useState(null)
-    let nodeAddress = !!nodeIdentities && nodeIdentities.length > 0 ? nodeIdentities[0].address : null
+    let nodeAddress = !!nodeIdentities && nodeIdentities.length > 0 ? nodeIdentities[1].address : null
 
     useEffect(() => {
         if (users && users[nodeAddress]) {
@@ -108,11 +108,13 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
     const [username, setUsername] = useState('')
     const [iconImg, setIconImg] = useState(null)
     const [iconFile, setIconFile] = useState(null)
-    const { nodeIdentities } = useRedwood()
+    const redwood = useRedwood()
+    const { nodeIdentities } = redwood
     const api = useAPI()
     const { selectedStateURI } = useNavigation()
     const { usersStateURI } = useUsers(selectedStateURI)
-    const photoFileRef = useRef()
+
+    console.log(redwood)
 
     useEffect(() => {
       if (currentUsername) {
@@ -124,11 +126,7 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
     const onSave = useCallback(async () => {
         if (!api || !nodeIdentities || nodeIdentities.length === 0) { return }
         try {
-            // let photoFile
-            // if (photoFileRef && photoFileRef.current && photoFileRef.current.files && photoFileRef.current.files.length > 0) {
-            //     photoFile = photoFileRef.current.files[0]
-            // }
-            await api.updateProfile(nodeIdentities[0].address, usersStateURI, username, iconFile)
+            await api.updateProfile(nodeIdentities[1].address, usersStateURI, username, iconFile)
             onDismiss()
         } catch (err) {
             console.error(err)
@@ -152,9 +150,6 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
         <Modal modalKey="user profile">
             <ModalTitle closeModal={closeModal}>Your Profile</ModalTitle>
             <ModalContent>
-                {/* <div>
-                    <input type="file" ref={photoFileRef} />
-                </div> */}
                 <UploadAvatar
                   iconImg={iconImg}
                   setIconImg={setIconImg}
@@ -166,10 +161,13 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
                   label={'Username'}
                   width={'460px'}
                 />
-                {/* <div>
-                    Username:
-                    <Input value={username} onChange={onChangeUsername} />
-                </div> */}
+                <h2>Identities</h2>
+                <div>
+                  <button onClick={async () => {
+                    const address = await api.newIdentity()
+                    console.log(address)
+                  }}>Create</button>
+                </div>
             </ModalContent>
             <ModalActions>
                 <Button onClick={onSave} primary>Save</Button>

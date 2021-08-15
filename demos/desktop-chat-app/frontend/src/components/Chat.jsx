@@ -268,8 +268,8 @@ function Chat({ className }) {
     useEffect(async () => {
       if (nodeIdentities) {
         if (Object.keys(users || {}).length > 0) {
-          if (!users[nodeIdentities[0].address]) {
-            await api.updateProfile(nodeIdentities[0].address, `${selectedServer}/registry`, null, null, 'member')
+          if (!users[nodeIdentities[1].address]) {
+            await api.updateProfile(nodeIdentities[1].address, `${selectedServer}/registry`, null, null, 'member')
           }
         }
       }
@@ -418,7 +418,7 @@ function Chat({ className }) {
         const plainMessage = serializeMessageText()
         if (!api || !plainMessage) { return }
         // Replace with markdown serializer
-        await api.sendMessage(plainMessage, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
+        await api.sendMessage(plainMessage, attachments, nodeIdentities[1].address, selectedServer, selectedRoom, messages)
         setAttachments([])
         setPreviews([])
         setEmojiSearchWord('')
@@ -617,7 +617,7 @@ function Chat({ className }) {
         </EmptyChatContainer>
     }
 
-    const ownAddress = nodeIdentities && nodeIdentities[0] ? nodeIdentities[0].address : null
+    const ownAddress = nodeIdentities && nodeIdentities[1] ? nodeIdentities[1].address : null
 
     return (
         <Container className={className}>

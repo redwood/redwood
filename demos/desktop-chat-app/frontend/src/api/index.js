@@ -7,6 +7,15 @@ export default function(redwoodClient, ownAddress) {
         await redwoodClient.rpc.addPeer({ transportName, dialAddr })
     }
 
+    async function newIdentity() {
+      try {
+        return await redwoodClient.rpc.newIdentity()
+      } catch (err) {
+        console.error(err)
+        return err
+      }
+    }
+
     async function addServer(server, iconFile, provider, cloudStackOptions) {
         let stateURI = `${server}/registry`
 
@@ -260,6 +269,7 @@ export default function(redwoodClient, ownAddress) {
     }
 
     return {
+        newIdentity,
         addPeer,
         addServer,
         importServer,
