@@ -5,7 +5,7 @@ import {
     Route,
 } from 'react-router-dom'
 import { ThemeProvider } from 'styled-components'
-import { RedwoodProvider } from 'redwood-p2p-client/react'
+import { RedwoodProvider } from '@redwood.dev/client/react'
 
 import ModalsProvider from './contexts/Modals'
 import APIProvider from './contexts/API'

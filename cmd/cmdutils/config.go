@@ -1,36 +1,42 @@
-package config
+package cmdutils
 
 import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync"
-	"time"
 
+	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 
 	"redwood.dev/rpc"
 )
 
 type Config struct {
+	Mode       Mode       `yaml:"-"`
+	REPLConfig REPLConfig `yaml:"-"`
+
 	BootstrapPeers []BootstrapPeer `yaml:"BootstrapPeers"`
 	DataRoot       string          `yaml:"DataRoot"`
-	DevMode        bool            `yaml:"DevMode"`
+	DevMode        bool            `yaml:"-"`
 
-	KeyStore *KeyStoreConfig `yaml:"-"`
+	KeyStore KeyStoreConfig `yaml:"-"`
 
-	P2PTransport  *P2PTransportConfig  `yaml:"P2PTransport"`
-	HTTPTransport *HTTPTransportConfig `yaml:"HTTPTransport"`
+	Libp2pTransport    Libp2pTransportConfig    `yaml:"Libp2pTransport"`
+	BraidHTTPTransport BraidHTTPTransportConfig `yaml:"BraidHTTPTransport"`
 
-	AuthProtocol *AuthProtocolConfig `yaml:"AuthProtocol"`
-	BlobProtocol *BlobProtocolConfig `yaml:"BlobProtocol"`
-	TreeProtocol *TreeProtocolConfig `yaml:"TreeProtocol"`
+	AuthProtocol AuthProtocolConfig `yaml:"AuthProtocol"`
+	BlobProtocol BlobProtocolConfig `yaml:"BlobProtocol"`
+	TreeProtocol TreeProtocolConfig `yaml:"TreeProtocol"`
 
 	HTTPRPC *rpc.HTTPConfig `yaml:"HTTPRPC"`
 
-	configPath string       `yaml:"-"`
-	mu         sync.RWMutex `yaml:"-"`
+	configPath string `yaml:"-"`
+}
+
+type REPLConfig struct {
+	Prompt   string
+	Commands []REPLCommand
 }
 
 type BootstrapPeer struct {
@@ -39,18 +45,19 @@ type BootstrapPeer struct {
 }
 
 type KeyStoreConfig struct {
-	Password             string `yaml:"Password"`
-	InsecureScryptParams bool   `yaml:"InsecureScryptParams"`
+	Password             string `yaml:"-"`
+	Mnemonic             string `yaml:"-"`
+	InsecureScryptParams bool   `yaml:"-"`
 }
 
-type P2PTransportConfig struct {
+type Libp2pTransportConfig struct {
 	Enabled     bool   `yaml:"Enabled"`
 	ListenAddr  string `yaml:"ListenAddr"`
 	ListenPort  uint   `yaml:"ListenPort"`
 	ReachableAt string `yaml:"ReachableAt"`
 }
 
-type HTTPTransportConfig struct {
+type BraidHTTPTransportConfig struct {
 	Enabled         bool   `yaml:"Enabled"`
 	ListenHost      string `yaml:"ListenHost"`
 	DefaultStateURI string `yaml:"DefaultStateURI"`
@@ -86,26 +93,44 @@ func DefaultConfig(appName string) Config {
 	}
 
 	return Config{
+		Mode: ModeREPL,
+		REPLConfig: REPLConfig{
+			Prompt: ">",
+			Commands: []REPLCommand{
+				CmdMnemonic,
+				CmdLibp2pPeerID,
+				CmdSubscribe,
+				CmdStateURIs,
+				CmdGetState,
+				CmdSetState,
+				CmdBlobs,
+				CmdPeers,
+				CmdAddPeer,
+				CmdRemoveAllPeers,
+				CmdRemoveUnverifiedPeers,
+				CmdRemoveFailedPeers,
+			},
+		},
 		BootstrapPeers: []BootstrapPeer{},
 		DataRoot:       dataRoot,
 		DevMode:        false,
-		P2PTransport: &P2PTransportConfig{
+		Libp2pTransport: Libp2pTransportConfig{
 			Enabled:    true,
 			ListenAddr: "0.0.0.0",
 			ListenPort: 21231,
 		},
-		HTTPTransport: &HTTPTransportConfig{
+		BraidHTTPTransport: BraidHTTPTransportConfig{
 			Enabled:         true,
 			ListenHost:      ":8080",
 			DefaultStateURI: "",
 		},
-		AuthProtocol: &AuthProtocolConfig{
+		AuthProtocol: AuthProtocolConfig{
 			Enabled: true,
 		},
-		BlobProtocol: &BlobProtocolConfig{
+		BlobProtocol: BlobProtocolConfig{
 			Enabled: true,
 		},
-		TreeProtocol: &TreeProtocolConfig{
+		TreeProtocol: TreeProtocolConfig{
 			Enabled:                 true,
 			MaxPeersPerSubscription: 4,
 		},
@@ -128,14 +153,6 @@ func DefaultConfigRoot(appName string) (root string, _ error) {
 	return configRoot, nil
 }
 
-func DefaultConfigPath(appName string) (root string, _ error) {
-	configRoot, err := DefaultConfigRoot(appName)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(configRoot, ".redwoodrc"), nil
-}
-
 func DefaultDataRoot(appName string) (string, error) {
 	switch runtime.GOOS {
 	case "windows", "darwin", "plan9":
@@ -154,60 +171,42 @@ func DefaultDataRoot(appName string) (string, error) {
 	}
 }
 
-func ReadConfigAtPath(appName, configPath string) (*Config, error) {
+func FindOrCreateConfigAtPath(dst *Config, appName, configPath string) error {
+	if dst == nil {
+		*dst = Config{}
+	}
+
 	if configPath == "" {
 		var err error
 		configPath, err = DefaultConfigRoot(appName)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		configPath = filepath.Join(configPath, ".redwoodrc")
 	}
 
-	// Copy the default config
-	cfg := DefaultConfig(appName)
-
 	bs, err := ioutil.ReadFile(configPath)
 	// If the file can't be found, we ignore the error.  Otherwise, return it.
 	if err != nil && !os.IsNotExist(err) {
-		return nil, err
+		return err
 	}
 
-	// Decode the config file on top of the defaults
-	err = yaml.Unmarshal(bs, &cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	// Save the file again in case it didn't exist or was missing fields
-	cfg.configPath = configPath
-	err = cfg.save()
-	if err != nil {
-		return nil, err
-	}
-
-	return &cfg, nil
-}
-
-func (c *Config) Read(fn func()) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	fn()
-}
-
-func (c *Config) Update(fn func() error) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	err := fn()
+	// Decode the config file on top of whatever was passed in
+	err = yaml.Unmarshal(bs, dst)
 	if err != nil {
 		return err
 	}
 
-	return c.save()
+	// Save the file again in case it didn't exist or was missing fields
+	dst.configPath = configPath
+	err = dst.Save()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (c *Config) save() error {
+func (c *Config) Save() error {
 	f, err := os.OpenFile(c.configPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0700)
 	if err != nil {
 		return err
@@ -216,16 +215,7 @@ func (c *Config) save() error {
 
 	encoder := yaml.NewEncoder(f)
 	encoder.SetIndent(4)
-
-	err = encoder.Encode(c)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *Config) Path() string {
-	return c.configPath
+	return encoder.Encode(c)
 }
 
 func (c *Config) BlobDataRoot() string {
@@ -244,17 +234,24 @@ func (c *Config) KeyStoreRoot() string {
 	return filepath.Join(c.DataRoot, "keystore")
 }
 
-type Duration time.Duration
+type Mode int
 
-func (d Duration) MarshalText() ([]byte, error) {
-	return []byte(time.Duration(d).String()), nil
-}
+const (
+	ModeREPL Mode = iota
+	ModeTermUI
+	ModeHeadless
+)
 
-func (d *Duration) UnmarshalText(text []byte) error {
-	dur, err := time.ParseDuration(string(text))
-	if err != nil {
-		return err
+func (m *Mode) UnmarshalText(bs []byte) error {
+	switch string(bs) {
+	case "repl":
+		*m = ModeREPL
+	case "termui":
+		*m = ModeTermUI
+	case "headless":
+		*m = ModeHeadless
+	default:
+		return errors.Errorf("unknown mode '%v'", string(bs))
 	}
-	*d = Duration(dur)
 	return nil
 }

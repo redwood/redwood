@@ -34,8 +34,10 @@ require (
 	github.com/libp2p/go-libp2p-record v0.1.3
 	github.com/linode/linodego v1.0.0
 	github.com/markbates/pkger v0.17.0
+	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/multiformats/go-multiaddr v0.3.1
 	github.com/multiformats/go-multihash v0.0.14
+	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/onsi/gomega v1.10.1
 	github.com/pkg/errors v0.9.1
 	github.com/powerman/rpc-codec v1.2.2

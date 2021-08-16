@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -30,6 +31,7 @@ import (
 	"redwood.dev/crypto"
 	"redwood.dev/identity"
 	"redwood.dev/log"
+	"redwood.dev/process"
 	"redwood.dev/redwood.js/embed/redwoodjs"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
@@ -42,13 +44,22 @@ import (
 	"redwood.dev/utils"
 )
 
+type Transport interface {
+	process.Interface
+	swarm.Transport
+	protoauth.AuthTransport
+	protoblob.BlobTransport
+	prototree.TreeTransport
+	ServeHTTP(w http.ResponseWriter, r *http.Request)
+}
+
 type transport struct {
+	process.Process
 	protoauth.BaseAuthTransport
 	protoblob.BaseBlobTransport
 	prototree.BaseTreeTransport
 
 	log.Logger
-	chStop chan struct{}
 
 	controllerHub   tree.ControllerHub
 	defaultStateURI string
@@ -65,15 +76,12 @@ type transport struct {
 
 	pendingAuthorizations map[types.ID][]byte
 
-	host      swarm.Host
 	peerStore swarm.PeerStore
 	keyStore  identity.KeyStore
 	blobStore blob.Store
 }
 
-var _ prototree.TreeTransport = (*transport)(nil)
-var _ protoblob.BlobTransport = (*transport)(nil)
-var _ protoauth.AuthTransport = (*transport)(nil)
+var _ Transport = (*transport)(nil)
 
 const (
 	TransportName string = "braidhttp"
@@ -89,7 +97,7 @@ func NewTransport(
 	peerStore swarm.PeerStore,
 	tlsCertFilename, tlsKeyFilename string,
 	devMode bool,
-) (swarm.Transport, error) {
+) (*transport, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
@@ -106,8 +114,8 @@ func NewTransport(
 	}
 
 	t := &transport{
-		Logger:                log.NewLogger("http"),
-		chStop:                make(chan struct{}),
+		Process:               *process.New(TransportName),
+		Logger:                log.NewLogger(TransportName),
 		controllerHub:         controllerHub,
 		listenAddr:            listenAddr,
 		defaultStateURI:       defaultStateURI,
@@ -144,9 +152,14 @@ func (t *transport) findOrCreateCookieSecret() error {
 }
 
 func (t *transport) Start() error {
+	err := t.Process.Start()
+	if err != nil {
+		return err
+	}
+
 	t.Infof(0, "opening http transport at %v", t.listenAddr)
 
-	err := t.findOrCreateCookieSecret()
+	err = t.findOrCreateCookieSecret()
 	if err != nil {
 		return err
 	}
@@ -165,7 +178,7 @@ func (t *transport) Start() error {
 		)
 	}
 
-	go func() {
+	t.Process.Go("", func(ctx context.Context) {
 		if !t.devMode {
 			t.srv = &http.Server{
 				Addr:    t.listenAddr,
@@ -190,14 +203,12 @@ func (t *transport) Start() error {
 				fmt.Sprintf("http transport failed to start: %+v", err.Error())
 			}
 		}
-	}()
+	})
 
 	return nil
 }
 
-func (t *transport) Close() {
-	close(t.chStop)
-
+func (t *transport) Close() error {
 	// Non-graceful
 	err := t.srv.Close()
 	if err != nil {
@@ -210,6 +221,7 @@ func (t *transport) Close() {
 	// }
 
 	t.httpClient.Close()
+	return t.Process.Close()
 }
 
 func (t *transport) Name() string {
@@ -478,13 +490,12 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 	// Block until the subscription is canceled so that net/http doesn't close the connection
 	select {
 	case <-writeSub.Closed():
-	case <-t.chStop:
+	case <-t.Done():
 	}
 }
 
 func (t *transport) serveRedwoodJS(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "./redwood.js", time.Now(), bytes.NewReader(redwoodjs.BrowserSrc))
-	return
 }
 
 func (t *transport) serveGetTx(w http.ResponseWriter, r *http.Request) {
@@ -758,7 +769,7 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 	_, err = io.Copy(w, respBuf)
 	if err != nil {
-		panic(err)
+		http.Error(w, "could not copy response", http.StatusInternalServerError)
 	}
 }
 
@@ -971,7 +982,9 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, address 
 	////////////////////////////////
 
 	peer := t.makePeerConn(w, nil, "", address)
-	go t.HandleTxReceived(tx, peer)
+	t.Process.Go("HandleTxReceived", func(ctx context.Context) {
+		t.HandleTxReceived(tx, peer)
+	})
 }
 
 func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.PeerConn, error) {
@@ -996,7 +1009,7 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_
 	}
 
 	ch := make(chan prototree.TreePeerConn)
-	go func() {
+	t.Process.Go("ProvidersOfStateURI", func(ctx context.Context) {
 		defer close(ch)
 		for _, providerURL := range providers {
 			if providerURL == t.ownURL {
@@ -1008,7 +1021,7 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_
 			case <-ctx.Done():
 			}
 		}
-	}()
+	})
 	return ch, nil
 }
 
@@ -1022,7 +1035,7 @@ func (t *transport) tryFetchProvidersFromAuthoritativeHost(stateURI string) ([]s
 
 	u.Path = path.Join(u.Path, "providers")
 
-	ctx, cancel := utils.CombinedContext(10*time.Second, t.chStop)
+	ctx, cancel := context.WithTimeout(t.Ctx(), 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)

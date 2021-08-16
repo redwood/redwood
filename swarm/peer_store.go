@@ -1,6 +1,7 @@
 package swarm
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -47,6 +48,10 @@ type PeerDialInfo struct {
 	DialAddr      string
 }
 
+func (pdi PeerDialInfo) String() string {
+	return strings.Join([]string{pdi.TransportName, pdi.DialAddr}, " ")
+}
+
 var (
 	ErrNotReady = errors.New("not ready")
 )
@@ -85,8 +90,8 @@ func NewPeerStore(state *state.DBTree) *peerStore {
 }
 
 func (s *peerStore) Peers() []PeerDetails {
-	s.muPeers.Lock()
-	defer s.muPeers.Unlock()
+	s.muPeers.RLock()
+	defer s.muPeers.RUnlock()
 
 	var pds []PeerDetails
 	for _, pd := range s.peers {

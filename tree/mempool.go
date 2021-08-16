@@ -1,22 +1,24 @@
 package tree
 
 import (
+	"context"
 	"sync"
 
 	"redwood.dev/log"
+	"redwood.dev/process"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type Mempool interface {
-	Start() error
-	Close()
+	process.Interface
 	Add(tx *Tx)
 	Get() *txSortedSet
 	ForceReprocess()
 }
 
 type mempool struct {
+	process.Process
 	log.Logger
 	chStop chan struct{}
 	chDone chan struct{}
@@ -31,6 +33,7 @@ type mempool struct {
 
 func NewMempool(processCallback func(tx *Tx) processTxOutcome) *mempool {
 	return &mempool{
+		Process:                 *process.New("Mempool"),
 		Logger:                  log.NewLogger("mempool"),
 		chStop:                  make(chan struct{}),
 		chDone:                  make(chan struct{}),
@@ -42,11 +45,15 @@ func NewMempool(processCallback func(tx *Tx) processTxOutcome) *mempool {
 }
 
 func (m *mempool) Start() error {
-	go func() {
-		defer close(m.chDone)
+	err := m.Process.Start()
+	if err != nil {
+		return err
+	}
+
+	m.Process.Go("mempool", func(ctx context.Context) {
 		for {
 			select {
-			case <-m.chStop:
+			case <-ctx.Done():
 				return
 			case <-m.processMempoolWorkQueue.Notify():
 				for {
@@ -60,18 +67,12 @@ func (m *mempool) Start() error {
 					case struct{}:
 					}
 				}
-				m.processMempool()
+				m.processMempool(ctx)
 			}
 		}
-	}()
+	})
 
 	return nil
-}
-
-func (m *mempool) Close() {
-	m.Debugf("stopping mempool")
-	close(m.chStop)
-	<-m.chDone
 }
 
 func (m *mempool) Get() *txSortedSet {
@@ -94,13 +95,13 @@ const (
 	processTxOutcome_Retry
 )
 
-func (m *mempool) processMempool() {
+func (m *mempool) processMempool(ctx context.Context) {
 	txs := m.txs.takeAll()
 
 	var retry []*Tx
 	for {
 		select {
-		case <-m.chStop:
+		case <-ctx.Done():
 			return
 		default:
 		}
@@ -110,7 +111,7 @@ func (m *mempool) processMempool() {
 
 		for _, tx := range txs {
 			select {
-			case <-m.chStop:
+			case <-ctx.Done():
 				return
 			default:
 			}

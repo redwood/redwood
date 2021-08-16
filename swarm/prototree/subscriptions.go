@@ -2,6 +2,7 @@ package prototree
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 
 	"redwood.dev/log"
+	"redwood.dev/process"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/tree"
@@ -23,24 +25,25 @@ type (
 	}
 
 	WritableSubscription interface {
+		process.Interface
 		StateURI() string
 		Keypath() state.Keypath
 		Type() SubscriptionType
 		EnqueueWrite(stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID)
-		Close() error
+		String() string
 	}
 )
 
 type writableSubscription struct {
+	process.Process
 	log.Logger
+
 	stateURI         string
 	keypath          state.Keypath
 	subscriptionType SubscriptionType
 	treeProtocol     *treeProtocol
 	subImpl          WritableSubscriptionImpl
 	messages         *utils.Mailbox
-	chStop           chan struct{}
-	chDone           chan struct{}
 	stopOnce         sync.Once
 }
 
@@ -50,6 +53,7 @@ type WritableSubscriptionImpl interface {
 	Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) error
 	Close() error
 	Closed() <-chan struct{}
+	String() string
 }
 
 func newWritableSubscription(
@@ -59,7 +63,8 @@ func newWritableSubscription(
 	subscriptionType SubscriptionType,
 	subImpl WritableSubscriptionImpl,
 ) *writableSubscription {
-	writeSub := &writableSubscription{
+	return &writableSubscription{
+		Process:          *process.New("WritableSubscription " + subImpl.String()),
 		Logger:           log.NewLogger("tree proto"),
 		stateURI:         stateURI,
 		keypath:          keypath,
@@ -67,42 +72,59 @@ func newWritableSubscription(
 		treeProtocol:     treeProtocol,
 		subImpl:          subImpl,
 		messages:         utils.NewMailbox(10000),
-		chStop:           make(chan struct{}),
-		chDone:           make(chan struct{}),
+	}
+}
+
+func (sub *writableSubscription) Start() error {
+	err := sub.Process.Start()
+	if err != nil {
+		return err
 	}
 
-	go func() {
+	sub.Process.Go("runloop", func(ctx context.Context) {
 		defer func() {
 			if perr := recover(); perr != nil {
-				writeSub.Errorf("caught panic: %+v", perr)
+				sub.Errorf("caught panic: %+v", perr)
 			}
 		}()
-		defer writeSub.destroy()
+		defer sub.destroy()
 
 		for {
 			select {
-			case <-writeSub.messages.Notify():
-				err := writeSub.writeMessages()
+			case <-sub.messages.Notify():
+				err := sub.writeMessages(ctx)
 				if err != nil {
-					writeSub.subImpl.Close()
+					sub.subImpl.Close()
 					return
 				}
-			case <-writeSub.subImpl.Closed():
+			case <-sub.subImpl.Closed():
 				return
-			case <-writeSub.chStop:
-				writeSub.subImpl.Close()
+			case <-ctx.Done():
+				sub.subImpl.Close()
 				return
 			}
 		}
-	}()
-
-	return writeSub
+	})
+	// We have to use Autoclose to avoid a deadlock caused by the fact that
+	// shutdown can be triggered inside of the runloop goroutine (by subImpl),
+	// and Process#Close() waits for all goroutines to exit before returning.
+	sub.Process.Autoclose()
+	return nil
 }
 
-func (sub *writableSubscription) writeMessages() (err error) {
+func (sub *writableSubscription) destroy() {
+	sub.treeProtocol.handleWritableSubscriptionClosed(sub)
+	select {
+	case <-sub.subImpl.Closed():
+	default:
+		sub.subImpl.Close()
+	}
+}
+
+func (sub *writableSubscription) writeMessages(ctx context.Context) (err error) {
 	for {
 		select {
-		case <-sub.chStop:
+		case <-ctx.Done():
 			sub.subImpl.Close()
 			return types.ErrClosed
 		case <-sub.subImpl.Closed():
@@ -124,7 +146,7 @@ func (sub *writableSubscription) writeMessages() (err error) {
 			node = msg.State
 		}
 
-		ctx, cancel := utils.CombinedContext(sub.chStop, 10*time.Second) // @@TODO: make configurable?
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second) // @@TODO: make configurable?
 		defer cancel()
 
 		err = sub.subImpl.Put(ctx, msg.StateURI, tx, node, msg.Leaves)
@@ -135,11 +157,6 @@ func (sub *writableSubscription) writeMessages() (err error) {
 	}
 }
 
-func (sub *writableSubscription) destroy() {
-	defer close(sub.chDone)
-	sub.treeProtocol.handleWritableSubscriptionClosed(sub.subImpl)
-}
-
 func (sub *writableSubscription) StateURI() string       { return sub.stateURI }
 func (sub *writableSubscription) Type() SubscriptionType { return sub.subscriptionType }
 func (sub *writableSubscription) Keypath() state.Keypath { return sub.keypath }
@@ -148,15 +165,12 @@ func (sub *writableSubscription) EnqueueWrite(stateURI string, tx *tree.Tx, stat
 	sub.messages.Deliver(&SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
 }
 
-func (sub *writableSubscription) Close() error {
-	sub.stopOnce.Do(func() {
-		close(sub.chStop)
-		<-sub.chDone
-	})
-	return nil
+func (sub *writableSubscription) String() string {
+	return sub.subImpl.String()
 }
 
 type multiReaderSubscription struct {
+	process.Process
 	log.Logger
 	stateURI       string
 	maxConns       uint64
@@ -164,8 +178,6 @@ type multiReaderSubscription struct {
 	searchForPeers func(ctx context.Context, stateURI string) <-chan TreePeerConn
 
 	conns    sync.Map
-	chStop   chan struct{}
-	wgDone   sync.WaitGroup
 	peerPool swarm.PeerPool
 }
 
@@ -176,13 +188,69 @@ func newMultiReaderSubscription(
 	searchForPeers func(ctx context.Context, stateURI string) <-chan TreePeerConn,
 ) *multiReaderSubscription {
 	return &multiReaderSubscription{
+		Process:        *process.New("MultiReaderSubscription " + stateURI),
 		Logger:         log.NewLogger("tree proto"),
 		stateURI:       stateURI,
 		maxConns:       maxConns,
 		onTxReceived:   onTxReceived,
 		searchForPeers: searchForPeers,
-		chStop:         make(chan struct{}),
 	}
+}
+
+func (s *multiReaderSubscription) Start() error {
+	err := s.Process.Start()
+	if err != nil {
+		return err
+	}
+	defer s.Process.Autoclose()
+
+	var (
+		restartSearchBackoff = utils.ExponentialBackoff{Min: 5 * time.Second, Max: 30 * time.Second}
+		getPeerBackoff       = utils.ExponentialBackoff{Min: 5 * time.Second, Max: 30 * time.Second}
+	)
+
+	s.peerPool = swarm.NewPeerPool(
+		s.maxConns,
+		func(ctx context.Context) (<-chan swarm.PeerConn, error) {
+			select {
+			case <-time.After(restartSearchBackoff.Next()):
+			case <-ctx.Done():
+				return nil, nil
+			case <-s.Process.Done():
+				return nil, nil
+			}
+			chTreePeers := s.searchForPeers(ctx, s.stateURI)
+			return convertTreePeerChan(ctx, chTreePeers), nil // Can't wait for generics
+		},
+	)
+
+	err = s.Process.SpawnChild(nil, s.peerPool)
+	if err != nil {
+		return err
+	}
+
+	s.Process.Go("runloop", func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			treePeer, err := s.getPeer(ctx)
+			if err != nil {
+				s.Errorf("error getting peer from pool: %v", err)
+				time.Sleep(getPeerBackoff.Next())
+				continue
+			}
+			getPeerBackoff.Reset()
+
+			s.Process.Go("readUntilErrorOrShutdown "+treePeer.DialInfo().String(), func(ctx context.Context) {
+				s.readUntilErrorOrShutdown(ctx, treePeer)
+			})
+		}
+	})
+	return nil
 }
 
 func convertTreePeerChan(ctx context.Context, ch <-chan TreePeerConn) <-chan swarm.PeerConn {
@@ -209,49 +277,6 @@ func convertTreePeerChan(ctx context.Context, ch <-chan TreePeerConn) <-chan swa
 	return chPeer
 }
 
-func (s *multiReaderSubscription) Start() {
-	var (
-		restartSearchBackoff = utils.ExponentialBackoff{Min: 5 * time.Second, Max: 30 * time.Second}
-		getPeerBackoff       = utils.ExponentialBackoff{Min: 5 * time.Second, Max: 30 * time.Second}
-	)
-
-	s.peerPool = swarm.NewPeerPool(
-		s.maxConns,
-		func(ctx context.Context) (<-chan swarm.PeerConn, error) {
-			time.Sleep(restartSearchBackoff.Next())
-			chTreePeers := s.searchForPeers(ctx, s.stateURI)
-			return convertTreePeerChan(ctx, chTreePeers), nil // Can't wait for generics
-		},
-	)
-
-	s.wgDone.Add(1)
-	go func() {
-		defer s.wgDone.Done()
-
-		ctx, cancel := utils.ContextFromChan(s.chStop)
-		defer cancel()
-
-		for {
-			select {
-			case <-s.chStop:
-				return
-			default:
-			}
-
-			treePeer, err := s.getPeer(ctx)
-			if err != nil {
-				s.Errorf("error getting peer from pool: %v", err)
-				time.Sleep(getPeerBackoff.Next())
-				continue
-			}
-			getPeerBackoff.Reset()
-
-			s.wgDone.Add(1)
-			go s.readUntilErrorOrShutdown(ctx, treePeer)
-		}
-	}()
-}
-
 func (s *multiReaderSubscription) getPeer(ctx context.Context) (TreePeerConn, error) {
 	for {
 		peer, err := s.peerPool.GetPeer(ctx)
@@ -275,7 +300,6 @@ func (s *multiReaderSubscription) getPeer(ctx context.Context) (TreePeerConn, er
 }
 
 func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, peer TreePeerConn) {
-	defer s.wgDone.Done()
 	defer func() {
 		s.peerPool.ReturnPeer(peer, false)
 		s.conns.Delete(peer)
@@ -289,12 +313,6 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 		return
 	}
 
-	// err = s.treeProtocol.ChallengePeerIdentity(ctx, peer)
-	// if err != nil {
-	//  s.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
-	//  return
-	// }
-
 	peerSub, err := peer.Subscribe(ctx, s.stateURI)
 	if err != nil {
 		s.Errorf("error subscribing to peer %v (stateURI: %v): %v", peer.DialInfo(), s.stateURI, err)
@@ -304,7 +322,7 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 
 	for {
 		select {
-		case <-s.chStop:
+		case <-s.Process.Done():
 			return
 		default:
 		}
@@ -322,16 +340,12 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 	}
 }
 
-func (s *multiReaderSubscription) Close() {
-	close(s.chStop)
-
-	s.peerPool.Close()
+func (s *multiReaderSubscription) Close() error {
 	s.conns.Range(func(peer, val interface{}) bool {
 		peer.(TreePeerConn).Close()
 		return true
 	})
-
-	s.wgDone.Wait()
+	return s.Process.Close()
 }
 
 type inProcessSubscription struct {
@@ -361,6 +375,10 @@ func newInProcessSubscription(
 		chMessages:       make(chan SubscriptionMsg),
 		chClosed:         make(chan struct{}),
 	}
+}
+
+func (sub *inProcessSubscription) String() string {
+	return "in process " + fmt.Sprintf("%p", sub) + " (" + sub.stateURI + "/" + sub.keypath.String() + ")"
 }
 
 func (sub *inProcessSubscription) StateURI() string {

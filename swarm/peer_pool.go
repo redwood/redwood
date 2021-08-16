@@ -8,16 +8,18 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"redwood.dev/log"
+	"redwood.dev/process"
 	"redwood.dev/utils"
 )
 
 type PeerPool interface {
+	process.Interface
 	GetPeer(ctx context.Context) (_ PeerConn, err error)
 	ReturnPeer(peer PeerConn, strike bool)
-	Close()
 }
 
 type peerPool struct {
+	process.Process
 	log.Logger
 
 	concurrentConns uint64
@@ -26,8 +28,6 @@ type peerPool struct {
 	chProviders     <-chan PeerConn
 	chPeers         chan PeerConn
 	sem             *semaphore.Weighted
-	chStop          chan struct{}
-	wgDone          sync.WaitGroup
 
 	fnGetPeers func(ctx context.Context) (<-chan PeerConn, error)
 
@@ -52,40 +52,35 @@ func NewPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 	chProviders := make(chan PeerConn)
 	close(chProviders)
 
-	p := &peerPool{
+	return &peerPool{
+		Process:         *process.New("PeerPool"),
 		Logger:          log.NewLogger("peer pool"),
 		concurrentConns: concurrentConns,
 		peersAvailable:  utils.NewMailbox(0),
 		peersInTimeout:  utils.NewMailbox(0),
 		chProviders:     chProviders,
 		chPeers:         make(chan PeerConn),
-		chStop:          make(chan struct{}),
 		sem:             semaphore.NewWeighted(int64(concurrentConns)),
 		fnGetPeers:      fnGetPeers,
 		peers:           make(map[PeerDialInfo]peersMapEntry),
 	}
-
-	go p.fillPool()
-	go p.deliverAvailablePeers()
-	go p.handlePeersInTimeout()
-
-	return p
 }
 
-func (p *peerPool) Close() {
-	close(p.chStop)
+func (p *peerPool) Start() error {
+	p.Process.Start()
+	p.Process.Go("fillPool", p.fillPool)
+	p.Process.Go("deliverAvailablePeers", p.deliverAvailablePeers)
+	p.Process.Go("handlePeersInTimeout", p.handlePeersInTimeout)
+	return nil
 }
 
 // fillPool has two responsibilities:
 //   - Adds peers to the `peers` map as they're received from the `fnGetPeers` channel
 //   - If the transports stop searching before `.Close()` is called, the search is reinitiated
-func (p *peerPool) fillPool() {
-	ctx, cancel := utils.ContextFromChan(p.chStop)
-	defer cancel()
-
+func (p *peerPool) fillPool(ctx context.Context) {
 	for {
 		select {
-		case <-p.chStop:
+		case <-ctx.Done():
 			return
 		case peer, open := <-p.chProviders:
 			if !open {
@@ -107,8 +102,6 @@ func (p *peerPool) fillPool() {
 }
 
 func (p *peerPool) restartSearch(ctx context.Context) {
-	ctx, _ = utils.CombinedContext(ctx, p.chStop)
-
 	var err error
 	p.chProviders, err = p.fnGetPeers(ctx)
 	if err != nil {
@@ -117,17 +110,17 @@ func (p *peerPool) restartSearch(ctx context.Context) {
 	}
 }
 
-func (p *peerPool) deliverAvailablePeers() {
+func (p *peerPool) deliverAvailablePeers(ctx context.Context) {
 	for {
 		select {
-		case <-p.chStop:
+		case <-ctx.Done():
 			return
 
 		case <-p.peersAvailable.Notify():
 			for _, x := range p.peersAvailable.RetrieveAll() {
 				peer := x.(PeerConn)
 				select {
-				case <-p.chStop:
+				case <-ctx.Done():
 					return
 				case p.chPeers <- peer:
 				}
@@ -136,11 +129,11 @@ func (p *peerPool) deliverAvailablePeers() {
 	}
 }
 
-func (p *peerPool) handlePeersInTimeout() {
+func (p *peerPool) handlePeersInTimeout(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	for {
 		select {
-		case <-p.chStop:
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		}
@@ -157,7 +150,7 @@ func (p *peerPool) handlePeersInTimeout() {
 }
 
 func (p *peerPool) GetPeer(ctx context.Context) (_ PeerConn, err error) {
-	ctx, cancel := utils.CombinedContext(ctx, p.chStop)
+	ctx, cancel := utils.CombinedContext(ctx, p.Ctx())
 	defer cancel()
 
 	err = p.sem.Acquire(ctx, 1)

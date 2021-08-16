@@ -15,7 +15,6 @@ import (
 	"github.com/gorilla/rpc/v2/json2"
 	"github.com/pkg/errors"
 
-	"redwood.dev/config"
 	"redwood.dev/crypto"
 	"redwood.dev/identity"
 	"redwood.dev/log"
@@ -29,7 +28,20 @@ import (
 	"redwood.dev/utils"
 )
 
-func StartHTTPRPC(svc interface{}, config *config.HTTPRPCConfig) (*http.Server, error) {
+type HTTPConfig struct {
+	Enabled    bool                                      `json:"enabled"    yaml:"Enabled"`
+	ListenHost string                                    `json:"listenHost" yaml:"ListenHost"`
+	Whitelist  HTTPWhitelistConfig                       `json:"whitelist"  yaml:"Whitelist"`
+	Server     func(innerServer *HTTPServer) interface{} `json:"-"          yaml:"-"`
+}
+
+type HTTPWhitelistConfig struct {
+	Enabled        bool            `json:"enabled"        yaml:"Enabled"`
+	PermittedAddrs []types.Address `json:"permittedAddrs" yaml:"PermittedAddrs"`
+	JWTSecret      string          `json:"jwtSecret"      yaml:"JWTSecret"`
+}
+
+func StartHTTPRPC(svc interface{}, config *HTTPConfig) (*http.Server, error) {
 	if config == nil || !config.Enabled {
 		return nil, nil
 	}
@@ -45,7 +57,7 @@ func StartHTTPRPC(svc interface{}, config *config.HTTPRPCConfig) (*http.Server, 
 
 		httpServer.Handler = server
 		if config.Whitelist.Enabled {
-			httpServer.Handler = NewWhitelistMiddleware(config.Whitelist.PermittedAddrs, server)
+			httpServer.Handler = NewWhitelistMiddleware(config.Whitelist.PermittedAddrs, []byte(config.Whitelist.JWTSecret), server)
 		}
 		httpServer.Handler = utils.UnrestrictedCors(httpServer.Handler)
 
@@ -294,11 +306,13 @@ type whitelistMiddleware struct {
 	pendingAuthorizationsMu sync.Mutex
 }
 
-func NewWhitelistMiddleware(permittedAddrs []types.Address, nextHandler http.Handler) *whitelistMiddleware {
-	jwtSecret := make([]byte, 64)
-	_, err := rand.Read(jwtSecret)
-	if err != nil {
-		panic(err)
+func NewWhitelistMiddleware(permittedAddrs []types.Address, jwtSecret []byte, nextHandler http.Handler) *whitelistMiddleware {
+	if len(jwtSecret) == 0 {
+		jwtSecret = make([]byte, 64)
+		_, err := rand.Read(jwtSecret)
+		if err != nil {
+			panic(err)
+		}
 	}
 	paddrs := make(map[types.Address]struct{}, len(permittedAddrs))
 	for _, addr := range permittedAddrs {

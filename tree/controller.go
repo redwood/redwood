@@ -1,6 +1,7 @@
 package tree
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"redwood.dev/blob"
 	"redwood.dev/crypto"
 	"redwood.dev/log"
+	"redwood.dev/process"
 	"redwood.dev/state"
 	"redwood.dev/tree/nelson"
 	"redwood.dev/types"
@@ -18,8 +20,7 @@ import (
 )
 
 type Controller interface {
-	Start() error
-	Close()
+	process.Interface
 
 	AddTx(tx *Tx) error
 	StateAtVersion(version *types.ID) state.Node
@@ -34,8 +35,8 @@ type Controller interface {
 }
 
 type controller struct {
+	process.Process
 	log.Logger
-	chStop chan struct{}
 
 	stateURI         string
 	stateDBRootPath  string
@@ -75,8 +76,8 @@ func NewController(
 	blobStore blob.Store,
 ) (Controller, error) {
 	c := &controller{
+		Process:          *process.New("controller " + stateURI),
 		Logger:           log.NewLogger("controller"),
-		chStop:           make(chan struct{}),
 		stateURI:         stateURI,
 		stateDBRootPath:  stateDBRootPath,
 		encryptionConfig: encryptionConfig,
@@ -91,9 +92,14 @@ func NewController(
 func (c *controller) Start() (err error) {
 	defer func() {
 		if err != nil {
+			fmt.Println(err)
 			c.Close()
 		}
 	}()
+	err = c.Process.Start()
+	if err != nil {
+		return err
+	}
 
 	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(c.stateURI)
 	states, err := state.NewVersionedDBTree(filepath.Join(c.stateDBRootPath, stateURIClean), c.encryptionConfig)
@@ -123,7 +129,7 @@ func (c *controller) Start() (err error) {
 
 	// Start mempool
 	c.mempool = NewMempool(c.processMempoolTx)
-	err = c.mempool.Start()
+	err = c.Process.SpawnChild(context.TODO(), c.mempool)
 	if err != nil {
 		return err
 	}
@@ -134,13 +140,7 @@ func (c *controller) Start() (err error) {
 	return nil
 }
 
-func (c *controller) Close() {
-	close(c.chStop)
-
-	if c.mempool != nil {
-		c.mempool.Close()
-	}
-
+func (c *controller) Close() error {
 	if c.states != nil {
 		err := c.states.Close()
 		if err != nil {
@@ -154,6 +154,8 @@ func (c *controller) Close() {
 			c.Errorf("error closing index db: %v", err)
 		}
 	}
+
+	return c.Process.Close()
 }
 
 func (c *controller) StateAtVersion(version *types.ID) state.Node {

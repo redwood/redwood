@@ -2,7 +2,6 @@ package protoauth
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -10,15 +9,15 @@ import (
 	"redwood.dev/crypto"
 	"redwood.dev/identity"
 	"redwood.dev/log"
+	"redwood.dev/process"
 	"redwood.dev/swarm"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 //go:generate mockery --name AuthProtocol --output ./mocks/ --case=underscore
-
 type AuthProtocol interface {
-	swarm.Protocol
+	process.Interface
 	PeersClaimingAddress(ctx context.Context, address types.Address) <-chan AuthPeerConn
 	ChallengePeerIdentity(ctx context.Context, peerConn AuthPeerConn) (err error)
 }
@@ -39,15 +38,12 @@ type AuthPeerConn interface {
 }
 
 type authProtocol struct {
+	process.Process
 	log.Logger
 
-	keyStore         identity.KeyStore
-	peerStore        swarm.PeerStore
-	transports       map[string]AuthTransport
-	processPeersTask *utils.PeriodicTask
-
-	chStop chan struct{}
-	wgDone sync.WaitGroup
+	keyStore   identity.KeyStore
+	peerStore  swarm.PeerStore
+	transports map[string]AuthTransport
 }
 
 func NewAuthProtocol(transports []swarm.Transport, keyStore identity.KeyStore, peerStore swarm.PeerStore) *authProtocol {
@@ -58,11 +54,11 @@ func NewAuthProtocol(transports []swarm.Transport, keyStore identity.KeyStore, p
 		}
 	}
 	return &authProtocol{
+		Process:    *process.New("AuthProtocol"),
 		Logger:     log.NewLogger("auth proto"),
 		transports: transportsMap,
 		keyStore:   keyStore,
 		peerStore:  peerStore,
-		chStop:     make(chan struct{}),
 	}
 }
 
@@ -72,40 +68,37 @@ func (ap *authProtocol) Name() string {
 	return ProtocolName
 }
 
-func (ap *authProtocol) Start() {
-	ap.wgDone.Add(1)
+func (ap *authProtocol) Start() error {
+	ap.Process.Start()
+
+	processPeersTask := NewProcessPeersTask(10*time.Second, ap, ap.peerStore, ap.transports)
 	ap.peerStore.OnNewUnverifiedPeer(func(dialInfo swarm.PeerDialInfo) {
-		ap.processPeersTask.Enqueue()
+		processPeersTask.Enqueue()
 	})
-	ap.processPeersTask = utils.NewPeriodicTask(10*time.Second, ap.processPeers)
+	err := ap.Process.SpawnChild(nil, processPeersTask)
+	if err != nil {
+		return err
+	}
+
 	for _, tpt := range ap.transports {
 		tpt.OnChallengeIdentity(ap.handleChallengeIdentity)
 	}
-}
-
-func (ap *authProtocol) Close() {
-	ap.processPeersTask.Close()
-	close(ap.chStop)
-	ap.wgDone.Done()
-	ap.wgDone.Wait()
+	return nil
 }
 
 func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.Address) <-chan AuthPeerConn {
-	ctx, cancel := utils.CombinedContext(ctx, ap.chStop)
-
-	var wg sync.WaitGroup
 	ch := make(chan AuthPeerConn)
+
+	child := ap.Process.NewChild(ctx, "PeersClaimingAddress "+address.String())
+	defer child.Autoclose()
+
 	for _, tpt := range ap.transports {
 		innerCh, err := tpt.PeersClaimingAddress(ctx, address)
 		if err != nil {
 			continue
 		}
 
-		wg.Add(1)
-		ap.wgDone.Add(1)
-		go func() {
-			defer wg.Done()
-			defer ap.wgDone.Done()
+		child.Go(tpt.Name(), func(ctx context.Context) {
 			for {
 				select {
 				case <-ctx.Done():
@@ -122,15 +115,13 @@ func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.
 					}
 				}
 			}
-		}()
-
+		})
 	}
 
-	go func() {
-		defer cancel()
-		defer close(ch)
-		wg.Wait()
-	}()
+	ap.Process.Go("PeersClaimingAddress "+address.String()+" (await completion)", func(ctx context.Context) {
+		<-child.Done()
+		close(ch)
+	})
 
 	return ch
 }
@@ -195,21 +186,37 @@ func (ap *authProtocol) handleChallengeIdentity(challengeMsg ChallengeMsg, peerC
 	return peerConn.RespondChallengeIdentity(responses)
 }
 
-func (ap *authProtocol) processPeers(ctx context.Context) {
-	ctx, cancel := utils.CombinedContext(ctx, ap.chStop)
-	defer cancel()
+type processPeersTask struct {
+	process.PeriodicTask
+	log.Logger
+	authProto  AuthProtocol
+	peerStore  swarm.PeerStore
+	transports map[string]AuthTransport
+}
 
-	wg := utils.NewWaitGroupChan(ctx)
-	defer wg.Close()
+func NewProcessPeersTask(
+	interval time.Duration,
+	authProto AuthProtocol,
+	peerStore swarm.PeerStore,
+	transports map[string]AuthTransport,
+) *processPeersTask {
+	t := &processPeersTask{
+		Logger:     log.NewLogger("auth proto"),
+		authProto:  authProto,
+		peerStore:  peerStore,
+		transports: transports,
+	}
+	t.PeriodicTask = *process.NewPeriodicTask("ProcessPeersTask", interval, t.processPeers)
+	return t
+}
 
-	wg.Add(1)
-
+func (t *processPeersTask) processPeers(ctx context.Context) {
 	// Announce peers
 	{
-		allDialInfos := ap.peerStore.AllDialInfos()
+		allDialInfos := t.peerStore.AllDialInfos()
 
-		for _, tpt := range ap.transports {
-			for _, peerDetails := range ap.peerStore.PeersFromTransport(tpt.Name()) {
+		for _, tpt := range t.transports {
+			for _, peerDetails := range t.peerStore.PeersFromTransport(tpt.Name()) {
 				if !peerDetails.Ready() {
 					continue
 				}
@@ -221,17 +228,12 @@ func (ap *authProtocol) processPeers(ctx context.Context) {
 				tpt := tpt
 				peerDetails := peerDetails
 
-				wg.Add(1)
-				ap.wgDone.Add(1)
-				go func() {
-					defer wg.Done()
-					defer ap.wgDone.Done()
-
+				t.Process.Go("announce peers", func(ctx context.Context) {
 					peerConn, err := tpt.NewPeerConn(ctx, peerDetails.DialInfo().DialAddr)
 					if errors.Cause(err) == swarm.ErrPeerIsSelf {
 						return
 					} else if err != nil {
-						ap.Warnf("error creating new %v peerConn: %v", tpt.Name(), err)
+						t.Warnf("error creating new %v peerConn: %v", tpt.Name(), err)
 						return
 					}
 					defer peerConn.Close()
@@ -240,7 +242,7 @@ func (ap *authProtocol) processPeers(ctx context.Context) {
 					if errors.Cause(err) == types.ErrConnection {
 						return
 					} else if err != nil {
-						ap.Warnf("error connecting to %v peerConn (%v): %v", tpt.Name(), peerDetails.DialInfo().DialAddr, err)
+						t.Warnf("error connecting to %v peerConn (%v): %v", tpt.Name(), peerDetails.DialInfo().DialAddr, err)
 						return
 					}
 
@@ -248,21 +250,19 @@ func (ap *authProtocol) processPeers(ctx context.Context) {
 					if err != nil {
 						// t.Errorf("error writing to peerConn: %+v", err)
 					}
-				}()
+				})
 			}
 		}
 	}
 
 	// Verify unverified peers
 	{
-		unverifiedPeers := ap.peerStore.UnverifiedPeers()
-
-		for _, unverifiedPeer := range unverifiedPeers {
+		for _, unverifiedPeer := range t.peerStore.UnverifiedPeers() {
 			if !unverifiedPeer.Ready() {
 				continue
 			}
 
-			transport, exists := ap.transports[unverifiedPeer.DialInfo().TransportName]
+			transport, exists := t.transports[unverifiedPeer.DialInfo().TransportName]
 			if !exists {
 				// Unsupported transport
 				continue
@@ -284,25 +284,20 @@ func (ap *authProtocol) processPeers(ctx context.Context) {
 				continue
 			}
 
-			wg.Add(1)
-			ap.wgDone.Add(1)
-			go func() {
-				defer wg.Done()
-				defer ap.wgDone.Done()
+			t.Process.Go("verify unverified peers", func(ctx context.Context) {
 				defer authPeerConn.Close()
 
-				err := ap.ChallengePeerIdentity(ctx, authPeerConn)
+				err := t.authProto.ChallengePeerIdentity(ctx, authPeerConn)
 				if errors.Cause(err) == types.ErrConnection {
 					// no-op
 				} else if errors.Cause(err) == context.Canceled {
 					// no-op
 				} else if err != nil {
-					ap.Errorf("error verifying peerConn identity (%v): %v", authPeerConn.DialInfo(), err)
+					t.Errorf("error verifying peerConn identity (%v): %v", authPeerConn.DialInfo(), err)
 				}
-			}()
+			})
 		}
 	}
 
-	wg.Done()
-	<-wg.Wait()
+	// <-child.Done()
 }

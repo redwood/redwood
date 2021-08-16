@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useState, useEffect, useDebugValue } from 'react'
-import { useRedwood } from 'redwood-p2p-client/react'
+import { useRedwood } from '@redwood.dev/client/react'
 import { uniq } from 'lodash'
 
 export const Context = createContext({

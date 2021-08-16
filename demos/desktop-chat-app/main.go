@@ -3,12 +3,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/brynbellomy/klog"
@@ -16,8 +18,13 @@ import (
 	"github.com/webview/webview"
 
 	"redwood.dev/config"
+	"redwood.dev/process"
 	"redwood.dev/utils"
 )
+
+func init() {
+	runtime.LockOSThread()
+}
 
 func main() {
 	cliApp := cli.NewApp()
@@ -25,13 +32,13 @@ func main() {
 
 	configPath, err := config.DefaultConfigPath("redwood-chat")
 	if err != nil {
-		app.Error(err)
+		fmt.Println(err)
 		os.Exit(1)
 	}
 
 	profileRoot, err := config.DefaultDataRoot("redwood-chat")
 	if err != nil {
-		app.Error(err)
+		fmt.Println(err)
 		os.Exit(1)
 	}
 
@@ -73,31 +80,48 @@ func main() {
 		})
 		klog.Flush()
 
-		// if c.Bool("pprof") {
 		go func() {
 			http.ListenAndServe(":"+c.String("pprof"), nil)
 		}()
 		runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
-		// }
 
-		app.configPath = c.String("config")
-		app.profileRoot = c.String("root")
+		profileRoot := c.String("root")
 
 		// Create the profileRoot if it doesn't exist
-		if _, err := os.Stat(app.profileRoot); os.IsNotExist(err) {
-			err := os.MkdirAll(app.profileRoot, 0777|os.ModeDir)
+		if _, err := os.Stat(profileRoot); os.IsNotExist(err) {
+			err := os.MkdirAll(profileRoot, 0777|os.ModeDir)
 			if err != nil {
-				panic(err)
+				return err
 			}
 		}
+		fmt.Println("profile root:", profileRoot)
 
-		port := c.Uint("port")
-		go startGUI(port)
-		go startAPI(port)
+		masterProcess := process.New("root")
 
-		defer app.Close()
+		err := masterProcess.Start()
+		if err != nil {
+			return err
+		}
+		defer masterProcess.Close()
 
-		<-utils.AwaitInterrupt()
+		api := newAPI(c.Uint("port"), c.String("config"), profileRoot, masterProcess)
+		gui := newGUI(api)
+
+		err = masterProcess.SpawnChild(context.TODO(), api)
+		if err != nil {
+			return err
+		}
+
+		go func() {
+			defer masterProcess.Close()
+			defer gui.Close()
+			select {
+			case <-utils.AwaitInterrupt():
+			case <-api.Done():
+			case <-gui.chDone:
+			}
+		}()
+		gui.Start()
 		return nil
 	}
 
@@ -108,12 +132,75 @@ func main() {
 	}
 }
 
-func startGUI(port uint) {
-	debug := true
-	w := webview.New(debug)
-	defer w.Destroy()
-	w.SetTitle("Minimal webview example")
-	w.SetSize(800, 600, webview.HintNone)
-	w.Navigate(fmt.Sprintf("http://localhost:%v/index.html", port))
-	w.Run()
+type GUI struct {
+	closeOnce sync.Once
+	chDone    chan struct{}
+
+	api     *API
+	webview webview.WebView
 }
+
+func newGUI(api *API) *GUI {
+	return &GUI{
+		api:    api,
+		chDone: make(chan struct{}),
+	}
+}
+
+func (gui *GUI) Start() error {
+	defer close(gui.chDone)
+
+	debug := true
+	gui.webview = webview.New(debug)
+	gui.webview.SetTitle("Minimal webview example")
+	gui.webview.SetSize(800, 600, webview.HintNone)
+	gui.webview.Navigate(fmt.Sprintf("http://localhost:%v/index.html", gui.api.port))
+	gui.webview.Run()
+	return nil
+}
+
+func (gui *GUI) Close() (err error) {
+	gui.closeOnce.Do(func() {
+		gui.webview.Destroy()
+	})
+	return nil
+}
+
+// MUON STUFF
+// cfg := &muon.Config{
+//  Title:          "asdf",
+//  Height:         800,
+//  Width:          600,
+//  Titled:         true,
+//  Resizeable:     true,
+//  FilesystemPath: "../projects/forest/lib",
+// }
+
+// m := muon.New(cfg, api.server)
+// err := m.Start()
+// if err != nil {
+//  panic(err)
+// }
+
+// ULTRALIGHT STUFF
+// app := ultralight.NewApp()
+// defer app.Destroy()
+
+// win := app.NewWindow(1024, 768, false, "Ultralight Browser")
+// defer win.Destroy()
+
+// ovl := win.Overlay(0)
+// ovl.Resize(win.Width(), UI_HEIGHT)
+
+// ovl.View().OnConsoleMessage(func(source ultralight.MessageSource, level ultralight.MessageLevel,
+//  message string, line uint, col uint, sourceId string) {
+//  fmt.Printf("CONSOLE source=%v level=%v id=%q line=%c col=%v %v\n",
+//      source, level, sourceId, line, col, message)
+// })
+
+// ui := &UI{win: win, ovl: ovl, tabWidth: win.Width(), tabHeight: win.Height() - UI_HEIGHT, tabs: map[int]*Tab{}}
+
+// view := ovl.View()
+
+// ovl.View().LoadURL("file:///assets/ui.html")
+// app.Run()

@@ -1,6 +1,8 @@
 package tree
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -9,14 +11,14 @@ import (
 
 	"redwood.dev/blob"
 	"redwood.dev/log"
+	"redwood.dev/process"
 	"redwood.dev/state"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type ControllerHub interface {
-	Start() error
-	Close()
+	process.Interface
 
 	AddTx(tx *Tx) error
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
@@ -38,6 +40,7 @@ type ControllerHub interface {
 }
 
 type controllerHub struct {
+	process.Process
 	log.Logger
 	chStop chan struct{}
 
@@ -58,6 +61,7 @@ var (
 
 func NewControllerHub(dbRootPath string, txStore TxStore, blobStore blob.Store, encryptionConfig *state.EncryptionConfig) ControllerHub {
 	return &controllerHub{
+		Process:     *process.New("controller hub"),
 		Logger:      log.NewLogger("controller hub"),
 		chStop:      make(chan struct{}),
 		controllers: make(map[string]Controller),
@@ -70,9 +74,14 @@ func NewControllerHub(dbRootPath string, txStore TxStore, blobStore blob.Store, 
 func (m *controllerHub) Start() (err error) {
 	defer func() {
 		if err != nil {
+			fmt.Println(err)
 			m.Close()
 		}
 	}()
+	err = m.Process.Start()
+	if err != nil {
+		return err
+	}
 
 	stateURIs, err := m.txStore.KnownStateURIs()
 	if err != nil {
@@ -87,16 +96,6 @@ func (m *controllerHub) Start() (err error) {
 	}
 
 	return nil
-}
-
-func (m *controllerHub) Close() {
-	close(m.chStop)
-
-	m.controllersMu.Lock()
-	defer m.controllersMu.Unlock()
-	for _, c := range m.controllers {
-		c.Close()
-	}
 }
 
 func (m *controllerHub) EnsureController(stateURI string) (Controller, error) {
@@ -114,7 +113,7 @@ func (m *controllerHub) EnsureController(stateURI string) (Controller, error) {
 
 		ctrl.OnNewState(m.notifyNewStateListeners)
 
-		err = ctrl.Start()
+		err = m.Process.SpawnChild(context.TODO(), ctrl)
 		if err != nil {
 			m.Errorf("error starting new controller: %v", err)
 			return nil, err

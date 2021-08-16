@@ -3,13 +3,13 @@ package protoblob
 import (
 	"context"
 	"io"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
 
 	"redwood.dev/blob"
 	"redwood.dev/log"
+	"redwood.dev/process"
 	"redwood.dev/swarm"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -17,7 +17,7 @@ import (
 
 //go:generate mockery --name BlobProtocol --output ./mocks/ --case=underscore
 type BlobProtocol interface {
-	swarm.Protocol
+	process.Interface
 	ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-chan BlobPeerConn
 }
 
@@ -40,12 +40,12 @@ type BlobPeerConn interface {
 }
 
 type blobProtocol struct {
+	process.Process
 	log.Logger
+
 	blobStore   blob.Store
 	transports  map[string]BlobTransport
 	blobsNeeded *utils.Mailbox
-	chStop      chan struct{}
-	chDone      chan struct{}
 }
 
 const (
@@ -60,12 +60,11 @@ func NewBlobProtocol(transports []swarm.Transport, blobStore blob.Store) *blobPr
 		}
 	}
 	return &blobProtocol{
+		Process:     *process.New("BlobProtocol"),
 		Logger:      log.NewLogger("blob proto"),
 		blobStore:   blobStore,
 		transports:  transportsMap,
 		blobsNeeded: utils.NewMailbox(0),
-		chStop:      make(chan struct{}),
-		chDone:      make(chan struct{}),
 	}
 }
 
@@ -75,28 +74,26 @@ func (bp *blobProtocol) Name() string {
 	return ProtocolName
 }
 
-func (bp *blobProtocol) Start() {
+func (bp *blobProtocol) Start() error {
+	bp.Process.Start()
 	bp.blobStore.OnBlobsNeeded(func(blobs []blob.ID) {
 		bp.blobsNeeded.Deliver(blobs)
 	})
 
-	go bp.periodicallyFetchMissingBlobs()
+	bp.periodicallyFetchMissingBlobs()
 
 	for _, tpt := range bp.transports {
 		tpt.OnBlobRequest(bp.handleBlobRequest)
 	}
-}
-
-func (bp *blobProtocol) Close() {
-	close(bp.chStop)
-	<-bp.chDone
+	return nil
 }
 
 func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-chan BlobPeerConn {
-	ctx, cancel := utils.CombinedContext(ctx, bp.chStop)
-
-	var wg sync.WaitGroup
 	ch := make(chan BlobPeerConn)
+
+	child := bp.Process.NewChild(ctx, "ProvidersOfBlob "+blobID.String())
+	defer child.Autoclose()
+
 	for _, tpt := range bp.transports {
 		innerCh, err := tpt.ProvidersOfBlob(ctx, blobID)
 		if err != nil {
@@ -104,9 +101,7 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 			continue
 		}
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		child.Go(tpt.Name(), func(ctx context.Context) {
 			for {
 				select {
 				case <-ctx.Done():
@@ -123,65 +118,66 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 					}
 				}
 			}
-		}()
+		})
 	}
 
-	go func() {
-		defer cancel()
-		defer close(ch)
-		wg.Wait()
-	}()
+	bp.Process.Go("ProvidersOfBlob "+blobID.String()+" (await completion)", func(ctx context.Context) {
+		<-child.Done()
+		close(ch)
+	})
 
 	return ch
 }
 
 func (bp *blobProtocol) periodicallyFetchMissingBlobs() {
-	ticker := utils.NewExponentialBackoffTicker(10*time.Second, 2*time.Minute) // @@TODO: configurable?
-	ticker.Start()
-	defer ticker.Stop()
+	bp.Process.Go("periodicallyFetchMissingBlobs", func(ctx context.Context) {
+		ticker := utils.NewExponentialBackoffTicker(10*time.Second, 2*time.Minute) // @@TODO: configurable?
+		ticker.Start()
+		defer ticker.Stop()
 
-	for {
-		select {
-		case <-bp.chStop:
-			return
+		for {
+			select {
+			case <-ctx.Done():
+				return
 
-		case <-bp.blobsNeeded.Notify():
-			blobsBlobs := bp.blobsNeeded.RetrieveAll()
-			var allBlobs []blob.ID
-			for _, blobs := range blobsBlobs {
-				allBlobs = append(allBlobs, blobs.([]blob.ID)...)
-			}
-			bp.fetchBlobs(allBlobs)
+			case <-bp.blobsNeeded.Notify():
+				blobsBlobs := bp.blobsNeeded.RetrieveAll()
+				var allBlobs []blob.ID
+				for _, blobs := range blobsBlobs {
+					allBlobs = append(allBlobs, blobs.([]blob.ID)...)
+				}
+				bp.fetchBlobs(allBlobs)
 
-		case <-ticker.Tick():
-			blobs, err := bp.blobStore.BlobsNeeded()
-			if err != nil {
-				bp.Errorf("error fetching list of needed blobs: %v", err)
-				continue
-			}
+			case <-ticker.Tick():
+				blobs, err := bp.blobStore.BlobsNeeded()
+				if err != nil {
+					bp.Errorf("error fetching list of needed blobs: %v", err)
+					continue
+				}
 
-			if len(blobs) > 0 {
-				bp.fetchBlobs(blobs)
+				if len(blobs) > 0 {
+					bp.fetchBlobs(blobs)
+				}
 			}
 		}
-	}
+	})
 }
 
 func (bp *blobProtocol) fetchBlobs(blobs []blob.ID) {
-	var wg sync.WaitGroup
+	child := bp.Process.NewChild(context.Background(), "fetchBlobs")
+
 	for _, blobID := range blobs {
-		wg.Add(1)
 		blobID := blobID
-		go func() {
-			defer wg.Done()
-			bp.fetchBlob(context.Background(), blobID)
-		}()
+		child.Go(blobID.String(), func(ctx context.Context) {
+			bp.fetchBlob(ctx, blobID)
+		})
 	}
-	wg.Wait()
+	child.Autoclose()
+	<-child.Done()
 }
 
 func (bp *blobProtocol) fetchBlob(ctx context.Context, blobID blob.ID) {
-	ctxFindProviders, cancelFindProviders := utils.CombinedContext(ctx, bp.chStop, 15*time.Second)
+	ctxFindProviders, cancelFindProviders := context.WithTimeout(ctx, 15*time.Second)
 	defer cancelFindProviders()
 
 	for peer := range bp.ProvidersOfBlob(ctxFindProviders, blobID) {
@@ -191,7 +187,7 @@ func (bp *blobProtocol) fetchBlob(ctx context.Context, blobID blob.ID) {
 
 		var done bool
 		func() {
-			ctxConnect, cancelConnect := utils.CombinedContext(bp.chStop, 10*time.Second)
+			ctxConnect, cancelConnect := context.WithTimeout(ctx, 10*time.Second)
 			defer cancelConnect()
 
 			err := peer.EnsureConnected(ctxConnect)
@@ -218,7 +214,7 @@ func (bp *blobProtocol) fetchBlob(ctx context.Context, blobID blob.ID) {
 			}
 
 			pr, pw := io.Pipe()
-			go func() {
+			bp.Process.Go("fetchBlob "+blobID.String()+" pipe", func(ctx context.Context) {
 				var err error
 				defer func() { pw.CloseWithError(err) }()
 
@@ -248,7 +244,7 @@ func (bp *blobProtocol) fetchBlob(ctx context.Context, blobID blob.ID) {
 						return
 					}
 				}
-			}()
+			})
 
 			sha1Hash, sha3Hash, err := bp.blobStore.StoreBlob(pr)
 			if err != nil {
@@ -270,30 +266,28 @@ func (bp *blobProtocol) fetchBlob(ctx context.Context, blobID blob.ID) {
 }
 
 func (bp *blobProtocol) announceBlobs(blobIDs []blob.ID) {
-	ctx, cancel := utils.CombinedContext(bp.chStop, 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var wg sync.WaitGroup
-	wg.Add(len(blobIDs) * len(bp.transports))
+	child := bp.Process.NewChild(ctx, "announceBlobs")
 
 	for _, transport := range bp.transports {
 		for _, blobID := range blobIDs {
 			transport := transport
 			blobID := blobID
 
-			go func() {
-				defer wg.Done()
-
+			child.Go(blobID.String(), func(ctx context.Context) {
 				err := transport.AnnounceBlob(ctx, blobID)
 				if errors.Cause(err) == types.ErrUnimplemented {
 					return
 				} else if err != nil {
 					bp.Warnf("error announcing blob %v over transport %v: %v", blobID, transport.Name(), err)
 				}
-			}()
+			})
 		}
 	}
-	wg.Wait()
+	child.Autoclose()
+	<-child.Done()
 }
 
 func (bp *blobProtocol) handleBlobRequest(blobID blob.ID, peer BlobPeerConn) {

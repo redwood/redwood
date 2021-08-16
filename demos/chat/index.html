@@ -363,6 +363,7 @@
     //
     async function available(url) {
         try {
+            console.log('requesting', url)
             const resp = await fetch(url)
             console.log('available ~>', resp)
             return resp.status == 200

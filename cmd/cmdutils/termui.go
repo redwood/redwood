@@ -1,4 +1,4 @@
-package main
+package cmdutils
 
 import (
 	"bytes"
@@ -103,7 +103,7 @@ func NewTermUI() *termUI {
 
 func (tui *termUI) Start() {
 	if err := ui.Init(); err != nil {
-		logger.Fatalf("failed to initialize termui: %v", err)
+		panic(fmt.Sprintf("failed to initialize termui: %v", err))
 	}
 	defer ui.Close()
 	defer tui.Stop()
