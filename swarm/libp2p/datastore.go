@@ -19,7 +19,7 @@ func (ds *notifyingDatastore) Put(k dstore.Key, v []byte) error {
 	if err != nil {
 		return err
 	}
-	key, value, err := decodeDatastoreKeyValue(ds.Batching, k, v)
+	key, value, err := ds.decodeDatastoreKeyValue(k, v)
 	if err != nil {
 		return err
 	}
@@ -27,8 +27,8 @@ func (ds *notifyingDatastore) Put(k dstore.Key, v []byte) error {
 	return nil
 }
 
-func decodeDatastoreKeyValue(ds dstore.Batching, key dstore.Key, value []byte) (string, []byte, error) {
-	buf, err := ds.Get(key)
+func (ds *notifyingDatastore) decodeDatastoreKeyValue(key dstore.Key, value []byte) (string, []byte, error) {
+	buf, err := ds.Batching.Get(key)
 	if err == dstore.ErrNotFound {
 		return "", nil, nil
 	} else if err != nil {

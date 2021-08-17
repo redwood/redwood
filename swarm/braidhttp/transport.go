@@ -55,11 +55,10 @@ type Transport interface {
 
 type transport struct {
 	process.Process
+	log.Logger
 	protoauth.BaseAuthTransport
 	protoblob.BaseBlobTransport
 	prototree.BaseTreeTransport
-
-	log.Logger
 
 	controllerHub   tree.ControllerHub
 	defaultStateURI string

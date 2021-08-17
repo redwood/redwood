@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/brynbellomy/klog"
@@ -164,6 +166,9 @@ func (app *App) Start() error {
 				cfg.Libp2pTransport.ListenPort,
 				cfg.Libp2pTransport.ReachableAt,
 				bootstrapPeers,
+				cfg.Libp2pTransport.StaticRelays,
+				filepath.Join(cfg.DataRoot, libp2p.TransportName),
+				cfg.DNSOverHTTPSURL,
 				app.ControllerHub,
 				app.KeyStore,
 				app.BlobStore,
@@ -293,7 +298,7 @@ func (app *App) Start() error {
 				prompt = cfg.REPLConfig.Prompt
 			}
 			app.startREPL(prompt, cfg.REPLConfig.Commands)
-			<-utils.AwaitInterrupt()
+			<-AwaitInterrupt()
 			app.Process.Close()
 		}()
 
@@ -333,7 +338,7 @@ func (app *App) Start() error {
 		})
 
 	case ModeHeadless:
-		<-utils.AwaitInterrupt()
+		<-AwaitInterrupt()
 	}
 
 	return nil
@@ -487,4 +492,39 @@ func (app *App) startREPL(prompt string, replCommands []REPLCommand) {
 			app.Error(err)
 		}
 	}
+}
+
+func AwaitInterrupt() <-chan struct{} {
+	chDone := make(chan struct{})
+
+	go func() {
+		sigInbox := make(chan os.Signal, 1)
+
+		signal.Notify(sigInbox, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+
+		count := 0
+		firstTime := int64(0)
+
+		for range sigInbox {
+			count++
+			curTime := time.Now().Unix()
+
+			// Prevent un-terminated ^c character in terminal
+			fmt.Println()
+
+			if count == 1 {
+				firstTime = curTime
+				close(chDone)
+
+			} else {
+				if curTime > firstTime+3 {
+					fmt.Println("\nReceived interrupt before graceful shutdown, terminating...")
+					klog.Flush()
+					os.Exit(-1)
+				}
+			}
+		}
+	}()
+
+	return chDone
 }
