@@ -23,7 +23,7 @@ type Config struct {
 	Datastore struct {
 		Path       string                 `json:"path"`
 		Encryption state.EncryptionConfig `json:"encryption"`
-	} `json: "datastore"`
+	} `json:"datastore"`
 	BootstrapPeers  []string `json:"bootstrapPeers"`
 	DNSOverHTTPSURL string   `json:"dnsOverHTTPSURL"`
 }
