@@ -10,21 +10,23 @@ import (
 	"time"
 
 	cid "github.com/ipfs/go-cid"
-	dstore "github.com/ipfs/go-datastore"
-	dsync "github.com/ipfs/go-datastore/sync"
+	badgerds "github.com/ipfs/go-ds-badger2"
+	dohp2p "github.com/libp2p/go-doh-resolver"
 	libp2p "github.com/libp2p/go-libp2p"
 	cryptop2p "github.com/libp2p/go-libp2p-core/crypto"
 	metrics "github.com/libp2p/go-libp2p-core/metrics"
 	netp2p "github.com/libp2p/go-libp2p-core/network"
-	corepeer "github.com/libp2p/go-libp2p-core/peer"
 	p2phost "github.com/libp2p/go-libp2p-host"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
+	noisep2p "github.com/libp2p/go-libp2p-noise"
 	peer "github.com/libp2p/go-libp2p-peer"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
+	"github.com/libp2p/go-libp2p-peerstore/pstoreds"
 	protocol "github.com/libp2p/go-libp2p-protocol"
 	"github.com/libp2p/go-libp2p/p2p/discovery"
 	ma "github.com/multiformats/go-multiaddr"
+	madns "github.com/multiformats/go-multiaddr-dns"
 	"github.com/pkg/errors"
 
 	"redwood.dev/blob"
@@ -54,22 +56,22 @@ type Transport interface {
 
 type transport struct {
 	process.Process
+	log.Logger
 	protoauth.BaseAuthTransport
 	protoblob.BaseBlobTransport
 	prototree.BaseTreeTransport
 
-	log.Logger
-	chStop chan struct{}
-	chDone chan struct{}
-
-	libp2pHost     p2phost.Host
-	dht            *dht.IpfsDHT
-	disc           discovery.Service
-	peerID         peer.ID
-	port           uint
-	p2pKey         cryptop2p.PrivKey
-	reachableAt    string
-	bootstrapPeers []string
+	libp2pHost        p2phost.Host
+	dht               *dht.IpfsDHT
+	disc              discovery.Service
+	peerID            peer.ID
+	port              uint
+	p2pKey            cryptop2p.PrivKey
+	reachableAt       string
+	bootstrapPeers    []string
+	staticRelays      []string
+	datastorePath     string
+	dohDNSResolverURL string
 	*metrics.BandwidthCounter
 
 	address types.Address
@@ -94,6 +96,9 @@ func NewTransport(
 	port uint,
 	reachableAt string,
 	bootstrapPeers []string,
+	staticRelays []string,
+	datastorePath string,
+	dohDNSResolverURL string,
 	controllerHub tree.ControllerHub,
 	keyStore identity.KeyStore,
 	blobStore blob.Store,
@@ -102,10 +107,12 @@ func NewTransport(
 	t := &transport{
 		Process:           *process.New(TransportName),
 		Logger:            log.NewLogger(TransportName),
-		chStop:            make(chan struct{}),
-		chDone:            make(chan struct{}),
 		port:              port,
 		reachableAt:       reachableAt,
+		bootstrapPeers:    bootstrapPeers,
+		staticRelays:      staticRelays,
+		datastorePath:     datastorePath,
+		dohDNSResolverURL: dohDNSResolverURL,
 		controllerHub:     controllerHub,
 		keyStore:          keyStore,
 		blobStore:         blobStore,
@@ -136,11 +143,28 @@ func (t *transport) Start() error {
 
 	t.BandwidthCounter = metrics.NewBandwidthCounter()
 
-	// ctx, cancel := utils.CombinedContext(t.chStop, 30*time.Second)
-	// defer cancel()
+	staticRelays, err := addrInfosFromStrings(t.staticRelays)
+	if err != nil {
+		t.Warnf("while decoding static relays: %v", err)
+	}
+
+	datastore, err := badgerds.NewDatastore(t.datastorePath, nil)
+	if err != nil {
+		return err
+	}
+
+	peerStore, err := pstoreds.NewPeerstore(t.Process.Ctx(), datastore, pstoreds.DefaultOpts())
+	if err != nil {
+		return err
+	}
+
+	dnsResolver, err := madns.NewResolver(madns.WithDefaultResolver(dohp2p.NewResolver(t.dohDNSResolverURL)))
+	if err != nil {
+		return err
+	}
 
 	// Initialize the libp2p host
-	libp2pHost, err := libp2p.New(context.Background(),
+	libp2pHost, err := libp2p.New(t.Process.Ctx(),
 		libp2p.ListenAddrStrings(
 			fmt.Sprintf("/ip4/0.0.0.0/tcp/%v", t.port),
 		),
@@ -150,6 +174,10 @@ func (t *transport) Start() error {
 		libp2p.EnableNATService(),
 		// libp2p.EnableAutoRelay(),
 		// libp2p.DefaultStaticRelays(),
+		libp2p.StaticRelays(staticRelays),
+		libp2p.Peerstore(peerStore),
+		libp2p.Security(noisep2p.ID, noisep2p.New),
+		libp2p.MultiaddrResolver(dnsResolver),
 	)
 	if err != nil {
 		return errors.Wrap(err, "could not initialize libp2p host")
@@ -160,29 +188,15 @@ func (t *transport) Start() error {
 
 	// Initialize the DHT
 	// bootstrapPeers := dht.GetDefaultBootstrapPeerAddrInfos() // @@TODO: remove this
-	var bootstrapPeers []corepeer.AddrInfo
-	for _, bp := range t.bootstrapPeers {
-		multiaddr, err := ma.NewMultiaddr(bp)
-		if err != nil {
-			t.Warnf("bad bootstrap peer multiaddress (%v): %v", bp, err)
-			continue
-		}
-		addrInfo, err := corepeer.AddrInfoFromP2pAddr(multiaddr)
-		if err != nil {
-			t.Warnf("bad bootstrap peer multiaddress (%v): %v", multiaddr, err)
-			continue
-		}
-		bootstrapPeers = append(bootstrapPeers, *addrInfo)
+	bootstrapPeers, err := addrInfosFromStrings(t.bootstrapPeers)
+	if err != nil {
+		t.Warnf("while decoding bootstrap peers: %v", err)
 	}
 
 	t.dht, err = dht.New(context.Background(), t.libp2pHost,
 		dht.BootstrapPeers(bootstrapPeers...),
 		dht.Mode(dht.ModeServer),
-		dht.Datastore(
-			dsync.MutexWrap(&notifyingDatastore{
-				Batching: dstore.NewMapDatastore(),
-			}),
-		),
+		dht.Datastore(datastore),
 		// dht.Validator(blankValidator{}), // Set a pass-through validator
 	)
 	if err != nil {
@@ -192,6 +206,16 @@ func (t *transport) Start() error {
 	err = t.dht.Bootstrap(context.Background())
 	if err != nil {
 		return errors.Wrap(err, "could not bootstrap DHT")
+	}
+
+	for _, relay := range staticRelays {
+		relay := relay
+		go func() {
+			err := t.libp2pHost.Connect(t.Process.Ctx(), relay)
+			if err != nil {
+				t.Errorf("couldn't connect to static relay: %v", err)
+			}
+		}()
 	}
 
 	// Update our node's info in the peer store
@@ -276,7 +300,7 @@ func (t *transport) findOrCreateP2PKey() error {
 		return nil
 	}
 
-	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Secp256k1, 0)
+	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Ed25519, 0)
 	if err != nil {
 		return err
 	}
@@ -373,7 +397,7 @@ func (t *transport) HandlePeerFound(pinfo peerstore.PeerInfo) {
 		return
 	}
 
-	ctx, cancel := utils.CombinedContext(t.chStop, 10*time.Second)
+	ctx, cancel := utils.CombinedContext(t.Process.Ctx(), 10*time.Second)
 	defer cancel()
 
 	err := peer.EnsureConnected(ctx)
@@ -530,7 +554,7 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<
 		return nil, errors.WithStack(err)
 	}
 
-	ctx, cancel := utils.CombinedContext(ctx, t.chStop)
+	ctx, cancel := utils.CombinedContext(ctx, t.Process.Ctx())
 
 	ch := make(chan prototree.TreePeerConn)
 	go func() {
@@ -614,7 +638,7 @@ func (t *transport) ProvidersOfBlob(ctx context.Context, refID blob.ID) (<-chan 
 }
 
 func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan protoauth.AuthPeerConn, error) {
-	ctx, cancel := utils.CombinedContext(ctx, t.chStop)
+	ctx, cancel := utils.CombinedContext(ctx, t.Process.Ctx())
 	defer cancel()
 
 	addrCid, err := cidForString("addr:" + address.String())

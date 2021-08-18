@@ -5,12 +5,13 @@ import (
 	"strings"
 
 	cid "github.com/ipfs/go-cid"
+	corepeer "github.com/libp2p/go-libp2p-core/peer"
 	peer "github.com/libp2p/go-libp2p-peer"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	ma "github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
-
 	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 
 	"redwood.dev/swarm"
 	"redwood.dev/utils"
@@ -28,6 +29,7 @@ func cidForString(s string) (cid.Cid, error) {
 var (
 	protoDNS4 = ma.ProtocolWithName("dns4")
 	protoIP4  = ma.ProtocolWithName("ip4")
+	protoIP6  = ma.ProtocolWithName("ip6")
 )
 
 func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *utils.SortedStringSet {
@@ -68,6 +70,23 @@ func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *utils.SortedStringSet {
 		}
 	}
 	return utils.NewSortedStringSet(multiaddrStrings)
+}
+
+func addrInfosFromStrings(ss []string) (infos []corepeer.AddrInfo, err error) {
+	for _, s := range ss {
+		multiaddr, err := ma.NewMultiaddr(s)
+		if err != nil {
+			err = multierr.Append(err, errors.Errorf("bad multiaddress (%v): %v", s, err))
+			continue
+		}
+		addrInfo, err := corepeer.AddrInfoFromP2pAddr(multiaddr)
+		if err != nil {
+			err = multierr.Append(err, errors.Errorf("bad multiaddress (%v): %v", multiaddr, err))
+			continue
+		}
+		infos = append(infos, *addrInfo)
+	}
+	return infos, err
 }
 
 func cleanLibp2pAddr(addrStr string, peerID peer.ID) string {

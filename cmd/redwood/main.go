@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -11,13 +12,10 @@ import (
 	"runtime"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/brynbellomy/klog"
 	"github.com/urfave/cli"
 
 	"redwood.dev/cmd/cmdutils"
-	"redwood.dev/config"
 	"redwood.dev/log"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/utils"
@@ -36,7 +34,7 @@ func main() {
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
-	configRoot, err := config.DefaultConfigRoot("redwood")
+	configRoot, err := cmdutils.DefaultConfigRoot("redwood")
 	if err != nil {
 		logger.Error(err)
 		os.Exit(1)

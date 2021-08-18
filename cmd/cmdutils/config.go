@@ -16,9 +16,10 @@ type Config struct {
 	Mode       Mode       `yaml:"-"`
 	REPLConfig REPLConfig `yaml:"-"`
 
-	BootstrapPeers []BootstrapPeer `yaml:"BootstrapPeers"`
-	DataRoot       string          `yaml:"DataRoot"`
-	DevMode        bool            `yaml:"-"`
+	BootstrapPeers  []BootstrapPeer `yaml:"BootstrapPeers"`
+	DataRoot        string          `yaml:"DataRoot"`
+	DNSOverHTTPSURL string          `yaml:"DNSOverHTTPSURL"`
+	DevMode         bool            `yaml:"-"`
 
 	KeyStore KeyStoreConfig `yaml:"-"`
 
@@ -51,10 +52,11 @@ type KeyStoreConfig struct {
 }
 
 type Libp2pTransportConfig struct {
-	Enabled     bool   `yaml:"Enabled"`
-	ListenAddr  string `yaml:"ListenAddr"`
-	ListenPort  uint   `yaml:"ListenPort"`
-	ReachableAt string `yaml:"ReachableAt"`
+	Enabled      bool     `yaml:"Enabled"`
+	ListenAddr   string   `yaml:"ListenAddr"`
+	ListenPort   uint     `yaml:"ListenPort"`
+	ReachableAt  string   `yaml:"ReachableAt"`
+	StaticRelays []string `yaml:"StaticRelays"`
 }
 
 type BraidHTTPTransportConfig struct {
@@ -151,6 +153,14 @@ func DefaultConfigRoot(appName string) (root string, _ error) {
 	}
 	configRoot = filepath.Join(configRoot, appName)
 	return configRoot, nil
+}
+
+func DefaultConfigPath(appName string) (root string, _ error) {
+	configRoot, err := DefaultConfigRoot(appName)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configRoot, ".redwoodrc"), nil
 }
 
 func DefaultDataRoot(appName string) (string, error) {

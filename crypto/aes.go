@@ -5,6 +5,8 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
+	"errors"
 	"io"
 )
 
@@ -69,6 +71,22 @@ func (key SymEncKey) Decrypt(msg SymEncMsg) ([]byte, error) {
 		return nil, err
 	}
 	return aesgcm.Open(nil, msg.Nonce, msg.Ciphertext, nil)
+}
+
+func (key SymEncKey) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + hex.EncodeToString(key[:]) + `"`), nil
+}
+
+func (key *SymEncKey) UnmarshalJSON(hexBytes []byte) error {
+	if len(hexBytes) != (32*2)+2 {
+		return errors.New("bad symmetric encryption key length")
+	}
+	bytes, err := hex.DecodeString(string(hexBytes[1:65]))
+	if err != nil {
+		return err
+	}
+	copy((*key)[:], bytes)
+	return nil
 }
 
 // An AES-256 symmetrically encrypted message

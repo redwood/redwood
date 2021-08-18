@@ -1,22 +1,28 @@
-Node:
-    BootstrapPeers: []
-    SubscribedStateURIs:
-    MaxPeersPerSubscription: 4
-    DataRoot: 
-    DevMode: true
-P2PTransport:
+BootstrapPeers: []
+DataRoot: "./node1_data"
+DNSOverHTTPSURL: ""
+Libp2pTransport:
     Enabled: true
     ListenAddr: 0.0.0.0
     ListenPort: 21231
     ReachableAt: ""
-HTTPTransport:
+    StaticRelays: []
+BraidHTTPTransport:
     Enabled: true
     ListenHost: :8080
     DefaultStateURI: ""
     ReachableAt: ""
+AuthProtocol:
+    Enabled: true
+BlobProtocol:
+    Enabled: true
+TreeProtocol:
+    Enabled: true
+    MaxPeersPerSubscription: 4
 HTTPRPC:
     Enabled: true
     ListenHost: :8081
     Whitelist:
         Enabled: false
         PermittedAddrs: []
+        JWTSecret: ""

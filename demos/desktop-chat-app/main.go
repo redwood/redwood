@@ -1,5 +1,3 @@
-// +build !headless
-
 package main
 
 import (
@@ -17,9 +15,8 @@ import (
 	"github.com/urfave/cli"
 	"github.com/webview/webview"
 
-	"redwood.dev/config"
+	"redwood.dev/cmd/cmdutils"
 	"redwood.dev/process"
-	"redwood.dev/utils"
 )
 
 func init() {
@@ -30,13 +27,13 @@ func main() {
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
-	configPath, err := config.DefaultConfigPath("redwood-chat")
+	configPath, err := cmdutils.DefaultConfigPath("redwood-chat")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	profileRoot, err := config.DefaultDataRoot("redwood-chat")
+	profileRoot, err := cmdutils.DefaultDataRoot("redwood-chat")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -116,7 +113,7 @@ func main() {
 			defer masterProcess.Close()
 			defer gui.Close()
 			select {
-			case <-utils.AwaitInterrupt():
+			case <-cmdutils.AwaitInterrupt():
 			case <-api.Done():
 			case <-gui.chDone:
 			}
