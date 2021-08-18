@@ -42,3 +42,22 @@ The bootstrap node will report its libp2p public key, which you will need to dis
 /dns4/bootstrap.chat.org/tcp/21231/p2p/12D3KooWCt4YfyFNL1W4P58oYwznJGPA5G7JtFch79PEpM1UMB92
 ```
 
+### Docker image
+
+Build:
+
+```sh
+cd ../.. # In other words, go to the redwood repo root
+docker build -t redwood.dev/bootstrapnode --file ./cmd/bootstrapnode/Dockerfile .
+```
+
+Run:
+
+```sh
+docker run \
+    -v ~/you/bootstrapnode_config_dir:/root/config \
+    -p 21231:21231 redwood.dev/bootstrapnode \
+    /bootstrapnode start --config /root/config/config.json
+```
+
+Once the node is online, delete the `config.json` file from the device (but keep a backup).
