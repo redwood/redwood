@@ -300,7 +300,7 @@ func (t *transport) findOrCreateP2PKey() error {
 		return nil
 	}
 
-	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Secp256k1, 0)
+	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Ed25519, 0)
 	if err != nil {
 		return err
 	}

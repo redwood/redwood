@@ -27,6 +27,7 @@ import (
 
 	"redwood.dev/log"
 	"redwood.dev/process"
+	"redwood.dev/state"
 )
 
 type bootstrapNode struct {
@@ -36,6 +37,8 @@ type bootstrapNode struct {
 	libp2pHost        p2phost.Host
 	dht               *dht.IpfsDHT
 	datastorePath     string
+	datastore         *badgerds.Datastore
+	encryptionConfig  state.EncryptionConfig
 	disc              discovery.Service
 	peerID            peer.ID
 	port              uint
@@ -45,13 +48,22 @@ type bootstrapNode struct {
 	*metrics.BandwidthCounter
 }
 
-func NewBootstrapNode(port uint, bootstrapPeers []string, dohDNSResolverURL, datastorePath string) *bootstrapNode {
+func NewBootstrapNode(
+	port uint,
+	bootstrapPeers []string,
+	p2pKey cryptop2p.PrivKey,
+	dohDNSResolverURL string,
+	datastorePath string,
+	encryptionConfig state.EncryptionConfig,
+) *bootstrapNode {
 	return &bootstrapNode{
 		Process:           *process.New("bootstrap"),
 		Logger:            log.NewLogger("bootstrap"),
 		port:              port,
 		bootstrapPeers:    bootstrapPeers,
+		p2pKey:            p2pKey,
 		datastorePath:     datastorePath,
+		encryptionConfig:  encryptionConfig,
 		dohDNSResolverURL: dohDNSResolverURL,
 	}
 }
@@ -64,11 +76,6 @@ func (bn *bootstrapNode) Start() error {
 
 	bn.Infof(0, "opening libp2p on port %v", bn.port)
 
-	err = bn.findOrCreateP2PKey()
-	if err != nil {
-		return err
-	}
-
 	peerID, err := peer.IDFromPublicKey(bn.p2pKey.GetPublic())
 	if err != nil {
 		return err
@@ -77,10 +84,17 @@ func (bn *bootstrapNode) Start() error {
 
 	bn.BandwidthCounter = metrics.NewBandwidthCounter()
 
-	datastore, err := badgerds.NewDatastore(bn.datastorePath, nil)
+	opts := badgerds.DefaultOptions
+	opts.Options.EncryptionKey = bn.encryptionConfig.Key.Bytes()
+	opts.Options.EncryptionKeyRotationDuration = bn.encryptionConfig.KeyRotationInterval
+	opts.Options.IndexCacheSize = 100 << 20 // @@TODO: make configurable
+	opts.Options.KeepL0InMemory = true      // @@TODO: make configurable
+
+	datastore, err := badgerds.NewDatastore(bn.datastorePath, &opts)
 	if err != nil {
 		return err
 	}
+	bn.datastore = datastore
 
 	peerstore, err := pstoreds.NewPeerstore(bn.Process.Ctx(), datastore, pstoreds.DefaultOpts())
 	if err != nil {
@@ -101,7 +115,7 @@ func (bn *bootstrapNode) Start() error {
 		libp2p.BandwidthReporter(bn.BandwidthCounter),
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
-		libp2p.EnableAutoRelay(),
+		// libp2p.EnableAutoRelay(),
 		// libp2p.DefaultStaticRelays(),
 		libp2p.EnableRelay(circuitp2p.OptHop),
 		libp2p.Peerstore(peerstore),
@@ -160,6 +174,10 @@ func (bn *bootstrapNode) Close() error {
 	if err != nil {
 		bn.Errorf("error closing libp2p host: %v", err)
 	}
+	err = bn.datastore.Close()
+	if err != nil {
+		bn.Errorf("error closing libp2p datastore: %v", err)
+	}
 	return bn.Process.Close()
 }
 
@@ -185,7 +203,7 @@ func (bn *bootstrapNode) findOrCreateP2PKey() error {
 		return nil
 	}
 
-	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Secp256k1, 0)
+	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Ed25519, 0)
 	if err != nil {
 		return err
 	}

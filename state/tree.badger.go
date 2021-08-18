@@ -30,8 +30,8 @@ type DBTree struct {
 }
 
 type EncryptionConfig struct {
-	Key                 crypto.SymEncKey
-	KeyRotationInterval time.Duration
+	Key                 crypto.SymEncKey `json:"key"`
+	KeyRotationInterval time.Duration    `json:"rotationInterval"`
 }
 
 func NewDBTree(dbFilename string, encryptionConfig *EncryptionConfig) (*DBTree, error) {
