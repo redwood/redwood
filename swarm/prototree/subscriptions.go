@@ -49,15 +49,13 @@ type writableSubscription struct {
 
 //go:generate mockery --name WritableSubscriptionImpl --output ./mocks/ --case=underscore
 type WritableSubscriptionImpl interface {
+	process.Interface
 	StateURI() string
 	Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) error
-	Close() error
-	Closed() <-chan struct{}
 	String() string
 }
 
 func newWritableSubscription(
-	treeProtocol *treeProtocol,
 	stateURI string,
 	keypath state.Keypath,
 	subscriptionType SubscriptionType,
@@ -69,7 +67,6 @@ func newWritableSubscription(
 		stateURI:         stateURI,
 		keypath:          keypath,
 		subscriptionType: subscriptionType,
-		treeProtocol:     treeProtocol,
 		subImpl:          subImpl,
 		messages:         utils.NewMailbox(10000),
 	}
@@ -80,54 +77,44 @@ func (sub *writableSubscription) Start() error {
 	if err != nil {
 		return err
 	}
+	defer sub.Process.Autoclose()
+
+	err = sub.Process.SpawnChild(nil, sub.subImpl)
+	if err != nil {
+		return err
+	}
 
 	sub.Process.Go("runloop", func(ctx context.Context) {
-		defer func() {
-			if perr := recover(); perr != nil {
-				sub.Errorf("caught panic: %+v", perr)
-			}
-		}()
-		defer sub.destroy()
-
 		for {
 			select {
+			case <-sub.subImpl.Done():
+				return
+
+			case <-ctx.Done():
+				return
+
 			case <-sub.messages.Notify():
 				err := sub.writeMessages(ctx)
-				if err != nil {
+				if errors.Cause(err) == context.Canceled {
+					return
+				} else if errors.Cause(err) == types.ErrClosed {
+					return
+				} else if err != nil {
 					sub.subImpl.Close()
 					return
 				}
-			case <-sub.subImpl.Closed():
-				return
-			case <-ctx.Done():
-				sub.subImpl.Close()
-				return
 			}
 		}
 	})
-	// We have to use Autoclose to avoid a deadlock caused by the fact that
-	// shutdown can be triggered inside of the runloop goroutine (by subImpl),
-	// and Process#Close() waits for all goroutines to exit before returning.
-	sub.Process.Autoclose()
 	return nil
-}
-
-func (sub *writableSubscription) destroy() {
-	sub.treeProtocol.handleWritableSubscriptionClosed(sub)
-	select {
-	case <-sub.subImpl.Closed():
-	default:
-		sub.subImpl.Close()
-	}
 }
 
 func (sub *writableSubscription) writeMessages(ctx context.Context) (err error) {
 	for {
 		select {
 		case <-ctx.Done():
-			sub.subImpl.Close()
-			return types.ErrClosed
-		case <-sub.subImpl.Closed():
+			return context.Canceled
+		case <-sub.subImpl.Done():
 			return types.ErrClosed
 		default:
 		}
@@ -176,9 +163,7 @@ type multiReaderSubscription struct {
 	maxConns       uint64
 	onTxReceived   func(tx tree.Tx, peer TreePeerConn)
 	searchForPeers func(ctx context.Context, stateURI string) <-chan TreePeerConn
-
-	conns    sync.Map
-	peerPool swarm.PeerPool
+	peerPool       swarm.PeerPool
 }
 
 func newMultiReaderSubscription(
@@ -213,11 +198,11 @@ func (s *multiReaderSubscription) Start() error {
 		s.maxConns,
 		func(ctx context.Context) (<-chan swarm.PeerConn, error) {
 			select {
-			case <-time.After(restartSearchBackoff.Next()):
 			case <-ctx.Done():
 				return nil, nil
 			case <-s.Process.Done():
 				return nil, nil
+			case <-time.After(restartSearchBackoff.Next()):
 			}
 			chTreePeers := s.searchForPeers(ctx, s.stateURI)
 			return convertTreePeerChan(ctx, chTreePeers), nil // Can't wait for generics
@@ -246,6 +231,7 @@ func (s *multiReaderSubscription) Start() error {
 			getPeerBackoff.Reset()
 
 			s.Process.Go("readUntilErrorOrShutdown "+treePeer.DialInfo().String(), func(ctx context.Context) {
+				defer s.peerPool.ReturnPeer(treePeer, false)
 				s.readUntilErrorOrShutdown(ctx, treePeer)
 			})
 		}
@@ -259,18 +245,19 @@ func convertTreePeerChan(ctx context.Context, ch <-chan TreePeerConn) <-chan swa
 		defer close(chPeer)
 		for {
 			select {
+			case <-ctx.Done():
+				return
+
 			case peer, open := <-ch:
 				if !open {
 					return
 				}
 
 				select {
-				case chPeer <- peer:
 				case <-ctx.Done():
 					return
+				case chPeer <- peer:
 				}
-			case <-ctx.Done():
-				return
 			}
 		}
 	}()
@@ -293,18 +280,11 @@ func (s *multiReaderSubscription) getPeer(ctx context.Context) (TreePeerConn, er
 			s.peerPool.ReturnPeer(peer, true)
 			continue
 		}
-
-		s.conns.Store(treePeer, struct{}{})
 		return treePeer, nil
 	}
 }
 
 func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, peer TreePeerConn) {
-	defer func() {
-		s.peerPool.ReturnPeer(peer, false)
-		s.conns.Delete(peer)
-	}()
-
 	err := peer.EnsureConnected(ctx)
 	if errors.Cause(err) == types.ErrConnection {
 		return
@@ -312,13 +292,13 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 		s.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
 		return
 	}
+	defer peer.Close()
 
 	peerSub, err := peer.Subscribe(ctx, s.stateURI)
 	if err != nil {
 		s.Errorf("error subscribing to peer %v (stateURI: %v): %v", peer.DialInfo(), s.stateURI, err)
 		return
 	}
-	defer peerSub.Close()
 
 	for {
 		select {
@@ -340,15 +320,8 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 	}
 }
 
-func (s *multiReaderSubscription) Close() error {
-	s.conns.Range(func(peer, val interface{}) bool {
-		peer.(TreePeerConn).Close()
-		return true
-	})
-	return s.Process.Close()
-}
-
 type inProcessSubscription struct {
+	process.Process
 	stateURI         string
 	keypath          state.Keypath
 	subscriptionType SubscriptionType
@@ -368,6 +341,7 @@ func newInProcessSubscription(
 	treeProtocol *treeProtocol,
 ) *inProcessSubscription {
 	return &inProcessSubscription{
+		Process:          *process.New("in process sub " + stateURI),
 		stateURI:         stateURI,
 		keypath:          keypath,
 		subscriptionType: subscriptionType,
@@ -391,33 +365,22 @@ func (sub *inProcessSubscription) Type() SubscriptionType {
 
 func (sub *inProcessSubscription) Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) error {
 	select {
-	case sub.chMessages <- SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves}:
-		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-sub.chClosed:
+	case <-sub.Process.Done():
 		return types.ErrClosed
+	case sub.chMessages <- SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves}:
+		return nil
 	}
 }
 
 func (sub *inProcessSubscription) Read() (*SubscriptionMsg, error) {
 	select {
-	case <-sub.chClosed:
+	case <-sub.Process.Done():
 		return nil, types.ErrClosed
 	case msg := <-sub.chMessages:
 		return &msg, nil
 	}
-}
-
-func (sub *inProcessSubscription) Close() error {
-	sub.stopOnce.Do(func() {
-		close(sub.chClosed)
-	})
-	return nil
-}
-
-func (sub *inProcessSubscription) Closed() <-chan struct{} {
-	return sub.chClosed
 }
 
 type StateURISubscription interface {

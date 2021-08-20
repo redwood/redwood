@@ -2,6 +2,7 @@ package prototree
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
+
+//go:generate mockery --name TreeProtocol --output ./mocks/ --case=underscore
 
 //go:generate mockery --name TreeProtocol --output ./mocks/ --case=underscore
 type TreeProtocol interface {
@@ -395,12 +398,31 @@ func (tp *treeProtocol) handleWritableSubscriptionOpened(
 	writeSubImpl WritableSubscriptionImpl,
 	fetchHistoryOpts *FetchHistoryOpts,
 ) {
-	writeSub := newWritableSubscription(tp, stateURI, keypath, subType, writeSubImpl)
+	tp.Infof(0, "KEKS %v %v %p", stateURI, keypath, writeSubImpl)
+	writeSub := newWritableSubscription(stateURI, keypath, subType, writeSubImpl)
 	err := tp.Process.SpawnChild(nil, writeSub)
 	if err != nil {
 		tp.Errorf("while spawning writable subscription: %v", err)
 		return
 	}
+
+	func() {
+		tp.writableSubscriptionsMu.Lock()
+		defer tp.writableSubscriptionsMu.Unlock()
+
+		if _, exists := tp.writableSubscriptions[stateURI]; !exists {
+			tp.writableSubscriptions[stateURI] = make(map[WritableSubscription]struct{})
+		}
+		tp.writableSubscriptions[stateURI][writeSub] = struct{}{}
+	}()
+
+	tp.Process.Go("await close "+writeSub.String(), func(ctx context.Context) {
+		select {
+		case <-writeSub.Done():
+		case <-ctx.Done():
+		}
+		tp.handleWritableSubscriptionClosed(writeSub)
+	})
 
 	if subType.Includes(SubscriptionType_Txs) && fetchHistoryOpts != nil {
 		tp.handleFetchHistoryRequest(stateURI, *fetchHistoryOpts, writeSub)
@@ -436,14 +458,6 @@ func (tp *treeProtocol) handleWritableSubscriptionOpened(
 			}
 		}
 	}
-
-	tp.writableSubscriptionsMu.Lock()
-	defer tp.writableSubscriptionsMu.Unlock()
-
-	if _, exists := tp.writableSubscriptions[stateURI]; !exists {
-		tp.writableSubscriptions[stateURI] = make(map[WritableSubscription]struct{})
-	}
-	tp.writableSubscriptions[stateURI][writeSub] = struct{}{}
 }
 
 func (tp *treeProtocol) handleWritableSubscriptionClosed(sub WritableSubscription) {
@@ -504,6 +518,7 @@ func (tp *treeProtocol) Subscribe(
 	}
 
 	sub := newInProcessSubscription(stateURI, keypath, subscriptionType, tp)
+	fmt.Printf("YEET %p\n", sub)
 	tp.handleWritableSubscriptionOpened(stateURI, keypath, subscriptionType, sub, fetchHistoryOpts)
 	return sub, nil
 }
@@ -843,11 +858,6 @@ func (t *broadcastTxsToStateURIProvidersTask) broadcastTxsToStateURIProviders(ct
 					err = treePeer.Put(ctx, tx, nil, nil)
 					if err != nil {
 						t.Errorf("while sending tx to state URI provider: %v", err)
-						continue
-					}
-					err = t.treeStore.MarkTxSeenByPeer(treePeer.DialInfo(), stateURI, tx.ID)
-					if err != nil {
-						t.Errorf("while marking tx seen by peer: %v", err)
 						continue
 					}
 				}

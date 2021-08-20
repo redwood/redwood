@@ -217,7 +217,6 @@ func (p *peerPool) ReturnPeer(peer PeerConn, strike bool) {
 
 	if strike {
 		p.setPeerState(peer, peerState_Strike)
-		peer.Close() // Close the faulty connection
 
 	} else {
 		// Return the peer to the pool

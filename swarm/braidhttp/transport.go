@@ -397,7 +397,7 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 		stateURI         string
 		keypath          string
 		subscriptionType prototree.SubscriptionType
-		fetchHistoryOpts *prototree.FetchHistoryOpts
+		fetchHistoryOpts prototree.FetchHistoryOpts
 		writeSub         prototree.WritableSubscriptionImpl
 	)
 	if r.URL.Path == "/ws" {
@@ -422,20 +422,16 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 				http.Error(w, "could not parse From-Tx header", http.StatusBadRequest)
 				return
 			}
-			fetchHistoryOpts = &prototree.FetchHistoryOpts{FromTxID: fromTxID}
+			fetchHistoryOpts = prototree.FetchHistoryOpts{FromTxID: fromTxID}
 		}
-
-		t.Infof(0, "incoming websocket subscription (address: %v, state uri: %v)", address, stateURI)
 
 		conn, err := wsUpgrader.Upgrade(w, r, nil)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		wsWriteSub := newWSWritableSubscription(stateURI, conn, t.makePeerConn(nil, nil, "", address), t)
-		writeSub = wsWriteSub
-
-		wsWriteSub.start()
+		fmt.Printf("XYZZY %+v\n", errors.New(""))
+		writeSub = newWSWritableSubscription(stateURI, conn, t.makePeerConn(nil, nil, "", address), t)
 
 	} else {
 		// Make sure that the writer supports flushing
@@ -451,7 +447,7 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 			stateURI = t.defaultStateURI
 		}
 
-		t.Infof(0, "incoming subscription (address: %v, state uri: %v)", address, stateURI)
+		t.Infof(0, "incoming http subscription (address: %v, state uri: %v)", address, stateURI)
 
 		keypath = r.Header.Get("Keypath")
 		subscriptionTypeStr := r.Header.Get("Subscribe")
@@ -468,7 +464,7 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 				http.Error(w, "could not parse From-Tx header", http.StatusBadRequest)
 				return
 			}
-			fetchHistoryOpts = &prototree.FetchHistoryOpts{FromTxID: fromTxID}
+			fetchHistoryOpts = prototree.FetchHistoryOpts{FromTxID: fromTxID}
 		}
 
 		// Set the headers related to event streaming
@@ -477,18 +473,16 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 		w.Header().Set("Connection", "keep-alive")
 		w.Header().Set("Transfer-Encoding", "chunked")
 
-		httpWriteSub := newHTTPWritableSubscription(stateURI, t.makePeerConn(w, f, "", address), subscriptionType, t)
-		writeSub = httpWriteSub
+		writeSub = newHTTPWritableSubscription(stateURI, t.makePeerConn(w, f, "", address), subscriptionType)
 
 		f.Flush()
 	}
 
-	defer writeSub.Close()
-	t.HandleWritableSubscriptionOpened(stateURI, state.Keypath(keypath), subscriptionType, writeSub, fetchHistoryOpts)
+	t.HandleWritableSubscriptionOpened(stateURI, state.Keypath(keypath), subscriptionType, writeSub, &fetchHistoryOpts)
 
 	// Block until the subscription is canceled so that net/http doesn't close the connection
 	select {
-	case <-writeSub.Closed():
+	case <-writeSub.Done():
 	case <-t.Done():
 	}
 }

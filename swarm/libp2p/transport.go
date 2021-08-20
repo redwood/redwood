@@ -14,8 +14,11 @@ import (
 	dohp2p "github.com/libp2p/go-doh-resolver"
 	libp2p "github.com/libp2p/go-libp2p"
 	cryptop2p "github.com/libp2p/go-libp2p-core/crypto"
+	corehost "github.com/libp2p/go-libp2p-core/host"
 	metrics "github.com/libp2p/go-libp2p-core/metrics"
 	netp2p "github.com/libp2p/go-libp2p-core/network"
+	corepeer "github.com/libp2p/go-libp2p-core/peer"
+	discovery "github.com/libp2p/go-libp2p-discovery"
 	p2phost "github.com/libp2p/go-libp2p-host"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
@@ -24,7 +27,8 @@ import (
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	"github.com/libp2p/go-libp2p-peerstore/pstoreds"
 	protocol "github.com/libp2p/go-libp2p-protocol"
-	"github.com/libp2p/go-libp2p/p2p/discovery"
+	routing "github.com/libp2p/go-libp2p-routing"
+	mdns "github.com/libp2p/go-libp2p/p2p/discovery"
 	ma "github.com/multiformats/go-multiaddr"
 	madns "github.com/multiformats/go-multiaddr-dns"
 	"github.com/pkg/errors"
@@ -51,7 +55,7 @@ type Transport interface {
 	prototree.TreeTransport
 	Libp2pPeerID() string
 	ListenAddrs() []string
-	Peers() []peerstore.PeerInfo
+	Peers() []corepeer.AddrInfo
 }
 
 type transport struct {
@@ -63,7 +67,7 @@ type transport struct {
 
 	libp2pHost        p2phost.Host
 	dht               *dht.IpfsDHT
-	disc              discovery.Service
+	mdns              mdns.Service
 	peerID            peer.ID
 	port              uint
 	p2pKey            cryptop2p.PrivKey
@@ -163,6 +167,12 @@ func (t *transport) Start() error {
 		return err
 	}
 
+	// bootstrapPeers := dht.GetDefaultBootstrapPeerAddrInfos() // @@TODO: remove this
+	bootstrapPeers, err := addrInfosFromStrings(t.bootstrapPeers)
+	if err != nil {
+		t.Warnf("while decoding bootstrap peers: %v", err)
+	}
+
 	// Initialize the libp2p host
 	libp2pHost, err := libp2p.New(t.Process.Ctx(),
 		libp2p.ListenAddrStrings(
@@ -172,12 +182,24 @@ func (t *transport) Start() error {
 		libp2p.BandwidthReporter(t.BandwidthCounter),
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
-		// libp2p.EnableAutoRelay(),
-		// libp2p.DefaultStaticRelays(),
+		libp2p.EnableAutoRelay(),
 		libp2p.StaticRelays(staticRelays),
+		// libp2p.DefaultStaticRelays(),
 		libp2p.Peerstore(peerStore),
 		libp2p.Security(noisep2p.ID, noisep2p.New),
 		libp2p.MultiaddrResolver(dnsResolver),
+		libp2p.Routing(func(host corehost.Host) (routing.PeerRouting, error) {
+			t.dht, err = dht.New(t.Process.Ctx(), host,
+				dht.BootstrapPeers(bootstrapPeers...),
+				dht.Mode(dht.ModeServer),
+				dht.Datastore(datastore),
+				// dht.Validator(blankValidator{}), // Set a pass-through validator
+			)
+			if err != nil {
+				return nil, err
+			}
+			return t.dht, err
+		}),
 	)
 	if err != nil {
 		return errors.Wrap(err, "could not initialize libp2p host")
@@ -186,24 +208,7 @@ func (t *transport) Start() error {
 	t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
 	t.libp2pHost.Network().Notify(t) // Register for libp2p connect/disconnect notifications
 
-	// Initialize the DHT
-	// bootstrapPeers := dht.GetDefaultBootstrapPeerAddrInfos() // @@TODO: remove this
-	bootstrapPeers, err := addrInfosFromStrings(t.bootstrapPeers)
-	if err != nil {
-		t.Warnf("while decoding bootstrap peers: %v", err)
-	}
-
-	t.dht, err = dht.New(context.Background(), t.libp2pHost,
-		dht.BootstrapPeers(bootstrapPeers...),
-		dht.Mode(dht.ModeServer),
-		dht.Datastore(datastore),
-		// dht.Validator(blankValidator{}), // Set a pass-through validator
-	)
-	if err != nil {
-		return errors.Wrap(err, "could not initialize libp2p dht")
-	}
-
-	err = t.dht.Bootstrap(context.Background())
+	err = t.dht.Bootstrap(t.Process.Ctx())
 	if err != nil {
 		return errors.Wrap(err, "could not bootstrap DHT")
 	}
@@ -211,12 +216,36 @@ func (t *transport) Start() error {
 	for _, relay := range staticRelays {
 		relay := relay
 		go func() {
+			peerConn := t.makeDisconnectedPeerConn(relay)
+			peerConn.EnsureConnected(t.Process.Ctx())
+
 			err := t.libp2pHost.Connect(t.Process.Ctx(), relay)
 			if err != nil {
 				t.Errorf("couldn't connect to static relay: %v", err)
 			}
 		}()
 	}
+
+	// Set up DHT discovery
+	routingDiscovery := discovery.NewRoutingDiscovery(t.dht)
+	discovery.Advertise(t.Process.Ctx(), routingDiscovery, "redwood")
+
+	t.Process.Go("find peers", func(ctx context.Context) {
+		chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
+		if err != nil {
+			t.Errorf("error finding peers: %v", err)
+		}
+		for pinfo := range chPeers {
+			t.onPeerFound("routing", pinfo)
+		}
+	})
+
+	// Set up mDNS discovery
+	t.mdns, err = mdns.NewMdnsService(t.Process.Ctx(), libp2pHost, 10*time.Second, "redwood")
+	if err != nil {
+		return err
+	}
+	t.mdns.RegisterNotifee(t)
 
 	// Update our node's info in the peer store
 	myDialAddrs := utils.NewStringSet(nil)
@@ -246,13 +275,6 @@ func (t *transport) Start() error {
 		}
 	}
 
-	// Set up mDNS discovery
-	t.disc, err = discovery.NewMdnsService(context.Background(), libp2pHost, 10*time.Second, "redwood")
-	if err != nil {
-		return err
-	}
-	t.disc.RegisterNotifee(t)
-
 	announceContentTask := NewAnnounceContentTask(10*time.Second, t, t.controllerHub, t.keyStore, t.peerStore, t.blobStore, t.dht)
 	t.Process.SpawnChild(nil, announceContentTask)
 	if t.blobStore != nil {
@@ -265,7 +287,7 @@ func (t *transport) Start() error {
 }
 
 func (t *transport) Close() error {
-	err := t.disc.Close()
+	err := t.mdns.Close()
 	if err != nil {
 		t.Errorf("error closing libp2p mDNS service: %v", err)
 	}
@@ -330,7 +352,7 @@ func (t *transport) ListenAddrs() []string {
 	return addrs
 }
 
-func (t *transport) Peers() []peerstore.PeerInfo {
+func (t *transport) Peers() []corepeer.AddrInfo {
 	return peerstore.PeerInfos(t.libp2pHost.Peerstore(), t.libp2pHost.Peerstore().Peers())
 }
 
@@ -370,7 +392,11 @@ func (t *transport) ClosedStream(network netp2p.Network, stream netp2p.Stream) {
 }
 
 // HandlePeerFound is the libp2p mDNS peer discovery callback
-func (t *transport) HandlePeerFound(pinfo peerstore.PeerInfo) {
+func (t *transport) HandlePeerFound(pinfo corepeer.AddrInfo) {
+	t.onPeerFound("mDNS", pinfo)
+}
+
+func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	// Ensure all peers discovered on the libp2p layer are in the peer store
 	if pinfo.ID == peer.ID("") {
 		return
@@ -389,7 +415,7 @@ func (t *transport) HandlePeerFound(pinfo peerstore.PeerInfo) {
 		t.Infof(0, "mDNS: peer %+v found", pinfo.ID.Pretty())
 	}
 
-	t.addPeerInfosToPeerStore([]peerstore.PeerInfo{pinfo})
+	t.addPeerInfosToPeerStore([]corepeer.AddrInfo{pinfo})
 
 	peer := t.makeDisconnectedPeerConn(pinfo)
 	if peer == nil {
@@ -429,7 +455,7 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 			t.Errorf("Subscribe message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
-		t.Infof(0, "incoming libp2p subscription (stateURI: %v)", stateURI)
+		t.Infof(0, "incoming libp2p subscription: %v %v", peer.DialInfo(), stateURI)
 
 		writeSub := newWritableSubscription(peer, stateURI)
 		func() {
@@ -688,7 +714,7 @@ func (t *transport) AnnounceBlob(ctx context.Context, refID blob.ID) error {
 	return nil
 }
 
-func (t *transport) addPeerInfosToPeerStore(pinfos []peerstore.PeerInfo) {
+func (t *transport) addPeerInfosToPeerStore(pinfos []corepeer.AddrInfo) {
 	for _, pinfo := range pinfos {
 		if pinfo.ID == peer.ID("") {
 			continue
@@ -723,7 +749,7 @@ func (t *transport) makeConnectedPeerConn(stream netp2p.Stream) *peerConn {
 	return peer
 }
 
-func (t *transport) makeDisconnectedPeerConn(pinfo peerstore.PeerInfo) *peerConn {
+func (t *transport) makeDisconnectedPeerConn(pinfo corepeer.AddrInfo) *peerConn {
 	peer := &peerConn{t: t, pinfo: pinfo, stream: nil}
 	dialAddrs := multiaddrsFromPeerInfo(pinfo)
 	if dialAddrs.Len() == 0 {
