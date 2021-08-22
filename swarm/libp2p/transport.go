@@ -275,11 +275,25 @@ func (t *transport) Start() error {
 		}
 	}
 
-	announceContentTask := NewAnnounceContentTask(10*time.Second, t, t.controllerHub, t.keyStore, t.peerStore, t.blobStore, t.dht)
-	t.Process.SpawnChild(nil, announceContentTask)
 	if t.blobStore != nil {
-		t.blobStore.OnBlobsSaved(announceContentTask.Enqueue)
+		announceBlobsTask := NewAnnounceBlobsTask(10*time.Second, t, t.blobStore, t.dht)
+		t.Process.SpawnChild(nil, announceBlobsTask)
+		t.blobStore.OnBlobsSaved(announceBlobsTask.Enqueue)
 	}
+
+	if t.controllerHub != nil {
+		announceStateURIsTask := NewAnnounceStateURIsTask(10*time.Second, t.controllerHub, t.dht)
+		t.Process.SpawnChild(nil, announceStateURIsTask)
+		// if t.blobStore != nil {
+		//     t.blobStore.OnBlobsSaved(announceBlobsTask.Enqueue)
+		// }
+	}
+
+	announceIdentitiesTask := NewAnnounceIdentitiesTask(10*time.Second, t.keyStore, t.dht)
+	t.Process.SpawnChild(nil, announceIdentitiesTask)
+	// if t.blobStore != nil {
+	//     t.blobStore.OnBlobsSaved(announceBlobsTask.Enqueue)
+	// }
 
 	t.Infof(0, "libp2p peer ID is %v", t.Libp2pPeerID())
 
@@ -788,97 +802,147 @@ func (t *transport) makeDisconnectedPeerConn(pinfo corepeer.AddrInfo) *peerConn 
 	return peer
 }
 
-type announceContentTask struct {
-	process.PeriodicTask
-	log.Logger
-	transport     protoblob.BlobTransport
-	controllerHub tree.ControllerHub
-	keyStore      identity.KeyStore
-	peerStore     swarm.PeerStore
-	blobStore     blob.Store
-	dht           DHT
-}
-
 type DHT interface {
 	Provide(context.Context, cid.Cid, bool) error
 }
 
-func NewAnnounceContentTask(
+type announceBlobsTask struct {
+	process.PeriodicTask
+	log.Logger
+	transport protoblob.BlobTransport
+	blobStore blob.Store
+	dht       DHT
+}
+
+func NewAnnounceBlobsTask(
 	interval time.Duration,
 	transport protoblob.BlobTransport,
-	controllerHub tree.ControllerHub,
-	keyStore identity.KeyStore,
-	peerStore swarm.PeerStore,
 	blobStore blob.Store,
 	dht DHT,
-) *announceContentTask {
-	t := &announceContentTask{
-		Logger:        log.NewLogger("libp2p"),
-		transport:     transport,
-		controllerHub: controllerHub,
-		keyStore:      keyStore,
-		peerStore:     peerStore,
-		blobStore:     blobStore,
-		dht:           dht,
+) *announceBlobsTask {
+	t := &announceBlobsTask{
+		Logger:    log.NewLogger("libp2p"),
+		transport: transport,
+		blobStore: blobStore,
+		dht:       dht,
 	}
-	t.PeriodicTask = *process.NewPeriodicTask("AnnounceContentTask", interval, t.announceContent)
+	t.PeriodicTask = *process.NewPeriodicTask("AnnounceBlobsTask", interval, t.announceBlobs)
 	return t
 }
 
 // Periodically announces our objects to the network.
-func (t *announceContentTask) announceContent(ctx context.Context) {
-	// Announce the state URIs we're serving
-	stateURIs, err := t.controllerHub.KnownStateURIs()
-	if err != nil {
-		t.Errorf("error fetching known state URIs from DB: %v", err)
-
-	} else {
-		for _, stateURI := range stateURIs {
-			stateURI := stateURI
-
-			t.Process.Go("state URIs", func(ctx context.Context) {
-				c, err := cidForString("serve:" + stateURI)
-				if err != nil {
-					t.Errorf("announce: error creating cid: %v", err)
-					return
-				}
-
-				err = t.dht.Provide(ctx, c, true)
-				if err != nil && err != kbucket.ErrLookupFailure {
-					t.Errorf(`announce: could not dht.Provide stateURI "%v": %v`, stateURI, err)
-					return
-				}
-			})
-		}
-	}
-
+func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 	// Announce the blobs we're serving
 	refHashes, err := t.blobStore.AllHashes()
 	if err != nil {
 		t.Errorf("error fetching blobStore hashes: %v", err)
+		return
 	}
+
+	var chDones []<-chan struct{}
 	for _, refHash := range refHashes {
 		refHash := refHash
 
-		t.Process.Go("blobs", func(ctx context.Context) {
+		chDone := t.Process.Go("blobs", func(ctx context.Context) {
 			err := t.transport.AnnounceBlob(ctx, refHash)
 			if err != nil {
 				t.Errorf("announce: error: %v", err)
 			}
 		})
+		chDones = append(chDones, chDone)
 	}
+	for _, chDone := range chDones {
+		<-chDone
+	}
+}
 
-	// Announce our address (for exchanging private txs)
-	identities, err := t.keyStore.Identities()
+type announceStateURIsTask struct {
+	process.PeriodicTask
+	log.Logger
+	controllerHub tree.ControllerHub
+	dht           DHT
+}
+
+func NewAnnounceStateURIsTask(
+	interval time.Duration,
+	controllerHub tree.ControllerHub,
+	dht DHT,
+) *announceStateURIsTask {
+	t := &announceStateURIsTask{
+		Logger:        log.NewLogger("libp2p"),
+		controllerHub: controllerHub,
+		dht:           dht,
+	}
+	t.PeriodicTask = *process.NewPeriodicTask("AnnounceStateURIsTask", interval, t.announceStateURIs)
+	return t
+}
+
+func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
+	// Announce the state URIs we're serving
+	stateURIs, err := t.controllerHub.KnownStateURIs()
 	if err != nil {
-		t.Errorf("announce: error creating cid: %v", err)
+		t.Errorf("error fetching known state URIs from DB: %v", err)
 		return
 	}
 
+	var chDones []<-chan struct{}
+	for _, stateURI := range stateURIs {
+		stateURI := stateURI
+
+		chDone := t.Process.Go("state URI "+stateURI, func(ctx context.Context) {
+			c, err := cidForString("serve:" + stateURI)
+			if err != nil {
+				t.Errorf("announce: error creating cid: %v", err)
+				return
+			}
+
+			err = t.dht.Provide(ctx, c, true)
+			if err != nil && err != kbucket.ErrLookupFailure {
+				t.Errorf(`announce: could not dht.Provide stateURI "%v": %v`, stateURI, err)
+				return
+			}
+		})
+		chDones = append(chDones, chDone)
+	}
+	for _, chDone := range chDones {
+		<-chDone
+	}
+}
+
+type announceIdentitiesTask struct {
+	process.PeriodicTask
+	log.Logger
+	keyStore identity.KeyStore
+	dht      DHT
+}
+
+func NewAnnounceIdentitiesTask(
+	interval time.Duration,
+	keyStore identity.KeyStore,
+	dht DHT,
+) *announceIdentitiesTask {
+	t := &announceIdentitiesTask{
+		Logger:   log.NewLogger("libp2p"),
+		keyStore: keyStore,
+		dht:      dht,
+	}
+	t.PeriodicTask = *process.NewPeriodicTask("AnnounceIdentitiesTask", interval, t.announceIdentities)
+	return t
+}
+
+func (t *announceIdentitiesTask) announceIdentities(ctx context.Context) {
+	// Announce our address (for exchanging private txs)
+	identities, err := t.keyStore.Identities()
+	if err != nil {
+		t.Errorf("announce: error fetching identities: %v", err)
+		return
+	}
+
+	var chDones []<-chan struct{}
 	for _, identity := range identities {
 		identity := identity
 
-		t.Process.Go("identity", func(ctx context.Context) {
+		chDone := t.Process.Go("identity "+identity.SigKeypair.Address().Hex(), func(ctx context.Context) {
 			c, err := cidForString("addr:" + identity.Address().String())
 			if err != nil {
 				t.Errorf("announce: error creating cid: %v", err)
@@ -890,5 +954,9 @@ func (t *announceContentTask) announceContent(ctx context.Context) {
 				t.Errorf(`announce: could not dht.Provide pubkey: %v`, err)
 			}
 		})
+		chDones = append(chDones, chDone)
+	}
+	for _, chDone := range chDones {
+		<-chDone
 	}
 }

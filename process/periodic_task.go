@@ -38,12 +38,6 @@ func (task *PeriodicTask) Start() error {
 			select {
 			case <-ctx.Done():
 				return
-			default:
-			}
-
-			select {
-			case <-ctx.Done():
-				return
 
 			case <-ticker.C:
 				task.Enqueue()

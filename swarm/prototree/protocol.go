@@ -112,7 +112,11 @@ func (tp *treeProtocol) Name() string {
 }
 
 func (tp *treeProtocol) Start() error {
-	tp.Process.Start()
+	err := tp.Process.Start()
+	if err != nil {
+		return err
+	}
+
 	tp.controllerHub.OnNewState(tp.handleNewState)
 
 	for _, tpt := range tp.transports {
@@ -125,7 +129,7 @@ func (tp *treeProtocol) Start() error {
 	tp.Process.Go("initial subscribe", func(ctx context.Context) {
 		for _, stateURI := range tp.store.SubscribedStateURIs().Slice() {
 			tp.Infof(0, "subscribing to %v", stateURI)
-			sub, err := tp.Subscribe(context.Background(), stateURI, SubscriptionType_Txs, nil, nil)
+			sub, err := tp.Subscribe(ctx, stateURI, SubscriptionType_Txs, nil, nil)
 			if err != nil {
 				tp.Errorf("error subscribing to %v: %v", stateURI, err)
 				continue
@@ -134,38 +138,12 @@ func (tp *treeProtocol) Start() error {
 		}
 	})
 
-	err := tp.Process.SpawnChild(nil, tp.broadcastTxsToStateURIProvidersTask)
+	err = tp.Process.SpawnChild(nil, tp.broadcastTxsToStateURIProvidersTask)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-
-// func (tp *treeProtocol) Close() {
-// 	var writableSubs []WritableSubscription
-// 	func() {
-// 		tp.writableSubscriptionsMu.Lock()
-// 		defer tp.writableSubscriptionsMu.Unlock()
-// 		for _, subs := range tp.writableSubscriptions {
-// 			for _, sub := range subs {
-// 				writableSubs = append(writableSubs, sub)
-// 			}
-// 		}
-// 	}()
-// 	for _, sub := range writableSubs {
-// 		sub.Close()
-// 	}
-
-// 	func() {
-// 		tp.readableSubscriptionsMu.Lock()
-// 		defer tp.readableSubscriptionsMu.Unlock()
-// 		for _, sub := range tp.readableSubscriptions {
-// 			sub.Close()
-// 		}
-// 	}()
-
-// 	tp.Process.Close()
-// }
 
 func (tp *treeProtocol) SendTx(ctx context.Context, tx tree.Tx) (err error) {
 	tp.Infof(0, "adding tx (%v) %v", tx.StateURI, tx.ID.Pretty())
