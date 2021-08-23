@@ -129,7 +129,7 @@ func (app *App) Start() error {
 	defer closeIfError(&err, db)
 	app.SharedBadgerDB = db
 
-	app.PeerStore = swarm.NewPeerStore(db)
+	app.PeerStore = swarm.NewPeerStore(app.SharedBadgerDB)
 
 	app.BlobStore = blob.NewBadgerStore(cfg.BlobDataRoot(), encryptionConfig)
 	err = app.BlobStore.Start()

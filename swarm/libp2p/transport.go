@@ -843,7 +843,7 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 	for _, refHash := range refHashes {
 		refHash := refHash
 
-		chDone := t.Process.Go("blobs", func(ctx context.Context) {
+		chDone := t.Process.Go(refHash.String(), func(ctx context.Context) {
 			err := t.transport.AnnounceBlob(ctx, refHash)
 			if err != nil {
 				t.Errorf("announce: error: %v", err)
@@ -889,7 +889,7 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 	for _, stateURI := range stateURIs {
 		stateURI := stateURI
 
-		chDone := t.Process.Go("state URI "+stateURI, func(ctx context.Context) {
+		chDone := t.Process.Go(stateURI, func(ctx context.Context) {
 			c, err := cidForString("serve:" + stateURI)
 			if err != nil {
 				t.Errorf("announce: error creating cid: %v", err)

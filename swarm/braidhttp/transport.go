@@ -430,7 +430,6 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		fmt.Printf("XYZZY %+v\n", errors.New(""))
 		writeSub = newWSWritableSubscription(stateURI, conn, t.makePeerConn(nil, nil, "", address), t)
 
 	} else {

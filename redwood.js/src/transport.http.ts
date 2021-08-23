@@ -92,6 +92,14 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
                     websocketConn.onmessage = function (evt) {
                         let messages = (evt.data as string).split('\n').filter(x => x.trim().length > 0)
                         for (let msg of messages) {
+                            if (!websocketConn) {
+                                continue
+                            }
+                            if (msg === 'ping') {
+                                websocketConn.send('pong')
+                                continue
+                            }
+
                             try {
                                 let { stateURI, tx, state, leaves } = JSON.parse(msg)
                                 callback(null, { stateURI, tx, state, leaves })

@@ -1748,10 +1748,10 @@
     schema-utils "^2.6.5"
     source-map "^0.7.3"
 
-"@redwood.dev/client@0.2.0":
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/@redwood.dev/client/-/client-0.2.0.tgz#a7beaf4175b24b3692df9a9a9d1ed53dc0c4d44d"
-  integrity sha512-PdcgFnrfrJeK0cQiYsXg9XFWkB0wWyOKwhYxNiqiXa4UnYn/N6oy61Eq5bopJbt1PXRYBJonXJIwzhJWqGmRZg==
+"@redwood.dev/client@0.2.2":
+  version "0.2.2"
+  resolved "https://registry.yarnpkg.com/@redwood.dev/client/-/client-0.2.2.tgz#5a68df18f652e57eb7440341721171dff0424f54"
+  integrity sha512-uohlK9O0iF7cZjiX/EpI5Ah57lHeAXZb2q7pJ1TPMN+gz/UyGdy//eqDF/Jmgzviche2E9rpAcP4nzjTDOT+9g==
   dependencies:
     "@types/json-stable-stringify" "^1.0.32"
     "@types/react" "^17.0.2"
@@ -8928,16 +8928,6 @@ redent@^3.0.0:
   dependencies:
     indent-string "^4.0.0"
     strip-indent "^3.0.0"
-
-redwood-p2p-client@^0.1.0:
-  version "0.1.0"
-  resolved "https://registry.yarnpkg.com/redwood-p2p-client/-/redwood-p2p-client-0.1.0.tgz#82d3269e3f6bb0a3e2e5ebd131dbdca8a7e06e32"
-  dependencies:
-    "@types/json-stable-stringify" "^1.0.32"
-    "@types/react" "^17.0.2"
-    ethers "^5.0.31"
-    json-stable-stringify "^1.0.1"
-    node-fetch "^2.6.1"
 
 regenerate-unicode-properties@^8.2.0:
   version "8.2.0"

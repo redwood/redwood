@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -210,9 +209,9 @@ func (sub httpWritableSubscription) String() string {
 }
 
 const (
-	wsWriteWait  = 10 * time.Second      // Time allowed to write a message to the peer.
-	wsPongWait   = 10 * time.Second      // Time allowed to read the next pong message from the peer.
-	wsPingPeriod = (wsPongWait * 9) / 10 // Send pings to peer with this period. Must be less than wsPongWait.
+	wsWriteWait  = 10 * time.Second // Time allowed to write a message to the peer.
+	wsPongWait   = 10 * time.Second // Time allowed to read the next pong message from the peer.
+	wsPingPeriod = 5 * time.Second  // Send pings to peer with this period. Must be less than wsPongWait.
 )
 
 var (
@@ -233,8 +232,15 @@ type wsWritableSubscription struct {
 	wsConn    *websocket.Conn
 	transport *transport
 	messages  *utils.Mailbox
+	writeMu   sync.Mutex
 	startOnce sync.Once
+	closed    bool
 	closeOnce sync.Once
+}
+
+type wsMessage struct {
+	msgType int
+	data    []byte
 }
 
 var _ prototree.WritableSubscriptionImpl = (*wsWritableSubscription)(nil)
@@ -253,17 +259,17 @@ func newWSWritableSubscription(stateURI string, wsConn *websocket.Conn, peerConn
 
 func (sub *wsWritableSubscription) Start() (err error) {
 	sub.startOnce.Do(func() {
-		fmt.Printf("START %v %v %p %+v\n", sub.peerConn.DialInfo().String(), sub.stateURI, sub, errors.New(""))
 		err = sub.Process.Start()
 		if err != nil {
 			return
 		}
 
-		// sub.wsConn.SetPongHandler(func(string) error { sub.wsConn.SetReadDeadline(time.Now().Add(wsPongWait)); return nil })
-
 		ticker := time.NewTicker(wsPingPeriod)
 
-		sub.Process.Go("read", func(ctx context.Context) {
+		// Say hello
+		sub.write(websocket.PingMessage, nil)
+
+		sub.Process.Go("write", func(ctx context.Context) {
 			defer ticker.Stop()
 			defer sub.Close()
 
@@ -279,20 +285,12 @@ func (sub *wsWritableSubscription) Start() (err error) {
 					}
 
 				case <-ticker.C:
-					sub.wsConn.SetWriteDeadline(time.Now().Add(wsWriteWait))
-					sub.wsConn.SetReadDeadline(time.Now().Add(wsPongWait))
-
-					err := sub.wsConn.WriteMessage(websocket.PingMessage, nil)
-					sub.peerConn.UpdateConnStats(err == nil)
-					if err != nil {
-						sub.peerConn.t.Errorf("error pinging websocket client: %v", err)
-						return
-					}
+					sub.messages.Deliver(wsMessage{websocket.PingMessage, nil})
 				}
 			}
 		})
 
-		sub.Process.Go("write", func(ctx context.Context) {
+		sub.Process.Go("read", func(ctx context.Context) {
 			defer sub.Close()
 
 			for {
@@ -302,10 +300,22 @@ func (sub *wsWritableSubscription) Start() (err error) {
 				default:
 				}
 
-				_, bs, err := sub.wsConn.ReadMessage()
+				msg, err := sub.read()
 				if err != nil {
 					sub.Errorf("error reading from websocket: %v", err)
 					return
+				}
+
+				if msg.msgType == websocket.CloseMessage {
+					return
+				} else if msg.msgType == websocket.PingMessage {
+					sub.messages.Deliver(wsMessage{websocket.PongMessage, nil})
+					continue
+				} else if msg.msgType == websocket.PongMessage {
+					continue
+				} else if msg.msgType == websocket.BinaryMessage {
+					sub.Errorf("websocket subscription received unexpected binary message")
+					continue
 				}
 
 				var addSubMsg struct {
@@ -316,7 +326,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 						FromTxID         string `json:"fromTxID"`
 					} `json:"params"`
 				}
-				err = json.Unmarshal(bs, &addSubMsg)
+				err = json.Unmarshal(msg.data, &addSubMsg)
 				if err != nil {
 					sub.Errorf("got bad multiplexed subscription request: %v", err)
 					continue
@@ -355,34 +365,53 @@ func (sub *wsWritableSubscription) Start() (err error) {
 	return err
 }
 
+var (
+	pingMessage = []byte("ping")
+	pongMessage = []byte("pong")
+)
+
+func (sub *wsWritableSubscription) read() (m wsMessage, err error) {
+	sub.wsConn.SetReadDeadline(time.Now().Add(wsPongWait))
+
+	msgType, bs, err := sub.wsConn.ReadMessage()
+	if err == io.EOF {
+		return wsMessage{websocket.CloseMessage, nil}, nil
+	} else if _, is := err.(*websocket.CloseError); is {
+		return wsMessage{websocket.CloseMessage, nil}, nil
+	} else if err != nil {
+		return wsMessage{}, err
+	}
+
+	switch msgType {
+	case websocket.PingMessage, websocket.PongMessage, websocket.CloseMessage:
+		return wsMessage{msgType, bs}, nil
+	}
+
+	bs = bytes.TrimSpace(bs)
+	if bytes.Equal(bs, pingMessage) {
+		return wsMessage{websocket.PingMessage, nil}, nil
+	} else if bytes.Equal(bs, pongMessage) {
+		return wsMessage{websocket.PongMessage, nil}, nil
+	} else {
+		return wsMessage{websocket.TextMessage, bs}, nil
+	}
+}
+
 func (sub *wsWritableSubscription) writePendingMessages(ctx context.Context) error {
-	for _, msgBytes := range sub.messages.RetrieveAll() {
-		err := func() error {
-			select {
-			case <-ctx.Done():
-				return context.Canceled
-			default:
-			}
+	for {
+		select {
+		case <-ctx.Done():
+			return context.Canceled
+		default:
+		}
 
-			var err error
-			defer func() { sub.peerConn.UpdateConnStats(err == nil) }()
-
-			sub.wsConn.SetWriteDeadline(time.Now().Add(wsWriteWait))
-
-			w, err := sub.wsConn.NextWriter(websocket.TextMessage)
-			if err != nil {
-				return errors.Wrapf(err, "while obtaining next writer")
-			}
-			defer w.Close()
-
-			bs := append(msgBytes.([]byte), '\n')
-
-			_, err = w.Write(bs)
-			if err != nil {
-				return errors.Wrapf(err, "while writing to websocket client")
-			}
+		x := sub.messages.Retrieve()
+		if x == nil {
 			return nil
-		}()
+		}
+
+		msg := x.(wsMessage)
+		err := sub.write(msg.msgType, msg.data)
 		if err != nil {
 			return err
 		}
@@ -390,11 +419,45 @@ func (sub *wsWritableSubscription) writePendingMessages(ctx context.Context) err
 	return nil
 }
 
-func (sub *wsWritableSubscription) Close() error {
-	sub.Infof(0, "ws writable subscription closed (%v)", sub.stateURI)
+func (sub *wsWritableSubscription) write(messageType int, bytes []byte) error {
+	sub.writeMu.Lock()
+	defer sub.writeMu.Unlock()
+
+	if sub.closed && messageType != websocket.CloseMessage {
+		return nil
+	}
+
+	var err error
+	defer func() { sub.peerConn.UpdateConnStats(err == nil) }()
 
 	sub.wsConn.SetWriteDeadline(time.Now().Add(wsWriteWait))
-	_ = sub.wsConn.WriteMessage(websocket.CloseMessage, []byte{})
+
+	switch messageType {
+	case websocket.TextMessage:
+		bytes = append(bytes, '\n')
+	case websocket.PingMessage:
+		messageType = websocket.TextMessage
+		bytes = []byte("ping\n")
+	case websocket.PongMessage:
+		messageType = websocket.TextMessage
+		bytes = []byte("pong\n")
+	}
+
+	err = sub.wsConn.WriteMessage(messageType, bytes)
+	if err != nil {
+		return errors.Wrapf(err, "while writing to websocket client")
+	}
+	return nil
+}
+
+func (sub *wsWritableSubscription) Close() error {
+	sub.writeMu.Lock()
+	sub.closed = true
+	sub.writeMu.Unlock()
+
+	sub.Infof(0, "ws writable subscription closed (%v)", sub.stateURI)
+
+	_ = sub.write(websocket.CloseMessage, []byte{})
 
 	return multierr.Combine(
 		sub.wsConn.Close(),
@@ -413,7 +476,7 @@ func (sub *wsWritableSubscription) Put(ctx context.Context, stateURI string, tx 
 		sub.peerConn.t.Errorf("error marshaling message json: %v", err)
 		return err
 	}
-	sub.messages.Deliver(bs)
+	sub.messages.Deliver(wsMessage{websocket.TextMessage, bs})
 	return nil
 }
 

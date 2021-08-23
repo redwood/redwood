@@ -1,6 +1,6 @@
 {
   "name": "@redwood.dev/client",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "Client for interacting with Redwood nodes",
   "main": "dist/main/index.js",
   "module": "dist/module/index.js",
