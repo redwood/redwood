@@ -180,10 +180,12 @@ func (bp *blobProtocol) fetchBlob(ctx context.Context, blobID blob.ID) {
 	ctxFindProviders, cancelFindProviders := context.WithTimeout(ctx, 15*time.Second)
 	defer cancelFindProviders()
 
+	bp.Warnf("looking for providers of blob %v", blobID)
 	for peer := range bp.ProvidersOfBlob(ctxFindProviders, blobID) {
 		if !peer.Ready() {
 			continue
 		}
+		bp.Warnf("found provider of blob %v: %v", blobID, peer.DialInfo())
 
 		var done bool
 		func() {
@@ -233,6 +235,7 @@ func (bp *blobProtocol) fetchBlob(ctx context.Context, blobID blob.ID) {
 					} else if pkt.End {
 						return
 					}
+					bp.Warnf("received packet (len %v) for blob %v: %v", len(pkt.Data), blobID, peer.DialInfo())
 
 					var n int
 					n, err = pw.Write(pkt.Data)
@@ -251,6 +254,7 @@ func (bp *blobProtocol) fetchBlob(ctx context.Context, blobID blob.ID) {
 				bp.Errorf("could not store blob: %v", err)
 				return
 			}
+			bp.Warnf("received entire blob %v: %v", blobID, peer.DialInfo())
 			// @@TODO: check stored blobHash against the one we requested
 
 			bp.announceBlobs([]blob.ID{
@@ -293,7 +297,9 @@ func (bp *blobProtocol) announceBlobs(blobIDs []blob.ID) {
 func (bp *blobProtocol) handleBlobRequest(blobID blob.ID, peer BlobPeerConn) {
 	defer peer.Close()
 
-	blobReader, _, err := bp.blobStore.BlobReader(blobID)
+	bp.Debugf("incoming blob request: %v %v", blobID, peer.DialInfo())
+
+	blobReader, blobLen, err := bp.blobStore.BlobReader(blobID)
 	if err != nil {
 		err = peer.SendBlobHeader(false)
 		if err != nil {
@@ -308,9 +314,13 @@ func (bp *blobProtocol) handleBlobRequest(blobID blob.ID, peer BlobPeerConn) {
 		bp.Errorf("%+v", errors.WithStack(err))
 		return
 	}
+	bp.Debugf("sent blob header: %v %v", blobID, peer.DialInfo())
 
 	buf := make([]byte, BlobChunkSize)
+	i := 0
+	numPackets := blobLen / BlobChunkSize
 	for {
+		i++
 		var end bool
 		n, err := io.ReadFull(blobReader, buf)
 		if err == io.EOF {
@@ -328,6 +338,7 @@ func (bp *blobProtocol) handleBlobRequest(blobID blob.ID, peer BlobPeerConn) {
 			bp.Errorf("%+v", errors.WithStack(err))
 			return
 		}
+		bp.Debugf("sent blob packet (%v / %v): %v %v", i, numPackets, blobID, peer.DialInfo())
 		if end {
 			break
 		}
@@ -338,4 +349,5 @@ func (bp *blobProtocol) handleBlobRequest(blobID blob.ID, peer BlobPeerConn) {
 		bp.Errorf("%+v", errors.WithStack(err))
 		return
 	}
+	bp.Debugf("sent blob footer: %v %v", blobID, peer.DialInfo())
 }
