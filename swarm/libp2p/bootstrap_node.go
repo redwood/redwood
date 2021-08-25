@@ -134,11 +134,11 @@ func (bn *bootstrapNode) Start() error {
 		libp2p.BandwidthReporter(bn.BandwidthCounter),
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
-		// libp2p.EnableAutoRelay(),
 		// libp2p.DefaultStaticRelays(),
 		libp2p.EnableRelay(circuitp2p.OptHop),
-		// libp2p.EnableAutoRelay(),
+		libp2p.EnableAutoRelay(),
 		libp2p.Peerstore(bn.peerstore),
+		libp2p.ForceReachabilityPublic(),
 		libp2p.Security(noisep2p.ID, noisep2p.New),
 		libp2p.MultiaddrResolver(dnsResolver),
 		libp2p.Routing(func(host corehost.Host) (routing.PeerRouting, error) {
@@ -173,6 +173,7 @@ func (bn *bootstrapNode) Start() error {
 		chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
 		if err != nil {
 			bn.Errorf("error finding peers: %v", err)
+			return
 		}
 		for pinfo := range chPeers {
 			pinfo := pinfo
