@@ -190,8 +190,8 @@ func (s *multiReaderSubscription) Start() error {
 	defer s.Process.Autoclose()
 
 	var (
-		restartSearchBackoff = utils.ExponentialBackoff{Min: 5 * time.Second, Max: 30 * time.Second}
-		getPeerBackoff       = utils.ExponentialBackoff{Min: 5 * time.Second, Max: 30 * time.Second}
+		restartSearchBackoff = utils.ExponentialBackoff{Min: 3 * time.Second, Max: 10 * time.Second}
+		getPeerBackoff       = utils.ExponentialBackoff{Min: 1 * time.Second, Max: 10 * time.Second}
 	)
 
 	s.peerPool = swarm.NewPeerPool(
@@ -385,36 +385,60 @@ func (sub *inProcessSubscription) Read() (*SubscriptionMsg, error) {
 
 type StateURISubscription interface {
 	Read(ctx context.Context) (string, error)
-	Close()
+	Close() error
 }
 
 type stateURISubscription struct {
-	treeProtocol *treeProtocol
-	mailbox      *utils.Mailbox
-	ch           chan string
-	chStop       chan struct{}
-	chDone       chan struct{}
+	process.Process
+	store       Store
+	mailbox     *utils.Mailbox
+	ch          chan string
+	unsubscribe func()
 }
 
-func (sub *stateURISubscription) start() {
-	defer close(sub.chDone)
-	defer sub.treeProtocol.handleStateURISubscriptionClosed(sub)
+func newStateURISubscription(store Store) *stateURISubscription {
+	return &stateURISubscription{
+		Process: *process.New("stateURI subscription"),
+		store:   store,
+		mailbox: utils.NewMailbox(0),
+		ch:      make(chan string),
+	}
+}
 
-	for {
-		select {
-		case <-sub.chStop:
-			return
-		case <-sub.mailbox.Notify():
-			for _, x := range sub.mailbox.RetrieveAll() {
-				stateURI := x.(string)
-				select {
-				case sub.ch <- stateURI:
-				case <-sub.chStop:
-					return
+func (sub *stateURISubscription) Start() error {
+	err := sub.Process.Start()
+	if err != nil {
+		return err
+	}
+
+	sub.unsubscribe = sub.store.OnNewSubscribedStateURI(sub.put)
+	for stateURI := range sub.store.SubscribedStateURIs() {
+		sub.mailbox.Deliver(stateURI)
+	}
+
+	sub.Process.Go("runloop", func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-sub.mailbox.Notify():
+				for _, x := range sub.mailbox.RetrieveAll() {
+					stateURI := x.(string)
+					select {
+					case sub.ch <- stateURI:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
 		}
-	}
+	})
+	return nil
+}
+
+func (sub *stateURISubscription) Close() error {
+	sub.unsubscribe()
+	return sub.Process.Close()
 }
 
 func (sub *stateURISubscription) put(stateURI string) {
@@ -425,14 +449,9 @@ func (sub *stateURISubscription) Read(ctx context.Context) (string, error) {
 	select {
 	case <-ctx.Done():
 		return "", ctx.Err()
-	case <-sub.chStop:
+	case <-sub.Process.Done():
 		return "", types.ErrClosed
 	case s := <-sub.ch:
 		return s, nil
 	}
-}
-
-func (sub *stateURISubscription) Close() {
-	close(sub.chStop)
-	<-sub.chDone
 }
