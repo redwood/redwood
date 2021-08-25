@@ -26,12 +26,6 @@ func cidForString(s string) (cid.Cid, error) {
 	return c, nil
 }
 
-var (
-	protoDNS4 = ma.ProtocolWithName("dns4")
-	protoIP4  = ma.ProtocolWithName("ip4")
-	protoIP6  = ma.ProtocolWithName("ip6")
-)
-
 func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *utils.SortedStringSet {
 	multiaddrs, err := peerstore.InfoToP2pAddrs(&pinfo)
 	if err != nil {
