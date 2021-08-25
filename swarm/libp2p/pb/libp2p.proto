@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package Redwood.swarm.libp2p;
+
+option go_package = "redwood.dev/swarm/libp2p/pb";
+
+import "blob/pb/blob.proto";
+
+message Msg {
+    oneof msg {
+        MsgFetchBlobManifest fetchBlobManifest = 1;
+        MsgSendBlobManifest sendBlobManifest = 2;
+        MsgFetchBlobChunk fetchBlobChunk = 3;
+        MsgSendBlobChunk sendBlobChunk = 4;
+    }
+}
+
+message MsgFetchBlobManifest {
+    Redwood.blob.BlobID id = 1;
+}
+
+message MsgSendBlobManifest {
+    Redwood.blob.Manifest manifest = 1;
+    bool exists = 2;
+}
+
+message MsgFetchBlobChunk {
+    bytes sha3 = 1;
+}
+
+message MsgSendBlobChunk {
+    bytes chunk = 1;
+    bool exists = 2;
+}
