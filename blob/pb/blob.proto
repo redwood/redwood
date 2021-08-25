@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package Redwood.blob;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option go_package = "redwood.dev/blob/pb";
+
+import "types/pb/types.proto";
+
+message BlobID {
+    Redwood.types.HashAlg hashAlg = 1;
+    bytes hash = 2;
+}
+
+message Manifest {
+    uint64 size = 1;
+    repeated bytes chunkSHA3s = 2;
+}
