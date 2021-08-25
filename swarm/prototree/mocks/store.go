@@ -5,8 +5,6 @@ package mocks
 import (
 	mock "github.com/stretchr/testify/mock"
 
-	swarm "redwood.dev/swarm"
-
 	types "redwood.dev/types"
 
 	utils "redwood.dev/utils"
@@ -31,13 +29,13 @@ func (_m *Store) AddSubscribedStateURI(stateURI string) error {
 	return r0
 }
 
-// MarkTxSeenByPeer provides a mock function with given fields: dialInfo, stateURI, txID
-func (_m *Store) MarkTxSeenByPeer(dialInfo swarm.PeerDialInfo, stateURI string, txID types.ID) error {
-	ret := _m.Called(dialInfo, stateURI, txID)
+// MarkTxSeenByPeer provides a mock function with given fields: deviceSpecificID, stateURI, txID
+func (_m *Store) MarkTxSeenByPeer(deviceSpecificID string, stateURI string, txID types.ID) error {
+	ret := _m.Called(deviceSpecificID, stateURI, txID)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(swarm.PeerDialInfo, string, types.ID) error); ok {
-		r0 = rf(dialInfo, stateURI, txID)
+	if rf, ok := ret.Get(0).(func(string, string, types.ID) error); ok {
+		r0 = rf(deviceSpecificID, stateURI, txID)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -54,6 +52,22 @@ func (_m *Store) MaxPeersPerSubscription() uint64 {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(uint64)
+	}
+
+	return r0
+}
+
+// OnNewSubscribedStateURI provides a mock function with given fields: handler
+func (_m *Store) OnNewSubscribedStateURI(handler func(string)) func() {
+	ret := _m.Called(handler)
+
+	var r0 func()
+	if rf, ok := ret.Get(0).(func(func(string)) func()); ok {
+		r0 = rf(handler)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(func())
+		}
 	}
 
 	return r0
@@ -103,13 +117,13 @@ func (_m *Store) SubscribedStateURIs() utils.StringSet {
 	return r0
 }
 
-// TxSeenByPeer provides a mock function with given fields: dialInfo, stateURI, txID
-func (_m *Store) TxSeenByPeer(dialInfo swarm.PeerDialInfo, stateURI string, txID types.ID) bool {
-	ret := _m.Called(dialInfo, stateURI, txID)
+// TxSeenByPeer provides a mock function with given fields: deviceSpecificID, stateURI, txID
+func (_m *Store) TxSeenByPeer(deviceSpecificID string, stateURI string, txID types.ID) bool {
+	ret := _m.Called(deviceSpecificID, stateURI, txID)
 
 	var r0 bool
-	if rf, ok := ret.Get(0).(func(swarm.PeerDialInfo, string, types.ID) bool); ok {
-		r0 = rf(dialInfo, stateURI, txID)
+	if rf, ok := ret.Get(0).(func(string, string, types.ID) bool); ok {
+		r0 = rf(deviceSpecificID, stateURI, txID)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}

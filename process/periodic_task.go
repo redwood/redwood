@@ -47,11 +47,7 @@ func (task *PeriodicTask) Start() error {
 				if len(xs) == 0 {
 					continue Loop
 				}
-				// func() {
-				//  ctx, cancel := CombinedContext(task.chStop, interval)
-				//  defer cancel()
 				task.taskFn(ctx)
-				// }()
 			}
 		}
 	})
