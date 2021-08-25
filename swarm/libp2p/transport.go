@@ -184,8 +184,9 @@ func (t *transport) Start() error {
 		libp2p.BandwidthReporter(t.BandwidthCounter),
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
-		libp2p.EnableAutoRelay(),
+		libp2p.ForceReachabilityPrivate(),
 		libp2p.StaticRelays(staticRelays),
+		libp2p.EnableAutoRelay(),
 		// libp2p.DefaultStaticRelays(),
 		libp2p.Peerstore(peerStore),
 		libp2p.Security(noisep2p.ID, noisep2p.New),
@@ -220,10 +221,7 @@ func (t *transport) Start() error {
 	for _, relay := range staticRelays {
 		relay := relay
 		go func() {
-			peerConn := t.makeDisconnectedPeerConn(relay)
-			peerConn.EnsureConnected(t.Process.Ctx())
-
-			err := t.libp2pHost.Connect(t.Process.Ctx(), relay)
+			err = t.libp2pHost.Connect(t.Process.Ctx(), relay)
 			if err != nil {
 				t.Errorf("couldn't connect to static relay: %v", err)
 			}
@@ -238,6 +236,7 @@ func (t *transport) Start() error {
 		chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
 		if err != nil {
 			t.Errorf("error finding peers: %v", err)
+			return
 		}
 		for pinfo := range chPeers {
 			t.onPeerFound("routing", pinfo)
@@ -393,9 +392,15 @@ func (t *transport) Disconnected(network netp2p.Network, conn netp2p.Conn) {
 	t.Debugf("libp2p disconnected: %v", addr)
 }
 
-func (t *transport) OpenedStream(network netp2p.Network, stream netp2p.Stream) {}
+func (t *transport) OpenedStream(network netp2p.Network, stream netp2p.Stream) {
+	addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
+	t.Debugf("opened stream %v with %v", stream.Protocol(), addr)
+}
 
 func (t *transport) ClosedStream(network netp2p.Network, stream netp2p.Stream) {
+	addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
+	t.Debugf("closed stream %v with %v", stream.Protocol(), addr)
+
 	peerID := stream.Conn().RemotePeer()
 	t.writeSubsByPeerIDMu.Lock()
 	defer t.writeSubsByPeerIDMu.Unlock()
