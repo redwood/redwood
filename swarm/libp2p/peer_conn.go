@@ -37,6 +37,10 @@ var (
 	_ prototree.TreePeerConn = (*peerConn)(nil)
 )
 
+func (peer *peerConn) DeviceSpecificID() string {
+	return peer.pinfo.ID.Pretty()
+}
+
 func (peer *peerConn) Transport() swarm.Transport {
 	return peer.t
 }

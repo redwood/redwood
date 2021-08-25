@@ -28,7 +28,7 @@ type peerConn struct {
 	swarm.PeerDetails
 
 	t *transport
-	sync.Mutex
+	sessionID types.ID
 
 	// stream
 	stream struct {
@@ -43,6 +43,10 @@ var (
 	_ protoblob.BlobPeerConn = (*peerConn)(nil)
 	_ prototree.TreePeerConn = (*peerConn)(nil)
 )
+
+func (peer *peerConn) DeviceSpecificID() string {
+	return peer.sessionID.Hex()
+}
 
 func (p *peerConn) Transport() swarm.Transport {
 	return p.t

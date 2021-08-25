@@ -177,7 +177,7 @@ func (t *transport) Start() error {
 		)
 	}
 
-	t.Process.Go("", func(ctx context.Context) {
+	t.Process.Go("http server", func(ctx context.Context) {
 		if !t.devMode {
 			t.srv = &http.Server{
 				Addr:    t.listenAddr,
@@ -277,7 +277,7 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Address verification requests (2 kinds)
 		if challengeMsgHex := r.Header.Get("Challenge"); challengeMsgHex != "" {
 			// 1. Remote node is reaching out to us with a challenge, and we respond
-			t.serveChallengeIdentityResponse(w, r, address, challengeMsgHex)
+			t.serveChallengeIdentityResponse(w, r, sessionID, address, challengeMsgHex)
 		} else {
 			responseHex := r.Header.Get("Response")
 			if responseHex == "" {
@@ -291,7 +291,7 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case "GET":
 		if r.Header.Get("Subscribe") != "" || r.URL.Path == "/ws" {
-			t.serveSubscription(w, r, address)
+			t.serveSubscription(w, r, sessionID, address)
 		} else {
 			if r.URL.Path == "/redwood.js" {
 				// @@TODO: this is hacky
@@ -309,13 +309,13 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "ACK":
-		t.serveAck(w, r, address)
+		t.serveAck(w, r, sessionID, address)
 
 	case "PUT":
 		if r.Header.Get("Private") == "true" {
-			t.servePostPrivateTx(w, r, address)
+			t.servePostPrivateTx(w, r, sessionID, address)
 		} else {
-			t.servePostTx(w, r, address)
+			t.servePostTx(w, r, sessionID, address)
 		}
 
 	default:
@@ -324,14 +324,14 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // Respond to a request from another node challenging our identity.
-func (t *transport) serveChallengeIdentityResponse(w http.ResponseWriter, r *http.Request, address types.Address, challengeMsgHex string) {
+func (t *transport) serveChallengeIdentityResponse(w http.ResponseWriter, r *http.Request, sessionID types.ID, address types.Address, challengeMsgHex string) {
 	challengeMsg, err := hex.DecodeString(challengeMsgHex)
 	if err != nil {
 		http.Error(w, "Challenge header: bad challenge message", http.StatusBadRequest)
 		return
 	}
 
-	peer := t.makePeerConn(w, nil, "", address)
+	peer := t.makePeerConn(w, nil, "", sessionID, address)
 	err = t.HandleChallengeIdentity([]byte(challengeMsg), peer)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -392,7 +392,7 @@ func (t *transport) serveChallengeIdentityCheckResponse(w http.ResponseWriter, r
 	delete(t.pendingAuthorizations, sessionID) // @@TODO: expiration/garbage collection for failed auths
 }
 
-func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, address types.Address) {
+func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, sessionID types.ID, address types.Address) {
 	var (
 		stateURI         string
 		keypath          string
@@ -430,7 +430,7 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeSub = newWSWritableSubscription(stateURI, conn, t.makePeerConn(nil, nil, "", address), t)
+		writeSub = newWSWritableSubscription(stateURI, conn, t.makePeerConn(nil, nil, "", sessionID, address), t)
 
 	} else {
 		// Make sure that the writer supports flushing
@@ -472,7 +472,7 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, ad
 		w.Header().Set("Connection", "keep-alive")
 		w.Header().Set("Transfer-Encoding", "chunked")
 
-		writeSub = newHTTPWritableSubscription(stateURI, t.makePeerConn(w, f, "", address), subscriptionType)
+		writeSub = newHTTPWritableSubscription(stateURI, t.makePeerConn(w, f, "", sessionID, address), subscriptionType)
 
 		f.Flush()
 	}
@@ -765,7 +765,7 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (t *transport) serveAck(w http.ResponseWriter, r *http.Request, address types.Address) {
+func (t *transport) serveAck(w http.ResponseWriter, r *http.Request, sessionID types.ID, address types.Address) {
 	defer r.Body.Close()
 
 	bs, err := ioutil.ReadAll(r.Body)
@@ -785,10 +785,10 @@ func (t *transport) serveAck(w http.ResponseWriter, r *http.Request, address typ
 
 	stateURI := r.Header.Get("State-URI")
 
-	t.HandleAckReceived(stateURI, txID, t.makePeerConn(w, nil, "", address))
+	t.HandleAckReceived(stateURI, txID, t.makePeerConn(w, nil, "", sessionID, address))
 }
 
-func (t *transport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, address types.Address) {
+func (t *transport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, sessionID types.ID, address types.Address) {
 	t.Infof(0, "incoming private tx")
 
 	var encryptedTx prototree.EncryptedTx
@@ -817,7 +817,7 @@ func (t *transport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 
-	t.HandleTxReceived(tx, t.makePeerConn(w, nil, "", address))
+	t.HandleTxReceived(tx, t.makePeerConn(w, nil, "", sessionID, address))
 }
 
 func (t *transport) servePostBlob(w http.ResponseWriter, r *http.Request) {
@@ -845,7 +845,7 @@ func (t *transport) servePostBlob(w http.ResponseWriter, r *http.Request) {
 	utils.RespondJSON(w, StoreBlobResponse{SHA1: sha1Hash, SHA3: sha3Hash})
 }
 
-func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, address types.Address) {
+func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, sessionID types.ID, address types.Address) {
 	t.Infof(0, "incoming tx")
 
 	var err error
@@ -973,7 +973,7 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, address 
 	tx.From = pubkey.Address()
 	////////////////////////////////
 
-	peer := t.makePeerConn(w, nil, "", address)
+	peer := t.makePeerConn(w, nil, "", sessionID, address)
 	t.Process.Go("HandleTxReceived", func(ctx context.Context) {
 		t.HandleTxReceived(tx, peer)
 	})
@@ -983,7 +983,7 @@ func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Pee
 	if dialAddr == t.ownURL || strings.HasPrefix(dialAddr, "localhost") {
 		return nil, errors.WithStack(swarm.ErrPeerIsSelf)
 	}
-	return t.makePeerConn(nil, nil, dialAddr, types.Address{}), nil
+	return t.makePeerConn(nil, nil, dialAddr, types.ID{}, types.Address{}), nil
 }
 
 func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_ <-chan prototree.TreePeerConn, err error) {
@@ -1009,7 +1009,7 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_
 			}
 
 			select {
-			case ch <- t.makePeerConn(nil, nil, providerURL, types.Address{}):
+			case ch <- t.makePeerConn(nil, nil, providerURL, types.ID{}, types.Address{}):
 			case <-ctx.Done():
 			}
 		}
@@ -1152,8 +1152,8 @@ func (t *transport) addressFromCookie(r *http.Request) types.Address {
 	return types.AddressFromBytes(addressBytes)
 }
 
-func (t *transport) makePeerConn(writer io.Writer, flusher http.Flusher, dialAddr string, address types.Address) *peerConn {
-	peer := &peerConn{t: t}
+func (t *transport) makePeerConn(writer io.Writer, flusher http.Flusher, dialAddr string, sessionID types.ID, address types.Address) *peerConn {
+	peer := &peerConn{t: t, sessionID: sessionID}
 	peer.stream.Writer = writer
 	peer.stream.Flusher = flusher
 
