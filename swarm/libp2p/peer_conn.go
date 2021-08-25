@@ -143,6 +143,10 @@ func (peer *peerConn) Ack(stateURI string, txID types.ID) error {
 }
 
 func (peer *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) error {
+	err := peer.ensureStreamWithProtocol(context.Background(), PROTO_MAIN)
+	if err != nil {
+		return err
+	}
 	return peer.writeMsg(Msg{Type: msgType_ChallengeIdentityRequest, Payload: challengeMsg})
 }
 
