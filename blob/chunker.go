@@ -26,9 +26,9 @@ type Chunker struct {
 const (
 	KB          = 1024
 	WINDOW_SIZE = 2 * KB
-	MIN         = 2 * KB
-	AVG         = 16 * KB
-	MAX         = 20 * KB
+	MIN         = 128 * KB
+	AVG         = 256 * KB
+	MAX         = 512 * KB
 )
 
 func NewChunker(reader io.ReadCloser) *Chunker {
