@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package Redwood.types;
+
+option go_package = "redwood.dev/types/pb";
+
+enum HashAlg {
+    Unknown = 0;
+    SHA1 = 1;
+    SHA3 = 2;
+}
