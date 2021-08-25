@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package redwood;
+package Redwood.tree;
 
-option go_package = "pb";
+option go_package = "redwood.dev/internal/pb";
 
 import "google/protobuf/any.proto";
 
