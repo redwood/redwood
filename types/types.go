@@ -6,6 +6,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
+
+	"redwood.dev/types/pb"
 )
 
 type ID [32]byte
@@ -242,6 +244,14 @@ const (
 	SHA1
 	SHA3
 )
+
+func HashAlgFromProtobuf(proto pb.HashAlg) HashAlg {
+	return HashAlg(proto)
+}
+
+func (alg HashAlg) ToProtobuf() pb.HashAlg {
+	return pb.HashAlg(alg)
+}
 
 func (alg HashAlg) String() string {
 	switch alg {
