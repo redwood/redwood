@@ -184,10 +184,30 @@ func HashBytes(bs []byte) Hash {
 	return h
 }
 
+func HashFromBytes(bs []byte) (Hash, error) {
+	if len(bs) > 32 {
+		return Hash{}, errors.Errorf("bad input to HashFromBytes (expected 32 or fewer bytes, got %v)", len(bs))
+	}
+	var h Hash
+	copy(h[:], bs)
+	return h, nil
+}
+
 func HashFromHex(hexStr string) (Hash, error) {
 	var hash Hash
 	err := hash.UnmarshalText([]byte(hexStr))
 	return hash, err
+}
+
+func (h Hash) Copy() Hash {
+	var out Hash
+	copy(out[:], h[:])
+	return out
+}
+
+func (h Hash) Bytes() []byte {
+	out := h.Copy()
+	return out[:]
 }
 
 func (h Hash) String() string {
