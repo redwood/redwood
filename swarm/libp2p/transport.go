@@ -275,25 +275,26 @@ func (t *transport) Start() error {
 		}
 	}
 
+	if t.controllerHub != nil {
+		announceStateURIsTask := NewAnnounceStateURIsTask(30*time.Second, t.controllerHub, t.dht)
+		announceStateURIsTask.Enqueue()
+		t.Process.SpawnChild(nil, announceStateURIsTask)
+	}
+
 	if t.blobStore != nil {
-		announceBlobsTask := NewAnnounceBlobsTask(10*time.Second, t, t.blobStore, t.dht)
+		announceBlobsTask := NewAnnounceBlobsTask(30*time.Second, t, t.blobStore, t.dht)
+		announceBlobsTask.Enqueue()
 		t.Process.SpawnChild(nil, announceBlobsTask)
 		t.blobStore.OnBlobsSaved(announceBlobsTask.Enqueue)
 	}
 
-	if t.controllerHub != nil {
-		announceStateURIsTask := NewAnnounceStateURIsTask(10*time.Second, t.controllerHub, t.dht)
-		t.Process.SpawnChild(nil, announceStateURIsTask)
-		// if t.blobStore != nil {
-		//     t.blobStore.OnBlobsSaved(announceBlobsTask.Enqueue)
-		// }
-	}
-
-	announceIdentitiesTask := NewAnnounceIdentitiesTask(10*time.Second, t.keyStore, t.dht)
+	announceIdentitiesTask := NewAnnounceIdentitiesTask(30*time.Second, t.keyStore, t.dht)
+	announceIdentitiesTask.Enqueue()
 	t.Process.SpawnChild(nil, announceIdentitiesTask)
-	// if t.blobStore != nil {
-	//     t.blobStore.OnBlobsSaved(announceBlobsTask.Enqueue)
-	// }
+
+	connectToStaticRelaysTask := NewConnectToStaticRelaysTask(8*time.Second, staticRelays, t.libp2pHost)
+	connectToStaticRelaysTask.Enqueue()
+	t.Process.SpawnChild(nil, connectToStaticRelaysTask)
 
 	t.Infof(0, "libp2p peer ID is %v", t.Libp2pPeerID())
 
@@ -952,6 +953,48 @@ func (t *announceIdentitiesTask) announceIdentities(ctx context.Context) {
 			err = t.dht.Provide(ctx, c, true)
 			if err != nil && err != kbucket.ErrLookupFailure {
 				t.Errorf(`announce: could not dht.Provide pubkey: %v`, err)
+			}
+		})
+		chDones = append(chDones, chDone)
+	}
+	for _, chDone := range chDones {
+		<-chDone
+	}
+}
+
+type connectToStaticRelaysTask struct {
+	process.PeriodicTask
+	log.Logger
+	staticRelays []corepeer.AddrInfo
+	libp2pHost   p2phost.Host
+}
+
+func NewConnectToStaticRelaysTask(
+	interval time.Duration,
+	staticRelays []corepeer.AddrInfo,
+	libp2pHost p2phost.Host,
+) *connectToStaticRelaysTask {
+	t := &connectToStaticRelaysTask{
+		Logger:       log.NewLogger("libp2p"),
+		staticRelays: staticRelays,
+		libp2pHost:   libp2pHost,
+	}
+	t.PeriodicTask = *process.NewPeriodicTask("ConnectToStaticRelaysTask", interval, t.connectToStaticRelays)
+	return t
+}
+
+func (t *connectToStaticRelaysTask) connectToStaticRelays(ctx context.Context) {
+	var chDones []<-chan struct{}
+	for _, relay := range t.staticRelays {
+		if len(t.libp2pHost.Network().ConnsToPeer(relay.ID)) > 0 {
+			continue
+		}
+
+		relay := relay
+		chDone := t.Process.Go("relay "+relay.ID.Pretty(), func(ctx context.Context) {
+			err := t.libp2pHost.Connect(ctx, relay)
+			if err != nil {
+				t.Errorf("error connecting to static relay (%v): %v", relay.ID, err)
 			}
 		})
 		chDones = append(chDones, chDone)

@@ -33,6 +33,9 @@ type peerPool struct {
 
 	peers   map[PeerDialInfo]peersMapEntry
 	peersMu sync.RWMutex
+
+	activePeerDeviceIDs   map[string]struct{}
+	activePeerDeviceIDsMu sync.RWMutex
 }
 
 type peerState int
@@ -53,16 +56,17 @@ func NewPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 	close(chProviders)
 
 	return &peerPool{
-		Process:         *process.New("PeerPool"),
-		Logger:          log.NewLogger("peer pool"),
-		concurrentConns: concurrentConns,
-		peersAvailable:  utils.NewMailbox(0),
-		peersInTimeout:  utils.NewMailbox(0),
-		chProviders:     chProviders,
-		chPeers:         make(chan PeerConn),
-		sem:             semaphore.NewWeighted(int64(concurrentConns)),
-		fnGetPeers:      fnGetPeers,
-		peers:           make(map[PeerDialInfo]peersMapEntry),
+		Process:             *process.New("PeerPool"),
+		Logger:              log.NewLogger("peer pool"),
+		concurrentConns:     concurrentConns,
+		peersAvailable:      utils.NewMailbox(0),
+		peersInTimeout:      utils.NewMailbox(0),
+		chProviders:         chProviders,
+		chPeers:             make(chan PeerConn),
+		sem:                 semaphore.NewWeighted(int64(concurrentConns)),
+		fnGetPeers:          fnGetPeers,
+		peers:               make(map[PeerDialInfo]peersMapEntry),
+		activePeerDeviceIDs: make(map[string]struct{}),
 	}
 }
 
@@ -140,7 +144,7 @@ func (p *peerPool) handlePeersInTimeout(ctx context.Context) {
 
 		for _, x := range p.peersInTimeout.RetrieveAll() {
 			peer := x.(PeerConn)
-			if peer.Ready() && len(peer.Addresses()) > 0 {
+			if peer.Ready() && len(peer.Addresses()) > 0 && !p.deviceIDAlreadyActive(peer.DeviceSpecificID()) {
 				p.peersAvailable.Deliver(peer)
 			} else {
 				p.peersInTimeout.Deliver(peer)
@@ -179,6 +183,8 @@ func (p *peerPool) GetPeer(ctx context.Context) (_ PeerConn, err error) {
 					panic("!exists")
 				} else if entry.state != peerState_Unknown {
 					panic("!available")
+				} else if p.deviceIDAlreadyActive(peer.DeviceSpecificID()) {
+					p.peersInTimeout.Deliver(peer)
 				} else if !entry.peer.Ready() {
 					p.peersInTimeout.Deliver(peer)
 				} else if len(entry.peer.Addresses()) == 0 {
@@ -195,9 +201,15 @@ func (p *peerPool) GetPeer(ctx context.Context) (_ PeerConn, err error) {
 				continue
 			}
 			return peer, nil
-
 		}
 	}
+}
+
+func (p *peerPool) deviceIDAlreadyActive(deviceID string) bool {
+	p.activePeerDeviceIDsMu.RLock()
+	defer p.activePeerDeviceIDsMu.RUnlock()
+	_, exists := p.activePeerDeviceIDs[deviceID]
+	return exists
 }
 
 func (p *peerPool) countActivePeers() int {
@@ -211,6 +223,12 @@ func (p *peerPool) countActivePeers() int {
 }
 
 func (p *peerPool) ReturnPeer(peer PeerConn, strike bool) {
+	func() {
+		p.activePeerDeviceIDsMu.Lock()
+		defer p.activePeerDeviceIDsMu.Unlock()
+		delete(p.activePeerDeviceIDs, peer.DeviceSpecificID())
+	}()
+
 	p.peersMu.Lock()
 	defer p.peersMu.Unlock()
 	defer p.sem.Release(1)
