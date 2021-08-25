@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -27,8 +26,9 @@ import (
 type peerConn struct {
 	swarm.PeerDetails
 
-	t *transport
+	t         *transport
 	sessionID types.ID
+	// sync.Mutex
 
 	// stream
 	stream struct {
@@ -99,7 +99,7 @@ func (p *peerConn) Subscribe(ctx context.Context, stateURI string) (_ prototree.
 func (p *peerConn) Put(ctx context.Context, tx *tree.Tx, state state.Node, leaves []types.ID) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
-	ctx, cancel := context.WithTimeout(p.t.Ctx(), 10*time.Second)
+	ctx, cancel := utils.CombinedContext(ctx, p.t.Ctx(), 10*time.Second)
 	defer cancel()
 
 	if p.DialInfo().DialAddr == "" {
@@ -215,24 +215,28 @@ func (p *peerConn) RespondChallengeIdentity(verifyAddressResponse []protoauth.Ch
 	return nil
 }
 
-func (p *peerConn) FetchBlob(blobID blob.ID) error {
+func (p *peerConn) FetchBlobManifest(blobID blob.ID) (blob.Manifest, error) {
+	return blob.Manifest{}, types.ErrUnimplemented
+}
+
+func (p *peerConn) ReadBlobManifestRequest() (blob.ID, error) {
+	return blob.ID{}, types.ErrUnimplemented
+}
+
+func (p *peerConn) SendBlobManifest(m blob.Manifest, exists bool) error {
 	return types.ErrUnimplemented
 }
 
-func (p *peerConn) SendBlobHeader(haveBlob bool) error {
+func (p *peerConn) FetchBlobChunk(sha3 types.Hash) ([]byte, error) {
+	return nil, types.ErrUnimplemented
+}
+
+func (p *peerConn) ReadBlobChunkRequest() (sha3 types.Hash, err error) {
+	return types.Hash{}, types.ErrUnimplemented
+}
+
+func (p *peerConn) SendBlobChunk(chunk []byte, exists bool) error {
 	return types.ErrUnimplemented
-}
-
-func (p *peerConn) SendBlobPacket(data []byte, end bool) error {
-	return types.ErrUnimplemented
-}
-
-func (p *peerConn) ReceiveBlobHeader() (protoblob.FetchBlobResponseHeader, error) {
-	return protoblob.FetchBlobResponseHeader{}, types.ErrUnimplemented
-}
-
-func (p *peerConn) ReceiveBlobPacket() (protoblob.FetchBlobResponseBody, error) {
-	return protoblob.FetchBlobResponseBody{}, types.ErrUnimplemented
 }
 
 func (p *peerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.PeerDialInfo) (err error) {

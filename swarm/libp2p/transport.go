@@ -92,8 +92,10 @@ type transport struct {
 var _ Transport = (*transport)(nil)
 
 const (
-	PROTO_MAIN    protocol.ID = "/redwood/main/1.0.0"
-	TransportName string      = "libp2p"
+	PROTO_MAIN          protocol.ID = "/redwood/main/1.0.0"
+	PROTO_BLOB_MANIFEST protocol.ID = "/redwood/blob/manifest/1.0.0"
+	PROTO_BLOB_CHUNK    protocol.ID = "/redwood/blob/chunk/1.0.0"
+	TransportName       string      = "libp2p"
 )
 
 func NewTransport(
@@ -206,6 +208,8 @@ func (t *transport) Start() error {
 	}
 	t.libp2pHost = libp2pHost
 	t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
+	t.libp2pHost.SetStreamHandler(PROTO_BLOB_MANIFEST, t.handleBlobManifestRequest)
+	t.libp2pHost.SetStreamHandler(PROTO_BLOB_CHUNK, t.handleBlobChunkRequest)
 	t.libp2pHost.Network().Notify(t) // Register for libp2p connect/disconnect notifications
 
 	err = t.dht.Bootstrap(t.Process.Ctx())
@@ -453,6 +457,30 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	// }
 }
 
+func (t *transport) handleBlobManifestRequest(stream netp2p.Stream) {
+	peerConn := t.makeConnectedPeerConn(stream)
+	defer peerConn.Close()
+
+	blobID, err := peerConn.ReadBlobManifestRequest()
+	if err != nil {
+		t.Errorf("could not read blob manifest request: %v", err)
+		return
+	}
+	t.HandleBlobManifestRequest(blobID, peerConn)
+}
+
+func (t *transport) handleBlobChunkRequest(stream netp2p.Stream) {
+	peerConn := t.makeConnectedPeerConn(stream)
+	defer peerConn.Close()
+
+	chunkSHA3, err := peerConn.ReadBlobChunkRequest()
+	if err != nil {
+		t.Errorf("could not read blob chunk request: %v", err)
+		return
+	}
+	t.HandleBlobChunkRequest(chunkSHA3, peerConn)
+}
+
 func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 	msg, err := readMsg(stream)
 	if err != nil {
@@ -519,16 +547,6 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 			t.Errorf("msgType_ChallengeIdentityRequest: error from verifyAddressHandler: %v", err)
 			return
 		}
-
-	case msgType_FetchBlob:
-		defer peer.Close()
-
-		refID, ok := msg.Payload.(blob.ID)
-		if !ok {
-			t.Errorf("FetchBlob message: bad payload: (%T) %v", msg.Payload, msg.Payload)
-			return
-		}
-		t.HandleBlobRequest(refID, peer)
 
 	case msgType_EncryptedTx:
 		defer peer.Close()
