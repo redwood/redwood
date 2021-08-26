@@ -50,6 +50,7 @@ type writableSubscription struct {
 //go:generate mockery --name WritableSubscriptionImpl --output ./mocks/ --case=underscore
 type WritableSubscriptionImpl interface {
 	process.Interface
+	DialInfo() swarm.PeerDialInfo
 	StateURI() string
 	Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) error
 	String() string
@@ -309,7 +310,7 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 
 		msg, err := peerSub.Read()
 		if err != nil {
-			s.Errorf("while reading from peer subscription: %v", err)
+			s.Errorf("while reading from peer subscription (%v): %v", peer.DialInfo(), err)
 			return
 		} else if msg.Tx == nil {
 			s.Error("peer sent empty subscription message")
@@ -349,6 +350,10 @@ func newInProcessSubscription(
 		chMessages:       make(chan SubscriptionMsg),
 		chClosed:         make(chan struct{}),
 	}
+}
+
+func (sub *inProcessSubscription) DialInfo() swarm.PeerDialInfo {
+	return swarm.PeerDialInfo{"in process", fmt.Sprintf("%p", sub)}
 }
 
 func (sub *inProcessSubscription) String() string {

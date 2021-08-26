@@ -160,31 +160,25 @@ var (
 		func(args []string, app *App) error {
 			app.BlobStore.DebugPrint()
 
-			blobIDsNeeded, err := app.BlobStore.BlobsNeeded()
-			if err != nil {
-				return err
-			}
-
-			blobIDs, err := app.BlobStore.AllHashes()
+			contents, err := app.BlobStore.Contents()
 			if err != nil {
 				return err
 			}
 
 			var rows [][]string
 
-			for _, id := range blobIDsNeeded {
-				rows = append(rows, []string{id.String(), "(missing)"})
-			}
-
-			for _, id := range blobIDs {
-				rows = append(rows, []string{id.String(), ""})
+			for blobHash, x := range contents {
+				for chunkHash, have := range x {
+					rows = append(rows, []string{blobHash.Hex(), chunkHash.Hex(), fmt.Sprintf("%v", have)})
+				}
 			}
 
 			table := tablewriter.NewWriter(os.Stdout)
 			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
 			table.SetCenterSeparator("|")
 			table.SetRowLine(true)
-			table.SetHeader([]string{"ID", "Status"})
+			table.SetAutoMergeCellsByColumnIndex([]int{0, 1})
+			table.SetHeader([]string{"Blob", "Chunk", "Have"})
 			table.AppendBulk(rows)
 			table.Render()
 

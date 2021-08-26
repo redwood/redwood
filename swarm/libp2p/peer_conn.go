@@ -6,12 +6,10 @@ import (
 	"encoding/json"
 	"io"
 	"sync"
-	"time"
 
 	netp2p "github.com/libp2p/go-libp2p-core/network"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	protocol "github.com/libp2p/go-libp2p-protocol"
-
 	"github.com/pkg/errors"
 
 	"redwood.dev/blob"
@@ -48,14 +46,11 @@ func (peer *peerConn) Transport() swarm.Transport {
 }
 
 func (peer *peerConn) EnsureConnected(ctx context.Context) (err error) {
-	if peer.stream == nil {
-		defer func() { peer.UpdateConnStats(err == nil) }()
+	defer func() { peer.UpdateConnStats(err == nil) }()
 
-		err = peer.t.libp2pHost.Connect(ctx, peer.pinfo)
-		if err != nil {
-			return errors.Wrapf(types.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
-		}
-
+	err = peer.t.libp2pHost.Connect(ctx, peer.pinfo)
+	if err != nil {
+		return errors.Wrapf(types.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 	}
 	return nil
 }
@@ -68,7 +63,7 @@ func (peer *peerConn) ensureStreamWithProtocol(ctx context.Context, p protocol.I
 		return nil
 	}
 
-	peer.stream, err = peer.t.libp2pHost.NewStream(ctx, peer.pinfo.ID, PROTO_MAIN)
+	peer.stream, err = peer.t.libp2pHost.NewStream(ctx, peer.pinfo.ID, p)
 	if err != nil {
 		return errors.Wrapf(types.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 	}
@@ -134,8 +129,8 @@ func (peer *peerConn) Put(ctx context.Context, tx *tree.Tx, state state.Node, le
 	return peer.writeMsg(Msg{Type: msgType_Tx, Payload: tx})
 }
 
-func (peer *peerConn) Ack(stateURI string, txID types.ID) error {
-	err := peer.ensureStreamWithProtocol(context.Background(), PROTO_MAIN)
+func (peer *peerConn) Ack(stateURI string, txID types.ID) (err error) {
+	err = peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_MAIN)
 	if err != nil {
 		return err
 	}
@@ -143,7 +138,7 @@ func (peer *peerConn) Ack(stateURI string, txID types.ID) error {
 }
 
 func (peer *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) error {
-	err := peer.ensureStreamWithProtocol(context.Background(), PROTO_MAIN)
+	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_MAIN)
 	if err != nil {
 		return err
 	}
@@ -167,10 +162,11 @@ func (peer *peerConn) RespondChallengeIdentity(challengeIdentityResponse []proto
 }
 
 func (peer *peerConn) FetchBlobManifest(blobID blob.ID) (blob.Manifest, error) {
-	err := peer.ensureStreamWithProtocol(context.Background(), PROTO_BLOB_MANIFEST)
+	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_BLOB_MANIFEST)
 	if err != nil {
 		return blob.Manifest{}, err
 	}
+	defer peer.Close()
 
 	err = peer.writeProtobuf(pb.MsgFetchBlobManifest{Id: blobID.ToProtobuf()})
 	if err != nil {
@@ -188,7 +184,11 @@ func (peer *peerConn) FetchBlobManifest(blobID blob.ID) (blob.Manifest, error) {
 	} else if !msg.Exists {
 		return blob.Manifest{}, types.Err404
 	}
-	return blob.ManifestFromProtobuf(msg.Manifest)
+	m, err := blob.ManifestFromProtobuf(msg.Manifest)
+	if err != nil {
+		return blob.Manifest{}, err
+	}
+	return m, nil
 }
 
 func (p *peerConn) ReadBlobManifestRequest() (blob.ID, error) {
@@ -203,18 +203,20 @@ func (p *peerConn) ReadBlobManifestRequest() (blob.ID, error) {
 	return blob.IDFromProtobuf(msg.Id)
 }
 
-func (p *peerConn) SendBlobManifest(manifest blob.Manifest, exists bool) error {
+func (peer *peerConn) SendBlobManifest(manifest blob.Manifest, exists bool) error {
+	defer peer.Close()
 	if exists {
-		return p.writeProtobuf(pb.MsgSendBlobManifest{Manifest: manifest.ToProtobuf(), Exists: true})
+		return peer.writeProtobuf(pb.MsgSendBlobManifest{Manifest: manifest.ToProtobuf(), Exists: true})
 	}
-	return p.writeProtobuf(pb.MsgSendBlobManifest{Exists: false})
+	return peer.writeProtobuf(pb.MsgSendBlobManifest{Exists: false})
 }
 
 func (peer *peerConn) FetchBlobChunk(sha3 types.Hash) ([]byte, error) {
-	err := peer.ensureStreamWithProtocol(context.Background(), PROTO_BLOB_CHUNK)
+	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_BLOB_CHUNK)
 	if err != nil {
 		return nil, err
 	}
+	defer peer.Close()
 
 	err = peer.writeProtobuf(pb.MsgFetchBlobChunk{Sha3: sha3.Bytes()})
 	if err != nil {
@@ -265,7 +267,7 @@ func (peer *peerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.P
 func (peer *peerConn) readProtobuf() (_ interface{}, err error) {
 	defer func() { peer.UpdateConnStats(err == nil) }()
 
-	peer.stream.SetReadDeadline(time.Now().Add(10 * time.Second))
+	// peer.stream.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 	size, err := readUint64(peer.stream)
 	if err != nil {
@@ -328,17 +330,17 @@ func (peer *peerConn) writeProtobuf(child interface{}) error {
 
 	buflen := uint64(len(bs))
 
-	err = peer.stream.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	if err != nil {
-		return err
-	}
+	// err = peer.stream.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	// if err != nil {
+	// 	return err
+	// }
 
 	err = writeUint64(peer.stream, buflen)
 	if err != nil {
 		return err
 	}
 
-	n, err := io.Copy(peer.stream, bytes.NewReader(bs))
+	n, err := io.CopyN(peer.stream, bytes.NewReader(bs), int64(buflen))
 	if err != nil {
 		return err
 	} else if n != int64(buflen) {
@@ -357,10 +359,10 @@ func (p *peerConn) writeMsg(msg Msg) (err error) {
 
 	buflen := uint64(len(bs))
 
-	err = p.stream.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	if err != nil {
-		return err
-	}
+	// err = p.stream.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	// if err != nil {
+	// 	return err
+	// }
 
 	err = writeUint64(p.stream, buflen)
 	if err != nil {
@@ -378,13 +380,14 @@ func (p *peerConn) writeMsg(msg Msg) (err error) {
 
 func (p *peerConn) readMsg() (msg Msg, err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
-	p.stream.SetReadDeadline(time.Now().Add(10 * time.Second))
 	return readMsg(p.stream)
 }
 
 func (p *peerConn) Close() error {
 	if p.stream != nil {
-		return p.stream.Close()
+		err := p.stream.Close()
+		p.stream = nil
+		return err
 	}
 	return nil
 }

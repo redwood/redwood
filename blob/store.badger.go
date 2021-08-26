@@ -30,6 +30,7 @@ var _ Store = (*badgerStore)(nil)
 
 var (
 	manifestKey      = state.Keypath("manifest")
+	chunkKey         = state.Keypath("chunk")
 	missingBlobsKey  = state.Keypath("missing").Pushs("blobs")
 	missingChunksKey = state.Keypath("missing").Pushs("chunks")
 )
@@ -104,7 +105,7 @@ func (s *badgerStore) StoreBlob(reader io.ReadCloser) (types.Hash, types.Hash, e
 	sha1, sha3, chunkSha3s := chunker.Hashes()
 	size := chunker.Size()
 
-	err := s.StoreManifest(sha3, Manifest{Size: size, ChunkSHA3s: chunkSha3s})
+	err := s.StoreManifest(ID{HashAlg: types.SHA3, Hash: sha3}, Manifest{Size: size, ChunkSHA3s: chunkSha3s})
 	if err != nil {
 		return types.Hash{}, types.Hash{}, err
 	}
@@ -160,31 +161,33 @@ func (s *badgerStore) HaveBlob(blobID ID) (bool, error) {
 	return s.haveAllChunksInManifest(rootNode, manifestNode)
 }
 
-// @@TODO
 func (s *badgerStore) VerifyBlobOrPrune(blobID ID) error {
+	blobReader, length, err := s.BlobReader(blobID)
+	if err != nil {
+		return errors.Wrapf(err, "while verifying blob hash %v: %v", blobID, err)
+	}
+	defer blobReader.Close()
+
+	var shouldPrune bool
+	hasher := sha3.NewLegacyKeccak256()
+	n, err := io.Copy(hasher, blobReader)
+	if err != nil {
+		return errors.Wrapf(err, "while verifying blob hash %v: %v", blobID, err)
+	} else if n != length {
+		s.Errorf("blob %v is incorrect length (expected %v, got %v)", blobID, length, n)
+		shouldPrune = true
+	} else if hash, _ := types.HashFromBytes(hasher.Sum(nil)); hash != blobID.Hash {
+		s.Errorf("blob %v has incorrect hash (got %v)", blobID, hash.Hex())
+		shouldPrune = true
+	}
+
+	if shouldPrune {
+		// @@TODO
+		// s.DeleteBlob()
+	} else {
+		s.unmarkBlobsAsNeeded([]ID{blobID})
+	}
 	return nil
-	// blobReader, length, err := s.BlobReader(blobID)
-	// if err != nil {
-	// 	return errors.Wrapf(err, "while verifying blob hash %v: %v", blobID, err)
-	// }
-	// defer blobReader.Close()
-
-	//    var shouldPrune bool
-	// hasher := sha3.NewLegacyKeccak256()
-	// n, err := io.Copy(hasher, blobReader)
-	// if err != nil {
-	// 	return errors.Wrapf(err, "while verifying blob hash %v: %v", blobID, err)
-	// } else if n != length {
-	// 	s.Errorf("blob %v is incorrect length (expected %v, got %v)", blobID, length, n)
-	//        shouldPrune = true
-	// } else if hash := types.HashFromBytes(hasher.Sum(nil)); hash != blobID.Hash {
-	//        s.Errorf("blob %v has incorrect hash (got %v)", blobID, hash.Hex())
-	//        shouldPrune = true
-	//    }
-
-	//    if shouldPrune {
-	//        s.DeleteBlob()
-	//    }
 }
 
 func (s *badgerStore) Manifest(blobID ID) (Manifest, error) {
@@ -213,14 +216,34 @@ func (s *badgerStore) Manifest(blobID ID) (Manifest, error) {
 	return manifest, nil
 }
 
-func (s *badgerStore) StoreManifest(sha3 types.Hash, manifest Manifest) error {
-	node := s.db.State(true)
-	defer node.Close()
-
-	err := node.Set(s.manifestKeypath(sha3), nil, manifest)
+func (s *badgerStore) StoreManifest(blobID ID, manifest Manifest) error {
+	sha3, err := s.sha3ForBlobID(blobID)
 	if err != nil {
 		return err
 	}
+
+	node := s.db.State(true)
+	defer node.Close()
+
+	err = node.Set(s.manifestKeypath(sha3), nil, manifest)
+	if err != nil {
+		return err
+	}
+
+	for _, chunkSHA3 := range manifest.ChunkSHA3s {
+		exists, err := node.Exists(s.chunkKeypath(chunkSHA3))
+		if err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		err = node.Set(s.missingChunkKeypath(chunkSHA3), nil, true)
+		if err != nil {
+			return err
+		}
+	}
+
 	return node.Save()
 }
 
@@ -260,7 +283,11 @@ func (s *badgerStore) Chunk(sha3 types.Hash) ([]byte, error) {
 
 func (s *badgerStore) StoreChunkIfHashMatches(expectedSHA3 types.Hash, chunkBytes []byte) error {
 	sha3Hasher := sha3.NewLegacyKeccak256()
-	sha3Bytes := sha3Hasher.Sum(chunkBytes)
+	_, err := io.Copy(sha3Hasher, bytes.NewReader(chunkBytes))
+	if err != nil {
+		return err
+	}
+	sha3Bytes := sha3Hasher.Sum(nil)
 	if !bytes.Equal(expectedSHA3[:], sha3Bytes) {
 		return errors.Wrapf(ErrWrongHash, "expected %v, got %0x", expectedSHA3.Hex(), sha3Bytes)
 	}
@@ -541,6 +568,47 @@ func (s *badgerStore) missingChunkKeypath(sha3 types.Hash) state.Keypath {
 	return missingChunksKey.Pushs(sha3.Hex())
 }
 
+func (s *badgerStore) Contents() (map[types.Hash]map[types.Hash]bool, error) {
+	m := make(map[types.Hash]map[types.Hash]bool)
+
+	rootNode := s.db.State(false)
+	defer rootNode.Close()
+
+	iter := rootNode.Iterator(nil, false, 0)
+	defer iter.Close()
+
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		manifestNode := iter.Node()
+		if !manifestNode.Keypath().Part(-1).Equals(manifestKey) {
+			continue
+		}
+
+		sha3Hex := manifestNode.Keypath().Part(-2)
+		sha3Hash, err := types.HashFromHex(sha3Hex.String())
+		if err != nil {
+			continue
+		}
+
+		if _, exists := m[sha3Hash]; !exists {
+			m[sha3Hash] = make(map[types.Hash]bool)
+		}
+
+		manifest, err := s.Manifest(ID{HashAlg: types.SHA3, Hash: sha3Hash})
+		if err != nil {
+			return nil, err
+		}
+
+		for _, chunkSHA3 := range manifest.ChunkSHA3s {
+			exists, err := rootNode.Exists(state.Keypath(chunkSHA3.Hex()).Push(chunkKey))
+			if err != nil {
+				return nil, err
+			}
+			m[sha3Hash][chunkSHA3] = exists
+		}
+	}
+	return m, nil
+}
+
 func (s *badgerStore) DebugPrint() {
 	keypaths, values, err := s.db.DebugPrint(nil, nil)
 	if err != nil {
@@ -551,7 +619,7 @@ func (s *badgerStore) DebugPrint() {
 		kp := keypaths[i]
 		val := values[i]
 
-		if kp.ContainsPart(state.Keypath("chunk")) {
+		if kp.ContainsPart(chunkKey) {
 			s.Debugf("%v: (chunk of length %v)", kp, len(val.([]byte)))
 		} else if kp.ContainsPart(state.Keypath("manifest")) {
 			switch val := val.(type) {

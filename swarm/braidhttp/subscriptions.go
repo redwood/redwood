@@ -19,6 +19,7 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/state"
+	"redwood.dev/swarm"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -107,6 +108,10 @@ func newHTTPWritableSubscription(
 		stateURI: stateURI,
 		peerConn: peerConn,
 	}
+}
+
+func (sub *httpWritableSubscription) DialInfo() swarm.PeerDialInfo {
+	return sub.peerConn.DialInfo()
 }
 
 func (sub *httpWritableSubscription) Start() error {
@@ -255,6 +260,10 @@ func newWSWritableSubscription(stateURI string, wsConn *websocket.Conn, peerConn
 		transport: transport,
 		messages:  utils.NewMailbox(300), // @@TODO: configurable?
 	}
+}
+
+func (sub *wsWritableSubscription) DialInfo() swarm.PeerDialInfo {
+	return sub.peerConn.DialInfo()
 }
 
 func (sub *wsWritableSubscription) Start() (err error) {

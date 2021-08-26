@@ -52,6 +52,7 @@ func (f *fetcher) Start() error {
 	if err != nil {
 		return err
 	}
+	defer f.Process.Autoclose()
 
 	err = f.startPeerPool()
 	if err != nil {
@@ -59,6 +60,8 @@ func (f *fetcher) Start() error {
 	}
 
 	f.Process.Go("runloop", func(ctx context.Context) {
+		defer f.peerPool.Close()
+
 		manifest, err := f.fetchManifest(ctx)
 		if err != nil {
 			f.Errorf("while fetching manifest: %v", err)
@@ -127,6 +130,12 @@ func (f *fetcher) fetchManifest(ctx context.Context) (blob.Manifest, error) {
 			f.Errorf("error getting peer from pool: %v", err)
 			continue
 		}
+
+		err = f.blobStore.StoreManifest(blob.ID{HashAlg: types.SHA3, Hash: f.blobID.Hash}, manifest)
+		if err != nil {
+			f.Errorf("error storing manifest: %v", err)
+			return blob.Manifest{}, err
+		}
 		return manifest, nil
 	}
 }
@@ -152,6 +161,8 @@ func (f *fetcher) fetchChunks(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-f.workPool.Done():
+			return nil
 		default:
 		}
 

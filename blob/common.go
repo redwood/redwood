@@ -21,7 +21,7 @@ type Store interface {
 
 	Manifest(id ID) (Manifest, error)
 	HaveManifest(blobID ID) (bool, error)
-	StoreManifest(sha3 types.Hash, manifest Manifest) error
+	StoreManifest(blobID ID, manifest Manifest) error
 
 	Chunk(sha3 types.Hash) ([]byte, error)
 	HaveChunk(sha3 types.Hash) (bool, error)
@@ -34,6 +34,7 @@ type Store interface {
 	OnBlobsNeeded(fn func(refs []ID))
 	OnBlobsSaved(fn func())
 
+	Contents() (map[types.Hash]map[types.Hash]bool, error)
 	DebugPrint()
 }
 

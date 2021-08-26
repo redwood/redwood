@@ -11,6 +11,7 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/state"
+	"redwood.dev/swarm"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -75,6 +76,10 @@ func newWritableSubscription(peerConn *peerConn, stateURI string) *writableSubsc
 		peerConn: peerConn,
 		stateURI: stateURI,
 	}
+}
+
+func (sub *writableSubscription) DialInfo() swarm.PeerDialInfo {
+	return sub.peerConn.DialInfo()
 }
 
 func (sub *writableSubscription) StateURI() string {

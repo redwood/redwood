@@ -8,27 +8,27 @@ import "blob/pb/blob.proto";
 
 message Msg {
     oneof msg {
-        MsgFetchBlobManifest fetchBlobManifest = 1;
-        MsgSendBlobManifest sendBlobManifest = 2;
-        MsgFetchBlobChunk fetchBlobChunk = 3;
-        MsgSendBlobChunk sendBlobChunk = 4;
+        FetchBlobManifest fetchBlobManifest = 1;
+        SendBlobManifest sendBlobManifest = 2;
+        FetchBlobChunk fetchBlobChunk = 3;
+        SendBlobChunk sendBlobChunk = 4;
     }
 }
 
-message MsgFetchBlobManifest {
+message FetchBlobManifest {
     Redwood.blob.BlobID id = 1;
 }
 
-message MsgSendBlobManifest {
+message SendBlobManifest {
     Redwood.blob.Manifest manifest = 1;
     bool exists = 2;
 }
 
-message MsgFetchBlobChunk {
+message FetchBlobChunk {
     bytes sha3 = 1;
 }
 
-message MsgSendBlobChunk {
+message SendBlobChunk {
     bytes chunk = 1;
     bool exists = 2;
 }

@@ -22,6 +22,7 @@ import (
 	p2phost "github.com/libp2p/go-libp2p-host"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
+	mplex "github.com/libp2p/go-libp2p-mplex"
 	noisep2p "github.com/libp2p/go-libp2p-noise"
 	peer "github.com/libp2p/go-libp2p-peer"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
@@ -191,6 +192,7 @@ func (t *transport) Start() error {
 		libp2p.Peerstore(peerStore),
 		libp2p.Security(noisep2p.ID, noisep2p.New),
 		libp2p.MultiaddrResolver(dnsResolver),
+		libp2p.Muxer(string("/mplex/6.7.0"), mplex.DefaultTransport),
 		libp2p.Routing(func(host corehost.Host) (routing.PeerRouting, error) {
 			t.dht, err = dht.New(t.Process.Ctx(), host,
 				dht.BootstrapPeers(bootstrapPeers...),
@@ -393,13 +395,13 @@ func (t *transport) Disconnected(network netp2p.Network, conn netp2p.Conn) {
 }
 
 func (t *transport) OpenedStream(network netp2p.Network, stream netp2p.Stream) {
-	addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
-	t.Debugf("opened stream %v with %v", stream.Protocol(), addr)
+	// addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
+	// t.Debugf("opened stream %v with %v", stream.Protocol(), addr)
 }
 
 func (t *transport) ClosedStream(network netp2p.Network, stream netp2p.Stream) {
-	addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
-	t.Debugf("closed stream %v with %v", stream.Protocol(), addr)
+	// addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
+	// t.Debugf("closed stream %v with %v", stream.Protocol(), addr)
 
 	peerID := stream.Conn().RemotePeer()
 	t.writeSubsByPeerIDMu.Lock()

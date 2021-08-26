@@ -132,8 +132,9 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 
 func (bp *blobProtocol) periodicallyFetchMissingBlobs() {
 	bp.Process.Go("periodicallyFetchMissingBlobs", func(ctx context.Context) {
-		ticker := utils.NewExponentialBackoffTicker(10*time.Second, 2*time.Minute) // @@TODO: configurable?
-		ticker.Start()
+		// ticker := utils.NewExponentialBackoffTicker(10*time.Second, 2*time.Minute) // @@TODO: configurable?
+		ticker := time.NewTicker(10 * time.Second)
+		// ticker.Start()
 		defer ticker.Stop()
 
 		for {
@@ -149,7 +150,8 @@ func (bp *blobProtocol) periodicallyFetchMissingBlobs() {
 				}
 				bp.fetchBlobs(allBlobs)
 
-			case <-ticker.Tick():
+				// case <-ticker.Tick():
+			case <-ticker.C:
 				blobs, err := bp.blobStore.BlobsNeeded()
 				if err != nil {
 					bp.Errorf("error fetching list of needed blobs: %v", err)

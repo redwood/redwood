@@ -293,7 +293,13 @@ func (tp *treeProtocol) handleTxReceived(tx tree.Tx, peerConn TreePeerConn) {
 		}
 	}
 
-	err = peerConn.Ack(tx.StateURI, tx.ID)
+	// The ACK happens in a separate stream
+	peerConn2, err := peerConn.Transport().NewPeerConn(context.TODO(), peerConn.DialInfo().DialAddr)
+	if err != nil {
+		tp.Errorf("error ACKing peer: %v", err)
+	}
+	defer peerConn2.Close()
+	err = peerConn2.(TreePeerConn).Ack(tx.StateURI, tx.ID)
 	if err != nil {
 		tp.Errorf("error ACKing peer: %v", err)
 	}
@@ -370,6 +376,8 @@ func (tp *treeProtocol) handleWritableSubscriptionOpened(
 	writeSubImpl WritableSubscriptionImpl,
 	fetchHistoryOpts *FetchHistoryOpts,
 ) {
+	tp.Debugf("write sub opened (%v %v)", stateURI, writeSubImpl.DialInfo())
+
 	writeSub := newWritableSubscription(stateURI, keypath, subType, writeSubImpl)
 	err := tp.Process.SpawnChild(nil, writeSub)
 	if err != nil {
