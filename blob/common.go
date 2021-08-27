@@ -27,10 +27,10 @@ type Store interface {
 	HaveChunk(sha3 types.Hash) (bool, error)
 	StoreChunkIfHashMatches(expectedSHA3 types.Hash, chunkBytes []byte) error
 
-	AllHashes() ([]ID, error)
+	BlobIDs() *IDIterator
 
 	BlobsNeeded() ([]ID, error)
-	MarkBlobsAsNeeded(refs []ID)
+	MarkBlobsAsNeeded(refs []ID) error
 	OnBlobsNeeded(fn func(refs []ID))
 	OnBlobsSaved(fn func())
 
