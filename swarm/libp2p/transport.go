@@ -859,18 +859,22 @@ func NewAnnounceBlobsTask(
 // Periodically announces our objects to the network.
 func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 	// Announce the blobs we're serving
-	refHashes, err := t.blobStore.AllHashes()
-	if err != nil {
-		t.Errorf("error fetching blobStore hashes: %v", err)
-		return
-	}
+	iter := t.blobStore.BlobIDs()
 
 	var chDones []<-chan struct{}
-	for _, refHash := range refHashes {
-		refHash := refHash
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		sha1, sha3 := iter.Current()
 
-		chDone := t.Process.Go(refHash.String(), func(ctx context.Context) {
-			err := t.transport.AnnounceBlob(ctx, refHash)
+		chDone := t.Process.Go(sha1.String(), func(ctx context.Context) {
+			err := t.transport.AnnounceBlob(ctx, sha1)
+			if err != nil {
+				t.Errorf("announce: error: %v", err)
+			}
+		})
+		chDones = append(chDones, chDone)
+
+		chDone = t.Process.Go(sha3.String(), func(ctx context.Context) {
+			err := t.transport.AnnounceBlob(ctx, sha3)
 			if err != nil {
 				t.Errorf("announce: error: %v", err)
 			}

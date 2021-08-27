@@ -50,8 +50,7 @@ type blobProtocol struct {
 }
 
 const (
-	BlobChunkSize = 1024 // @@TODO: tunable buffer size?
-	ProtocolName  = "protoblob"
+	ProtocolName = "protoblob"
 )
 
 func NewBlobProtocol(transports []swarm.Transport, blobStore blob.Store) *blobProtocol {

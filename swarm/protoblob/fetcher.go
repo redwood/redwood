@@ -110,6 +110,13 @@ func (f *fetcher) startPeerPool() error {
 }
 
 func (f *fetcher) fetchManifest(ctx context.Context) (blob.Manifest, error) {
+	manifest, err := f.blobStore.Manifest(f.blobID)
+	if err != nil && errors.Cause(err) == types.Err404 {
+		return blob.Manifest{}, err
+	} else if err == nil {
+		return manifest, nil
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -136,6 +143,7 @@ func (f *fetcher) fetchManifest(ctx context.Context) (blob.Manifest, error) {
 			f.Errorf("error storing manifest: %v", err)
 			return blob.Manifest{}, err
 		}
+		f.Debugf("fetched manifest for blob %v", f.blobID)
 		return manifest, nil
 	}
 }
@@ -240,6 +248,7 @@ func (f *fetcher) readUntilErrorOrShutdown(ctx context.Context, peer BlobPeerCon
 			f.workPool.ReturnFailedJob(sha3)
 			return errors.Wrapf(err, "while storing chunk %v", sha3)
 		}
+		f.Debugf("fetched chunk %v for blob %v", sha3, f.blobID)
 		f.workPool.MarkJobComplete()
 	}
 }
