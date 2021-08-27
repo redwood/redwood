@@ -144,7 +144,7 @@ func (p *peerPool) handlePeersInTimeout(ctx context.Context) {
 
 		for _, x := range p.peersInTimeout.RetrieveAll() {
 			peer := x.(PeerConn)
-			if peer.Ready() && len(peer.Addresses()) > 0 && !p.deviceIDAlreadyActive(peer.DeviceSpecificID()) {
+			if p.peerIsEligible(peer) {
 				p.peersAvailable.Deliver(peer)
 			} else {
 				p.peersInTimeout.Deliver(peer)
@@ -183,11 +183,7 @@ func (p *peerPool) GetPeer(ctx context.Context) (_ PeerConn, err error) {
 					panic("!exists")
 				} else if entry.state != peerState_Unknown {
 					panic("!available")
-				} else if p.deviceIDAlreadyActive(peer.DeviceSpecificID()) {
-					p.peersInTimeout.Deliver(peer)
-				} else if !entry.peer.Ready() {
-					p.peersInTimeout.Deliver(peer)
-				} else if len(entry.peer.Addresses()) == 0 {
+				} else if !p.peerIsEligible(peer) {
 					p.peersInTimeout.Deliver(peer)
 				} else {
 					p.setPeerState(peer, peerState_InUse)
@@ -203,6 +199,10 @@ func (p *peerPool) GetPeer(ctx context.Context) (_ PeerConn, err error) {
 			return peer, nil
 		}
 	}
+}
+
+func (p *peerPool) peerIsEligible(peerConn PeerConn) bool {
+	return peerConn.Ready() && len(peerConn.Addresses()) > 0 && !p.deviceIDAlreadyActive(peerConn.DeviceSpecificID())
 }
 
 func (p *peerPool) deviceIDAlreadyActive(deviceID string) bool {
@@ -247,4 +247,12 @@ func (p *peerPool) setPeerState(peer PeerConn, state peerState) {
 	peerInfo := p.peers[peer.DialInfo()]
 	peerInfo.state = state
 	p.peers[peer.DialInfo()] = peerInfo
+
+	if state == peerState_InUse {
+		func() {
+			p.activePeerDeviceIDsMu.Lock()
+			defer p.activePeerDeviceIDsMu.Unlock()
+			p.activePeerDeviceIDs[peer.DeviceSpecificID()] = struct{}{}
+		}()
+	}
 }
