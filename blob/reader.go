@@ -8,13 +8,17 @@ import (
 	"redwood.dev/state"
 )
 
-type blobReader struct {
+type Reader struct {
 	db       *state.DBTree
 	manifest Manifest
 	i, j     int
 }
 
-func (r *blobReader) Read(buf []byte) (int, error) {
+func NewReader(db *state.DBTree, manifest Manifest) *Reader {
+	return &Reader{db: db, manifest: manifest}
+}
+
+func (r *Reader) Read(buf []byte) (int, error) {
 	if r.i == len(r.manifest.ChunkSHA3s) {
 		return 0, io.EOF
 	}
@@ -38,6 +42,6 @@ func (r *blobReader) Read(buf []byte) (int, error) {
 	return n, nil
 }
 
-func (r *blobReader) Close() error {
+func (r *Reader) Close() error {
 	return nil
 }

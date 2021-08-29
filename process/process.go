@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
 
 	"redwood.dev/log"
 	"redwood.dev/utils"
@@ -36,10 +35,11 @@ type Interface interface {
 	Spawnable
 	ProcessTreer
 	Autoclose()
+	AutocloseWithCleanup(closeFn func())
 	Ctx() context.Context
 	NewChild(ctx context.Context, name string) *Process
 	SpawnChild(ctx context.Context, child Spawnable) error
-	Go(name string, fn func(ctx context.Context)) <-chan struct{}
+	Go(ctx context.Context, name string, fn func(ctx context.Context)) <-chan struct{}
 }
 
 type Spawnable interface {
@@ -57,8 +57,9 @@ type ProcessTreer interface {
 var _ Spawnable = (*Process)(nil)
 
 func New(name string) *Process {
+	name = name + " #" + utils.RandomNumberString()
 	return &Process{
-		name:       name + " #" + utils.RandomNumberString(),
+		name:       name,
 		children:   make(map[Spawnable]struct{}),
 		goroutines: make(map[*goroutine]struct{}),
 		chStop:     make(chan struct{}),
@@ -101,6 +102,14 @@ func (p *Process) Close() error {
 func (p *Process) Autoclose() {
 	go func() {
 		p.wg.Wait()
+		p.Close()
+	}()
+}
+
+func (p *Process) AutocloseWithCleanup(closeFn func()) {
+	go func() {
+		p.wg.Wait()
+		closeFn()
 		p.Close()
 	}()
 }
@@ -193,7 +202,7 @@ type goroutine struct {
 	chDone chan struct{}
 }
 
-func (p *Process) Go(name string, fn func(ctx context.Context)) <-chan struct{} {
+func (p *Process) Go(ctx context.Context, name string, fn func(ctx context.Context)) <-chan struct{} {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -206,18 +215,6 @@ func (p *Process) Go(name string, fn func(ctx context.Context)) <-chan struct{} 
 	g := &goroutine{name: name + " #" + utils.RandomNumberString(), chDone: make(chan struct{})}
 	p.goroutines[g] = struct{}{}
 
-	go func() {
-		for {
-			select {
-			case <-p.chStop:
-				// fmt.Println("SHOULD STOP", g.name)
-			case <-g.chDone:
-				return
-			case <-time.After(5 * time.Second):
-			}
-		}
-	}()
-
 	p.wg.Add(1)
 	go func() {
 		defer func() {
@@ -228,7 +225,10 @@ func (p *Process) Go(name string, fn func(ctx context.Context)) <-chan struct{} 
 			close(g.chDone)
 		}()
 
-		fn(utils.ChanContext(p.chStop))
+		ctx, cancel := utils.CombinedContext(ctx, p.chStop)
+		defer cancel()
+
+		fn(ctx)
 	}()
 
 	return g.chDone

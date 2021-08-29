@@ -90,7 +90,9 @@ func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.
 	ch := make(chan AuthPeerConn)
 
 	child := ap.Process.NewChild(ctx, "PeersClaimingAddress "+address.String())
-	defer child.Autoclose()
+	defer child.AutocloseWithCleanup(func() {
+		close(ch)
+	})
 
 	for _, tpt := range ap.transports {
 		innerCh, err := tpt.PeersClaimingAddress(ctx, address)
@@ -98,7 +100,7 @@ func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.
 			continue
 		}
 
-		child.Go(tpt.Name(), func(ctx context.Context) {
+		child.Go(nil, tpt.Name(), func(ctx context.Context) {
 			for {
 				select {
 				case <-ctx.Done():
@@ -117,12 +119,6 @@ func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.
 			}
 		})
 	}
-
-	ap.Process.Go("PeersClaimingAddress "+address.String()+" (await completion)", func(ctx context.Context) {
-		<-child.Done()
-		close(ch)
-	})
-
 	return ch
 }
 
@@ -228,7 +224,7 @@ func (t *processPeersTask) processPeers(ctx context.Context) {
 				tpt := tpt
 				peerDetails := peerDetails
 
-				t.Process.Go("announce peers", func(ctx context.Context) {
+				t.Process.Go(nil, "announce peers", func(ctx context.Context) {
 					peerConn, err := tpt.NewPeerConn(ctx, peerDetails.DialInfo().DialAddr)
 					if errors.Cause(err) == swarm.ErrPeerIsSelf {
 						return
@@ -284,7 +280,7 @@ func (t *processPeersTask) processPeers(ctx context.Context) {
 				continue
 			}
 
-			t.Process.Go("verify unverified peers", func(ctx context.Context) {
+			t.Process.Go(nil, "verify unverified peers", func(ctx context.Context) {
 				defer authPeerConn.Close()
 
 				err := t.authProto.ChallengePeerIdentity(ctx, authPeerConn)

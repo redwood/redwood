@@ -23,6 +23,14 @@ func RandomBytes(t *testing.T, length int) []byte {
 	return bs
 }
 
+func RandomHash(t *testing.T) types.Hash {
+	t.Helper()
+
+	var h types.Hash
+	copy(h[:], RandomBytes(t, 32))
+	return h
+}
+
 func RandomAddress(t *testing.T) types.Address {
 	t.Helper()
 	return types.AddressFromBytes(RandomBytes(t, len(types.Address{})))

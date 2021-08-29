@@ -117,10 +117,13 @@ func (app *App) Close() error {
 }
 
 func (app *App) monitorForDMs() {
-	app.Process.Go("monitorForDMs", func(ctx context.Context) {
+	app.Process.Go(nil, "monitorForDMs", func(ctx context.Context) {
 		time.Sleep(5 * time.Second)
 
-		sub := app.TreeProto.SubscribeStateURIs()
+		sub, err := app.TreeProto.SubscribeStateURIs()
+		if err != nil {
+			panic(err)
+		}
 		defer sub.Close()
 
 		for {

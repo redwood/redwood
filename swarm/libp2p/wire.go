@@ -8,10 +8,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"redwood.dev/blob"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/protoauth"
-	"redwood.dev/swarm/protoblob"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -33,8 +31,6 @@ const (
 	msgType_Error                     msgType = "error"
 	msgType_ChallengeIdentityRequest  msgType = "challenge identity"
 	msgType_ChallengeIdentityResponse msgType = "challenge identity response"
-	msgType_FetchBlob                 msgType = "fetch blob"
-	msgType_FetchBlobResponse         msgType = "fetch blob response"
 	msgType_AnnouncePeers             msgType = "announce peers"
 )
 
@@ -139,22 +135,6 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 			return err
 		}
 
-		msg.Payload = resp
-
-	case msgType_FetchBlob:
-		var blobID blob.ID
-		err := json.Unmarshal([]byte(m.PayloadBytes), &blobID)
-		if err != nil {
-			return err
-		}
-		msg.Payload = blobID
-
-	case msgType_FetchBlobResponse:
-		var resp protoblob.FetchBlobResponse
-		err := json.Unmarshal([]byte(m.PayloadBytes), &resp)
-		if err != nil {
-			return err
-		}
 		msg.Payload = resp
 
 	case msgType_AnnouncePeers:

@@ -29,18 +29,12 @@ func (task *PeriodicTask) Start() error {
 		return err
 	}
 
-	task.Process.Go("ticker", func(ctx context.Context) {
+	task.Process.Go(nil, "ticker", func(ctx context.Context) {
 		ticker := time.NewTicker(task.interval)
 		defer ticker.Stop()
 
 	Loop:
 		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
 			select {
 			case <-ctx.Done():
 				return
@@ -53,11 +47,7 @@ func (task *PeriodicTask) Start() error {
 				if len(xs) == 0 {
 					continue Loop
 				}
-				// func() {
-				//  ctx, cancel := CombinedContext(task.chStop, interval)
-				//  defer cancel()
 				task.taskFn(ctx)
-				// }()
 			}
 		}
 	})

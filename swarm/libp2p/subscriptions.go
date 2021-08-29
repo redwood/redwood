@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 
 	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 
 	"redwood.dev/crypto"
+	"redwood.dev/log"
+	"redwood.dev/process"
 	"redwood.dev/state"
+	"redwood.dev/swarm"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -59,13 +63,23 @@ func (sub *readableSubscription) Read() (_ *prototree.SubscriptionMsg, err error
 }
 
 type writableSubscription struct {
-	*peerConn
+	process.Process
+	log.Logger
+	peerConn *peerConn
 	stateURI string
-	chClosed chan struct{}
 }
 
 func newWritableSubscription(peerConn *peerConn, stateURI string) *writableSubscription {
-	return &writableSubscription{peerConn, stateURI, make(chan struct{})}
+	return &writableSubscription{
+		Process:  *process.New("sub impl " + peerConn.DialInfo().String() + " " + stateURI),
+		Logger:   log.NewLogger(TransportName),
+		peerConn: peerConn,
+		stateURI: stateURI,
+	}
+}
+
+func (sub *writableSubscription) DialInfo() swarm.PeerDialInfo {
+	return sub.peerConn.DialInfo()
 }
 
 func (sub *writableSubscription) StateURI() string {
@@ -73,12 +87,11 @@ func (sub *writableSubscription) StateURI() string {
 }
 
 func (sub *writableSubscription) Close() error {
-	close(sub.chClosed)
-	return nil
-}
-
-func (sub *writableSubscription) Closed() <-chan struct{} {
-	return sub.chClosed
+	sub.Infof(0, "libp2p writable subscription closed (%v)", sub.stateURI)
+	return multierr.Append(
+		sub.peerConn.Close(),
+		sub.Process.Close(),
+	)
 }
 
 func (sub *writableSubscription) Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) (err error) {
@@ -90,5 +103,5 @@ func (sub *writableSubscription) Put(ctx context.Context, stateURI string, tx *t
 }
 
 func (sub writableSubscription) String() string {
-	return sub.DialInfo().TransportName + " " + sub.DialInfo().DialAddr + " (" + sub.stateURI + ")"
+	return sub.peerConn.DialInfo().String() + " (" + sub.stateURI + ")"
 }

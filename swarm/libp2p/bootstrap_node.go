@@ -1,10 +1,8 @@
 package libp2p
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
 	"time"
 
 	badgerds "github.com/ipfs/go-ds-badger2"
@@ -12,15 +10,20 @@ import (
 	libp2p "github.com/libp2p/go-libp2p"
 	circuitp2p "github.com/libp2p/go-libp2p-circuit"
 	cryptop2p "github.com/libp2p/go-libp2p-core/crypto"
+	corehost "github.com/libp2p/go-libp2p-core/host"
 	metrics "github.com/libp2p/go-libp2p-core/metrics"
 	netp2p "github.com/libp2p/go-libp2p-core/network"
+	corepeer "github.com/libp2p/go-libp2p-core/peer"
+	corepeerstore "github.com/libp2p/go-libp2p-core/peerstore"
+	discovery "github.com/libp2p/go-libp2p-discovery"
 	p2phost "github.com/libp2p/go-libp2p-host"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	noisep2p "github.com/libp2p/go-libp2p-noise"
 	peer "github.com/libp2p/go-libp2p-peer"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	"github.com/libp2p/go-libp2p-peerstore/pstoreds"
-	"github.com/libp2p/go-libp2p/p2p/discovery"
+	routing "github.com/libp2p/go-libp2p-routing"
+	mdns "github.com/libp2p/go-libp2p/p2p/discovery"
 	ma "github.com/multiformats/go-multiaddr"
 	madns "github.com/multiformats/go-multiaddr-dns"
 	"github.com/pkg/errors"
@@ -30,6 +33,16 @@ import (
 	"redwood.dev/state"
 )
 
+type BootstrapNode interface {
+	process.Interface
+	log.Logger
+	Libp2pHost() p2phost.Host
+	Libp2pPeerID() string
+	DHT() *dht.IpfsDHT
+	Peers() []corepeer.AddrInfo
+	Peerstore() corepeerstore.Peerstore
+}
+
 type bootstrapNode struct {
 	process.Process
 	log.Logger
@@ -38,8 +51,9 @@ type bootstrapNode struct {
 	dht               *dht.IpfsDHT
 	datastorePath     string
 	datastore         *badgerds.Datastore
+	peerstore         corepeerstore.Peerstore
 	encryptionConfig  state.EncryptionConfig
-	disc              discovery.Service
+	mdns              mdns.Service
 	peerID            peer.ID
 	port              uint
 	p2pKey            cryptop2p.PrivKey
@@ -96,7 +110,7 @@ func (bn *bootstrapNode) Start() error {
 	}
 	bn.datastore = datastore
 
-	peerstore, err := pstoreds.NewPeerstore(bn.Process.Ctx(), datastore, pstoreds.DefaultOpts())
+	bn.peerstore, err = pstoreds.NewPeerstore(bn.Process.Ctx(), datastore, pstoreds.DefaultOpts())
 	if err != nil {
 		return err
 	}
@@ -104,6 +118,11 @@ func (bn *bootstrapNode) Start() error {
 	dnsResolver, err := madns.NewResolver(madns.WithDefaultResolver(dohp2p.NewResolver(bn.dohDNSResolverURL)))
 	if err != nil {
 		return err
+	}
+
+	bootstrapPeers, err := addrInfosFromStrings(bn.bootstrapPeers)
+	if err != nil {
+		bn.Warnf("while decoding bootstrap peers: %v", err)
 	}
 
 	// Initialize the libp2p host
@@ -115,12 +134,25 @@ func (bn *bootstrapNode) Start() error {
 		libp2p.BandwidthReporter(bn.BandwidthCounter),
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
-		// libp2p.EnableAutoRelay(),
 		// libp2p.DefaultStaticRelays(),
 		libp2p.EnableRelay(circuitp2p.OptHop),
-		libp2p.Peerstore(peerstore),
+		libp2p.EnableAutoRelay(),
+		libp2p.Peerstore(bn.peerstore),
+		libp2p.ForceReachabilityPublic(),
 		libp2p.Security(noisep2p.ID, noisep2p.New),
 		libp2p.MultiaddrResolver(dnsResolver),
+		libp2p.Routing(func(host corehost.Host) (routing.PeerRouting, error) {
+			bn.dht, err = dht.New(bn.Process.Ctx(), host,
+				dht.BootstrapPeers(bootstrapPeers...),
+				dht.Mode(dht.ModeServer),
+				dht.Datastore(datastore),
+				// dht.Validator(blankValidator{}), // Set a pass-through validator
+			)
+			if err != nil {
+				return nil, err
+			}
+			return bn.dht, nil
+		}),
 	)
 	if err != nil {
 		return errors.Wrap(err, "could not initialize libp2p host")
@@ -128,33 +160,43 @@ func (bn *bootstrapNode) Start() error {
 	bn.libp2pHost = libp2pHost
 	bn.libp2pHost.Network().Notify(bn) // Register for libp2p connect/disconnect notifications
 
-	// Initialize the DHT
-	bootstrapPeers, err := addrInfosFromStrings(bn.bootstrapPeers)
-	if err != nil {
-		bn.Warnf("while decoding bootstrap peers: %v", err)
-	}
-
-	bn.dht, err = dht.New(bn.Process.Ctx(), bn.libp2pHost,
-		dht.BootstrapPeers(bootstrapPeers...),
-		dht.Mode(dht.ModeServer),
-		dht.Datastore(datastore),
-		// dht.Validator(blankValidator{}), // Set a pass-through validator
-	)
-	if err != nil {
-		return errors.Wrap(err, "could not initialize libp2p dht")
-	}
-
 	err = bn.dht.Bootstrap(bn.Process.Ctx())
 	if err != nil {
 		return errors.Wrap(err, "could not bootstrap DHT")
 	}
 
+	// Set up DHT discovery
+	routingDiscovery := discovery.NewRoutingDiscovery(bn.dht)
+	discovery.Advertise(bn.Process.Ctx(), routingDiscovery, "redwood")
+
+	bn.Process.Go(nil, "find peers", func(ctx context.Context) {
+		chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
+		if err != nil {
+			bn.Errorf("error finding peers: %v", err)
+			return
+		}
+		for pinfo := range chPeers {
+			pinfo := pinfo
+			bn.Process.Go(nil, fmt.Sprintf("connect to %v", pinfo.ID.Pretty()), func(ctx context.Context) {
+				if pinfo.ID == bn.peerID {
+					return
+				}
+
+				bn.Debugf("DHT peer found: %v", pinfo.ID.Pretty())
+				err := bn.libp2pHost.Connect(ctx, pinfo)
+				if err != nil {
+					bn.Errorf("could not connect to %v: %v", pinfo.ID, err)
+				}
+			})
+		}
+	})
+
 	// Set up mDNS discovery
-	bn.disc, err = discovery.NewMdnsService(bn.Process.Ctx(), libp2pHost, 10*time.Second, "redwood")
+	bn.mdns, err = mdns.NewMdnsService(bn.Process.Ctx(), libp2pHost, 10*time.Second, "redwood")
 	if err != nil {
 		return err
 	}
-	bn.disc.RegisterNotifee(bn)
+	bn.mdns.RegisterNotifee(bn)
 
 	bn.Infof(0, "libp2p peer ID is %v", bn.Libp2pPeerID())
 
@@ -162,7 +204,7 @@ func (bn *bootstrapNode) Start() error {
 }
 
 func (bn *bootstrapNode) Close() error {
-	err := bn.disc.Close()
+	err := bn.mdns.Close()
 	if err != nil {
 		bn.Errorf("error closing libp2p mDNS service: %v", err)
 	}
@@ -185,35 +227,19 @@ func (bn *bootstrapNode) Libp2pPeerID() string {
 	return bn.libp2pHost.ID().Pretty()
 }
 
-func (bn *bootstrapNode) findOrCreateP2PKey() error {
-	filename := filepath.Join(".", "p2pkey")
+func (bn *bootstrapNode) Libp2pHost() p2phost.Host {
+	return bn.libp2pHost
+}
+func (bn *bootstrapNode) DHT() *dht.IpfsDHT {
+	return bn.dht
+}
 
-	p2pkeyBytes, err := ioutil.ReadFile(filename)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
+func (bn *bootstrapNode) Peers() []corepeer.AddrInfo {
+	return peerstore.PeerInfos(bn.libp2pHost.Peerstore(), bn.libp2pHost.Peerstore().Peers())
+}
 
-	exists := !os.IsNotExist(err)
-	if exists {
-		p2pKey, err := cryptop2p.UnmarshalPrivateKey(p2pkeyBytes)
-		if err != nil {
-			return err
-		}
-		bn.p2pKey = p2pKey
-		return nil
-	}
-
-	p2pKey, _, err := cryptop2p.GenerateKeyPair(cryptop2p.Ed25519, 0)
-	if err != nil {
-		return err
-	}
-	bn.p2pKey = p2pKey
-
-	bs, err := cryptop2p.MarshalPrivateKey(p2pKey)
-	if err != nil {
-		return err
-	}
-	return ioutil.WriteFile(filename, bs, 0600)
+func (bn *bootstrapNode) Peerstore() corepeerstore.Peerstore {
+	return bn.peerstore
 }
 
 func (bn *bootstrapNode) Listen(network netp2p.Network, multiaddr ma.Multiaddr)      {}
@@ -229,9 +255,26 @@ func (bn *bootstrapNode) Disconnected(network netp2p.Network, conn netp2p.Conn) 
 	bn.Debugf("libp2p disconnected: %v", addr)
 }
 
-func (bn *bootstrapNode) OpenedStream(network netp2p.Network, stream netp2p.Stream) {}
+func (bn *bootstrapNode) OpenedStream(network netp2p.Network, stream netp2p.Stream) {
+	// addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
+	// bn.Debugf("opened stream: %v", addr)
+}
 
-func (bn *bootstrapNode) ClosedStream(network netp2p.Network, stream netp2p.Stream) {}
+func (bn *bootstrapNode) ClosedStream(network netp2p.Network, stream netp2p.Stream) {
+	// addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
+	// bn.Debugf("opened stream: %v", addr)
+}
 
 // HandlePeerFound is the libp2p mDNS peer discovery callback
-func (bn *bootstrapNode) HandlePeerFound(pinfo peerstore.PeerInfo) {}
+func (bn *bootstrapNode) HandlePeerFound(pinfo corepeer.AddrInfo) {
+	if pinfo.ID == bn.peerID {
+		return
+	}
+
+	bn.Debugf("mDNS peer found: %v", pinfo.ID.Pretty())
+
+	err := bn.libp2pHost.Connect(bn.Process.Ctx(), pinfo)
+	if err != nil {
+		bn.Errorf("could not connect to %v: %v", pinfo.ID, err)
+	}
+}

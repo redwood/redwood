@@ -75,9 +75,13 @@ func (api *API) Start() error {
 	if err != nil {
 		return err
 	}
-	defer api.Process.Autoclose()
+	defer api.Process.AutocloseWithCleanup(func() {
+		api.Debugf("api close")
+		_ = api.server.Shutdown(context.TODO())
+		api.app = nil
+	})
 
-	api.Process.Go("http.ListenAndServe", func(ctx context.Context) {
+	api.Process.Go(nil, "http.ListenAndServe", func(ctx context.Context) {
 		err := api.server.ListenAndServe()
 		if err == http.ErrServerClosed {
 			return
@@ -91,11 +95,8 @@ func (api *API) Start() error {
 func (api *API) Close() (err error) {
 	api.closeOnce.Do(func() {
 		api.Debugf("api close")
-
 		_ = api.server.Shutdown(context.TODO())
-
 		err = api.Process.Close()
-
 		api.app = nil
 	})
 	return err

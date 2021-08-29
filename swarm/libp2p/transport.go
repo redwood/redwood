@@ -14,17 +14,22 @@ import (
 	dohp2p "github.com/libp2p/go-doh-resolver"
 	libp2p "github.com/libp2p/go-libp2p"
 	cryptop2p "github.com/libp2p/go-libp2p-core/crypto"
+	corehost "github.com/libp2p/go-libp2p-core/host"
 	metrics "github.com/libp2p/go-libp2p-core/metrics"
 	netp2p "github.com/libp2p/go-libp2p-core/network"
+	corepeer "github.com/libp2p/go-libp2p-core/peer"
+	discovery "github.com/libp2p/go-libp2p-discovery"
 	p2phost "github.com/libp2p/go-libp2p-host"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
+	mplex "github.com/libp2p/go-libp2p-mplex"
 	noisep2p "github.com/libp2p/go-libp2p-noise"
 	peer "github.com/libp2p/go-libp2p-peer"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	"github.com/libp2p/go-libp2p-peerstore/pstoreds"
 	protocol "github.com/libp2p/go-libp2p-protocol"
-	"github.com/libp2p/go-libp2p/p2p/discovery"
+	routing "github.com/libp2p/go-libp2p-routing"
+	mdns "github.com/libp2p/go-libp2p/p2p/discovery"
 	ma "github.com/multiformats/go-multiaddr"
 	madns "github.com/multiformats/go-multiaddr-dns"
 	"github.com/pkg/errors"
@@ -51,7 +56,7 @@ type Transport interface {
 	prototree.TreeTransport
 	Libp2pPeerID() string
 	ListenAddrs() []string
-	Peers() []peerstore.PeerInfo
+	Peers() []corepeer.AddrInfo
 }
 
 type transport struct {
@@ -63,7 +68,7 @@ type transport struct {
 
 	libp2pHost        p2phost.Host
 	dht               *dht.IpfsDHT
-	disc              discovery.Service
+	mdns              mdns.Service
 	peerID            peer.ID
 	port              uint
 	p2pKey            cryptop2p.PrivKey
@@ -88,8 +93,10 @@ type transport struct {
 var _ Transport = (*transport)(nil)
 
 const (
-	PROTO_MAIN    protocol.ID = "/redwood/main/1.0.0"
-	TransportName string      = "libp2p"
+	PROTO_MAIN          protocol.ID = "/redwood/main/1.0.0"
+	PROTO_BLOB_MANIFEST protocol.ID = "/redwood/blob/manifest/1.0.0"
+	PROTO_BLOB_CHUNK    protocol.ID = "/redwood/blob/chunk/1.0.0"
+	TransportName       string      = "libp2p"
 )
 
 func NewTransport(
@@ -163,6 +170,12 @@ func (t *transport) Start() error {
 		return err
 	}
 
+	// bootstrapPeers := dht.GetDefaultBootstrapPeerAddrInfos() // @@TODO: remove this
+	bootstrapPeers, err := addrInfosFromStrings(t.bootstrapPeers)
+	if err != nil {
+		t.Warnf("while decoding bootstrap peers: %v", err)
+	}
+
 	// Initialize the libp2p host
 	libp2pHost, err := libp2p.New(t.Process.Ctx(),
 		libp2p.ListenAddrStrings(
@@ -172,38 +185,37 @@ func (t *transport) Start() error {
 		libp2p.BandwidthReporter(t.BandwidthCounter),
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
-		// libp2p.EnableAutoRelay(),
-		// libp2p.DefaultStaticRelays(),
+		libp2p.ForceReachabilityPrivate(),
 		libp2p.StaticRelays(staticRelays),
+		libp2p.EnableAutoRelay(),
+		// libp2p.DefaultStaticRelays(),
 		libp2p.Peerstore(peerStore),
 		libp2p.Security(noisep2p.ID, noisep2p.New),
 		libp2p.MultiaddrResolver(dnsResolver),
+		libp2p.Muxer(string("/mplex/6.7.0"), mplex.DefaultTransport),
+		libp2p.Routing(func(host corehost.Host) (routing.PeerRouting, error) {
+			t.dht, err = dht.New(t.Process.Ctx(), host,
+				dht.BootstrapPeers(bootstrapPeers...),
+				dht.Mode(dht.ModeServer),
+				dht.Datastore(datastore),
+				// dht.Validator(blankValidator{}), // Set a pass-through validator
+			)
+			if err != nil {
+				return nil, err
+			}
+			return t.dht, err
+		}),
 	)
 	if err != nil {
 		return errors.Wrap(err, "could not initialize libp2p host")
 	}
 	t.libp2pHost = libp2pHost
 	t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
+	t.libp2pHost.SetStreamHandler(PROTO_BLOB_MANIFEST, t.handleBlobManifestRequest)
+	t.libp2pHost.SetStreamHandler(PROTO_BLOB_CHUNK, t.handleBlobChunkRequest)
 	t.libp2pHost.Network().Notify(t) // Register for libp2p connect/disconnect notifications
 
-	// Initialize the DHT
-	// bootstrapPeers := dht.GetDefaultBootstrapPeerAddrInfos() // @@TODO: remove this
-	bootstrapPeers, err := addrInfosFromStrings(t.bootstrapPeers)
-	if err != nil {
-		t.Warnf("while decoding bootstrap peers: %v", err)
-	}
-
-	t.dht, err = dht.New(context.Background(), t.libp2pHost,
-		dht.BootstrapPeers(bootstrapPeers...),
-		dht.Mode(dht.ModeServer),
-		dht.Datastore(datastore),
-		// dht.Validator(blankValidator{}), // Set a pass-through validator
-	)
-	if err != nil {
-		return errors.Wrap(err, "could not initialize libp2p dht")
-	}
-
-	err = t.dht.Bootstrap(context.Background())
+	err = t.dht.Bootstrap(t.Process.Ctx())
 	if err != nil {
 		return errors.Wrap(err, "could not bootstrap DHT")
 	}
@@ -211,12 +223,34 @@ func (t *transport) Start() error {
 	for _, relay := range staticRelays {
 		relay := relay
 		go func() {
-			err := t.libp2pHost.Connect(t.Process.Ctx(), relay)
+			err = t.libp2pHost.Connect(t.Process.Ctx(), relay)
 			if err != nil {
 				t.Errorf("couldn't connect to static relay: %v", err)
 			}
 		}()
 	}
+
+	// Set up DHT discovery
+	routingDiscovery := discovery.NewRoutingDiscovery(t.dht)
+	discovery.Advertise(t.Process.Ctx(), routingDiscovery, "redwood")
+
+	t.Process.Go(nil, "find peers", func(ctx context.Context) {
+		chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
+		if err != nil {
+			t.Errorf("error finding peers: %v", err)
+			return
+		}
+		for pinfo := range chPeers {
+			t.onPeerFound("routing", pinfo)
+		}
+	})
+
+	// Set up mDNS discovery
+	t.mdns, err = mdns.NewMdnsService(t.Process.Ctx(), libp2pHost, 10*time.Second, "redwood")
+	if err != nil {
+		return err
+	}
+	t.mdns.RegisterNotifee(t)
 
 	// Update our node's info in the peer store
 	myDialAddrs := utils.NewStringSet(nil)
@@ -246,18 +280,26 @@ func (t *transport) Start() error {
 		}
 	}
 
-	// Set up mDNS discovery
-	t.disc, err = discovery.NewMdnsService(context.Background(), libp2pHost, 10*time.Second, "redwood")
-	if err != nil {
-		return err
+	if t.controllerHub != nil {
+		announceStateURIsTask := NewAnnounceStateURIsTask(30*time.Second, t.controllerHub, t.dht)
+		announceStateURIsTask.Enqueue()
+		t.Process.SpawnChild(nil, announceStateURIsTask)
 	}
-	t.disc.RegisterNotifee(t)
 
-	announceContentTask := NewAnnounceContentTask(10*time.Second, t, t.controllerHub, t.keyStore, t.peerStore, t.blobStore, t.dht)
-	t.Process.SpawnChild(nil, announceContentTask)
 	if t.blobStore != nil {
-		t.blobStore.OnBlobsSaved(announceContentTask.Enqueue)
+		announceBlobsTask := NewAnnounceBlobsTask(30*time.Second, t, t.blobStore, t.dht)
+		announceBlobsTask.Enqueue()
+		t.Process.SpawnChild(nil, announceBlobsTask)
+		t.blobStore.OnBlobsSaved(announceBlobsTask.Enqueue)
 	}
+
+	announceIdentitiesTask := NewAnnounceIdentitiesTask(30*time.Second, t.keyStore, t.dht)
+	announceIdentitiesTask.Enqueue()
+	t.Process.SpawnChild(nil, announceIdentitiesTask)
+
+	connectToStaticRelaysTask := NewConnectToStaticRelaysTask(8*time.Second, staticRelays, t.libp2pHost)
+	connectToStaticRelaysTask.Enqueue()
+	t.Process.SpawnChild(nil, connectToStaticRelaysTask)
 
 	t.Infof(0, "libp2p peer ID is %v", t.Libp2pPeerID())
 
@@ -265,7 +307,7 @@ func (t *transport) Start() error {
 }
 
 func (t *transport) Close() error {
-	err := t.disc.Close()
+	err := t.mdns.Close()
 	if err != nil {
 		t.Errorf("error closing libp2p mDNS service: %v", err)
 	}
@@ -330,7 +372,7 @@ func (t *transport) ListenAddrs() []string {
 	return addrs
 }
 
-func (t *transport) Peers() []peerstore.PeerInfo {
+func (t *transport) Peers() []corepeer.AddrInfo {
 	return peerstore.PeerInfos(t.libp2pHost.Peerstore(), t.libp2pHost.Peerstore().Peers())
 }
 
@@ -352,9 +394,15 @@ func (t *transport) Disconnected(network netp2p.Network, conn netp2p.Conn) {
 	t.Debugf("libp2p disconnected: %v", addr)
 }
 
-func (t *transport) OpenedStream(network netp2p.Network, stream netp2p.Stream) {}
+func (t *transport) OpenedStream(network netp2p.Network, stream netp2p.Stream) {
+	// addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
+	// t.Debugf("opened stream %v with %v", stream.Protocol(), addr)
+}
 
 func (t *transport) ClosedStream(network netp2p.Network, stream netp2p.Stream) {
+	// addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
+	// t.Debugf("closed stream %v with %v", stream.Protocol(), addr)
+
 	peerID := stream.Conn().RemotePeer()
 	t.writeSubsByPeerIDMu.Lock()
 	defer t.writeSubsByPeerIDMu.Unlock()
@@ -370,7 +418,11 @@ func (t *transport) ClosedStream(network netp2p.Network, stream netp2p.Stream) {
 }
 
 // HandlePeerFound is the libp2p mDNS peer discovery callback
-func (t *transport) HandlePeerFound(pinfo peerstore.PeerInfo) {
+func (t *transport) HandlePeerFound(pinfo corepeer.AddrInfo) {
+	t.onPeerFound("mDNS", pinfo)
+}
+
+func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	// Ensure all peers discovered on the libp2p layer are in the peer store
 	if pinfo.ID == peer.ID("") {
 		return
@@ -389,7 +441,7 @@ func (t *transport) HandlePeerFound(pinfo peerstore.PeerInfo) {
 		t.Infof(0, "mDNS: peer %+v found", pinfo.ID.Pretty())
 	}
 
-	t.addPeerInfosToPeerStore([]peerstore.PeerInfo{pinfo})
+	t.addPeerInfosToPeerStore([]corepeer.AddrInfo{pinfo})
 
 	peer := t.makeDisconnectedPeerConn(pinfo)
 	if peer == nil {
@@ -412,6 +464,30 @@ func (t *transport) HandlePeerFound(pinfo peerstore.PeerInfo) {
 	// }
 }
 
+func (t *transport) handleBlobManifestRequest(stream netp2p.Stream) {
+	peerConn := t.makeConnectedPeerConn(stream)
+	defer peerConn.Close()
+
+	blobID, err := peerConn.ReadBlobManifestRequest()
+	if err != nil {
+		t.Errorf("could not read blob manifest request: %v", err)
+		return
+	}
+	t.HandleBlobManifestRequest(blobID, peerConn)
+}
+
+func (t *transport) handleBlobChunkRequest(stream netp2p.Stream) {
+	peerConn := t.makeConnectedPeerConn(stream)
+	defer peerConn.Close()
+
+	chunkSHA3, err := peerConn.ReadBlobChunkRequest()
+	if err != nil {
+		t.Errorf("could not read blob chunk request: %v", err)
+		return
+	}
+	t.HandleBlobChunkRequest(chunkSHA3, peerConn)
+}
+
 func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 	msg, err := readMsg(stream)
 	if err != nil {
@@ -429,7 +505,7 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 			t.Errorf("Subscribe message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
-		t.Infof(0, "incoming libp2p subscription (stateURI: %v)", stateURI)
+		t.Infof(0, "incoming libp2p subscription: %v %v", peer.DialInfo(), stateURI)
 
 		writeSub := newWritableSubscription(peer, stateURI)
 		func() {
@@ -478,16 +554,6 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 			t.Errorf("msgType_ChallengeIdentityRequest: error from verifyAddressHandler: %v", err)
 			return
 		}
-
-	case msgType_FetchBlob:
-		defer peer.Close()
-
-		refID, ok := msg.Payload.(blob.ID)
-		if !ok {
-			t.Errorf("FetchBlob message: bad payload: (%T) %v", msg.Payload, msg.Payload)
-			return
-		}
-		t.HandleBlobRequest(refID, peer)
 
 	case msgType_EncryptedTx:
 		defer peer.Close()
@@ -688,7 +754,7 @@ func (t *transport) AnnounceBlob(ctx context.Context, refID blob.ID) error {
 	return nil
 }
 
-func (t *transport) addPeerInfosToPeerStore(pinfos []peerstore.PeerInfo) {
+func (t *transport) addPeerInfosToPeerStore(pinfos []corepeer.AddrInfo) {
 	for _, pinfo := range pinfos {
 		if pinfo.ID == peer.ID("") {
 			continue
@@ -723,7 +789,7 @@ func (t *transport) makeConnectedPeerConn(stream netp2p.Stream) *peerConn {
 	return peer
 }
 
-func (t *transport) makeDisconnectedPeerConn(pinfo peerstore.PeerInfo) *peerConn {
+func (t *transport) makeDisconnectedPeerConn(pinfo corepeer.AddrInfo) *peerConn {
 	peer := &peerConn{t: t, pinfo: pinfo, stream: nil}
 	dialAddrs := multiaddrsFromPeerInfo(pinfo)
 	if dialAddrs.Len() == 0 {
@@ -762,97 +828,151 @@ func (t *transport) makeDisconnectedPeerConn(pinfo peerstore.PeerInfo) *peerConn
 	return peer
 }
 
-type announceContentTask struct {
-	process.PeriodicTask
-	log.Logger
-	transport     protoblob.BlobTransport
-	controllerHub tree.ControllerHub
-	keyStore      identity.KeyStore
-	peerStore     swarm.PeerStore
-	blobStore     blob.Store
-	dht           DHT
-}
-
 type DHT interface {
 	Provide(context.Context, cid.Cid, bool) error
 }
 
-func NewAnnounceContentTask(
+type announceBlobsTask struct {
+	process.PeriodicTask
+	log.Logger
+	transport protoblob.BlobTransport
+	blobStore blob.Store
+	dht       DHT
+}
+
+func NewAnnounceBlobsTask(
 	interval time.Duration,
 	transport protoblob.BlobTransport,
-	controllerHub tree.ControllerHub,
-	keyStore identity.KeyStore,
-	peerStore swarm.PeerStore,
 	blobStore blob.Store,
 	dht DHT,
-) *announceContentTask {
-	t := &announceContentTask{
-		Logger:        log.NewLogger("libp2p"),
-		transport:     transport,
-		controllerHub: controllerHub,
-		keyStore:      keyStore,
-		peerStore:     peerStore,
-		blobStore:     blobStore,
-		dht:           dht,
+) *announceBlobsTask {
+	t := &announceBlobsTask{
+		Logger:    log.NewLogger("libp2p"),
+		transport: transport,
+		blobStore: blobStore,
+		dht:       dht,
 	}
-	t.PeriodicTask = *process.NewPeriodicTask("AnnounceContentTask", interval, t.announceContent)
+	t.PeriodicTask = *process.NewPeriodicTask("AnnounceBlobsTask", interval, t.announceBlobs)
 	return t
 }
 
 // Periodically announces our objects to the network.
-func (t *announceContentTask) announceContent(ctx context.Context) {
-	// Announce the state URIs we're serving
-	stateURIs, err := t.controllerHub.KnownStateURIs()
-	if err != nil {
-		t.Errorf("error fetching known state URIs from DB: %v", err)
-
-	} else {
-		for _, stateURI := range stateURIs {
-			stateURI := stateURI
-
-			t.Process.Go("state URIs", func(ctx context.Context) {
-				c, err := cidForString("serve:" + stateURI)
-				if err != nil {
-					t.Errorf("announce: error creating cid: %v", err)
-					return
-				}
-
-				err = t.dht.Provide(ctx, c, true)
-				if err != nil && err != kbucket.ErrLookupFailure {
-					t.Errorf(`announce: could not dht.Provide stateURI "%v": %v`, stateURI, err)
-					return
-				}
-			})
-		}
-	}
-
+func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 	// Announce the blobs we're serving
-	refHashes, err := t.blobStore.AllHashes()
-	if err != nil {
-		t.Errorf("error fetching blobStore hashes: %v", err)
-	}
-	for _, refHash := range refHashes {
-		refHash := refHash
+	iter := t.blobStore.BlobIDs()
 
-		t.Process.Go("blobs", func(ctx context.Context) {
-			err := t.transport.AnnounceBlob(ctx, refHash)
+	var chDones []<-chan struct{}
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		sha1, sha3 := iter.Current()
+
+		chDone := t.Process.Go(nil, sha1.String(), func(ctx context.Context) {
+			err := t.transport.AnnounceBlob(ctx, sha1)
 			if err != nil {
 				t.Errorf("announce: error: %v", err)
 			}
 		})
-	}
+		chDones = append(chDones, chDone)
 
-	// Announce our address (for exchanging private txs)
-	identities, err := t.keyStore.Identities()
+		chDone = t.Process.Go(nil, sha3.String(), func(ctx context.Context) {
+			err := t.transport.AnnounceBlob(ctx, sha3)
+			if err != nil {
+				t.Errorf("announce: error: %v", err)
+			}
+		})
+		chDones = append(chDones, chDone)
+	}
+	for _, chDone := range chDones {
+		<-chDone
+	}
+}
+
+type announceStateURIsTask struct {
+	process.PeriodicTask
+	log.Logger
+	controllerHub tree.ControllerHub
+	dht           DHT
+}
+
+func NewAnnounceStateURIsTask(
+	interval time.Duration,
+	controllerHub tree.ControllerHub,
+	dht DHT,
+) *announceStateURIsTask {
+	t := &announceStateURIsTask{
+		Logger:        log.NewLogger("libp2p"),
+		controllerHub: controllerHub,
+		dht:           dht,
+	}
+	t.PeriodicTask = *process.NewPeriodicTask("AnnounceStateURIsTask", interval, t.announceStateURIs)
+	return t
+}
+
+func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
+	// Announce the state URIs we're serving
+	stateURIs, err := t.controllerHub.KnownStateURIs()
 	if err != nil {
-		t.Errorf("announce: error creating cid: %v", err)
+		t.Errorf("error fetching known state URIs from DB: %v", err)
 		return
 	}
 
+	var chDones []<-chan struct{}
+	for _, stateURI := range stateURIs {
+		stateURI := stateURI
+
+		chDone := t.Process.Go(nil, stateURI, func(ctx context.Context) {
+			c, err := cidForString("serve:" + stateURI)
+			if err != nil {
+				t.Errorf("announce: error creating cid: %v", err)
+				return
+			}
+
+			err = t.dht.Provide(ctx, c, true)
+			if err != nil && err != kbucket.ErrLookupFailure {
+				t.Errorf(`announce: could not dht.Provide stateURI "%v": %v`, stateURI, err)
+				return
+			}
+		})
+		chDones = append(chDones, chDone)
+	}
+	for _, chDone := range chDones {
+		<-chDone
+	}
+}
+
+type announceIdentitiesTask struct {
+	process.PeriodicTask
+	log.Logger
+	keyStore identity.KeyStore
+	dht      DHT
+}
+
+func NewAnnounceIdentitiesTask(
+	interval time.Duration,
+	keyStore identity.KeyStore,
+	dht DHT,
+) *announceIdentitiesTask {
+	t := &announceIdentitiesTask{
+		Logger:   log.NewLogger("libp2p"),
+		keyStore: keyStore,
+		dht:      dht,
+	}
+	t.PeriodicTask = *process.NewPeriodicTask("AnnounceIdentitiesTask", interval, t.announceIdentities)
+	return t
+}
+
+func (t *announceIdentitiesTask) announceIdentities(ctx context.Context) {
+	// Announce our address (for exchanging private txs)
+	identities, err := t.keyStore.Identities()
+	if err != nil {
+		t.Errorf("announce: error fetching identities: %v", err)
+		return
+	}
+
+	var chDones []<-chan struct{}
 	for _, identity := range identities {
 		identity := identity
 
-		t.Process.Go("identity", func(ctx context.Context) {
+		chDone := t.Process.Go(nil, "identity "+identity.SigKeypair.Address().Hex(), func(ctx context.Context) {
 			c, err := cidForString("addr:" + identity.Address().String())
 			if err != nil {
 				t.Errorf("announce: error creating cid: %v", err)
@@ -864,5 +984,51 @@ func (t *announceContentTask) announceContent(ctx context.Context) {
 				t.Errorf(`announce: could not dht.Provide pubkey: %v`, err)
 			}
 		})
+		chDones = append(chDones, chDone)
+	}
+	for _, chDone := range chDones {
+		<-chDone
+	}
+}
+
+type connectToStaticRelaysTask struct {
+	process.PeriodicTask
+	log.Logger
+	staticRelays []corepeer.AddrInfo
+	libp2pHost   p2phost.Host
+}
+
+func NewConnectToStaticRelaysTask(
+	interval time.Duration,
+	staticRelays []corepeer.AddrInfo,
+	libp2pHost p2phost.Host,
+) *connectToStaticRelaysTask {
+	t := &connectToStaticRelaysTask{
+		Logger:       log.NewLogger("libp2p"),
+		staticRelays: staticRelays,
+		libp2pHost:   libp2pHost,
+	}
+	t.PeriodicTask = *process.NewPeriodicTask("ConnectToStaticRelaysTask", interval, t.connectToStaticRelays)
+	return t
+}
+
+func (t *connectToStaticRelaysTask) connectToStaticRelays(ctx context.Context) {
+	var chDones []<-chan struct{}
+	for _, relay := range t.staticRelays {
+		if len(t.libp2pHost.Network().ConnsToPeer(relay.ID)) > 0 {
+			continue
+		}
+
+		relay := relay
+		chDone := t.Process.Go(nil, "relay "+relay.ID.Pretty(), func(ctx context.Context) {
+			err := t.libp2pHost.Connect(ctx, relay)
+			if err != nil {
+				t.Errorf("error connecting to static relay (%v): %v", relay.ID, err)
+			}
+		})
+		chDones = append(chDones, chDone)
+	}
+	for _, chDone := range chDones {
+		<-chDone
 	}
 }

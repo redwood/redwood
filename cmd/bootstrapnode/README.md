@@ -56,7 +56,7 @@ Run:
 ```sh
 docker run \
     -v ~/you/bootstrapnode_config_dir:/root/config \
-    -p 21231:21231 redwood.dev/bootstrapnode \
+    -p 21231:21231 brynbellomy/bootstrapnode \
     /bootstrapnode start --config /root/config/config.json
 ```
 

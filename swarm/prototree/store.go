@@ -5,7 +5,6 @@ import (
 
 	"redwood.dev/log"
 	"redwood.dev/state"
-	"redwood.dev/swarm"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
@@ -15,35 +14,45 @@ type Store interface {
 	SubscribedStateURIs() utils.StringSet
 	AddSubscribedStateURI(stateURI string) error
 	RemoveSubscribedStateURI(stateURI string) error
+	OnNewSubscribedStateURI(handler func(stateURI string)) (unsubscribe func())
 	MaxPeersPerSubscription() uint64
 	SetMaxPeersPerSubscription(max uint64) error
-	TxSeenByPeer(dialInfo swarm.PeerDialInfo, stateURI string, txID types.ID) bool
-	MarkTxSeenByPeer(dialInfo swarm.PeerDialInfo, stateURI string, txID types.ID) error
+	TxSeenByPeer(deviceSpecificID, stateURI string, txID types.ID) bool
+	MarkTxSeenByPeer(deviceSpecificID, stateURI string, txID types.ID) error
 }
 
 type store struct {
 	log.Logger
-	db     *state.DBTree
+	db *state.DBTree
+
 	data   storeData
-	muData sync.RWMutex
+	dataMu sync.RWMutex
+
+	subscribedStateURIListeners   map[*subscribedStateURIListener]struct{}
+	subscribedStateURIListenersMu sync.RWMutex
+}
+
+type subscribedStateURIListener struct {
+	handler func(stateURI string)
 }
 
 type storeData struct {
 	SubscribedStateURIs     utils.StringSet
 	MaxPeersPerSubscription uint64
-	TxsSeenByPeers          map[string]map[string]map[string]map[types.ID]bool
+	TxsSeenByPeers          map[string]map[string]map[types.ID]bool
 }
 
 type storeDataCodec struct {
-	SubscribedStateURIs     []string                                         `tree:"subscribedStateURIs"`
-	MaxPeersPerSubscription uint64                                           `tree:"maxPeersPerSubscription"`
-	TxsSeenByPeers          map[string]map[string]map[string]map[string]bool `tree:"txsSeenByPeers"`
+	SubscribedStateURIs     []string                              `tree:"subscribedStateURIs"`
+	MaxPeersPerSubscription uint64                                `tree:"maxPeersPerSubscription"`
+	TxsSeenByPeers          map[string]map[string]map[string]bool `tree:"txsSeenByPeers"`
 }
 
 func NewStore(db *state.DBTree) (*store, error) {
 	s := &store{
-		Logger: log.NewLogger("prototree store"),
-		db:     db,
+		Logger:                      log.NewLogger("prototree store"),
+		db:                          db,
+		subscribedStateURIListeners: make(map[*subscribedStateURIListener]struct{}),
 	}
 	err := s.loadData()
 	return s, err
@@ -59,27 +68,24 @@ func (s *store) loadData() error {
 		return err
 	}
 
-	txsSeenByPeers := make(map[string]map[string]map[string]map[types.ID]bool)
-	for transportName, x := range codec.TxsSeenByPeers {
-		txsSeenByPeers[transportName] = make(map[string]map[string]map[types.ID]bool)
-		for dialAddr, y := range x {
-			txsSeenByPeers[transportName][dialAddr] = make(map[string]map[types.ID]bool)
-			for stateURI, z := range y {
-				txsSeenByPeers[transportName][dialAddr][stateURI] = make(map[types.ID]bool)
-				for txIDStr, seen := range z {
-					txID, err := types.IDFromHex(txIDStr)
-					if err != nil {
-						s.Errorf("while unmarshaling tx ID: %v", err)
-						continue
-					}
-					txsSeenByPeers[transportName][dialAddr][stateURI][txID] = seen
+	txsSeenByPeers := make(map[string]map[string]map[types.ID]bool)
+	for deviceSpecificID, x := range codec.TxsSeenByPeers {
+		txsSeenByPeers[deviceSpecificID] = make(map[string]map[types.ID]bool)
+		for stateURI, y := range x {
+			txsSeenByPeers[deviceSpecificID][stateURI] = make(map[types.ID]bool)
+			for txIDStr, seen := range y {
+				txID, err := types.IDFromHex(txIDStr)
+				if err != nil {
+					s.Errorf("while unmarshaling tx ID: %v", err)
+					continue
 				}
+				txsSeenByPeers[deviceSpecificID][stateURI][txID] = seen
 			}
 		}
 	}
 
-	s.muData.Lock()
-	defer s.muData.Unlock()
+	s.dataMu.Lock()
+	defer s.dataMu.Unlock()
 	s.data = storeData{
 		SubscribedStateURIs:     utils.NewStringSet(codec.SubscribedStateURIs),
 		MaxPeersPerSubscription: codec.MaxPeersPerSubscription,
@@ -89,16 +95,13 @@ func (s *store) loadData() error {
 }
 
 func (s *store) saveData() error {
-	txsSeenByPeers := make(map[string]map[string]map[string]map[string]bool)
-	for transportName, x := range s.data.TxsSeenByPeers {
-		txsSeenByPeers[transportName] = make(map[string]map[string]map[string]bool)
-		for dialAddr, y := range x {
-			txsSeenByPeers[transportName][dialAddr] = make(map[string]map[string]bool)
-			for stateURI, z := range y {
-				txsSeenByPeers[transportName][dialAddr][stateURI] = make(map[string]bool)
-				for txID, seen := range z {
-					txsSeenByPeers[transportName][dialAddr][stateURI][txID.Hex()] = seen
-				}
+	txsSeenByPeers := make(map[string]map[string]map[string]bool)
+	for deviceSpecificID, y := range s.data.TxsSeenByPeers {
+		txsSeenByPeers[deviceSpecificID] = make(map[string]map[string]bool)
+		for stateURI, z := range y {
+			txsSeenByPeers[deviceSpecificID][stateURI] = make(map[string]bool)
+			for txID, seen := range z {
+				txsSeenByPeers[deviceSpecificID][stateURI][txID.Hex()] = seen
 			}
 		}
 	}
@@ -120,78 +123,94 @@ func (s *store) saveData() error {
 }
 
 func (s *store) SubscribedStateURIs() utils.StringSet {
-	s.muData.RLock()
-	defer s.muData.RUnlock()
+	s.dataMu.RLock()
+	defer s.dataMu.RUnlock()
 	return s.data.SubscribedStateURIs.Copy()
 }
 
 func (s *store) AddSubscribedStateURI(stateURI string) error {
-	s.muData.Lock()
-	defer s.muData.Unlock()
+	func() {
+		s.subscribedStateURIListenersMu.RLock()
+		defer s.subscribedStateURIListenersMu.RUnlock()
+		for listener := range s.subscribedStateURIListeners {
+			listener.handler(stateURI)
+		}
+	}()
+
+	s.dataMu.Lock()
+	defer s.dataMu.Unlock()
 
 	s.data.SubscribedStateURIs.Add(stateURI)
 	return s.saveData()
 }
 
 func (s *store) RemoveSubscribedStateURI(stateURI string) error {
-	s.muData.Lock()
-	defer s.muData.Unlock()
+	s.dataMu.Lock()
+	defer s.dataMu.Unlock()
 
 	s.data.SubscribedStateURIs.Remove(stateURI)
 	return s.saveData()
 }
 
+func (s *store) OnNewSubscribedStateURI(handler func(stateURI string)) (unsubscribe func()) {
+	s.subscribedStateURIListenersMu.Lock()
+	defer s.subscribedStateURIListenersMu.Unlock()
+
+	listener := &subscribedStateURIListener{handler: handler}
+	s.subscribedStateURIListeners[listener] = struct{}{}
+
+	return func() {
+		s.subscribedStateURIListenersMu.Lock()
+		defer s.subscribedStateURIListenersMu.Unlock()
+		delete(s.subscribedStateURIListeners, listener)
+	}
+}
+
 func (s *store) MaxPeersPerSubscription() uint64 {
-	s.muData.RLock()
-	defer s.muData.RUnlock()
+	s.dataMu.RLock()
+	defer s.dataMu.RUnlock()
 	return s.data.MaxPeersPerSubscription
 }
 
 func (s *store) SetMaxPeersPerSubscription(max uint64) error {
-	s.muData.Lock()
-	defer s.muData.Unlock()
+	s.dataMu.Lock()
+	defer s.dataMu.Unlock()
 	s.data.MaxPeersPerSubscription = max
 	return s.saveData()
 }
 
-func (s *store) TxSeenByPeer(dialInfo swarm.PeerDialInfo, stateURI string, txID types.ID) bool {
-	if len(dialInfo.DialAddr) == 0 {
+func (s *store) TxSeenByPeer(deviceSpecificID, stateURI string, txID types.ID) bool {
+	if len(deviceSpecificID) == 0 {
 		return false
 	}
 
-	s.muData.RLock()
-	defer s.muData.RUnlock()
+	s.dataMu.RLock()
+	defer s.dataMu.RUnlock()
 
-	if _, exists := s.data.TxsSeenByPeers[dialInfo.TransportName]; !exists {
+	if _, exists := s.data.TxsSeenByPeers[deviceSpecificID]; !exists {
 		return false
 	}
-	if _, exists := s.data.TxsSeenByPeers[dialInfo.TransportName][dialInfo.DialAddr]; !exists {
+	if _, exists := s.data.TxsSeenByPeers[deviceSpecificID][stateURI]; !exists {
 		return false
 	}
-	if _, exists := s.data.TxsSeenByPeers[dialInfo.TransportName][dialInfo.DialAddr][stateURI]; !exists {
-		return false
-	}
-	return s.data.TxsSeenByPeers[dialInfo.TransportName][dialInfo.DialAddr][stateURI][txID]
+	return s.data.TxsSeenByPeers[deviceSpecificID][stateURI][txID]
 }
 
-func (s *store) MarkTxSeenByPeer(dialInfo swarm.PeerDialInfo, stateURI string, txID types.ID) error {
-	if len(dialInfo.DialAddr) == 0 {
+func (s *store) MarkTxSeenByPeer(deviceSpecificID, stateURI string, txID types.ID) error {
+	if len(deviceSpecificID) == 0 {
 		return nil
 	}
 
-	s.muData.Lock()
-	defer s.muData.Unlock()
+	s.dataMu.Lock()
+	defer s.dataMu.Unlock()
 
-	if _, exists := s.data.TxsSeenByPeers[dialInfo.TransportName]; !exists {
-		s.data.TxsSeenByPeers[dialInfo.TransportName] = make(map[string]map[string]map[types.ID]bool)
+	if _, exists := s.data.TxsSeenByPeers[deviceSpecificID]; !exists {
+		s.data.TxsSeenByPeers[deviceSpecificID] = make(map[string]map[types.ID]bool)
 	}
-	if _, exists := s.data.TxsSeenByPeers[dialInfo.TransportName][dialInfo.DialAddr]; !exists {
-		s.data.TxsSeenByPeers[dialInfo.TransportName][dialInfo.DialAddr] = make(map[string]map[types.ID]bool)
+	if _, exists := s.data.TxsSeenByPeers[deviceSpecificID][stateURI]; !exists {
+		s.data.TxsSeenByPeers[deviceSpecificID][stateURI] = make(map[types.ID]bool)
 	}
-	if _, exists := s.data.TxsSeenByPeers[dialInfo.TransportName][dialInfo.DialAddr][stateURI]; !exists {
-		s.data.TxsSeenByPeers[dialInfo.TransportName][dialInfo.DialAddr][stateURI] = make(map[types.ID]bool)
-	}
-	s.data.TxsSeenByPeers[dialInfo.TransportName][dialInfo.DialAddr][stateURI][txID] = true
+	s.data.TxsSeenByPeers[deviceSpecificID][stateURI][txID] = true
 
 	return s.saveData()
 }

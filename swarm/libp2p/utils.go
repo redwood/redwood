@@ -26,12 +26,6 @@ func cidForString(s string) (cid.Cid, error) {
 	return c, nil
 }
 
-var (
-	protoDNS4 = ma.ProtocolWithName("dns4")
-	protoIP4  = ma.ProtocolWithName("ip4")
-	protoIP6  = ma.ProtocolWithName("ip6")
-)
-
 func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *utils.SortedStringSet {
 	multiaddrs, err := peerstore.InfoToP2pAddrs(&pinfo)
 	if err != nil {
@@ -90,9 +84,9 @@ func addrInfosFromStrings(ss []string) (infos []corepeer.AddrInfo, err error) {
 }
 
 func cleanLibp2pAddr(addrStr string, peerID peer.ID) string {
-	if addrStr[:len("/p2p-circuit")] == "/p2p-circuit" {
-		return ""
-	}
+	// if addrStr[:len("/p2p-circuit")] == "/p2p-circuit" {
+	// 	return ""
+	// }
 
 	addrStr = strings.Replace(addrStr, "/ipfs/", "/p2p/", 1)
 
@@ -111,8 +105,8 @@ func cleanLibp2pAddrs(addrStrs utils.StringSet, peerID peer.ID) utils.StringSet 
 			//  continue
 			// } else if strings.Index(addrStr, "/ip4/127.0.0.1") == 0 {
 			//  continue
-		} else if addrStr[:len("/p2p-circuit")] == "/p2p-circuit" {
-			continue
+			// } else if addrStr[:len("/p2p-circuit")] == "/p2p-circuit" {
+			// 	continue
 		}
 
 		addrStr = strings.Replace(addrStr, "/ipfs/", "/p2p/", 1)

@@ -8,10 +8,9 @@ import (
 	"strings"
 
 	prototypes "github.com/gogo/protobuf/types"
-	proto "github.com/golang/protobuf/proto"
 
-	"redwood.dev/internal/pb"
 	"redwood.dev/state"
+	"redwood.dev/tree/pb"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
@@ -183,7 +182,7 @@ func (tx Tx) MarshalProto() ([]byte, error) {
 		recipients[i] = recipient.Bytes()
 	}
 
-	return proto.Marshal(&pb.Tx{
+	return (&pb.Tx{
 		Id:         tx.ID[:],
 		Parents:    parents,
 		Children:   children,
@@ -195,12 +194,12 @@ func (tx Tx) MarshalProto() ([]byte, error) {
 		Checkpoint: tx.Checkpoint,
 		Attachment: tx.Attachment,
 		Status:     string(tx.Status),
-	})
+	}).Marshal()
 }
 
 func (tx *Tx) UnmarshalProto(bs []byte) error {
 	var pbtx pb.Tx
-	err := proto.Unmarshal(bs, &pbtx)
+	err := pbtx.Unmarshal(bs)
 	if err != nil {
 		return err
 	}

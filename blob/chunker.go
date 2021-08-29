@@ -26,9 +26,9 @@ type Chunker struct {
 const (
 	KB          = 1024
 	WINDOW_SIZE = 2 * KB
-	MIN         = 2 * KB
-	AVG         = 16 * KB
-	MAX         = 20 * KB
+	MIN         = 128 * KB
+	AVG         = 256 * KB
+	MAX         = 512 * KB
 )
 
 func NewChunker(reader io.ReadCloser) *Chunker {
@@ -64,17 +64,16 @@ func (c *Chunker) Next() ([]byte, types.Hash, error) {
 		return nil, types.Hash{}, err
 	}
 
-	chunkHashBytes := chunkHasher.Sum(nil)
 	var chunkHash types.Hash
-	copy(chunkHash[:], chunkHashBytes)
+	chunkHasher.Sum(chunkHash[:0])
 	c.chunkHashes = append(c.chunkHashes, chunkHash)
 
 	return chunkBuf.Bytes(), chunkHash, nil
 }
 
 func (c *Chunker) Hashes() (sha1 types.Hash, sha3 types.Hash, chunkHashes []types.Hash) {
-	copy(sha1[:], c.sha1Hasher.Sum(nil))
-	copy(sha3[:], c.sha3Hasher.Sum(nil))
+	c.sha1Hasher.Sum(sha1[:0])
+	c.sha3Hasher.Sum(sha3[:0])
 	return sha1, sha3, c.chunkHashes
 }
 
