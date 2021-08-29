@@ -2,6 +2,7 @@ package protoblob
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -47,6 +48,9 @@ type blobProtocol struct {
 	blobStore   blob.Store
 	transports  map[string]BlobTransport
 	blobsNeeded *utils.Mailbox
+
+	blobsBeingFetched   map[blob.ID]struct{}
+	blobsBeingFetchedMu sync.Mutex
 }
 
 const (
@@ -61,11 +65,12 @@ func NewBlobProtocol(transports []swarm.Transport, blobStore blob.Store) *blobPr
 		}
 	}
 	return &blobProtocol{
-		Process:     *process.New(ProtocolName),
-		Logger:      log.NewLogger(ProtocolName),
-		blobStore:   blobStore,
-		transports:  transportsMap,
-		blobsNeeded: utils.NewMailbox(0),
+		Process:           *process.New(ProtocolName),
+		Logger:            log.NewLogger(ProtocolName),
+		blobStore:         blobStore,
+		transports:        transportsMap,
+		blobsNeeded:       utils.NewMailbox(0),
+		blobsBeingFetched: make(map[blob.ID]struct{}),
 	}
 }
 
@@ -168,6 +173,10 @@ func (bp *blobProtocol) periodicallyFetchMissingBlobs() {
 // @@TODO: maybe limit the number of blob fetchers that are active at any given time
 func (bp *blobProtocol) fetchBlobs(blobs []blob.ID) {
 	for _, blobID := range blobs {
+		if !bp.claimBlobForFetcher(blobID) {
+			continue
+		}
+
 		fetcher := newFetcher(blobID, 4, bp.blobStore, bp.ProvidersOfBlob)
 
 		err := bp.Process.SpawnChild(nil, fetcher)
@@ -175,7 +184,29 @@ func (bp *blobProtocol) fetchBlobs(blobs []blob.ID) {
 			bp.Errorf("error spawning blob fetcher (blobID: %v): %v", blobID, err)
 			return
 		}
+
+		blobID := blobID
+		go func() {
+			defer bp.unclaimBlobForFetcher(blobID)
+			<-fetcher.Done()
+		}()
 	}
+}
+
+func (bp *blobProtocol) claimBlobForFetcher(blobID blob.ID) bool {
+	bp.blobsBeingFetchedMu.Lock()
+	defer bp.blobsBeingFetchedMu.Unlock()
+	if _, exists := bp.blobsBeingFetched[blobID]; exists {
+		return false
+	}
+	bp.blobsBeingFetched[blobID] = struct{}{}
+	return true
+}
+
+func (bp *blobProtocol) unclaimBlobForFetcher(blobID blob.ID) {
+	bp.blobsBeingFetchedMu.Lock()
+	defer bp.blobsBeingFetchedMu.Unlock()
+	delete(bp.blobsBeingFetched, blobID)
 }
 
 func (bp *blobProtocol) announceBlobs(blobIDs []blob.ID) {
