@@ -168,7 +168,7 @@ func (peer *peerConn) FetchBlobManifest(blobID blob.ID) (blob.Manifest, error) {
 	}
 	defer peer.Close()
 
-	err = peer.writeProtobuf(pb.MsgFetchBlobManifest{Id: blobID.ToProtobuf()})
+	err = peer.writeProtobuf(pb.FetchBlobManifest{Id: blobID.ToProtobuf()})
 	if err != nil {
 		return blob.Manifest{}, err
 	}
@@ -178,7 +178,7 @@ func (peer *peerConn) FetchBlobManifest(blobID blob.ID) (blob.Manifest, error) {
 		return blob.Manifest{}, err
 	}
 
-	msg, is := proto.(*pb.MsgSendBlobManifest)
+	msg, is := proto.(*pb.SendBlobManifest)
 	if !is {
 		return blob.Manifest{}, swarm.ErrProtocol
 	} else if !msg.Exists {
@@ -196,7 +196,7 @@ func (p *peerConn) ReadBlobManifestRequest() (blob.ID, error) {
 	if err != nil {
 		return blob.ID{}, err
 	}
-	msg, is := proto.(*pb.MsgFetchBlobManifest)
+	msg, is := proto.(*pb.FetchBlobManifest)
 	if !is {
 		return blob.ID{}, swarm.ErrProtocol
 	}
@@ -206,9 +206,9 @@ func (p *peerConn) ReadBlobManifestRequest() (blob.ID, error) {
 func (peer *peerConn) SendBlobManifest(manifest blob.Manifest, exists bool) error {
 	defer peer.Close()
 	if exists {
-		return peer.writeProtobuf(pb.MsgSendBlobManifest{Manifest: manifest.ToProtobuf(), Exists: true})
+		return peer.writeProtobuf(pb.SendBlobManifest{Manifest: manifest.ToProtobuf(), Exists: true})
 	}
-	return peer.writeProtobuf(pb.MsgSendBlobManifest{Exists: false})
+	return peer.writeProtobuf(pb.SendBlobManifest{Exists: false})
 }
 
 func (peer *peerConn) FetchBlobChunk(sha3 types.Hash) ([]byte, error) {
@@ -218,7 +218,7 @@ func (peer *peerConn) FetchBlobChunk(sha3 types.Hash) ([]byte, error) {
 	}
 	defer peer.Close()
 
-	err = peer.writeProtobuf(pb.MsgFetchBlobChunk{Sha3: sha3.Bytes()})
+	err = peer.writeProtobuf(pb.FetchBlobChunk{Sha3: sha3.Bytes()})
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (peer *peerConn) FetchBlobChunk(sha3 types.Hash) ([]byte, error) {
 		return nil, err
 	}
 
-	msg, is := proto.(*pb.MsgSendBlobChunk)
+	msg, is := proto.(*pb.SendBlobChunk)
 	if !is {
 		return nil, swarm.ErrProtocol
 	} else if !msg.Exists {
@@ -242,7 +242,7 @@ func (peer *peerConn) ReadBlobChunkRequest() (sha3 types.Hash, err error) {
 	if err != nil {
 		return types.Hash{}, err
 	}
-	msg, is := proto.(*pb.MsgFetchBlobChunk)
+	msg, is := proto.(*pb.FetchBlobChunk)
 	if !is {
 		return types.Hash{}, swarm.ErrProtocol
 	}
@@ -251,13 +251,13 @@ func (peer *peerConn) ReadBlobChunkRequest() (sha3 types.Hash, err error) {
 
 func (peer *peerConn) SendBlobChunk(chunk []byte, exists bool) error {
 	if exists {
-		return peer.writeProtobuf(pb.MsgSendBlobChunk{Chunk: chunk, Exists: true})
+		return peer.writeProtobuf(pb.SendBlobChunk{Chunk: chunk, Exists: true})
 	}
-	return peer.writeProtobuf(pb.MsgSendBlobChunk{Exists: false})
+	return peer.writeProtobuf(pb.SendBlobChunk{Exists: false})
 }
 
 func (peer *peerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.PeerDialInfo) error {
-	err := peer.ensureStreamWithProtocol(context.Background(), PROTO_MAIN)
+	err := peer.ensureStreamWithProtocol(ctx, PROTO_MAIN)
 	if err != nil {
 		return err
 	}
@@ -301,19 +301,19 @@ func (peer *peerConn) readProtobuf() (_ interface{}, err error) {
 func (peer *peerConn) writeProtobuf(child interface{}) error {
 	var msg pb.Msg
 	switch child := child.(type) {
-	case pb.MsgFetchBlobManifest:
+	case pb.FetchBlobManifest:
 		msg.Msg = &pb.Msg_FetchBlobManifest{
 			FetchBlobManifest: &child,
 		}
-	case pb.MsgSendBlobManifest:
+	case pb.SendBlobManifest:
 		msg.Msg = &pb.Msg_SendBlobManifest{
 			SendBlobManifest: &child,
 		}
-	case pb.MsgFetchBlobChunk:
+	case pb.FetchBlobChunk:
 		msg.Msg = &pb.Msg_FetchBlobChunk{
 			FetchBlobChunk: &child,
 		}
-	case pb.MsgSendBlobChunk:
+	case pb.SendBlobChunk:
 		msg.Msg = &pb.Msg_SendBlobChunk{
 			SendBlobChunk: &child,
 		}

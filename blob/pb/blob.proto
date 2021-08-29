@@ -1,12 +1,23 @@
 syntax = "proto3";
 
 package Redwood.blob;
-
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-
 option go_package = "redwood.dev/blob/pb";
 
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "types/pb/types.proto";
+
+option (gogoproto.gostring_all) = true;
+option (gogoproto.equal_all) = true;
+option (gogoproto.verbose_equal_all) = true;
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.stringer_all) =  true;
+option (gogoproto.populate_all) = true;
+option (gogoproto.testgen_all) = true;
+option (gogoproto.benchgen_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
 
 message BlobID {
     Redwood.types.HashAlg hashAlg = 1;

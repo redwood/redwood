@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package Redwood.tree;
+option go_package = "redwood.dev/internal/pb";
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
+
+option (gogoproto.gostring_all) = true;
+option (gogoproto.equal_all) = true;
+option (gogoproto.verbose_equal_all) = true;
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.stringer_all) =  true;
+option (gogoproto.populate_all) = true;
+option (gogoproto.testgen_all) = true;
+option (gogoproto.benchgen_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+
+message Tx {
+    // See note on the Patch message
+    option (gogoproto.testgen) = false;
+
+    bytes id = 1;
+    repeated bytes parents = 2;
+    repeated bytes children = 3;
+    bytes from = 4;
+    bytes sig = 5;
+    string stateURI = 6;
+    repeated Patch patches = 7;
+    repeated bytes recipients = 8;
+    bool checkpoint = 9;
+    bytes attachment = 10;
+    string status = 11;
+    uint64 confidence = 12;
+}
+
+message Patch {
+    // For some reason, the generated JSON marshaler test fails due to the Any field
+    option (gogoproto.testgen) = false;
+
+    bytes keypath = 1;
+    Range range = 2;
+    google.protobuf.Any value = 3;
+}
+
+message Range {
+    int64 start = 1;
+    int64 end = 2;
+}

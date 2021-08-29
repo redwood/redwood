@@ -75,16 +75,16 @@ type isMsg_Msg interface {
 }
 
 type Msg_FetchBlobManifest struct {
-	FetchBlobManifest *MsgFetchBlobManifest `protobuf:"bytes,1,opt,name=fetchBlobManifest,proto3,oneof" json:"fetchBlobManifest,omitempty"`
+	FetchBlobManifest *FetchBlobManifest `protobuf:"bytes,1,opt,name=fetchBlobManifest,proto3,oneof" json:"fetchBlobManifest,omitempty"`
 }
 type Msg_SendBlobManifest struct {
-	SendBlobManifest *MsgSendBlobManifest `protobuf:"bytes,2,opt,name=sendBlobManifest,proto3,oneof" json:"sendBlobManifest,omitempty"`
+	SendBlobManifest *SendBlobManifest `protobuf:"bytes,2,opt,name=sendBlobManifest,proto3,oneof" json:"sendBlobManifest,omitempty"`
 }
 type Msg_FetchBlobChunk struct {
-	FetchBlobChunk *MsgFetchBlobChunk `protobuf:"bytes,3,opt,name=fetchBlobChunk,proto3,oneof" json:"fetchBlobChunk,omitempty"`
+	FetchBlobChunk *FetchBlobChunk `protobuf:"bytes,3,opt,name=fetchBlobChunk,proto3,oneof" json:"fetchBlobChunk,omitempty"`
 }
 type Msg_SendBlobChunk struct {
-	SendBlobChunk *MsgSendBlobChunk `protobuf:"bytes,4,opt,name=sendBlobChunk,proto3,oneof" json:"sendBlobChunk,omitempty"`
+	SendBlobChunk *SendBlobChunk `protobuf:"bytes,4,opt,name=sendBlobChunk,proto3,oneof" json:"sendBlobChunk,omitempty"`
 }
 
 func (*Msg_FetchBlobManifest) isMsg_Msg() {}
@@ -99,28 +99,28 @@ func (m *Msg) GetMsg() isMsg_Msg {
 	return nil
 }
 
-func (m *Msg) GetFetchBlobManifest() *MsgFetchBlobManifest {
+func (m *Msg) GetFetchBlobManifest() *FetchBlobManifest {
 	if x, ok := m.GetMsg().(*Msg_FetchBlobManifest); ok {
 		return x.FetchBlobManifest
 	}
 	return nil
 }
 
-func (m *Msg) GetSendBlobManifest() *MsgSendBlobManifest {
+func (m *Msg) GetSendBlobManifest() *SendBlobManifest {
 	if x, ok := m.GetMsg().(*Msg_SendBlobManifest); ok {
 		return x.SendBlobManifest
 	}
 	return nil
 }
 
-func (m *Msg) GetFetchBlobChunk() *MsgFetchBlobChunk {
+func (m *Msg) GetFetchBlobChunk() *FetchBlobChunk {
 	if x, ok := m.GetMsg().(*Msg_FetchBlobChunk); ok {
 		return x.FetchBlobChunk
 	}
 	return nil
 }
 
-func (m *Msg) GetSendBlobChunk() *MsgSendBlobChunk {
+func (m *Msg) GetSendBlobChunk() *SendBlobChunk {
 	if x, ok := m.GetMsg().(*Msg_SendBlobChunk); ok {
 		return x.SendBlobChunk
 	}
@@ -137,21 +137,21 @@ func (*Msg) XXX_OneofWrappers() []interface{} {
 	}
 }
 
-type MsgFetchBlobManifest struct {
+type FetchBlobManifest struct {
 	Id *pb.BlobID `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 }
 
-func (m *MsgFetchBlobManifest) Reset()      { *m = MsgFetchBlobManifest{} }
-func (*MsgFetchBlobManifest) ProtoMessage() {}
-func (*MsgFetchBlobManifest) Descriptor() ([]byte, []int) {
+func (m *FetchBlobManifest) Reset()      { *m = FetchBlobManifest{} }
+func (*FetchBlobManifest) ProtoMessage() {}
+func (*FetchBlobManifest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cad2813fa2bf04bd, []int{1}
 }
-func (m *MsgFetchBlobManifest) XXX_Unmarshal(b []byte) error {
+func (m *FetchBlobManifest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *MsgFetchBlobManifest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *FetchBlobManifest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_MsgFetchBlobManifest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_FetchBlobManifest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -161,41 +161,41 @@ func (m *MsgFetchBlobManifest) XXX_Marshal(b []byte, deterministic bool) ([]byte
 		return b[:n], nil
 	}
 }
-func (m *MsgFetchBlobManifest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MsgFetchBlobManifest.Merge(m, src)
+func (m *FetchBlobManifest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_FetchBlobManifest.Merge(m, src)
 }
-func (m *MsgFetchBlobManifest) XXX_Size() int {
+func (m *FetchBlobManifest) XXX_Size() int {
 	return m.Size()
 }
-func (m *MsgFetchBlobManifest) XXX_DiscardUnknown() {
-	xxx_messageInfo_MsgFetchBlobManifest.DiscardUnknown(m)
+func (m *FetchBlobManifest) XXX_DiscardUnknown() {
+	xxx_messageInfo_FetchBlobManifest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_MsgFetchBlobManifest proto.InternalMessageInfo
+var xxx_messageInfo_FetchBlobManifest proto.InternalMessageInfo
 
-func (m *MsgFetchBlobManifest) GetId() *pb.BlobID {
+func (m *FetchBlobManifest) GetId() *pb.BlobID {
 	if m != nil {
 		return m.Id
 	}
 	return nil
 }
 
-type MsgSendBlobManifest struct {
+type SendBlobManifest struct {
 	Manifest *pb.Manifest `protobuf:"bytes,1,opt,name=manifest,proto3" json:"manifest,omitempty"`
 	Exists   bool         `protobuf:"varint,2,opt,name=exists,proto3" json:"exists,omitempty"`
 }
 
-func (m *MsgSendBlobManifest) Reset()      { *m = MsgSendBlobManifest{} }
-func (*MsgSendBlobManifest) ProtoMessage() {}
-func (*MsgSendBlobManifest) Descriptor() ([]byte, []int) {
+func (m *SendBlobManifest) Reset()      { *m = SendBlobManifest{} }
+func (*SendBlobManifest) ProtoMessage() {}
+func (*SendBlobManifest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cad2813fa2bf04bd, []int{2}
 }
-func (m *MsgSendBlobManifest) XXX_Unmarshal(b []byte) error {
+func (m *SendBlobManifest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *MsgSendBlobManifest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *SendBlobManifest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_MsgSendBlobManifest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_SendBlobManifest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -205,47 +205,47 @@ func (m *MsgSendBlobManifest) XXX_Marshal(b []byte, deterministic bool) ([]byte,
 		return b[:n], nil
 	}
 }
-func (m *MsgSendBlobManifest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MsgSendBlobManifest.Merge(m, src)
+func (m *SendBlobManifest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SendBlobManifest.Merge(m, src)
 }
-func (m *MsgSendBlobManifest) XXX_Size() int {
+func (m *SendBlobManifest) XXX_Size() int {
 	return m.Size()
 }
-func (m *MsgSendBlobManifest) XXX_DiscardUnknown() {
-	xxx_messageInfo_MsgSendBlobManifest.DiscardUnknown(m)
+func (m *SendBlobManifest) XXX_DiscardUnknown() {
+	xxx_messageInfo_SendBlobManifest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_MsgSendBlobManifest proto.InternalMessageInfo
+var xxx_messageInfo_SendBlobManifest proto.InternalMessageInfo
 
-func (m *MsgSendBlobManifest) GetManifest() *pb.Manifest {
+func (m *SendBlobManifest) GetManifest() *pb.Manifest {
 	if m != nil {
 		return m.Manifest
 	}
 	return nil
 }
 
-func (m *MsgSendBlobManifest) GetExists() bool {
+func (m *SendBlobManifest) GetExists() bool {
 	if m != nil {
 		return m.Exists
 	}
 	return false
 }
 
-type MsgFetchBlobChunk struct {
+type FetchBlobChunk struct {
 	Sha3 []byte `protobuf:"bytes,1,opt,name=sha3,proto3" json:"sha3,omitempty"`
 }
 
-func (m *MsgFetchBlobChunk) Reset()      { *m = MsgFetchBlobChunk{} }
-func (*MsgFetchBlobChunk) ProtoMessage() {}
-func (*MsgFetchBlobChunk) Descriptor() ([]byte, []int) {
+func (m *FetchBlobChunk) Reset()      { *m = FetchBlobChunk{} }
+func (*FetchBlobChunk) ProtoMessage() {}
+func (*FetchBlobChunk) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cad2813fa2bf04bd, []int{3}
 }
-func (m *MsgFetchBlobChunk) XXX_Unmarshal(b []byte) error {
+func (m *FetchBlobChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *MsgFetchBlobChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *FetchBlobChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_MsgFetchBlobChunk.Marshal(b, m, deterministic)
+		return xxx_messageInfo_FetchBlobChunk.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -255,41 +255,41 @@ func (m *MsgFetchBlobChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 		return b[:n], nil
 	}
 }
-func (m *MsgFetchBlobChunk) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MsgFetchBlobChunk.Merge(m, src)
+func (m *FetchBlobChunk) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_FetchBlobChunk.Merge(m, src)
 }
-func (m *MsgFetchBlobChunk) XXX_Size() int {
+func (m *FetchBlobChunk) XXX_Size() int {
 	return m.Size()
 }
-func (m *MsgFetchBlobChunk) XXX_DiscardUnknown() {
-	xxx_messageInfo_MsgFetchBlobChunk.DiscardUnknown(m)
+func (m *FetchBlobChunk) XXX_DiscardUnknown() {
+	xxx_messageInfo_FetchBlobChunk.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_MsgFetchBlobChunk proto.InternalMessageInfo
+var xxx_messageInfo_FetchBlobChunk proto.InternalMessageInfo
 
-func (m *MsgFetchBlobChunk) GetSha3() []byte {
+func (m *FetchBlobChunk) GetSha3() []byte {
 	if m != nil {
 		return m.Sha3
 	}
 	return nil
 }
 
-type MsgSendBlobChunk struct {
+type SendBlobChunk struct {
 	Chunk  []byte `protobuf:"bytes,1,opt,name=chunk,proto3" json:"chunk,omitempty"`
 	Exists bool   `protobuf:"varint,2,opt,name=exists,proto3" json:"exists,omitempty"`
 }
 
-func (m *MsgSendBlobChunk) Reset()      { *m = MsgSendBlobChunk{} }
-func (*MsgSendBlobChunk) ProtoMessage() {}
-func (*MsgSendBlobChunk) Descriptor() ([]byte, []int) {
+func (m *SendBlobChunk) Reset()      { *m = SendBlobChunk{} }
+func (*SendBlobChunk) ProtoMessage() {}
+func (*SendBlobChunk) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cad2813fa2bf04bd, []int{4}
 }
-func (m *MsgSendBlobChunk) XXX_Unmarshal(b []byte) error {
+func (m *SendBlobChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *MsgSendBlobChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *SendBlobChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_MsgSendBlobChunk.Marshal(b, m, deterministic)
+		return xxx_messageInfo_SendBlobChunk.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -299,26 +299,26 @@ func (m *MsgSendBlobChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
-func (m *MsgSendBlobChunk) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MsgSendBlobChunk.Merge(m, src)
+func (m *SendBlobChunk) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SendBlobChunk.Merge(m, src)
 }
-func (m *MsgSendBlobChunk) XXX_Size() int {
+func (m *SendBlobChunk) XXX_Size() int {
 	return m.Size()
 }
-func (m *MsgSendBlobChunk) XXX_DiscardUnknown() {
-	xxx_messageInfo_MsgSendBlobChunk.DiscardUnknown(m)
+func (m *SendBlobChunk) XXX_DiscardUnknown() {
+	xxx_messageInfo_SendBlobChunk.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_MsgSendBlobChunk proto.InternalMessageInfo
+var xxx_messageInfo_SendBlobChunk proto.InternalMessageInfo
 
-func (m *MsgSendBlobChunk) GetChunk() []byte {
+func (m *SendBlobChunk) GetChunk() []byte {
 	if m != nil {
 		return m.Chunk
 	}
 	return nil
 }
 
-func (m *MsgSendBlobChunk) GetExists() bool {
+func (m *SendBlobChunk) GetExists() bool {
 	if m != nil {
 		return m.Exists
 	}
@@ -327,40 +327,40 @@ func (m *MsgSendBlobChunk) GetExists() bool {
 
 func init() {
 	proto.RegisterType((*Msg)(nil), "Redwood.swarm.libp2p.Msg")
-	proto.RegisterType((*MsgFetchBlobManifest)(nil), "Redwood.swarm.libp2p.MsgFetchBlobManifest")
-	proto.RegisterType((*MsgSendBlobManifest)(nil), "Redwood.swarm.libp2p.MsgSendBlobManifest")
-	proto.RegisterType((*MsgFetchBlobChunk)(nil), "Redwood.swarm.libp2p.MsgFetchBlobChunk")
-	proto.RegisterType((*MsgSendBlobChunk)(nil), "Redwood.swarm.libp2p.MsgSendBlobChunk")
+	proto.RegisterType((*FetchBlobManifest)(nil), "Redwood.swarm.libp2p.FetchBlobManifest")
+	proto.RegisterType((*SendBlobManifest)(nil), "Redwood.swarm.libp2p.SendBlobManifest")
+	proto.RegisterType((*FetchBlobChunk)(nil), "Redwood.swarm.libp2p.FetchBlobChunk")
+	proto.RegisterType((*SendBlobChunk)(nil), "Redwood.swarm.libp2p.SendBlobChunk")
 }
 
 func init() { proto.RegisterFile("libp2p.proto", fileDescriptor_cad2813fa2bf04bd) }
 
 var fileDescriptor_cad2813fa2bf04bd = []byte{
-	// 384 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x92, 0xcf, 0x4e, 0xf2, 0x40,
-	0x14, 0xc5, 0x67, 0xca, 0x9f, 0x90, 0xfb, 0xf1, 0x19, 0x18, 0x1b, 0x42, 0x34, 0x99, 0x98, 0xc6,
-	0x88, 0xba, 0x68, 0x13, 0xd8, 0xba, 0x30, 0x68, 0x0c, 0x2e, 0x30, 0x61, 0x5c, 0x98, 0xb0, 0x6b,
-	0x69, 0x81, 0x46, 0xa0, 0x0d, 0x53, 0xc5, 0xa5, 0x8f, 0xe0, 0x63, 0xf8, 0x28, 0x2e, 0x59, 0xb2,
-	0x94, 0xc1, 0x85, 0x4b, 0x1e, 0xc1, 0x30, 0x05, 0x92, 0x16, 0x08, 0xab, 0x76, 0xd2, 0x73, 0x7f,
-	0x67, 0xee, 0x39, 0x85, 0x6c, 0xcf, 0xb5, 0xfc, 0xb2, 0xaf, 0xfb, 0x43, 0x2f, 0xf0, 0x88, 0xca,
-	0x1c, 0x7b, 0xe4, 0x79, 0xb6, 0xce, 0x47, 0xe6, 0xb0, 0xaf, 0x87, 0xdf, 0x8e, 0x88, 0xd5, 0xf3,
-	0x2c, 0xc3, 0xb7, 0x8c, 0xc5, 0x33, 0x54, 0x6a, 0x3f, 0x0a, 0x24, 0xea, 0xbc, 0x43, 0x9a, 0x90,
-	0x6f, 0x3b, 0x41, 0xab, 0x5b, 0xed, 0x79, 0x56, 0xdd, 0x1c, 0xb8, 0x6d, 0x87, 0x07, 0x45, 0x7c,
-	0x82, 0xcf, 0xff, 0x95, 0x2f, 0xf5, 0x6d, 0x34, 0xbd, 0xce, 0x3b, 0x77, 0xf1, 0x89, 0x1a, 0x62,
-	0x9b, 0x18, 0xf2, 0x04, 0x39, 0xee, 0x0c, 0xec, 0x08, 0x5a, 0x91, 0xe8, 0x8b, 0x9d, 0xe8, 0xc7,
-	0xd8, 0x40, 0x0d, 0xb1, 0x0d, 0x08, 0x69, 0xc0, 0xc1, 0xda, 0xed, 0xa6, 0xfb, 0x32, 0x78, 0x2e,
-	0x26, 0x24, 0xb6, 0xb4, 0xff, 0xc6, 0x52, 0x5e, 0x43, 0x2c, 0x06, 0x20, 0x0f, 0xf0, 0x7f, 0x65,
-	0x13, 0x12, 0x93, 0x92, 0x78, 0xb6, 0xf7, 0xa2, 0x2b, 0x60, 0x74, 0xbc, 0x9a, 0x82, 0x44, 0x9f,
-	0x77, 0xb4, 0x2b, 0x50, 0xb7, 0xe5, 0x45, 0x4e, 0x41, 0x71, 0xed, 0x65, 0xce, 0xea, 0xda, 0x43,
-	0xf6, 0xb3, 0xd0, 0xdd, 0xdf, 0x32, 0xc5, 0xb5, 0x35, 0x13, 0x0e, 0xb7, 0x44, 0x42, 0xca, 0x90,
-	0xe9, 0x47, 0xab, 0x2a, 0x44, 0x11, 0x2b, 0x25, 0x5b, 0xeb, 0x48, 0x01, 0xd2, 0xce, 0x9b, 0xcb,
-	0x03, 0x2e, 0x1b, 0xc8, 0xb0, 0xe5, 0x49, 0x2b, 0x41, 0x7e, 0x23, 0x1e, 0x42, 0x20, 0xc9, 0xbb,
-	0x66, 0x45, 0xc2, 0xb3, 0x4c, 0xbe, 0x6b, 0xd7, 0x90, 0x8b, 0x6f, 0x4d, 0x54, 0x48, 0xb5, 0x64,
-	0x58, 0xa1, 0x30, 0x3c, 0xec, 0xb2, 0xaa, 0x36, 0xc6, 0x53, 0x8a, 0x26, 0x53, 0x8a, 0xe6, 0x53,
-	0x8a, 0xdf, 0x05, 0xc5, 0x9f, 0x82, 0xe2, 0x2f, 0x41, 0xf1, 0x58, 0x50, 0xfc, 0x2d, 0x28, 0xfe,
-	0x15, 0x14, 0xcd, 0x05, 0xc5, 0x1f, 0x33, 0x8a, 0xc6, 0x33, 0x8a, 0x26, 0x33, 0x8a, 0x9a, 0xc7,
-	0xc3, 0xe5, 0x66, 0xb6, 0xf3, 0x6a, 0xc8, 0x12, 0x8c, 0xb0, 0x04, 0xc3, 0xb7, 0xac, 0xb4, 0xfc,
-	0x99, 0x2b, 0x7f, 0x01, 0x00, 0x00, 0xff, 0xff, 0xeb, 0xa0, 0xd8, 0xe1, 0x06, 0x03, 0x00, 0x00,
+	// 380 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x92, 0x4f, 0x4b, 0x02, 0x41,
+	0x18, 0x87, 0x67, 0xd6, 0x3f, 0xc8, 0x9b, 0x8a, 0x0e, 0x22, 0x52, 0x30, 0xc4, 0x26, 0xd5, 0x69,
+	0x17, 0xf4, 0xd4, 0xa1, 0x8b, 0x45, 0x18, 0x61, 0xd0, 0x14, 0x04, 0x1d, 0x02, 0xc7, 0x5d, 0x75,
+	0x49, 0xdd, 0xc5, 0xd9, 0xb2, 0x63, 0x1f, 0xa1, 0x8f, 0xd1, 0x47, 0xe9, 0xe8, 0xd1, 0x63, 0x8e,
+	0x97, 0x8e, 0x7e, 0x84, 0x70, 0x56, 0x85, 0x5d, 0xad, 0x4e, 0xbb, 0xc3, 0xfe, 0xde, 0xe7, 0x9d,
+	0xf7, 0x79, 0x17, 0xd2, 0x3d, 0x87, 0x7b, 0x15, 0xcf, 0xf0, 0x86, 0xae, 0xef, 0x92, 0x02, 0xb3,
+	0xad, 0x91, 0xeb, 0x5a, 0x86, 0x18, 0x35, 0x87, 0x7d, 0x23, 0xf8, 0xb6, 0x4b, 0x78, 0xcf, 0xe5,
+	0xa6, 0xc7, 0xcd, 0xc5, 0x33, 0x48, 0xea, 0x13, 0x0d, 0x62, 0x0d, 0xd1, 0x21, 0xf7, 0x90, 0x6f,
+	0xdb, 0x7e, 0xab, 0x5b, 0xeb, 0xb9, 0xbc, 0xd1, 0x1c, 0x38, 0x6d, 0x5b, 0xf8, 0x25, 0xbc, 0x8f,
+	0x8f, 0x77, 0x2a, 0x47, 0xc6, 0x36, 0x9a, 0x71, 0x11, 0x8d, 0xd7, 0x11, 0xdb, 0x64, 0x90, 0x3b,
+	0xc8, 0x09, 0x7b, 0x60, 0x85, 0xb8, 0x9a, 0xe2, 0x1e, 0x6e, 0xe7, 0xde, 0x46, 0xd2, 0x75, 0xc4,
+	0x36, 0x08, 0xe4, 0x1a, 0xb2, 0xeb, 0x56, 0x67, 0xdd, 0xe7, 0xc1, 0x53, 0x29, 0xa6, 0x98, 0xe5,
+	0x7f, 0xee, 0xaa, 0xb2, 0x75, 0xc4, 0x22, 0xd5, 0xe4, 0x0a, 0x32, 0xab, 0x1e, 0x01, 0x2e, 0xae,
+	0x70, 0x07, 0x7f, 0x5f, 0x71, 0x45, 0x0b, 0xd7, 0xd6, 0x12, 0x10, 0xeb, 0x8b, 0x8e, 0x7e, 0x02,
+	0xf9, 0x0d, 0x47, 0xa4, 0x0c, 0x9a, 0x63, 0x2d, 0xc5, 0x16, 0xd6, 0x74, 0xb5, 0x90, 0x45, 0xee,
+	0xf2, 0x9c, 0x69, 0x8e, 0xa5, 0x3f, 0x42, 0x2e, 0xaa, 0x81, 0x54, 0x20, 0xd5, 0x0f, 0x2f, 0xa6,
+	0x18, 0xae, 0x5f, 0x25, 0xd9, 0x3a, 0x47, 0x8a, 0x90, 0xb4, 0x5f, 0x1d, 0xe1, 0x0b, 0xa5, 0x3c,
+	0xc5, 0x96, 0x27, 0xbd, 0x0c, 0xd9, 0xb0, 0x12, 0x42, 0x20, 0x2e, 0xba, 0xcd, 0xaa, 0x22, 0xa7,
+	0x99, 0x7a, 0xd7, 0x4f, 0x21, 0x13, 0x9a, 0x94, 0x14, 0x20, 0xd1, 0x52, 0x76, 0x82, 0x54, 0x70,
+	0xf8, 0xad, 0x49, 0xed, 0x66, 0x3c, 0xa5, 0x68, 0x32, 0xa5, 0x68, 0x3e, 0xa5, 0xf8, 0x4d, 0x52,
+	0xfc, 0x21, 0x29, 0xfe, 0x94, 0x14, 0x8f, 0x25, 0xc5, 0x5f, 0x92, 0xe2, 0x6f, 0x49, 0xd1, 0x5c,
+	0x52, 0xfc, 0x3e, 0xa3, 0x68, 0x3c, 0xa3, 0x68, 0x32, 0xa3, 0xe8, 0x61, 0x6f, 0xb8, 0x9c, 0xc9,
+	0xb2, 0x5f, 0x4c, 0x65, 0xdd, 0x0c, 0xac, 0x9b, 0x1e, 0xe7, 0x49, 0xf5, 0xd3, 0x56, 0x7f, 0x02,
+	0x00, 0x00, 0xff, 0xff, 0xef, 0x91, 0x6a, 0x72, 0xee, 0x02, 0x00, 0x00,
 }
 
 func (this *Msg) Equal(that interface{}) bool {
@@ -489,14 +489,14 @@ func (this *Msg_SendBlobChunk) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *MsgFetchBlobManifest) Equal(that interface{}) bool {
+func (this *FetchBlobManifest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*MsgFetchBlobManifest)
+	that1, ok := that.(*FetchBlobManifest)
 	if !ok {
-		that2, ok := that.(MsgFetchBlobManifest)
+		that2, ok := that.(FetchBlobManifest)
 		if ok {
 			that1 = &that2
 		} else {
@@ -513,14 +513,14 @@ func (this *MsgFetchBlobManifest) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *MsgSendBlobManifest) Equal(that interface{}) bool {
+func (this *SendBlobManifest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*MsgSendBlobManifest)
+	that1, ok := that.(*SendBlobManifest)
 	if !ok {
-		that2, ok := that.(MsgSendBlobManifest)
+		that2, ok := that.(SendBlobManifest)
 		if ok {
 			that1 = &that2
 		} else {
@@ -540,14 +540,14 @@ func (this *MsgSendBlobManifest) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *MsgFetchBlobChunk) Equal(that interface{}) bool {
+func (this *FetchBlobChunk) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*MsgFetchBlobChunk)
+	that1, ok := that.(*FetchBlobChunk)
 	if !ok {
-		that2, ok := that.(MsgFetchBlobChunk)
+		that2, ok := that.(FetchBlobChunk)
 		if ok {
 			that1 = &that2
 		} else {
@@ -564,14 +564,14 @@ func (this *MsgFetchBlobChunk) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *MsgSendBlobChunk) Equal(that interface{}) bool {
+func (this *SendBlobChunk) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*MsgSendBlobChunk)
+	that1, ok := that.(*SendBlobChunk)
 	if !ok {
-		that2, ok := that.(MsgSendBlobChunk)
+		that2, ok := that.(SendBlobChunk)
 		if ok {
 			that1 = &that2
 		} else {
@@ -635,24 +635,24 @@ func (this *Msg_SendBlobChunk) GoString() string {
 		`SendBlobChunk:` + fmt.Sprintf("%#v", this.SendBlobChunk) + `}`}, ", ")
 	return s
 }
-func (this *MsgFetchBlobManifest) GoString() string {
+func (this *FetchBlobManifest) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 5)
-	s = append(s, "&pb.MsgFetchBlobManifest{")
+	s = append(s, "&pb.FetchBlobManifest{")
 	if this.Id != nil {
 		s = append(s, "Id: "+fmt.Sprintf("%#v", this.Id)+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *MsgSendBlobManifest) GoString() string {
+func (this *SendBlobManifest) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 6)
-	s = append(s, "&pb.MsgSendBlobManifest{")
+	s = append(s, "&pb.SendBlobManifest{")
 	if this.Manifest != nil {
 		s = append(s, "Manifest: "+fmt.Sprintf("%#v", this.Manifest)+",\n")
 	}
@@ -660,22 +660,22 @@ func (this *MsgSendBlobManifest) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *MsgFetchBlobChunk) GoString() string {
+func (this *FetchBlobChunk) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 5)
-	s = append(s, "&pb.MsgFetchBlobChunk{")
+	s = append(s, "&pb.FetchBlobChunk{")
 	s = append(s, "Sha3: "+fmt.Sprintf("%#v", this.Sha3)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *MsgSendBlobChunk) GoString() string {
+func (this *SendBlobChunk) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 6)
-	s = append(s, "&pb.MsgSendBlobChunk{")
+	s = append(s, "&pb.SendBlobChunk{")
 	s = append(s, "Chunk: "+fmt.Sprintf("%#v", this.Chunk)+",\n")
 	s = append(s, "Exists: "+fmt.Sprintf("%#v", this.Exists)+",\n")
 	s = append(s, "}")
@@ -805,7 +805,7 @@ func (m *Msg_SendBlobChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	}
 	return len(dAtA) - i, nil
 }
-func (m *MsgFetchBlobManifest) Marshal() (dAtA []byte, err error) {
+func (m *FetchBlobManifest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -815,12 +815,12 @@ func (m *MsgFetchBlobManifest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *MsgFetchBlobManifest) MarshalTo(dAtA []byte) (int, error) {
+func (m *FetchBlobManifest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *MsgFetchBlobManifest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *FetchBlobManifest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -840,7 +840,7 @@ func (m *MsgFetchBlobManifest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *MsgSendBlobManifest) Marshal() (dAtA []byte, err error) {
+func (m *SendBlobManifest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -850,12 +850,12 @@ func (m *MsgSendBlobManifest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *MsgSendBlobManifest) MarshalTo(dAtA []byte) (int, error) {
+func (m *SendBlobManifest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *MsgSendBlobManifest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *SendBlobManifest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -885,7 +885,7 @@ func (m *MsgSendBlobManifest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *MsgFetchBlobChunk) Marshal() (dAtA []byte, err error) {
+func (m *FetchBlobChunk) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -895,12 +895,12 @@ func (m *MsgFetchBlobChunk) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *MsgFetchBlobChunk) MarshalTo(dAtA []byte) (int, error) {
+func (m *FetchBlobChunk) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *MsgFetchBlobChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *FetchBlobChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -915,7 +915,7 @@ func (m *MsgFetchBlobChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *MsgSendBlobChunk) Marshal() (dAtA []byte, err error) {
+func (m *SendBlobChunk) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -925,12 +925,12 @@ func (m *MsgSendBlobChunk) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *MsgSendBlobChunk) MarshalTo(dAtA []byte) (int, error) {
+func (m *SendBlobChunk) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *MsgSendBlobChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *SendBlobChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1026,7 +1026,7 @@ func (m *Msg_SendBlobChunk) Size() (n int) {
 	}
 	return n
 }
-func (m *MsgFetchBlobManifest) Size() (n int) {
+func (m *FetchBlobManifest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1039,7 +1039,7 @@ func (m *MsgFetchBlobManifest) Size() (n int) {
 	return n
 }
 
-func (m *MsgSendBlobManifest) Size() (n int) {
+func (m *SendBlobManifest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1055,7 +1055,7 @@ func (m *MsgSendBlobManifest) Size() (n int) {
 	return n
 }
 
-func (m *MsgFetchBlobChunk) Size() (n int) {
+func (m *FetchBlobChunk) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1068,7 +1068,7 @@ func (m *MsgFetchBlobChunk) Size() (n int) {
 	return n
 }
 
-func (m *MsgSendBlobChunk) Size() (n int) {
+func (m *SendBlobChunk) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1105,7 +1105,7 @@ func (this *Msg_FetchBlobManifest) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Msg_FetchBlobManifest{`,
-		`FetchBlobManifest:` + strings.Replace(fmt.Sprintf("%v", this.FetchBlobManifest), "MsgFetchBlobManifest", "MsgFetchBlobManifest", 1) + `,`,
+		`FetchBlobManifest:` + strings.Replace(fmt.Sprintf("%v", this.FetchBlobManifest), "FetchBlobManifest", "FetchBlobManifest", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1115,7 +1115,7 @@ func (this *Msg_SendBlobManifest) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Msg_SendBlobManifest{`,
-		`SendBlobManifest:` + strings.Replace(fmt.Sprintf("%v", this.SendBlobManifest), "MsgSendBlobManifest", "MsgSendBlobManifest", 1) + `,`,
+		`SendBlobManifest:` + strings.Replace(fmt.Sprintf("%v", this.SendBlobManifest), "SendBlobManifest", "SendBlobManifest", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1125,7 +1125,7 @@ func (this *Msg_FetchBlobChunk) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Msg_FetchBlobChunk{`,
-		`FetchBlobChunk:` + strings.Replace(fmt.Sprintf("%v", this.FetchBlobChunk), "MsgFetchBlobChunk", "MsgFetchBlobChunk", 1) + `,`,
+		`FetchBlobChunk:` + strings.Replace(fmt.Sprintf("%v", this.FetchBlobChunk), "FetchBlobChunk", "FetchBlobChunk", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1135,47 +1135,47 @@ func (this *Msg_SendBlobChunk) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Msg_SendBlobChunk{`,
-		`SendBlobChunk:` + strings.Replace(fmt.Sprintf("%v", this.SendBlobChunk), "MsgSendBlobChunk", "MsgSendBlobChunk", 1) + `,`,
+		`SendBlobChunk:` + strings.Replace(fmt.Sprintf("%v", this.SendBlobChunk), "SendBlobChunk", "SendBlobChunk", 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *MsgFetchBlobManifest) String() string {
+func (this *FetchBlobManifest) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&MsgFetchBlobManifest{`,
+	s := strings.Join([]string{`&FetchBlobManifest{`,
 		`Id:` + strings.Replace(fmt.Sprintf("%v", this.Id), "BlobID", "pb.BlobID", 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *MsgSendBlobManifest) String() string {
+func (this *SendBlobManifest) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&MsgSendBlobManifest{`,
+	s := strings.Join([]string{`&SendBlobManifest{`,
 		`Manifest:` + strings.Replace(fmt.Sprintf("%v", this.Manifest), "Manifest", "pb.Manifest", 1) + `,`,
 		`Exists:` + fmt.Sprintf("%v", this.Exists) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *MsgFetchBlobChunk) String() string {
+func (this *FetchBlobChunk) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&MsgFetchBlobChunk{`,
+	s := strings.Join([]string{`&FetchBlobChunk{`,
 		`Sha3:` + fmt.Sprintf("%v", this.Sha3) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *MsgSendBlobChunk) String() string {
+func (this *SendBlobChunk) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&MsgSendBlobChunk{`,
+	s := strings.Join([]string{`&SendBlobChunk{`,
 		`Chunk:` + fmt.Sprintf("%v", this.Chunk) + `,`,
 		`Exists:` + fmt.Sprintf("%v", this.Exists) + `,`,
 		`}`,
@@ -1248,7 +1248,7 @@ func (m *Msg) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &MsgFetchBlobManifest{}
+			v := &FetchBlobManifest{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1283,7 +1283,7 @@ func (m *Msg) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &MsgSendBlobManifest{}
+			v := &SendBlobManifest{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1318,7 +1318,7 @@ func (m *Msg) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &MsgFetchBlobChunk{}
+			v := &FetchBlobChunk{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1353,7 +1353,7 @@ func (m *Msg) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &MsgSendBlobChunk{}
+			v := &SendBlobChunk{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1380,7 +1380,7 @@ func (m *Msg) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *MsgFetchBlobManifest) Unmarshal(dAtA []byte) error {
+func (m *FetchBlobManifest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1403,10 +1403,10 @@ func (m *MsgFetchBlobManifest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: MsgFetchBlobManifest: wiretype end group for non-group")
+			return fmt.Errorf("proto: FetchBlobManifest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MsgFetchBlobManifest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: FetchBlobManifest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1466,7 +1466,7 @@ func (m *MsgFetchBlobManifest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *MsgSendBlobManifest) Unmarshal(dAtA []byte) error {
+func (m *SendBlobManifest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1489,10 +1489,10 @@ func (m *MsgSendBlobManifest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: MsgSendBlobManifest: wiretype end group for non-group")
+			return fmt.Errorf("proto: SendBlobManifest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MsgSendBlobManifest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: SendBlobManifest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1572,7 +1572,7 @@ func (m *MsgSendBlobManifest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *MsgFetchBlobChunk) Unmarshal(dAtA []byte) error {
+func (m *FetchBlobChunk) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1595,10 +1595,10 @@ func (m *MsgFetchBlobChunk) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: MsgFetchBlobChunk: wiretype end group for non-group")
+			return fmt.Errorf("proto: FetchBlobChunk: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MsgFetchBlobChunk: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: FetchBlobChunk: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1656,7 +1656,7 @@ func (m *MsgFetchBlobChunk) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *MsgSendBlobChunk) Unmarshal(dAtA []byte) error {
+func (m *SendBlobChunk) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1679,10 +1679,10 @@ func (m *MsgSendBlobChunk) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: MsgSendBlobChunk: wiretype end group for non-group")
+			return fmt.Errorf("proto: SendBlobChunk: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MsgSendBlobChunk: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: SendBlobChunk: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:

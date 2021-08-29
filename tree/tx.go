@@ -9,8 +9,8 @@ import (
 
 	prototypes "github.com/gogo/protobuf/types"
 
-	"redwood.dev/internal/pb"
 	"redwood.dev/state"
+	"redwood.dev/tree/pb"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
