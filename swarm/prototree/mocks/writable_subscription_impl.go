@@ -10,6 +10,8 @@ import (
 
 	state "redwood.dev/state"
 
+	swarm "redwood.dev/swarm"
+
 	tree "redwood.dev/tree"
 
 	types "redwood.dev/types"
@@ -23,6 +25,11 @@ type WritableSubscriptionImpl struct {
 // Autoclose provides a mock function with given fields:
 func (_m *WritableSubscriptionImpl) Autoclose() {
 	_m.Called()
+}
+
+// AutocloseWithCleanup provides a mock function with given fields: closeFn
+func (_m *WritableSubscriptionImpl) AutocloseWithCleanup(closeFn func()) {
+	_m.Called(closeFn)
 }
 
 // Close provides a mock function with given fields:
@@ -55,6 +62,20 @@ func (_m *WritableSubscriptionImpl) Ctx() context.Context {
 	return r0
 }
 
+// DialInfo provides a mock function with given fields:
+func (_m *WritableSubscriptionImpl) DialInfo() swarm.PeerDialInfo {
+	ret := _m.Called()
+
+	var r0 swarm.PeerDialInfo
+	if rf, ok := ret.Get(0).(func() swarm.PeerDialInfo); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(swarm.PeerDialInfo)
+	}
+
+	return r0
+}
+
 // Done provides a mock function with given fields:
 func (_m *WritableSubscriptionImpl) Done() <-chan struct{} {
 	ret := _m.Called()
@@ -71,13 +92,13 @@ func (_m *WritableSubscriptionImpl) Done() <-chan struct{} {
 	return r0
 }
 
-// Go provides a mock function with given fields: name, fn
-func (_m *WritableSubscriptionImpl) Go(name string, fn func(context.Context)) <-chan struct{} {
-	ret := _m.Called(name, fn)
+// Go provides a mock function with given fields: ctx, name, fn
+func (_m *WritableSubscriptionImpl) Go(ctx context.Context, name string, fn func(context.Context)) <-chan struct{} {
+	ret := _m.Called(ctx, name, fn)
 
 	var r0 <-chan struct{}
-	if rf, ok := ret.Get(0).(func(string, func(context.Context)) <-chan struct{}); ok {
-		r0 = rf(name, fn)
+	if rf, ok := ret.Get(0).(func(context.Context, string, func(context.Context)) <-chan struct{}); ok {
+		r0 = rf(ctx, name, fn)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(<-chan struct{})

@@ -47,24 +47,24 @@ func TestBaseBlobTransport_BlobChunkRequest(t *testing.T) {
 	var transport protoblob.BaseBlobTransport
 
 	expectedPeerConn := new(mocks.BlobPeerConn)
-	expectedBlobID := blob.ID{HashAlg: types.SHA3}
+	expectedSHA3 := types.HashBytes([]byte("foo bar baz"))
 
 	callback1 := testutils.NewAwaiter()
 	callback2 := testutils.NewAwaiter()
 
-	transport.OnBlobChunkRequest(func(blobID blob.ID, peerConn protoblob.BlobPeerConn) {
-		require.Equal(t, expectedBlobID, blobID)
+	transport.OnBlobChunkRequest(func(sha3 types.Hash, peerConn protoblob.BlobPeerConn) {
+		require.Equal(t, expectedSHA3, sha3)
 		require.Equal(t, expectedPeerConn, peerConn)
 		callback1.ItHappened()
 	})
 
-	transport.OnBlobChunkRequest(func(blobID blob.ID, peerConn protoblob.BlobPeerConn) {
-		require.Equal(t, expectedBlobID, blobID)
+	transport.OnBlobChunkRequest(func(sha3 types.Hash, peerConn protoblob.BlobPeerConn) {
+		require.Equal(t, expectedSHA3, sha3)
 		require.Equal(t, expectedPeerConn, peerConn)
 		callback2.ItHappened()
 	})
 
-	transport.HandleBlobChunkRequest(expectedBlobID, expectedPeerConn)
+	transport.HandleBlobChunkRequest(expectedSHA3, expectedPeerConn)
 	callback1.AwaitOrFail(t, 1*time.Second)
 	callback2.AwaitOrFail(t, 1*time.Second)
 }

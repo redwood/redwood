@@ -23,6 +23,11 @@ func (_m *AuthProtocol) Autoclose() {
 	_m.Called()
 }
 
+// AutocloseWithCleanup provides a mock function with given fields: closeFn
+func (_m *AuthProtocol) AutocloseWithCleanup(closeFn func()) {
+	_m.Called(closeFn)
+}
+
 // ChallengePeerIdentity provides a mock function with given fields: ctx, peerConn
 func (_m *AuthProtocol) ChallengePeerIdentity(ctx context.Context, peerConn protoauth.AuthPeerConn) error {
 	ret := _m.Called(ctx, peerConn)
@@ -83,13 +88,13 @@ func (_m *AuthProtocol) Done() <-chan struct{} {
 	return r0
 }
 
-// Go provides a mock function with given fields: name, fn
-func (_m *AuthProtocol) Go(name string, fn func(context.Context)) <-chan struct{} {
-	ret := _m.Called(name, fn)
+// Go provides a mock function with given fields: ctx, name, fn
+func (_m *AuthProtocol) Go(ctx context.Context, name string, fn func(context.Context)) <-chan struct{} {
+	ret := _m.Called(ctx, name, fn)
 
 	var r0 <-chan struct{}
-	if rf, ok := ret.Get(0).(func(string, func(context.Context)) <-chan struct{}); ok {
-		r0 = rf(name, fn)
+	if rf, ok := ret.Get(0).(func(context.Context, string, func(context.Context)) <-chan struct{}); ok {
+		r0 = rf(ctx, name, fn)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(<-chan struct{})

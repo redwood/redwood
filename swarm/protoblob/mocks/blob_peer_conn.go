@@ -11,8 +11,6 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
-	protoblob "redwood.dev/swarm/protoblob"
-
 	swarm "redwood.dev/swarm"
 
 	time "time"
@@ -132,18 +130,48 @@ func (_m *BlobPeerConn) Failures() uint64 {
 	return r0
 }
 
-// FetchBlob provides a mock function with given fields: blobID
-func (_m *BlobPeerConn) FetchBlob(blobID blob.ID) error {
-	ret := _m.Called(blobID)
+// FetchBlobChunk provides a mock function with given fields: sha3
+func (_m *BlobPeerConn) FetchBlobChunk(sha3 types.Hash) ([]byte, error) {
+	ret := _m.Called(sha3)
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(blob.ID) error); ok {
-		r0 = rf(blobID)
+	var r0 []byte
+	if rf, ok := ret.Get(0).(func(types.Hash) []byte); ok {
+		r0 = rf(sha3)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]byte)
+		}
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func(types.Hash) error); ok {
+		r1 = rf(sha3)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// FetchBlobManifest provides a mock function with given fields: blobID
+func (_m *BlobPeerConn) FetchBlobManifest(blobID blob.ID) (blob.Manifest, error) {
+	ret := _m.Called(blobID)
+
+	var r0 blob.Manifest
+	if rf, ok := ret.Get(0).(func(blob.ID) blob.Manifest); ok {
+		r0 = rf(blobID)
+	} else {
+		r0 = ret.Get(0).(blob.Manifest)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(blob.ID) error); ok {
+		r1 = rf(blobID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // LastContact provides a mock function with given fields:
@@ -199,6 +227,50 @@ func (_m *BlobPeerConn) PublicKeys(addr types.Address) (crypto.SigningPublicKey,
 	return r0, r1
 }
 
+// ReadBlobChunkRequest provides a mock function with given fields:
+func (_m *BlobPeerConn) ReadBlobChunkRequest() (types.Hash, error) {
+	ret := _m.Called()
+
+	var r0 types.Hash
+	if rf, ok := ret.Get(0).(func() types.Hash); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(types.Hash)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// ReadBlobManifestRequest provides a mock function with given fields:
+func (_m *BlobPeerConn) ReadBlobManifestRequest() (blob.ID, error) {
+	ret := _m.Called()
+
+	var r0 blob.ID
+	if rf, ok := ret.Get(0).(func() blob.ID); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(blob.ID)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Ready provides a mock function with given fields:
 func (_m *BlobPeerConn) Ready() bool {
 	ret := _m.Called()
@@ -211,48 +283,6 @@ func (_m *BlobPeerConn) Ready() bool {
 	}
 
 	return r0
-}
-
-// ReceiveBlobHeader provides a mock function with given fields:
-func (_m *BlobPeerConn) ReceiveBlobHeader() (protoblob.FetchBlobResponseHeader, error) {
-	ret := _m.Called()
-
-	var r0 protoblob.FetchBlobResponseHeader
-	if rf, ok := ret.Get(0).(func() protoblob.FetchBlobResponseHeader); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(protoblob.FetchBlobResponseHeader)
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// ReceiveBlobPacket provides a mock function with given fields:
-func (_m *BlobPeerConn) ReceiveBlobPacket() (protoblob.FetchBlobResponseBody, error) {
-	ret := _m.Called()
-
-	var r0 protoblob.FetchBlobResponseBody
-	if rf, ok := ret.Get(0).(func() protoblob.FetchBlobResponseBody); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(protoblob.FetchBlobResponseBody)
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
 }
 
 // RemainingBackoff provides a mock function with given fields:
@@ -274,13 +304,13 @@ func (_m *BlobPeerConn) RemoveStateURI(stateURI string) {
 	_m.Called(stateURI)
 }
 
-// SendBlobHeader provides a mock function with given fields: haveBlob
-func (_m *BlobPeerConn) SendBlobHeader(haveBlob bool) error {
-	ret := _m.Called(haveBlob)
+// SendBlobChunk provides a mock function with given fields: chunk, exists
+func (_m *BlobPeerConn) SendBlobChunk(chunk []byte, exists bool) error {
+	ret := _m.Called(chunk, exists)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(bool) error); ok {
-		r0 = rf(haveBlob)
+	if rf, ok := ret.Get(0).(func([]byte, bool) error); ok {
+		r0 = rf(chunk, exists)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -288,13 +318,13 @@ func (_m *BlobPeerConn) SendBlobHeader(haveBlob bool) error {
 	return r0
 }
 
-// SendBlobPacket provides a mock function with given fields: data, end
-func (_m *BlobPeerConn) SendBlobPacket(data []byte, end bool) error {
-	ret := _m.Called(data, end)
+// SendBlobManifest provides a mock function with given fields: m, exists
+func (_m *BlobPeerConn) SendBlobManifest(m blob.Manifest, exists bool) error {
+	ret := _m.Called(m, exists)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func([]byte, bool) error); ok {
-		r0 = rf(data, end)
+	if rf, ok := ret.Get(0).(func(blob.Manifest, bool) error); ok {
+		r0 = rf(m, exists)
 	} else {
 		r0 = ret.Error(0)
 	}

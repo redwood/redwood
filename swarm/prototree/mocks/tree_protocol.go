@@ -25,6 +25,11 @@ func (_m *TreeProtocol) Autoclose() {
 	_m.Called()
 }
 
+// AutocloseWithCleanup provides a mock function with given fields: closeFn
+func (_m *TreeProtocol) AutocloseWithCleanup(closeFn func()) {
+	_m.Called(closeFn)
+}
+
 // Close provides a mock function with given fields:
 func (_m *TreeProtocol) Close() error {
 	ret := _m.Called()
@@ -71,13 +76,13 @@ func (_m *TreeProtocol) Done() <-chan struct{} {
 	return r0
 }
 
-// Go provides a mock function with given fields: name, fn
-func (_m *TreeProtocol) Go(name string, fn func(context.Context)) <-chan struct{} {
-	ret := _m.Called(name, fn)
+// Go provides a mock function with given fields: ctx, name, fn
+func (_m *TreeProtocol) Go(ctx context.Context, name string, fn func(context.Context)) <-chan struct{} {
+	ret := _m.Called(ctx, name, fn)
 
 	var r0 <-chan struct{}
-	if rf, ok := ret.Get(0).(func(string, func(context.Context)) <-chan struct{}); ok {
-		r0 = rf(name, fn)
+	if rf, ok := ret.Get(0).(func(context.Context, string, func(context.Context)) <-chan struct{}); ok {
+		r0 = rf(ctx, name, fn)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(<-chan struct{})
