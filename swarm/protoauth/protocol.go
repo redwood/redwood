@@ -90,7 +90,9 @@ func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.
 	ch := make(chan AuthPeerConn)
 
 	child := ap.Process.NewChild(ctx, "PeersClaimingAddress "+address.String())
-	defer child.Autoclose()
+	defer child.AutocloseWithCleanup(func() {
+		close(ch)
+	})
 
 	for _, tpt := range ap.transports {
 		innerCh, err := tpt.PeersClaimingAddress(ctx, address)
@@ -117,12 +119,6 @@ func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.
 			}
 		})
 	}
-
-	ap.Process.Go(nil, "PeersClaimingAddress "+address.String()+" (await completion)", func(ctx context.Context) {
-		<-child.Done()
-		close(ch)
-	})
-
 	return ch
 }
 

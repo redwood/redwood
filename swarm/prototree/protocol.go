@@ -199,7 +199,9 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 	}
 
 	child := tp.Process.NewChild(ctx, "ProvidersOfStateURI "+stateURI)
-	defer child.Autoclose()
+	defer child.AutocloseWithCleanup(func() {
+		close(ch)
+	})
 
 	var alreadySent sync.Map
 
@@ -266,11 +268,6 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 			}
 		})
 	}
-
-	tp.Process.Go(nil, "ProvidersOfStateURI "+stateURI+" (await completion)", func(ctx context.Context) {
-		<-child.Done()
-		close(ch)
-	})
 
 	return ch
 }
@@ -556,7 +553,7 @@ func (tp *treeProtocol) handleNewState(tx *tree.Tx, node state.Node, leaves []ty
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 	child := tp.Process.NewChild(ctx, "handleNewState")
-	defer child.Autoclose()
+	defer child.AutocloseWithCleanup(cancel)
 
 	var alreadySentPeers sync.Map
 
@@ -566,11 +563,6 @@ func (tp *treeProtocol) handleNewState(tx *tree.Tx, node state.Node, leaves []ty
 	child.Go(nil, "broadcastToPrivateRecipients", func(ctx context.Context) {
 		tp.broadcastToPrivateRecipients(ctx, tx, leaves, &alreadySentPeers, child)
 	})
-
-	go func() {
-		<-child.Done()
-		cancel()
-	}()
 
 	tp.broadcastTxsToStateURIProvidersTask.addTx(tx)
 }

@@ -119,7 +119,9 @@ func (sub *httpWritableSubscription) Start() error {
 	if err != nil {
 		return err
 	}
-	defer sub.Process.Autoclose()
+	defer sub.Process.AutocloseWithCleanup(func() {
+		sub.peerConn.Close()
+	})
 
 	// Listen to the closing of the http connection via the CloseNotifier
 	notify := sub.peerConn.stream.Writer.(http.CloseNotifier).CloseNotify()

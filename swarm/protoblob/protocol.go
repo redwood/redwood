@@ -97,7 +97,9 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 	ch := make(chan BlobPeerConn)
 
 	child := bp.Process.NewChild(ctx, "ProvidersOfBlob "+blobID.String())
-	defer child.Autoclose()
+	defer child.AutocloseWithCleanup(func() {
+		close(ch)
+	})
 
 	for _, tpt := range bp.transports {
 		innerCh, err := tpt.ProvidersOfBlob(ctx, blobID)
@@ -125,12 +127,6 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 			}
 		})
 	}
-
-	bp.Process.Go(nil, "ProvidersOfBlob "+blobID.String()+" (await completion)", func(ctx context.Context) {
-		<-child.Done()
-		close(ch)
-	})
-
 	return ch
 }
 
@@ -214,6 +210,7 @@ func (bp *blobProtocol) announceBlobs(blobIDs []blob.ID) {
 	defer cancel()
 
 	child := bp.Process.NewChild(ctx, "announceBlobs")
+	defer child.Autoclose()
 
 	for _, transport := range bp.transports {
 		for _, blobID := range blobIDs {
@@ -230,7 +227,6 @@ func (bp *blobProtocol) announceBlobs(blobIDs []blob.ID) {
 			})
 		}
 	}
-	child.Autoclose()
 	<-child.Done()
 }
 
