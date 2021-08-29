@@ -120,7 +120,7 @@ func (tp *treeProtocol) Start() error {
 		tpt.OnWritableSubscriptionOpened(tp.handleWritableSubscriptionOpened)
 	}
 
-	tp.Process.Go("initial subscribe", func(ctx context.Context) {
+	tp.Process.Go(nil, "initial subscribe", func(ctx context.Context) {
 		for _, stateURI := range tp.store.SubscribedStateURIs().Slice() {
 			tp.Infof(0, "subscribing to %v", stateURI)
 			sub, err := tp.Subscribe(ctx, stateURI, SubscriptionType_Txs, nil, nil)
@@ -203,7 +203,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 
 	var alreadySent sync.Map
 
-	child.Go("from PeerStore", func(ctx context.Context) {
+	child.Go(nil, "from PeerStore", func(ctx context.Context) {
 		for _, peerDetails := range tp.peerStore.PeersServingStateURI(stateURI) {
 			dialInfo := peerDetails.DialInfo()
 			tpt, exists := tp.transports[dialInfo.TransportName]
@@ -241,7 +241,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 			continue
 		}
 
-		child.Go(tpt.Name(), func(ctx context.Context) {
+		child.Go(nil, tpt.Name(), func(ctx context.Context) {
 			for {
 				select {
 				case <-ctx.Done():
@@ -267,7 +267,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 		})
 	}
 
-	tp.Process.Go("ProvidersOfStateURI "+stateURI+" (await completion)", func(ctx context.Context) {
+	tp.Process.Go(nil, "ProvidersOfStateURI "+stateURI+" (await completion)", func(ctx context.Context) {
 		<-child.Done()
 		close(ch)
 	})
@@ -395,7 +395,7 @@ func (tp *treeProtocol) handleWritableSubscriptionOpened(
 		tp.writableSubscriptions[stateURI][writeSub] = struct{}{}
 	}()
 
-	tp.Process.Go("await close "+writeSub.String(), func(ctx context.Context) {
+	tp.Process.Go(nil, "await close "+writeSub.String(), func(ctx context.Context) {
 		select {
 		case <-writeSub.Done():
 		case <-ctx.Done():
@@ -535,7 +535,7 @@ func (tp *treeProtocol) handleNewState(tx *tree.Tx, node state.Node, leaves []ty
 	// If this is the genesis tx of a private state URI, ensure that we subscribe to that state URI
 	// @@TODO: allow blacklisting of senders
 	if tx.IsPrivate() && tx.ID == tree.GenesisTxID && !tp.store.SubscribedStateURIs().Contains(tx.StateURI) {
-		tp.Process.Go("auto-subscribe", func(ctx context.Context) {
+		tp.Process.Go(nil, "auto-subscribe", func(ctx context.Context) {
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
 
@@ -560,10 +560,10 @@ func (tp *treeProtocol) handleNewState(tx *tree.Tx, node state.Node, leaves []ty
 
 	var alreadySentPeers sync.Map
 
-	child.Go("broadcastToWritableSubscribers", func(ctx context.Context) {
+	child.Go(nil, "broadcastToWritableSubscribers", func(ctx context.Context) {
 		tp.broadcastToWritableSubscribers(ctx, tx, node, leaves, &alreadySentPeers, child)
 	})
-	child.Go("broadcastToPrivateRecipients", func(ctx context.Context) {
+	child.Go(nil, "broadcastToPrivateRecipients", func(ctx context.Context) {
 		tp.broadcastToPrivateRecipients(ctx, tx, leaves, &alreadySentPeers, child)
 	})
 
@@ -618,7 +618,7 @@ func (tp *treeProtocol) broadcastToPrivateRecipients(
 				continue
 			}
 
-			child.Go("broadcastToPeerConn "+peer.DialInfo().String(), func(ctx context.Context) {
+			child.Go(nil, "broadcastToPeerConn "+peer.DialInfo().String(), func(ctx context.Context) {
 				tp.broadcastToPeerConn(ctx, tx, nil, leaves, peer, alreadySentPeers)
 			})
 		}
@@ -678,7 +678,7 @@ func (tp *treeProtocol) broadcastToWritableSubscribers(
 
 		writeSub := writeSub
 
-		child.Go("broadcastToWritableSubscriber "+writeSub.String(), func(ctx context.Context) {
+		child.Go(nil, "broadcastToWritableSubscriber "+writeSub.String(), func(ctx context.Context) {
 			tp.broadcastToWritableSubscriber(tx, state, leaves, writeSub)
 		})
 	}
@@ -785,7 +785,7 @@ func (t *broadcastTxsToStateURIProvidersTask) broadcastTxsToStateURIProviders(ct
 			txs := txs
 			peerDetails := peerDetails
 
-			t.Process.Go(peerDetails.DialInfo().String(), func(ctx context.Context) {
+			t.Process.Go(nil, peerDetails.DialInfo().String(), func(ctx context.Context) {
 				tpt, exists := t.transports[peerDetails.DialInfo().TransportName]
 				if !exists {
 					return

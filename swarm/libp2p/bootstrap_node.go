@@ -169,7 +169,7 @@ func (bn *bootstrapNode) Start() error {
 	routingDiscovery := discovery.NewRoutingDiscovery(bn.dht)
 	discovery.Advertise(bn.Process.Ctx(), routingDiscovery, "redwood")
 
-	bn.Process.Go("find peers", func(ctx context.Context) {
+	bn.Process.Go(nil, "find peers", func(ctx context.Context) {
 		chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
 		if err != nil {
 			bn.Errorf("error finding peers: %v", err)
@@ -177,7 +177,7 @@ func (bn *bootstrapNode) Start() error {
 		}
 		for pinfo := range chPeers {
 			pinfo := pinfo
-			bn.Process.Go(fmt.Sprintf("connect to %v", pinfo.ID.Pretty()), func(ctx context.Context) {
+			bn.Process.Go(nil, fmt.Sprintf("connect to %v", pinfo.ID.Pretty()), func(ctx context.Context) {
 				if pinfo.ID == bn.peerID {
 					return
 				}

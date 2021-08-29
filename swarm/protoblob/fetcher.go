@@ -52,14 +52,19 @@ func (f *fetcher) Start() error {
 	if err != nil {
 		return err
 	}
-	defer f.Process.Autoclose()
+	defer f.Process.AutocloseWithCleanup(func() {
+		err := f.blobStore.VerifyBlobOrPrune(f.blobID)
+		if err != nil {
+			f.Errorf("while verifying blob %v: %v", f.blobID, err)
+		}
+	})
 
 	err = f.startPeerPool()
 	if err != nil {
 		return err
 	}
 
-	f.Process.Go("runloop", func(ctx context.Context) {
+	f.Process.Go(nil, "runloop", func(ctx context.Context) {
 		defer f.peerPool.Close()
 
 		manifest, err := f.fetchManifest(ctx)
@@ -68,7 +73,7 @@ func (f *fetcher) Start() error {
 			return
 		}
 
-		err = f.startWorkPool(ctx, manifest.ChunkSHA3s)
+		err = f.startWorkPool(manifest.ChunkSHA3s)
 		if err != nil {
 			f.Errorf("while starting work pool: %v", err)
 			return
@@ -98,20 +103,20 @@ func (f *fetcher) startPeerPool() error {
 			select {
 			case <-ctx.Done():
 				return nil, nil
-			case <-f.Process.Done():
+			case <-f.peerPool.Done():
 				return nil, nil
 			case <-time.After(restartSearchBackoff.Next()):
 			}
 			chBlobPeers := f.searchForPeers(ctx, f.blobID)
-			return convertBlobPeerChan(ctx, chBlobPeers), nil // Can't wait for generics
+			return f.convertBlobPeerChan(ctx, chBlobPeers), nil // Can't wait for generics
 		},
 	)
 	return f.Process.SpawnChild(nil, f.peerPool)
 }
 
-func (f *fetcher) fetchManifest(ctx context.Context) (blob.Manifest, error) {
+func (f *fetcher) fetchManifest(ctx context.Context) (_ blob.Manifest, err error) {
 	manifest, err := f.blobStore.Manifest(f.blobID)
-	if err != nil && errors.Cause(err) == types.Err404 {
+	if err != nil && errors.Cause(err) != types.Err404 {
 		return blob.Manifest{}, err
 	} else if err == nil {
 		return manifest, nil
@@ -134,9 +139,11 @@ func (f *fetcher) fetchManifest(ctx context.Context) (blob.Manifest, error) {
 
 		manifest, err := blobPeer.FetchBlobManifest(f.blobID)
 		if err != nil {
+			f.peerPool.ReturnPeer(blobPeer, false)
 			f.Errorf("error getting peer from pool: %v", err)
 			continue
 		}
+		f.peerPool.ReturnPeer(blobPeer, false)
 
 		err = f.blobStore.StoreManifest(blob.ID{HashAlg: types.SHA3, Hash: f.blobID.Hash}, manifest)
 		if err != nil {
@@ -148,7 +155,7 @@ func (f *fetcher) fetchManifest(ctx context.Context) (blob.Manifest, error) {
 	}
 }
 
-func (f *fetcher) startWorkPool(ctx context.Context, chunkSHA3s []types.Hash) error {
+func (f *fetcher) startWorkPool(chunkSHA3s []types.Hash) error {
 	var jobs []interface{}
 	for _, chunkSHA3 := range chunkSHA3s {
 		have, err := f.blobStore.HaveChunk(chunkSHA3)
@@ -161,10 +168,13 @@ func (f *fetcher) startWorkPool(ctx context.Context, chunkSHA3s []types.Hash) er
 	}
 
 	f.workPool = swarm.NewWorkPool(jobs)
-	return f.Process.SpawnChild(ctx, f.workPool)
+	return f.Process.SpawnChild(nil, f.workPool)
 }
 
 func (f *fetcher) fetchChunks(ctx context.Context) error {
+	ctx, cancel := utils.CombinedContext(ctx, f.workPool.Done())
+	defer cancel()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -175,14 +185,16 @@ func (f *fetcher) fetchChunks(ctx context.Context) error {
 		}
 
 		blobPeer, err := f.getPeer(ctx)
-		if err != nil {
+		if errors.Cause(err) == context.Canceled {
+			return err
+		} else if err != nil {
 			f.Errorf("error getting peer from pool: %v", err)
 			time.Sleep(f.getPeerBackoff.Next())
 			continue
 		}
 		f.getPeerBackoff.Reset()
 
-		f.Process.Go("readUntilErrorOrShutdown "+blobPeer.DialInfo().String(), func(ctx context.Context) {
+		f.Process.Go(nil, "readUntilErrorOrShutdown "+blobPeer.DialInfo().String(), func(ctx context.Context) {
 			defer f.peerPool.ReturnPeer(blobPeer, false)
 
 			err := f.readUntilErrorOrShutdown(ctx, blobPeer)
@@ -223,12 +235,14 @@ func (f *fetcher) readUntilErrorOrShutdown(ctx context.Context, peer BlobPeerCon
 
 	for {
 		select {
-		case <-f.Process.Done():
+		case <-ctx.Done():
 			return types.ErrClosed
+		case <-f.workPool.Done():
+			return nil
 		default:
 		}
 
-		x, ok := f.workPool.NextJob()
+		x, i, ok := f.workPool.NextJob()
 		if !ok {
 			return nil
 		}
@@ -248,26 +262,35 @@ func (f *fetcher) readUntilErrorOrShutdown(ctx context.Context, peer BlobPeerCon
 			f.workPool.ReturnFailedJob(sha3)
 			return errors.Wrapf(err, "while storing chunk %v", sha3)
 		}
-		f.Debugf("fetched chunk %v for blob %v", sha3, f.blobID)
+		f.Debugf("fetched chunk %v (%v/%v) for blob %v", sha3, i, f.workPool.NumJobs(), f.blobID)
 		f.workPool.MarkJobComplete()
+
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
 	}
 }
 
-func convertBlobPeerChan(ctx context.Context, ch <-chan BlobPeerConn) <-chan swarm.PeerConn {
+func (f *fetcher) convertBlobPeerChan(ctx context.Context, ch <-chan BlobPeerConn) <-chan swarm.PeerConn {
 	chPeer := make(chan swarm.PeerConn)
 	go func() {
 		defer close(chPeer)
 		for {
 			select {
+			case <-f.Process.Done():
+				return
 			case <-ctx.Done():
 				return
-
 			case peer, open := <-ch:
 				if !open {
 					return
 				}
 
 				select {
+				case <-f.Process.Done():
+					return
 				case <-ctx.Done():
 					return
 				case chPeer <- peer:

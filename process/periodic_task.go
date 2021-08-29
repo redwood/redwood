@@ -29,7 +29,7 @@ func (task *PeriodicTask) Start() error {
 		return err
 	}
 
-	task.Process.Go("ticker", func(ctx context.Context) {
+	task.Process.Go(nil, "ticker", func(ctx context.Context) {
 		ticker := time.NewTicker(task.interval)
 		defer ticker.Stop()
 

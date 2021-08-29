@@ -60,6 +60,13 @@ func (s *badgerStore) Close() {
 }
 
 func (s *badgerStore) BlobReader(blobID ID) (io.ReadCloser, int64, error) {
+	have, err := s.HaveBlob(blobID)
+	if err != nil {
+		return nil, 0, err
+	} else if !have {
+		return nil, 0, errors.WithStack(types.Err404)
+	}
+
 	sha3, err := s.sha3ForBlobID(blobID)
 	if err != nil {
 		return nil, 0, err

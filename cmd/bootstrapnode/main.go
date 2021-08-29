@@ -132,7 +132,7 @@ func main() {
 					bn.Close()
 				}()
 
-				bn.Process.Go("repl (await termination)", func(ctx context.Context) {
+				bn.Process.Go(nil, "repl (await termination)", func(ctx context.Context) {
 					<-ctx.Done()
 					err := os.Stdin.Close()
 					if err != nil {

@@ -16,9 +16,9 @@ func TestProcess(t *testing.T) {
 		p := process.New("")
 		p.Start()
 
-		p.Go("foo", func(ctx context.Context) { time.Sleep(1 * time.Second) })
-		p.Go("bar", func(ctx context.Context) { time.Sleep(1 * time.Second) })
-		p.Go("baz", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		p.Go(nil, "foo", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		p.Go(nil, "bar", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		p.Go(nil, "baz", func(ctx context.Context) { time.Sleep(1 * time.Second) })
 
 		p.Autoclose()
 
@@ -34,9 +34,9 @@ func TestProcess(t *testing.T) {
 
 		p.Start()
 
-		p.Go("foo", func(ctx context.Context) { time.Sleep(1 * time.Second) })
-		p.Go("bar", func(ctx context.Context) { time.Sleep(1 * time.Second) })
-		p.Go("baz", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		p.Go(nil, "foo", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		p.Go(nil, "bar", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		p.Go(nil, "baz", func(ctx context.Context) { time.Sleep(1 * time.Second) })
 
 		select {
 		case <-time.After(5 * time.Second):
@@ -60,9 +60,9 @@ func TestProcess(t *testing.T) {
 
 		child := p.NewChild(context.Background(), "child")
 
-		child.Go("foo", func(ctx context.Context) { time.Sleep(1 * time.Second) })
-		child.Go("bar", func(ctx context.Context) { time.Sleep(1 * time.Second) })
-		child.Go("baz", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		child.Go(nil, "foo", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		child.Go(nil, "bar", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		child.Go(nil, "baz", func(ctx context.Context) { time.Sleep(1 * time.Second) })
 
 		child.Autoclose()
 
@@ -80,9 +80,9 @@ func TestProcess(t *testing.T) {
 
 		child := p.NewChild(context.Background(), "child")
 
-		child.Go("foo", func(ctx context.Context) { time.Sleep(1 * time.Second) })
-		child.Go("bar", func(ctx context.Context) { time.Sleep(1 * time.Second) })
-		child.Go("baz", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		child.Go(nil, "foo", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		child.Go(nil, "bar", func(ctx context.Context) { time.Sleep(1 * time.Second) })
+		child.Go(nil, "baz", func(ctx context.Context) { time.Sleep(1 * time.Second) })
 
 		select {
 		case <-time.After(5 * time.Second):
@@ -108,7 +108,7 @@ func TestProcess(t *testing.T) {
 		canceled1 := testutils.NewAwaiter()
 		canceled2 := testutils.NewAwaiter()
 
-		chDone1 := p.Go("foo", func(ctx context.Context) {
+		chDone1 := p.Go(nil, "foo", func(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				canceled1.ItHappened()
@@ -117,7 +117,7 @@ func TestProcess(t *testing.T) {
 			}
 		})
 
-		chDone2 := child.Go("foo", func(ctx context.Context) {
+		chDone2 := child.Go(nil, "foo", func(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				canceled2.ItHappened()

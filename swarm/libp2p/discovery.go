@@ -43,7 +43,7 @@ package libp2p
 // 		routingDiscovery := discovery.NewRoutingDiscovery(d.ContentRouter)
 // 		discovery.Advertise(d.Process.Ctx(), routingDiscovery, d.RoutingDiscoveryKey)
 
-// 		d.Process.Go("find peers", func(ctx context.Context) {
+// 		d.Process.Go(nil, "find peers", func(ctx context.Context) {
 // 			chPeers, err := routingDiscovery.FindPeers(ctx, d.RoutingDiscoveryKey)
 // 			if err != nil {
 // 				d.Errorf("error finding peers: %v", err)

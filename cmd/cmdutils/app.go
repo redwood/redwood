@@ -276,7 +276,7 @@ func (app *App) Start() error {
 
 	for _, bootstrapPeer := range cfg.BootstrapPeers {
 		bootstrapPeer := bootstrapPeer
-		_ = app.Process.Go("", func(ctx context.Context) {
+		_ = app.Process.Go(nil, "", func(ctx context.Context) {
 			app.Infof(0, "adding bootstrap peer %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
 			for _, dialAddr := range bootstrapPeer.DialAddresses {
 				app.PeerStore.AddDialInfos([]swarm.PeerDialInfo{{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr}})
@@ -302,7 +302,7 @@ func (app *App) Start() error {
 			app.Process.Close()
 		}()
 
-		app.Process.Go("repl (await termination)", func(ctx context.Context) {
+		app.Process.Go(nil, "repl (await termination)", func(ctx context.Context) {
 			<-ctx.Done()
 			err := os.Stdin.Close()
 			if err != nil {
@@ -311,7 +311,7 @@ func (app *App) Start() error {
 		})
 
 	case ModeTermUI:
-		app.Process.Go("termui", func(ctx context.Context) {
+		app.Process.Go(nil, "termui", func(ctx context.Context) {
 			for {
 				select {
 				case <-time.After(3 * time.Second):

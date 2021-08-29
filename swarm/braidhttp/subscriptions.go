@@ -123,7 +123,7 @@ func (sub *httpWritableSubscription) Start() error {
 
 	// Listen to the closing of the http connection via the CloseNotifier
 	notify := sub.peerConn.stream.Writer.(http.CloseNotifier).CloseNotify()
-	sub.Process.Go("", func(ctx context.Context) {
+	sub.Process.Go(nil, "", func(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 		case <-notify:
@@ -278,7 +278,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 		// Say hello
 		sub.write(websocket.PingMessage, nil)
 
-		sub.Process.Go("write", func(ctx context.Context) {
+		sub.Process.Go(nil, "write", func(ctx context.Context) {
 			defer ticker.Stop()
 			defer sub.Close()
 
@@ -299,7 +299,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 			}
 		})
 
-		sub.Process.Go("read", func(ctx context.Context) {
+		sub.Process.Go(nil, "read", func(ctx context.Context) {
 			defer sub.Close()
 
 			for {

@@ -50,7 +50,7 @@ func (m *mempool) Start() error {
 		return err
 	}
 
-	m.Process.Go("mempool", func(ctx context.Context) {
+	m.Process.Go(nil, "mempool", func(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():

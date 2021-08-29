@@ -234,7 +234,7 @@ func (t *transport) Start() error {
 	routingDiscovery := discovery.NewRoutingDiscovery(t.dht)
 	discovery.Advertise(t.Process.Ctx(), routingDiscovery, "redwood")
 
-	t.Process.Go("find peers", func(ctx context.Context) {
+	t.Process.Go(nil, "find peers", func(ctx context.Context) {
 		chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
 		if err != nil {
 			t.Errorf("error finding peers: %v", err)
@@ -865,7 +865,7 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 	for iter.Rewind(); iter.Valid(); iter.Next() {
 		sha1, sha3 := iter.Current()
 
-		chDone := t.Process.Go(sha1.String(), func(ctx context.Context) {
+		chDone := t.Process.Go(nil, sha1.String(), func(ctx context.Context) {
 			err := t.transport.AnnounceBlob(ctx, sha1)
 			if err != nil {
 				t.Errorf("announce: error: %v", err)
@@ -873,7 +873,7 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 		})
 		chDones = append(chDones, chDone)
 
-		chDone = t.Process.Go(sha3.String(), func(ctx context.Context) {
+		chDone = t.Process.Go(nil, sha3.String(), func(ctx context.Context) {
 			err := t.transport.AnnounceBlob(ctx, sha3)
 			if err != nil {
 				t.Errorf("announce: error: %v", err)
@@ -919,7 +919,7 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 	for _, stateURI := range stateURIs {
 		stateURI := stateURI
 
-		chDone := t.Process.Go(stateURI, func(ctx context.Context) {
+		chDone := t.Process.Go(nil, stateURI, func(ctx context.Context) {
 			c, err := cidForString("serve:" + stateURI)
 			if err != nil {
 				t.Errorf("announce: error creating cid: %v", err)
@@ -972,7 +972,7 @@ func (t *announceIdentitiesTask) announceIdentities(ctx context.Context) {
 	for _, identity := range identities {
 		identity := identity
 
-		chDone := t.Process.Go("identity "+identity.SigKeypair.Address().Hex(), func(ctx context.Context) {
+		chDone := t.Process.Go(nil, "identity "+identity.SigKeypair.Address().Hex(), func(ctx context.Context) {
 			c, err := cidForString("addr:" + identity.Address().String())
 			if err != nil {
 				t.Errorf("announce: error creating cid: %v", err)
@@ -1020,7 +1020,7 @@ func (t *connectToStaticRelaysTask) connectToStaticRelays(ctx context.Context) {
 		}
 
 		relay := relay
-		chDone := t.Process.Go("relay "+relay.ID.Pretty(), func(ctx context.Context) {
+		chDone := t.Process.Go(nil, "relay "+relay.ID.Pretty(), func(ctx context.Context) {
 			err := t.libp2pHost.Connect(ctx, relay)
 			if err != nil {
 				t.Errorf("error connecting to static relay (%v): %v", relay.ID, err)

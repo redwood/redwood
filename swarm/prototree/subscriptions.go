@@ -85,7 +85,7 @@ func (sub *writableSubscription) Start() error {
 		return err
 	}
 
-	sub.Process.Go("runloop", func(ctx context.Context) {
+	sub.Process.Go(nil, "runloop", func(ctx context.Context) {
 		for {
 			select {
 			case <-sub.subImpl.Done():
@@ -215,7 +215,7 @@ func (s *multiReaderSubscription) Start() error {
 		return err
 	}
 
-	s.Process.Go("runloop", func(ctx context.Context) {
+	s.Process.Go(nil, "runloop", func(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
@@ -231,7 +231,7 @@ func (s *multiReaderSubscription) Start() error {
 			}
 			getPeerBackoff.Reset()
 
-			s.Process.Go("readUntilErrorOrShutdown "+treePeer.DialInfo().String(), func(ctx context.Context) {
+			s.Process.Go(nil, "readUntilErrorOrShutdown "+treePeer.DialInfo().String(), func(ctx context.Context) {
 				defer s.peerPool.ReturnPeer(treePeer, false)
 				s.readUntilErrorOrShutdown(ctx, treePeer)
 			})
@@ -421,7 +421,7 @@ func (sub *stateURISubscription) Start() error {
 		sub.mailbox.Deliver(stateURI)
 	}
 
-	sub.Process.Go("runloop", func(ctx context.Context) {
+	sub.Process.Go(nil, "runloop", func(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():

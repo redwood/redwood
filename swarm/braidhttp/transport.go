@@ -177,7 +177,7 @@ func (t *transport) Start() error {
 		)
 	}
 
-	t.Process.Go("http server", func(ctx context.Context) {
+	t.Process.Go(nil, "http server", func(ctx context.Context) {
 		if !t.devMode {
 			t.srv = &http.Server{
 				Addr:    t.listenAddr,
@@ -974,7 +974,7 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, sessionI
 	////////////////////////////////
 
 	peer := t.makePeerConn(w, nil, "", sessionID, address)
-	t.Process.Go("HandleTxReceived", func(ctx context.Context) {
+	t.Process.Go(nil, "HandleTxReceived", func(ctx context.Context) {
 		t.HandleTxReceived(tx, peer)
 	})
 }
@@ -1001,7 +1001,7 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_
 	}
 
 	ch := make(chan prototree.TreePeerConn)
-	t.Process.Go("ProvidersOfStateURI", func(ctx context.Context) {
+	t.Process.Go(nil, "ProvidersOfStateURI", func(ctx context.Context) {
 		defer close(ch)
 		for _, providerURL := range providers {
 			if providerURL == t.ownURL {

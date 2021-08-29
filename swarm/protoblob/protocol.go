@@ -97,11 +97,11 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 	for _, tpt := range bp.transports {
 		innerCh, err := tpt.ProvidersOfBlob(ctx, blobID)
 		if err != nil {
-			bp.Warnf("transport %v could not fetch providers of blob %v", tpt.Name(), blobID)
+			// bp.Warnf("transport %v could not fetch providers of blob %v", tpt.Name(), blobID)
 			continue
 		}
 
-		child.Go(tpt.Name(), func(ctx context.Context) {
+		child.Go(nil, tpt.Name(), func(ctx context.Context) {
 			for {
 				select {
 				case <-ctx.Done():
@@ -121,7 +121,7 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 		})
 	}
 
-	bp.Process.Go("ProvidersOfBlob "+blobID.String()+" (await completion)", func(ctx context.Context) {
+	bp.Process.Go(nil, "ProvidersOfBlob "+blobID.String()+" (await completion)", func(ctx context.Context) {
 		<-child.Done()
 		close(ch)
 	})
@@ -130,7 +130,7 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 }
 
 func (bp *blobProtocol) periodicallyFetchMissingBlobs() {
-	bp.Process.Go("periodicallyFetchMissingBlobs", func(ctx context.Context) {
+	bp.Process.Go(nil, "periodicallyFetchMissingBlobs", func(ctx context.Context) {
 		// ticker := utils.NewExponentialBackoffTicker(10*time.Second, 2*time.Minute) // @@TODO: configurable?
 		ticker := time.NewTicker(10 * time.Second)
 		// ticker.Start()
@@ -189,7 +189,7 @@ func (bp *blobProtocol) announceBlobs(blobIDs []blob.ID) {
 			transport := transport
 			blobID := blobID
 
-			child.Go(blobID.String(), func(ctx context.Context) {
+			child.Go(nil, blobID.String(), func(ctx context.Context) {
 				err := transport.AnnounceBlob(ctx, blobID)
 				if errors.Cause(err) == types.ErrUnimplemented {
 					return

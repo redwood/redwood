@@ -72,9 +72,9 @@ func NewPeerPool(concurrentConns uint64, fnGetPeers func(ctx context.Context) (<
 
 func (p *peerPool) Start() error {
 	p.Process.Start()
-	p.Process.Go("fillPool", p.fillPool)
-	p.Process.Go("deliverAvailablePeers", p.deliverAvailablePeers)
-	p.Process.Go("handlePeersInTimeout", p.handlePeersInTimeout)
+	p.Process.Go(nil, "fillPool", p.fillPool)
+	p.Process.Go(nil, "deliverAvailablePeers", p.deliverAvailablePeers)
+	p.Process.Go(nil, "handlePeersInTimeout", p.handlePeersInTimeout)
 	return nil
 }
 
@@ -84,6 +84,8 @@ func (p *peerPool) Start() error {
 func (p *peerPool) fillPool(ctx context.Context) {
 	for {
 		select {
+		case <-p.Process.Done():
+			return
 		case <-ctx.Done():
 			return
 		case peer, open := <-p.chProviders:
@@ -117,9 +119,10 @@ func (p *peerPool) restartSearch(ctx context.Context) {
 func (p *peerPool) deliverAvailablePeers(ctx context.Context) {
 	for {
 		select {
+		case <-p.Process.Done():
+			return
 		case <-ctx.Done():
 			return
-
 		case <-p.peersAvailable.Notify():
 			for _, x := range p.peersAvailable.RetrieveAll() {
 				peer := x.(PeerConn)
@@ -137,6 +140,8 @@ func (p *peerPool) handlePeersInTimeout(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	for {
 		select {
+		case <-p.Process.Done():
+			return
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
@@ -154,7 +159,7 @@ func (p *peerPool) handlePeersInTimeout(ctx context.Context) {
 }
 
 func (p *peerPool) GetPeer(ctx context.Context) (_ PeerConn, err error) {
-	ctx, cancel := utils.CombinedContext(ctx, p.Ctx())
+	ctx, cancel := utils.CombinedContext(ctx, p.Process.Ctx())
 	defer cancel()
 
 	err = p.sem.Acquire(ctx, 1)
@@ -169,6 +174,9 @@ func (p *peerPool) GetPeer(ctx context.Context) (_ PeerConn, err error) {
 
 	for {
 		select {
+		case <-p.Process.Done():
+			return nil, process.ErrClosed
+
 		case <-ctx.Done():
 			return nil, ctx.Err()
 
@@ -223,12 +231,6 @@ func (p *peerPool) countActivePeers() int {
 }
 
 func (p *peerPool) ReturnPeer(peer PeerConn, strike bool) {
-	func() {
-		p.activePeerDeviceIDsMu.Lock()
-		defer p.activePeerDeviceIDsMu.Unlock()
-		delete(p.activePeerDeviceIDs, peer.DeviceSpecificID())
-	}()
-
 	p.peersMu.Lock()
 	defer p.peersMu.Unlock()
 	defer p.sem.Release(1)
@@ -253,6 +255,12 @@ func (p *peerPool) setPeerState(peer PeerConn, state peerState) {
 			p.activePeerDeviceIDsMu.Lock()
 			defer p.activePeerDeviceIDsMu.Unlock()
 			p.activePeerDeviceIDs[peer.DeviceSpecificID()] = struct{}{}
+		}()
+	} else {
+		func() {
+			p.activePeerDeviceIDsMu.Lock()
+			defer p.activePeerDeviceIDsMu.Unlock()
+			delete(p.activePeerDeviceIDs, peer.DeviceSpecificID())
 		}()
 	}
 }

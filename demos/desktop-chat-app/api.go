@@ -77,7 +77,7 @@ func (api *API) Start() error {
 	}
 	defer api.Process.Autoclose()
 
-	api.Process.Go("http.ListenAndServe", func(ctx context.Context) {
+	api.Process.Go(nil, "http.ListenAndServe", func(ctx context.Context) {
 		err := api.server.ListenAndServe()
 		if err == http.ErrServerClosed {
 			return
