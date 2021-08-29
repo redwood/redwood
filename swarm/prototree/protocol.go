@@ -166,12 +166,11 @@ func (tp *treeProtocol) SendTx(ctx context.Context, tx tree.Tx) (err error) {
 	}
 
 	if len(tx.Parents) == 0 && tx.ID != tree.GenesisTxID {
-		var parents []types.ID
-		parents, err = tp.controllerHub.Leaves(tx.StateURI)
+		parents, err := tp.controllerHub.Leaves(tx.StateURI)
 		if err != nil {
 			return err
 		}
-		tx.Parents = parents
+		tx.Parents = parents.Slice()
 	}
 
 	if len(tx.Sig) == 0 {
@@ -308,15 +307,15 @@ func (tp *treeProtocol) handleAckReceived(stateURI string, txID types.ID, peerCo
 }
 
 type FetchHistoryOpts struct {
-	FromTxID types.ID
-	ToTxID   types.ID
+	FromTxIDs types.IDSet
+	ToTxID    types.ID
 }
 
 func (tp *treeProtocol) handleFetchHistoryRequest(stateURI string, opts FetchHistoryOpts, writeSub WritableSubscription) error {
 	// @@TODO: respect the `opts.ToTxID` param
 	// @@TODO: if .FromTxID == 0, set it to GenesisTxID
 
-	iter := tp.controllerHub.FetchTxs(stateURI, opts.FromTxID)
+	iter := tp.controllerHub.FetchTxs(stateURI, opts.FromTxIDs)
 	defer iter.Cancel()
 
 	for {
@@ -519,7 +518,7 @@ func (tp *treeProtocol) SubscribeStateURIs() (StateURISubscription, error) {
 	return sub, nil
 }
 
-func (tp *treeProtocol) handleNewState(tx *tree.Tx, node state.Node, leaves []types.ID) {
+func (tp *treeProtocol) handleNewState(tx *tree.Tx, node state.Node, leaves types.IDSet) {
 	node, err := node.CopyToMemory(nil, nil)
 	if err != nil {
 		tp.Errorf("handleNewState: couldn't copy state to memory: %v", err)
@@ -550,7 +549,7 @@ func (tp *treeProtocol) handleNewState(tx *tree.Tx, node state.Node, leaves []ty
 	// }
 
 	// Broadcast state and tx to others
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(tp.Process.Ctx(), 10*time.Second)
 
 	child := tp.Process.NewChild(ctx, "handleNewState")
 	defer child.AutocloseWithCleanup(cancel)
@@ -570,7 +569,7 @@ func (tp *treeProtocol) handleNewState(tx *tree.Tx, node state.Node, leaves []ty
 func (tp *treeProtocol) broadcastToPrivateRecipients(
 	ctx context.Context,
 	tx *tree.Tx,
-	leaves []types.ID,
+	leaves types.IDSet,
 	alreadySentPeers *sync.Map,
 	child *process.Process,
 ) {
@@ -621,7 +620,7 @@ func (tp *treeProtocol) broadcastToPeerConn(
 	ctx context.Context,
 	tx *tree.Tx,
 	state state.Node,
-	leaves []types.ID,
+	leaves types.IDSet,
 	peerConn TreePeerConn,
 	alreadySentPeers *sync.Map,
 ) {
@@ -636,7 +635,7 @@ func (tp *treeProtocol) broadcastToPeerConn(
 	}
 	defer peerConn.Close()
 
-	err = peerConn.Put(ctx, tx, state, leaves)
+	err = peerConn.Put(ctx, tx, state, leaves.Slice())
 	if errors.Cause(err) == types.ErrConnection {
 		return
 	} else if err != nil {
@@ -649,7 +648,7 @@ func (tp *treeProtocol) broadcastToWritableSubscribers(
 	ctx context.Context,
 	tx *tree.Tx,
 	state state.Node,
-	leaves []types.ID,
+	leaves types.IDSet,
 	alreadySentPeers *sync.Map,
 	child *process.Process,
 ) {
@@ -679,7 +678,7 @@ func (tp *treeProtocol) broadcastToWritableSubscribers(
 func (tp *treeProtocol) broadcastToWritableSubscriber(
 	tx *tree.Tx,
 	node state.Node,
-	leaves []types.ID,
+	leaves types.IDSet,
 	writeSub WritableSubscription,
 ) {
 	isPrivate, err := tp.controllerHub.IsPrivate(tx.StateURI)

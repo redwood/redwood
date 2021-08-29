@@ -12,11 +12,11 @@ type TxStore interface {
 	RemoveTx(stateURI string, txID types.ID) error
 	TxExists(stateURI string, txID types.ID) (bool, error)
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
-	AllTxsForStateURI(stateURI string, fromTxID types.ID) TxIterator
+	AllTxsForStateURI(stateURI string, fromTxIDs types.IDSet) TxIterator
 	KnownStateURIs() ([]string, error)
 	MarkLeaf(stateURI string, txID types.ID) error
 	UnmarkLeaf(stateURI string, txID types.ID) error
-	Leaves(stateURI string) ([]types.ID, error)
+	Leaves(stateURI string) (types.IDSet, error)
 }
 
 type TxIterator interface {

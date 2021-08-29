@@ -39,6 +39,14 @@ func (s IDSet) Slice() []ID {
 	return slice
 }
 
+func (s IDSet) HexSlice() []string {
+	var slice []string
+	for x := range s {
+		slice = append(slice, x.Hex())
+	}
+	return slice
+}
+
 func (s IDSet) Copy() IDSet {
 	set := map[ID]struct{}{}
 	for val := range s {

@@ -25,13 +25,13 @@ type Controller interface {
 	AddTx(tx *Tx) error
 	StateAtVersion(version *types.ID) state.Node
 	QueryIndex(version *types.ID, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
-	Leaves() ([]types.ID, error)
+	Leaves() (types.IDSet, error)
 
 	IsPrivate() (bool, error)
 	IsMember(addr types.Address) (bool, error)
 	Members() (types.AddressSet, error)
 
-	OnNewState(fn func(tx *Tx, state state.Node, leaves []types.ID))
+	OnNewState(fn func(tx *Tx, state state.Node, leaves types.IDSet))
 }
 
 type controller struct {
@@ -51,7 +51,7 @@ type controller struct {
 	states  *state.VersionedDBTree
 	indices *state.VersionedDBTree
 
-	newStateListeners   []func(tx *Tx, state state.Node, leaves []types.ID)
+	newStateListeners   []func(tx *Tx, state state.Node, leaves types.IDSet)
 	newStateListenersMu sync.RWMutex
 
 	mempool Mempool
@@ -162,7 +162,7 @@ func (c *controller) StateAtVersion(version *types.ID) state.Node {
 	return c.states.StateAtVersion(version, false)
 }
 
-func (c *controller) Leaves() ([]types.ID, error) {
+func (c *controller) Leaves() (types.IDSet, error) {
 	return c.txStore.Leaves(c.stateURI)
 }
 
@@ -781,13 +781,13 @@ func (c *controller) initializeIndexer(behaviorTree *behaviorTree, root state.No
 	return nil
 }
 
-func (c *controller) OnNewState(fn func(tx *Tx, state state.Node, leaves []types.ID)) {
+func (c *controller) OnNewState(fn func(tx *Tx, state state.Node, leaves types.IDSet)) {
 	c.newStateListenersMu.Lock()
 	defer c.newStateListenersMu.Unlock()
 	c.newStateListeners = append(c.newStateListeners, fn)
 }
 
-func (c *controller) notifyNewStateListeners(tx *Tx, root state.Node, leaves []types.ID) {
+func (c *controller) notifyNewStateListeners(tx *Tx, root state.Node, leaves types.IDSet) {
 	c.newStateListenersMu.RLock()
 	defer c.newStateListenersMu.RUnlock()
 
