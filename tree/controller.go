@@ -29,7 +29,7 @@ type Controller interface {
 
 	IsPrivate() (bool, error)
 	IsMember(addr types.Address) (bool, error)
-	Members() (utils.AddressSet, error)
+	Members() (types.AddressSet, error)
 
 	OnNewState(fn func(tx *Tx, state state.Node, leaves []types.ID))
 }
@@ -57,7 +57,7 @@ type controller struct {
 	mempool Mempool
 	addTxMu sync.Mutex
 
-	members   utils.AddressSet
+	members   types.AddressSet
 	isPrivate bool
 }
 
@@ -192,8 +192,8 @@ func (c *controller) IsMember(addr types.Address) (bool, error) {
 	return is, nil
 }
 
-func (c *controller) Members() (utils.AddressSet, error) {
-	addrs := utils.NewAddressSet(nil)
+func (c *controller) Members() (types.AddressSet, error) {
+	addrs := types.NewAddressSet(nil)
 
 	state := c.StateAtVersion(nil)
 	defer state.Close()

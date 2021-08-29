@@ -6,12 +6,11 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
-	"redwood.dev/utils"
 )
 
 //go:generate mockery --name Store --output ./mocks/ --case=underscore
 type Store interface {
-	SubscribedStateURIs() utils.StringSet
+	SubscribedStateURIs() types.StringSet
 	AddSubscribedStateURI(stateURI string) error
 	RemoveSubscribedStateURI(stateURI string) error
 	OnNewSubscribedStateURI(handler func(stateURI string)) (unsubscribe func())
@@ -37,7 +36,7 @@ type subscribedStateURIListener struct {
 }
 
 type storeData struct {
-	SubscribedStateURIs     utils.StringSet
+	SubscribedStateURIs     types.StringSet
 	MaxPeersPerSubscription uint64
 	TxsSeenByPeers          map[string]map[string]map[types.ID]bool
 }
@@ -87,7 +86,7 @@ func (s *store) loadData() error {
 	s.dataMu.Lock()
 	defer s.dataMu.Unlock()
 	s.data = storeData{
-		SubscribedStateURIs:     utils.NewStringSet(codec.SubscribedStateURIs),
+		SubscribedStateURIs:     types.NewStringSet(codec.SubscribedStateURIs),
 		MaxPeersPerSubscription: codec.MaxPeersPerSubscription,
 		TxsSeenByPeers:          txsSeenByPeers,
 	}
@@ -122,7 +121,7 @@ func (s *store) saveData() error {
 	return node.Save()
 }
 
-func (s *store) SubscribedStateURIs() utils.StringSet {
+func (s *store) SubscribedStateURIs() types.StringSet {
 	s.dataMu.RLock()
 	defer s.dataMu.RUnlock()
 	return s.data.SubscribedStateURIs.Copy()

@@ -253,7 +253,7 @@ func (t *transport) Start() error {
 	t.mdns.RegisterNotifee(t)
 
 	// Update our node's info in the peer store
-	myDialAddrs := utils.NewStringSet(nil)
+	myDialAddrs := types.NewStringSet(nil)
 	for _, addr := range t.libp2pHost.Addrs() {
 		addrStr := addr.String()
 		myDialAddrs.Add(addrStr)

@@ -90,7 +90,7 @@ func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
 					return err
 				}
 
-				parentTx.Children = utils.NewIDSet(parentTx.Children).Add(tx.ID).Slice()
+				parentTx.Children = types.NewIDSet(parentTx.Children).Add(tx.ID).Slice()
 
 				parentBytes, err := parentTx.MarshalProto()
 				if err != nil {

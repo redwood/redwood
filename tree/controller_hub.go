@@ -32,7 +32,7 @@ type ControllerHub interface {
 
 	IsPrivate(stateURI string) (bool, error)
 	IsMember(stateURI string, addr types.Address) (bool, error)
-	Members(stateURI string) (utils.AddressSet, error)
+	Members(stateURI string) (types.AddressSet, error)
 
 	BlobReader(refID blob.ID) (io.ReadCloser, int64, error)
 
@@ -207,7 +207,7 @@ func (m *controllerHub) IsMember(stateURI string, addr types.Address) (bool, err
 	return ctrl.IsMember(addr)
 }
 
-func (m *controllerHub) Members(stateURI string) (utils.AddressSet, error) {
+func (m *controllerHub) Members(stateURI string) (types.AddressSet, error) {
 	m.controllersMu.RLock()
 	defer m.controllersMu.RUnlock()
 

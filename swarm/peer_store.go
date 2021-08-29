@@ -160,7 +160,7 @@ func (s *peerStore) AddVerifiedCredentials(
 
 	pd.peerStore = s
 	if pd.addresses == nil {
-		pd.addresses = utils.NewAddressSet(nil)
+		pd.addresses = types.NewAddressSet(nil)
 	}
 	pd.addresses.Add(address)
 
@@ -369,10 +369,10 @@ func (s *peerStore) peerDetailsCodecToPeerDetails(pd peerDetailsCodec) (*peerDet
 	return &peerDetails{
 		peerStore:   s,
 		dialInfo:    pd.DialInfo,
-		addresses:   utils.NewAddressSet(pd.Addresses),
+		addresses:   types.NewAddressSet(pd.Addresses),
 		sigpubkeys:  sigpubkeys,
 		encpubkeys:  encpubkeys,
-		stateURIs:   utils.NewStringSet(pd.StateURIs),
+		stateURIs:   types.NewStringSet(pd.StateURIs),
 		lastContact: time.Unix(int64(pd.LastContact), 0),
 		lastFailure: time.Unix(int64(pd.LastFailure), 0),
 		failures:    pd.Failures,
@@ -432,7 +432,7 @@ type PeerDetails interface {
 	PublicKeys(addr types.Address) (crypto.SigningPublicKey, crypto.AsymEncPubkey)
 	AddStateURI(stateURI string)
 	RemoveStateURI(stateURI string)
-	StateURIs() utils.StringSet
+	StateURIs() types.StringSet
 
 	UpdateConnStats(success bool)
 	LastContact() time.Time
@@ -445,10 +445,10 @@ type PeerDetails interface {
 type peerDetails struct {
 	peerStore   *peerStore
 	dialInfo    PeerDialInfo
-	addresses   utils.AddressSet
+	addresses   types.AddressSet
 	sigpubkeys  map[types.Address]crypto.SigningPublicKey
 	encpubkeys  map[types.Address]crypto.AsymEncPubkey
-	stateURIs   utils.StringSet
+	stateURIs   types.StringSet
 	lastContact time.Time
 	lastFailure time.Time
 	failures    uint64
@@ -470,7 +470,7 @@ func newPeerDetails(peerStore *peerStore, dialInfo PeerDialInfo) *peerDetails {
 	return &peerDetails{
 		peerStore: peerStore,
 		dialInfo:  dialInfo,
-		stateURIs: utils.NewStringSet(nil),
+		stateURIs: types.NewStringSet(nil),
 		backoff:   utils.ExponentialBackoff{Min: 10 * time.Second, Max: 3 * time.Minute},
 	}
 }
@@ -507,7 +507,7 @@ func (p *peerDetails) RemoveStateURI(stateURI string) {
 	p.peerStore.savePeerDetails(p)
 }
 
-func (p *peerDetails) StateURIs() utils.StringSet {
+func (p *peerDetails) StateURIs() types.StringSet {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
 	return p.stateURIs.Copy()
@@ -580,7 +580,7 @@ func (p *ephemeralPeerDetails) PublicKeys(addr types.Address) (crypto.SigningPub
 func (p *ephemeralPeerDetails) DialInfo() PeerDialInfo         { return p.dialInfo }
 func (p *ephemeralPeerDetails) AddStateURI(stateURI string)    {}
 func (p *ephemeralPeerDetails) RemoveStateURI(stateURI string) {}
-func (p *ephemeralPeerDetails) StateURIs() utils.StringSet     { return nil }
+func (p *ephemeralPeerDetails) StateURIs() types.StringSet     { return nil }
 func (p *ephemeralPeerDetails) UpdateConnStats(success bool) {
 	now := time.Now()
 	if success {
