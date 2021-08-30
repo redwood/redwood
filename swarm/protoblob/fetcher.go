@@ -20,7 +20,6 @@ type fetcher struct {
 	process.Process
 	log.Logger
 	blobID         blob.ID
-	maxConns       uint64
 	blobStore      blob.Store
 	searchForPeers func(ctx context.Context, blobID blob.ID) <-chan BlobPeerConn
 	peerPool       swarm.PeerPool
@@ -30,7 +29,6 @@ type fetcher struct {
 
 func newFetcher(
 	blobID blob.ID,
-	maxConns uint64,
 	blobStore blob.Store,
 	searchForPeers func(ctx context.Context, blobID blob.ID) <-chan BlobPeerConn,
 ) *fetcher {
@@ -38,7 +36,6 @@ func newFetcher(
 		Process:        *process.New("fetcher " + blobID.String()),
 		Logger:         log.NewLogger("blob proto"),
 		blobID:         blobID,
-		maxConns:       maxConns,
 		blobStore:      blobStore,
 		searchForPeers: searchForPeers,
 		peerPool:       nil,
@@ -97,8 +94,13 @@ func (f *fetcher) Close() error {
 func (f *fetcher) startPeerPool() error {
 	restartSearchBackoff := utils.ExponentialBackoff{Min: 3 * time.Second, Max: 10 * time.Second}
 
+	maxConns, err := f.blobStore.MaxFetchConns()
+	if err != nil {
+		return err
+	}
+
 	f.peerPool = swarm.NewPeerPool(
-		f.maxConns,
+		maxConns,
 		func(ctx context.Context) (<-chan swarm.PeerConn, error) {
 			select {
 			case <-ctx.Done():
@@ -268,7 +270,7 @@ func (f *fetcher) readUntilErrorOrShutdown(ctx context.Context, peer BlobPeerCon
 			f.workPool.ReturnFailedJob(sha3)
 			return errors.Wrapf(err, "while storing chunk %v", sha3)
 		}
-		f.Debugf("fetched chunk %v (%v/%v) for blob %v", sha3, i, f.workPool.NumJobs(), f.blobID)
+		f.Debugf("fetched chunk %v (%v/%v) for blob %v", sha3, i+1, f.workPool.NumJobs(), f.blobID)
 		f.workPool.MarkJobComplete()
 
 		select {

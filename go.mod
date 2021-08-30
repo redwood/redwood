@@ -40,6 +40,7 @@ require (
 	github.com/libp2p/go-libp2p-record v0.1.3
 	github.com/libp2p/go-libp2p-routing v0.1.0 // indirect
 	github.com/linode/linodego v1.0.0
+	github.com/logrusorgru/aurora/v3 v3.0.0 // indirect
 	github.com/markbates/pkger v0.17.0
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/multiformats/go-multiaddr v0.3.3
