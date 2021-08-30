@@ -1,10 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { useHistory } from 'react-router-dom'
 import styled, { useTheme } from 'styled-components'
-import { Avatar } from '@material-ui/core'
+import { Avatar, Checkbox } from '@material-ui/core'
 import { AddCircleOutline as AddIcon, ExitToApp } from '@material-ui/icons'
+import { makeStyles, withStyles } from '@material-ui/core/styles'
 import moment from 'moment'
 import Redwood from '@redwood.dev/client'
+import { sortBy } from 'lodash'
 
 import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
@@ -20,6 +22,7 @@ import useServerAndRoomInfo from '../../hooks/useServerAndRoomInfo'
 import useRoomName from '../../hooks/useRoomName'
 import useLoginStatus from '../../hooks/useLoginStatus'
 import useUsers from '../../hooks/useUsers'
+import theme from '../../theme'
 
 import addChat from './assets/add_chat.svg'
 import avatarPlaceholder from './assets/speech-bubble.svg'
@@ -236,6 +239,27 @@ function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
     )
 }
 
+const useCheckboxStyles = makeStyles(muiTheme => ({
+    root: {
+        color: theme.color.grey[50] + ' !important',
+    },
+    checked: {
+        color: theme.color.green[500] + ' !important',
+    },
+}))
+
+const SNewDMModalContent = styled(ModalContent)`
+    max-height: 60vh;
+    overflow: scroll;
+
+    /* Chrome, Safari, Opera */
+    &::-webkit-scrollbar {
+        display: none;
+    }
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+`
+
 function NewDMModal({ serverRooms, onDismiss, navigate }) {
     const { nodeIdentities } = useRedwood()
     const [sender, setSender] = useState('')
@@ -249,33 +273,45 @@ function NewDMModal({ serverRooms, onDismiss, navigate }) {
         }
     }, [nodeIdentities])
 
-    const onClickCreate = useCallback(async (recipientAddr) => {
+    const [selectedPeers, setSelectedPeers] = useState({})
+    const onClickPeer = useCallback(async (recipientAddr) => {
+        setSelectedPeers({
+            ...selectedPeers,
+            [recipientAddr]: !selectedPeers[recipientAddr],
+        })
+    }, [selectedPeers, setSelectedPeers])
+
+    const onClickCreate = useCallback(async () => {
         if (!api) { return }
         try {
-            await api.createNewDM([sender, recipientAddr])
+            let recipients = Object.keys(selectedPeers).filter(addr => !!selectedPeers[addr])
+            await api.createNewDM([...recipients, sender])
             onDismiss()
             navigate('chat.p2p', Redwood.utils.privateTxRootForRecipients([sender, recipientAddr]))
         } catch (err) {
             console.error(err)
         }
-    }, [api, serverRooms, navigate])
+        setSelectedPeers({})
+    }, [api, serverRooms, navigate, selectedPeers, setSelectedPeers])
 
-    function onKeyDown(e) {
-        if (e.code === 'Enter') {
-            e.stopPropagation()
-            onClickCreate()
-            setRecipient('')
-        }
-    }
+    peers = sortBy(peers, ['address'])
+
+    const checkboxStyles = useCheckboxStyles()
 
     return (
         <Modal modalKey="new dm">
             <ModalTitle>Start a DM</ModalTitle>
-            <ModalContent>
+            <SNewDMModalContent>
                 {peers.map(peer => (
-                    <PeerRow address={peer.address} onClick={() => onClickCreate(peer.address)} key={peer.address} />
+                    <div style={{ display: 'flex' }} key={peer.address}>
+                        <Checkbox checked={!!selectedPeers[peer.address]} onChange={() => onClickPeer(peer.address)} classes={checkboxStyles} />
+                        <PeerRow address={peer.address} onClick={() => onClickPeer(peer.address)} />
+                    </div>
                 ))}
-            </ModalContent>
+            </SNewDMModalContent>
+            <ModalActions>
+                <Button primary onClick={onClickCreate}>Create</Button>
+            </ModalActions>
         </Modal>
     )
 }
