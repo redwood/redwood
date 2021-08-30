@@ -42,9 +42,10 @@ type blobProtocol struct {
 	process.Process
 	log.Logger
 
-	blobStore   blob.Store
-	transports  map[string]BlobTransport
-	blobsNeeded *utils.Mailbox
+	blobStore        blob.Store
+	transports       map[string]BlobTransport
+	blobsNeeded      *utils.Mailbox
+	maxPeersPerFetch uint64
 
 	blobsBeingFetched   map[blob.ID]struct{}
 	blobsBeingFetchedMu sync.Mutex
@@ -54,7 +55,7 @@ const (
 	ProtocolName = "protoblob"
 )
 
-func NewBlobProtocol(transports []swarm.Transport, blobStore blob.Store) *blobProtocol {
+func NewBlobProtocol(transports []swarm.Transport, blobStore blob.Store, maxPeersPerFetch uint64) *blobProtocol {
 	transportsMap := make(map[string]BlobTransport)
 	for _, tpt := range transports {
 		if tpt, is := tpt.(BlobTransport); is {
@@ -67,6 +68,7 @@ func NewBlobProtocol(transports []swarm.Transport, blobStore blob.Store) *blobPr
 		blobStore:         blobStore,
 		transports:        transportsMap,
 		blobsNeeded:       utils.NewMailbox(0),
+		maxPeersPerFetch:  maxPeersPerFetch,
 		blobsBeingFetched: make(map[blob.ID]struct{}),
 	}
 }
@@ -171,7 +173,7 @@ func (bp *blobProtocol) fetchBlobs(blobs []blob.ID) {
 			continue
 		}
 
-		fetcher := newFetcher(blobID, 4, bp.blobStore, bp.ProvidersOfBlob)
+		fetcher := newFetcher(blobID, bp.maxPeersPerFetch, bp.blobStore, bp.ProvidersOfBlob)
 
 		err := bp.Process.SpawnChild(nil, fetcher)
 		if err != nil {

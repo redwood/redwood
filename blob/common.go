@@ -13,6 +13,9 @@ type Store interface {
 	Start() error
 	Close()
 
+	MaxFetchConns() (uint64, error)
+	SetMaxFetchConns(maxFetchConns uint64) error
+
 	BlobReader(blobID ID) (io.ReadCloser, int64, error)
 	HaveBlob(id ID) (bool, error)
 	StoreBlob(reader io.ReadCloser) (sha1Hash types.Hash, sha3Hash types.Hash, err error)

@@ -78,7 +78,8 @@ type AuthProtocolConfig struct {
 }
 
 type BlobProtocolConfig struct {
-	Enabled bool `yaml:"Enabled"`
+	Enabled          bool   `yaml:"Enabled"`
+	MaxPeersPerFetch uint64 `yaml:"MaxPeersPerFetch"`
 }
 
 type HushProtocolConfig struct {
@@ -151,7 +152,8 @@ func DefaultConfig(appName string) Config {
 			Enabled: true,
 		},
 		BlobProtocol: BlobProtocolConfig{
-			Enabled: true,
+			Enabled:          true,
+			MaxPeersPerFetch: 4,
 		},
 		HushProtocol: HushProtocolConfig{
 			Enabled: true,

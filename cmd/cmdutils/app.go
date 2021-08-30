@@ -240,7 +240,7 @@ func (app *App) Start() error {
 	}
 
 	if cfg.BlobProtocol.Enabled {
-		app.BlobProto = protoblob.NewBlobProtocol(transports, app.BlobStore)
+		app.BlobProto = protoblob.NewBlobProtocol(transports, app.BlobStore, cfg.BlobProtocol.MaxPeersPerFetch)
 		protocols = append(protocols, app.BlobProto)
 	}
 
