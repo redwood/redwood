@@ -12,15 +12,18 @@ type BaseTreeTransport struct {
 	muTxReceivedCallbacks                 sync.RWMutex
 	muAckReceivedCallbacks                sync.RWMutex
 	muWritableSubscriptionOpenedCallbacks sync.RWMutex
+	muP2PStateURIReceivedCallbacks        sync.RWMutex
 
 	txReceivedCallbacks                 []TxReceivedCallback
 	ackReceivedCallbacks                []AckReceivedCallback
 	writableSubscriptionOpenedCallbacks []WritableSubscriptionOpenedCallback
+	p2pStateURIReceivedCallbacks        []P2PStateURIReceivedCallback
 }
 
 type TxReceivedCallback func(tx tree.Tx, peerConn TreePeerConn)
 type AckReceivedCallback func(stateURI string, txID types.ID, peerConn TreePeerConn)
 type WritableSubscriptionOpenedCallback func(stateURI string, keypath state.Keypath, subType SubscriptionType, writeSubImpl WritableSubscriptionImpl, fetchHistoryOpts *FetchHistoryOpts)
+type P2PStateURIReceivedCallback func(stateURI string, peerConn TreePeerConn)
 
 func (t *BaseTreeTransport) OnTxReceived(handler TxReceivedCallback) {
 	t.muTxReceivedCallbacks.Lock()
@@ -38,6 +41,12 @@ func (t *BaseTreeTransport) OnWritableSubscriptionOpened(handler WritableSubscri
 	t.muWritableSubscriptionOpenedCallbacks.Lock()
 	defer t.muWritableSubscriptionOpenedCallbacks.Unlock()
 	t.writableSubscriptionOpenedCallbacks = append(t.writableSubscriptionOpenedCallbacks, handler)
+}
+
+func (t *BaseTreeTransport) OnP2PStateURIReceived(handler P2PStateURIReceivedCallback) {
+	t.muP2PStateURIReceivedCallbacks.Lock()
+	defer t.muP2PStateURIReceivedCallbacks.Unlock()
+	t.p2pStateURIReceivedCallbacks = append(t.p2pStateURIReceivedCallbacks, handler)
 }
 
 func (t *BaseTreeTransport) HandleTxReceived(tx tree.Tx, peerConn TreePeerConn) {
@@ -86,6 +95,21 @@ func (t *BaseTreeTransport) HandleWritableSubscriptionOpened(
 		go func() {
 			defer wg.Done()
 			handler(stateURI, keypath, subType, writeSubImpl, fetchHistoryOpts)
+		}()
+	}
+	wg.Wait()
+}
+
+func (t *BaseTreeTransport) HandleP2PStateURIReceived(stateURI string, peerConn TreePeerConn) {
+	t.muP2PStateURIReceivedCallbacks.RLock()
+	defer t.muP2PStateURIReceivedCallbacks.RUnlock()
+	var wg sync.WaitGroup
+	wg.Add(len(t.p2pStateURIReceivedCallbacks))
+	for _, handler := range t.p2pStateURIReceivedCallbacks {
+		handler := handler
+		go func() {
+			defer wg.Done()
+			handler(stateURI, peerConn)
 		}()
 	}
 	wg.Wait()

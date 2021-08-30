@@ -540,6 +540,16 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 		}
 		t.HandleAckReceived(ackMsg.StateURI, ackMsg.TxID, peer)
 
+	case msgType_AnnounceP2PStateURI:
+		defer peer.Close()
+
+		stateURI, ok := msg.Payload.(string)
+		if !ok {
+			t.Errorf("P2PStateURI message: bad payload: (%T) %v", msg.Payload, msg.Payload)
+			return
+		}
+		t.HandleP2PStateURIReceived(stateURI, peer)
+
 	case msgType_ChallengeIdentityRequest:
 		defer peer.Close()
 

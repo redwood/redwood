@@ -167,6 +167,10 @@ func (p *peerConn) Ack(stateURI string, txID types.ID) (err error) {
 	return nil
 }
 
+func (p *peerConn) AnnounceP2PStateURI(ctx context.Context, stateURI string) (err error) {
+	return types.ErrUnimplemented
+}
+
 func (p *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) (err error) {
 	defer utils.WithStack(&err)
 	defer func() { p.UpdateConnStats(err == nil) }()
