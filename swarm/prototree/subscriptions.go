@@ -29,7 +29,7 @@ type (
 		StateURI() string
 		Keypath() state.Keypath
 		Type() SubscriptionType
-		EnqueueWrite(stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID)
+		EnqueueWrite(stateURI string, tx *tree.Tx, state state.Node, leaves types.IDSet)
 		String() string
 	}
 )
@@ -149,8 +149,8 @@ func (sub *writableSubscription) StateURI() string       { return sub.stateURI }
 func (sub *writableSubscription) Type() SubscriptionType { return sub.subscriptionType }
 func (sub *writableSubscription) Keypath() state.Keypath { return sub.keypath }
 
-func (sub *writableSubscription) EnqueueWrite(stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) {
-	sub.messages.Deliver(&SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
+func (sub *writableSubscription) EnqueueWrite(stateURI string, tx *tree.Tx, state state.Node, leaves types.IDSet) {
+	sub.messages.Deliver(&SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves.Slice()})
 }
 
 func (sub *writableSubscription) String() string {

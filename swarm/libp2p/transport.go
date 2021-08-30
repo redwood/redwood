@@ -253,7 +253,7 @@ func (t *transport) Start() error {
 	t.mdns.RegisterNotifee(t)
 
 	// Update our node's info in the peer store
-	myDialAddrs := utils.NewStringSet(nil)
+	myDialAddrs := types.NewStringSet(nil)
 	for _, addr := range t.libp2pHost.Addrs() {
 		addrStr := addr.String()
 		myDialAddrs.Add(addrStr)
@@ -500,14 +500,14 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 
 	switch msg.Type {
 	case msgType_Subscribe:
-		stateURI, ok := msg.Payload.(string)
+		subscribeMsg, ok := msg.Payload.(subscribeMsg)
 		if !ok {
 			t.Errorf("Subscribe message: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
-		t.Infof(0, "incoming libp2p subscription: %v %v", peer.DialInfo(), stateURI)
+		t.Infof(0, "incoming libp2p subscription: %v %v (from: %v)", peer.DialInfo(), subscribeMsg.StateURI, subscribeMsg.FromTxIDs)
 
-		writeSub := newWritableSubscription(peer, stateURI)
+		writeSub := newWritableSubscription(peer, subscribeMsg.StateURI)
 		func() {
 			t.writeSubsByPeerIDMu.Lock()
 			defer t.writeSubsByPeerIDMu.Unlock()
@@ -517,8 +517,8 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 			t.writeSubsByPeerID[peer.pinfo.ID][stream] = writeSub
 		}()
 
-		fetchHistoryOpts := &prototree.FetchHistoryOpts{} // Fetch all history (@@TODO)
-		t.HandleWritableSubscriptionOpened(stateURI, nil, prototree.SubscriptionType_Txs, writeSub, fetchHistoryOpts)
+		fetchHistoryOpts := &prototree.FetchHistoryOpts{FromTxIDs: types.NewIDSet(subscribeMsg.FromTxIDs)}
+		t.HandleWritableSubscriptionOpened(subscribeMsg.StateURI, nil, prototree.SubscriptionType_Txs, writeSub, fetchHistoryOpts)
 
 	case msgType_Tx:
 		defer peer.Close()

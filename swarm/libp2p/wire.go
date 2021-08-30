@@ -34,6 +34,11 @@ const (
 	msgType_AnnouncePeers             msgType = "announce peers"
 )
 
+type subscribeMsg struct {
+	StateURI  string     `json:"stateURI"`
+	FromTxIDs []types.ID `json:"fromTxIDs"`
+}
+
 type ackMsg struct {
 	StateURI string   `json:"stateURI"`
 	TxID     types.ID `json:"txID"`
@@ -93,8 +98,12 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 
 	switch msg.Type {
 	case msgType_Subscribe:
-		url := string(m.PayloadBytes)
-		msg.Payload = url[1 : len(url)-1] // remove quotes
+		var payload subscribeMsg
+		err := json.Unmarshal(m.PayloadBytes, &payload)
+		if err != nil {
+			return err
+		}
+		msg.Payload = payload
 
 	case msgType_Tx:
 		var tx tree.Tx

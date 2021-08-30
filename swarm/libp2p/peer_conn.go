@@ -81,7 +81,12 @@ func (peer *peerConn) Subscribe(ctx context.Context, stateURI string) (prototree
 		return nil, err
 	}
 
-	err = peer.writeMsg(Msg{Type: msgType_Subscribe, Payload: stateURI})
+	leaves, err := peer.t.controllerHub.Leaves(stateURI)
+	if err != nil {
+		return nil, errors.Errorf("while subscribing: couldn't fetch leaves for state URI %v: %v", stateURI, err)
+	}
+
+	err = peer.writeMsg(Msg{Type: msgType_Subscribe, Payload: subscribeMsg{StateURI: stateURI, FromTxIDs: leaves.Slice()}})
 	if err != nil {
 		return nil, err
 	}

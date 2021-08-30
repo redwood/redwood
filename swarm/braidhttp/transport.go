@@ -422,7 +422,7 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, se
 				http.Error(w, "could not parse From-Tx header", http.StatusBadRequest)
 				return
 			}
-			fetchHistoryOpts = prototree.FetchHistoryOpts{FromTxID: fromTxID}
+			fetchHistoryOpts = prototree.FetchHistoryOpts{FromTxIDs: types.NewIDSet([]types.ID{fromTxID})}
 		}
 
 		conn, err := wsUpgrader.Upgrade(w, r, nil)
@@ -463,7 +463,7 @@ func (t *transport) serveSubscription(w http.ResponseWriter, r *http.Request, se
 				http.Error(w, "could not parse From-Tx header", http.StatusBadRequest)
 				return
 			}
-			fetchHistoryOpts = prototree.FetchHistoryOpts{FromTxID: fromTxID}
+			fetchHistoryOpts = prototree.FetchHistoryOpts{FromTxIDs: types.NewIDSet([]types.ID{fromTxID})}
 		}
 
 		// Set the headers related to event streaming
@@ -595,20 +595,7 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(leaves) > 0 {
-			leaf := leaves[0]
-
-			tx, err := t.controllerHub.FetchTx(stateURI, leaf)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("can't fetch tx %v: %+v", leaf, err.Error()), http.StatusNotFound)
-				return
-			}
-			parents := tx.Parents
-
-			var parentStrs []string
-			for _, pid := range parents {
-				parentStrs = append(parentStrs, pid.Hex())
-			}
-			w.Header().Add("Parents", strings.Join(parentStrs, ","))
+			w.Header().Add("Parents", strings.Join(leaves.HexSlice(), ","))
 		} else {
 			w.Header().Add("Parents", "")
 		}

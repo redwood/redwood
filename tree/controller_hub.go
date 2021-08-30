@@ -14,7 +14,6 @@ import (
 	"redwood.dev/process"
 	"redwood.dev/state"
 	"redwood.dev/types"
-	"redwood.dev/utils"
 )
 
 type ControllerHub interface {
@@ -22,21 +21,21 @@ type ControllerHub interface {
 
 	AddTx(tx *Tx) error
 	FetchTx(stateURI string, txID types.ID) (*Tx, error)
-	FetchTxs(stateURI string, fromTxID types.ID) TxIterator
+	FetchTxs(stateURI string, fromTxIDs types.IDSet) TxIterator
 
 	EnsureController(stateURI string) (Controller, error)
 	KnownStateURIs() ([]string, error)
 	StateAtVersion(stateURI string, version *types.ID) (state.Node, error)
 	QueryIndex(stateURI string, version *types.ID, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
-	Leaves(stateURI string) ([]types.ID, error)
+	Leaves(stateURI string) (types.IDSet, error)
 
 	IsPrivate(stateURI string) (bool, error)
 	IsMember(stateURI string, addr types.Address) (bool, error)
-	Members(stateURI string) (utils.AddressSet, error)
+	Members(stateURI string) (types.AddressSet, error)
 
 	BlobReader(refID blob.ID) (io.ReadCloser, int64, error)
 
-	OnNewState(fn func(tx *Tx, root state.Node, leaves []types.ID))
+	OnNewState(fn func(tx *Tx, root state.Node, leaves types.IDSet))
 }
 
 type controllerHub struct {
@@ -51,7 +50,7 @@ type controllerHub struct {
 	dbRootPath       string
 	encryptionConfig *state.EncryptionConfig
 
-	newStateListeners   []func(tx *Tx, root state.Node, leaves []types.ID)
+	newStateListeners   []func(tx *Tx, root state.Node, leaves types.IDSet)
 	newStateListenersMu sync.RWMutex
 }
 
@@ -147,8 +146,8 @@ func (m *controllerHub) AddTx(tx *Tx) error {
 	return ctrl.AddTx(tx)
 }
 
-func (m *controllerHub) FetchTxs(stateURI string, fromTxID types.ID) TxIterator {
-	return m.txStore.AllTxsForStateURI(stateURI, fromTxID)
+func (m *controllerHub) FetchTxs(stateURI string, fromTxIDs types.IDSet) TxIterator {
+	return m.txStore.AllTxsForStateURI(stateURI, fromTxIDs)
 }
 
 func (m *controllerHub) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
@@ -181,7 +180,7 @@ func (m *controllerHub) BlobReader(refID blob.ID) (io.ReadCloser, int64, error) 
 	return m.blobStore.BlobReader(refID)
 }
 
-func (m *controllerHub) Leaves(stateURI string) ([]types.ID, error) {
+func (m *controllerHub) Leaves(stateURI string) (types.IDSet, error) {
 	return m.txStore.Leaves(stateURI)
 }
 
@@ -207,7 +206,7 @@ func (m *controllerHub) IsMember(stateURI string, addr types.Address) (bool, err
 	return ctrl.IsMember(addr)
 }
 
-func (m *controllerHub) Members(stateURI string) (utils.AddressSet, error) {
+func (m *controllerHub) Members(stateURI string) (types.AddressSet, error) {
 	m.controllersMu.RLock()
 	defer m.controllersMu.RUnlock()
 
@@ -218,13 +217,13 @@ func (m *controllerHub) Members(stateURI string) (utils.AddressSet, error) {
 	return ctrl.Members()
 }
 
-func (m *controllerHub) OnNewState(fn func(tx *Tx, root state.Node, leaves []types.ID)) {
+func (m *controllerHub) OnNewState(fn func(tx *Tx, root state.Node, leaves types.IDSet)) {
 	m.newStateListenersMu.Lock()
 	defer m.newStateListenersMu.Unlock()
 	m.newStateListeners = append(m.newStateListeners, fn)
 }
 
-func (m *controllerHub) notifyNewStateListeners(tx *Tx, root state.Node, leaves []types.ID) {
+func (m *controllerHub) notifyNewStateListeners(tx *Tx, root state.Node, leaves types.IDSet) {
 	m.newStateListenersMu.RLock()
 	defer m.newStateListenersMu.RUnlock()
 

@@ -9,7 +9,6 @@ import (
 	"redwood.dev/internal/testutils"
 	"redwood.dev/swarm"
 	"redwood.dev/types"
-	"redwood.dev/utils"
 )
 
 func TestPeerStore_DB(t *testing.T) {
@@ -26,10 +25,10 @@ func TestPeerStore_DB(t *testing.T) {
 	pd1 := swarm.NewPeerDetails(
 		p,
 		swarm.PeerDialInfo{TransportName: "http", DialAddr: "http://asdf.dev:1234"},
-		utils.NewAddressSet([]types.Address{addr1}),
+		types.NewAddressSet([]types.Address{addr1}),
 		map[types.Address]crypto.SigningPublicKey{addr1: testutils.RandomSigningPublicKey(t)},
 		map[types.Address]crypto.AsymEncPubkey{addr1: testutils.RandomAsymEncPubkey(t)},
-		utils.NewStringSet([]string{"asdf.dev/registry", "asdf.dev/users", "blah.org/foobar"}),
+		types.NewStringSet([]string{"asdf.dev/registry", "asdf.dev/users", "blah.org/foobar"}),
 		testutils.RandomTime(t),
 		testutils.RandomTime(t),
 		123,
@@ -47,10 +46,10 @@ func TestPeerStore_DB(t *testing.T) {
 	pd2 := swarm.NewPeerDetails(
 		p,
 		swarm.PeerDialInfo{TransportName: "libp2p", DialAddr: "/ip4/123.456.789.12/tcp/21231/p2p/16Uiu2HAmBn4mSAKEErkYbCWhmgYLwYckRTb4RwDDRrQEFg6ewJAK"},
-		utils.NewAddressSet([]types.Address{addr2}),
+		types.NewAddressSet([]types.Address{addr2}),
 		map[types.Address]crypto.SigningPublicKey{addr2: testutils.RandomSigningPublicKey(t)},
 		map[types.Address]crypto.AsymEncPubkey{addr2: testutils.RandomAsymEncPubkey(t)},
-		utils.NewStringSet([]string{"foo.bar/blah", "hello.xyz/asdfasdf"}),
+		types.NewStringSet([]string{"foo.bar/blah", "hello.xyz/asdfasdf"}),
 		testutils.RandomTime(t),
 		testutils.RandomTime(t),
 		456,
@@ -62,10 +61,10 @@ func TestPeerStore_DB(t *testing.T) {
 	pd3 := swarm.NewPeerDetails(
 		p,
 		swarm.PeerDialInfo{TransportName: "libp2p", DialAddr: "/dns4/redwood.dev/tcp/21231/p2p/16Uiu2HAmBn4mSAKEErkYbCWhmgYLwYckRTb4RwEcjaEeiFJKAdjDOF"},
-		utils.NewAddressSet([]types.Address{addr3}),
+		types.NewAddressSet([]types.Address{addr3}),
 		map[types.Address]crypto.SigningPublicKey{addr3: testutils.RandomSigningPublicKey(t)},
 		map[types.Address]crypto.AsymEncPubkey{addr3: testutils.RandomAsymEncPubkey(t)},
-		utils.NewStringSet([]string{"foo.bar/blah", "hello.xyz/asdfasdf", "foobar.xyz/xyzzy"}),
+		types.NewStringSet([]string{"foo.bar/blah", "hello.xyz/asdfasdf", "foobar.xyz/xyzzy"}),
 		testutils.RandomTime(t),
 		testutils.RandomTime(t),
 		789,

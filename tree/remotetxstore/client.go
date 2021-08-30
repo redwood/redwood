@@ -132,7 +132,7 @@ func (c *client) AddTx(tx *tree.Tx) error {
 	return nil
 }
 
-func (c *client) AllTxsForStateURI(stateURI string, fromTxID types.ID) tree.TxIterator {
+func (c *client) AllTxsForStateURI(stateURI string, fromTxIDs types.IDSet) tree.TxIterator {
 	txIter := &txIterator{
 		ch:       make(chan *tree.Tx),
 		chCancel: make(chan struct{}),

@@ -331,10 +331,10 @@ func (sub *wsWritableSubscription) Start() (err error) {
 
 				var addSubMsg struct {
 					Params struct {
-						StateURI         string `json:"stateURI"`
-						Keypath          string `json:"keypath"`
-						SubscriptionType string `json:"subscriptionType"`
-						FromTxID         string `json:"fromTxID"`
+						StateURI         string     `json:"stateURI"`
+						Keypath          string     `json:"keypath"`
+						SubscriptionType string     `json:"subscriptionType"`
+						FromTxIDs        []types.ID `json:"fromTxIDs"`
 					} `json:"params"`
 				}
 				err = json.Unmarshal(msg.data, &addSubMsg)
@@ -353,15 +353,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 					}
 				}
 
-				var fetchHistoryOpts prototree.FetchHistoryOpts
-				if addSubMsg.Params.FromTxID != "" {
-					fromTxID, err := types.IDFromHex(addSubMsg.Params.FromTxID)
-					if err != nil {
-						sub.Errorf("could not parse fromTxID: %v", err)
-						continue
-					}
-					fetchHistoryOpts = prototree.FetchHistoryOpts{FromTxID: fromTxID}
-				}
+				fetchHistoryOpts := prototree.FetchHistoryOpts{FromTxIDs: types.NewIDSet(addSubMsg.Params.FromTxIDs)}
 
 				sub.transport.HandleWritableSubscriptionOpened(
 					addSubMsg.Params.StateURI,

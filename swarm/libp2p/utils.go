@@ -14,7 +14,7 @@ import (
 	"go.uber.org/multierr"
 
 	"redwood.dev/swarm"
-	"redwood.dev/utils"
+	"redwood.dev/types"
 )
 
 func cidForString(s string) (cid.Cid, error) {
@@ -26,7 +26,7 @@ func cidForString(s string) (cid.Cid, error) {
 	return c, nil
 }
 
-func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *utils.SortedStringSet {
+func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *types.SortedStringSet {
 	multiaddrs, err := peerstore.InfoToP2pAddrs(&pinfo)
 	if err != nil {
 		panic(err)
@@ -63,7 +63,7 @@ func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *utils.SortedStringSet {
 			multiaddrStrings = append(multiaddrStrings, cleaned)
 		}
 	}
-	return utils.NewSortedStringSet(multiaddrStrings)
+	return types.NewSortedStringSet(multiaddrStrings)
 }
 
 func addrInfosFromStrings(ss []string) (infos []corepeer.AddrInfo, err error) {
@@ -96,8 +96,8 @@ func cleanLibp2pAddr(addrStr string, peerID peer.ID) string {
 	return addrStr
 }
 
-func cleanLibp2pAddrs(addrStrs utils.StringSet, peerID peer.ID) utils.StringSet {
-	keep := utils.NewStringSet(nil)
+func cleanLibp2pAddrs(addrStrs types.StringSet, peerID peer.ID) types.StringSet {
+	keep := types.NewStringSet(nil)
 	for addrStr := range addrStrs {
 		if strings.Index(addrStr, "/ip4/172.") == 0 {
 			// continue
@@ -139,7 +139,7 @@ func protocolValue(addr ma.Multiaddr, proto ma.Protocol) string {
 //         case "192"
 //         }
 //  })
-//  return utils.NewSortedStringSet(s)
+//  return types.NewSortedStringSet(s)
 // }
 
 func peerDialInfosFromPeerInfo(pinfo peerstore.PeerInfo) []swarm.PeerDialInfo {

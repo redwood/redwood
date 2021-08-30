@@ -69,7 +69,7 @@ var (
 				stateURI,
 				prototree.SubscriptionType_Txs,
 				nil,
-				&prototree.FetchHistoryOpts{FromTxID: tree.GenesisTxID},
+				&prototree.FetchHistoryOpts{FromTxIDs: types.NewIDSet([]types.ID{tree.GenesisTxID})},
 			)
 			if err != nil {
 				return err

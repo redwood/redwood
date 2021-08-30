@@ -90,7 +90,7 @@ func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
 					return err
 				}
 
-				parentTx.Children = utils.NewIDSet(parentTx.Children).Add(tx.ID).Slice()
+				parentTx.Children = types.NewIDSet(parentTx.Children).Add(tx.ID).Slice()
 
 				parentBytes, err := parentTx.MarshalProto()
 				if err != nil {
@@ -169,9 +169,9 @@ func (p *badgerTxStore) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 	return &tx, err
 }
 
-func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID types.ID) TxIterator {
-	if fromTxID == (types.ID{}) {
-		fromTxID = GenesisTxID
+func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxIDs types.IDSet) TxIterator {
+	if fromTxIDs.Len() == 0 {
+		fromTxIDs = types.NewIDSet([]types.ID{GenesisTxID})
 	}
 
 	txIter := &txIterator{
@@ -182,7 +182,7 @@ func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID types.ID) Tx
 	go func() {
 		defer close(txIter.ch)
 
-		stack := []types.ID{fromTxID}
+		stack := fromTxIDs.Slice()
 		sent := make(map[types.ID]struct{})
 
 		txIter.err = p.db.View(func(txn *badger.Txn) error {
@@ -260,8 +260,8 @@ func (s *badgerTxStore) UnmarkLeaf(stateURI string, txID types.ID) error {
 	})
 }
 
-func (s *badgerTxStore) Leaves(stateURI string) ([]types.ID, error) {
-	var leaves []types.ID
+func (s *badgerTxStore) Leaves(stateURI string) (types.IDSet, error) {
+	leaves := types.NewIDSet(nil)
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
@@ -272,7 +272,7 @@ func (s *badgerTxStore) Leaves(stateURI string) ([]types.ID, error) {
 
 		for iter.Seek(prefix); iter.ValidForPrefix(prefix); iter.Next() {
 			txID := types.IDFromBytes(iter.Item().Key()[len("leaf:"+stateURI+":"):])
-			leaves = append(leaves, txID)
+			leaves.Add(txID)
 		}
 		return nil
 	})
