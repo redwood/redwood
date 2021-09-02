@@ -139,7 +139,7 @@ func (sub *writableSubscription) writeMessages(ctx context.Context) (err error) 
 
 		err = sub.subImpl.Put(ctx, msg.StateURI, tx, node, msg.Leaves)
 		if err != nil {
-			sub.Errorf("error writing to subscribed peer: %+v", err)
+			sub.Errorf("error writing to subscribed peer: %v", err)
 			return err
 		}
 	}

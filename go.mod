@@ -51,6 +51,7 @@ require (
 	github.com/powerman/rpc-codec v1.2.2
 	github.com/robertkrimen/otto v0.0.0-20210614181706-373ff5438452 // indirect
 	github.com/rs/cors v1.7.0
+	github.com/status-im/doubleratchet v3.0.0+incompatible // indirect
 	github.com/stretchr/testify v1.7.0
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
 	github.com/urfave/cli v1.22.1

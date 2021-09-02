@@ -279,7 +279,7 @@ func (app *App) Start() error {
 		_ = app.Process.Go(nil, "", func(ctx context.Context) {
 			app.Infof(0, "adding bootstrap peer %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
 			for _, dialAddr := range bootstrapPeer.DialAddresses {
-				app.PeerStore.AddDialInfos([]swarm.PeerDialInfo{{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr}})
+				app.PeerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr}, "")
 			}
 		})
 		if err != nil {

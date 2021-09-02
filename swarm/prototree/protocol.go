@@ -103,7 +103,7 @@ func NewTreeProtocol(
 	return tp
 }
 
-const ProtocolName = "tree"
+const ProtocolName = "prototree"
 
 func (tp *treeProtocol) Name() string {
 	return ProtocolName

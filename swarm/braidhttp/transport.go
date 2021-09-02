@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -171,6 +170,7 @@ func (t *transport) Start() error {
 	for _, identity := range identities {
 		t.peerStore.AddVerifiedCredentials(
 			swarm.PeerDialInfo{TransportName: TransportName, DialAddr: t.ownURL},
+			"self",
 			identity.SigKeypair.SigningPublicKey.Address(),
 			identity.SigKeypair.SigningPublicKey,
 			identity.AsymEncKeypair.AsymEncPubkey,
@@ -230,7 +230,7 @@ func (t *transport) Name() string {
 func (t *transport) storeAltSvcHeaderPeers(h http.Header) {
 	if altSvcHeader := h.Get("Alt-Svc"); altSvcHeader != "" {
 		forEachAltSvcHeaderPeer(altSvcHeader, func(transportName, dialAddr string, metadata map[string]string) {
-			t.peerStore.AddDialInfos([]swarm.PeerDialInfo{{transportName, dialAddr}})
+			t.peerStore.AddDialInfo(swarm.PeerDialInfo{transportName, dialAddr}, "")
 		})
 	}
 }
@@ -387,7 +387,7 @@ func (t *transport) serveChallengeIdentityCheckResponse(w http.ResponseWriter, r
 	}
 
 	// @@TODO: make the request include the encrypting pubkey as well
-	t.peerStore.AddVerifiedCredentials(swarm.PeerDialInfo{TransportName, ""}, addr, sigpubkey, nil)
+	t.peerStore.AddVerifiedCredentials(swarm.PeerDialInfo{TransportName, ""}, deviceUniqueID(sessionID), addr, sigpubkey, nil)
 
 	delete(t.pendingAuthorizations, sessionID) // @@TODO: expiration/garbage collection for failed auths
 }
@@ -1158,26 +1158,9 @@ func (t *transport) makePeerConn(writer io.Writer, flusher http.Flusher, dialAdd
 	peer.stream.Flusher = flusher
 
 	if !address.IsZero() {
-		t.peerStore.AddVerifiedCredentials(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: dialAddr}, address, nil, nil)
+		peer.PeerDetails = t.peerStore.AddVerifiedCredentials(swarm.PeerDialInfo{TransportName, dialAddr}, deviceUniqueID(sessionID), address, nil, nil)
 	} else if dialAddr != "" {
-		t.peerStore.AddDialInfos([]swarm.PeerDialInfo{{TransportName, dialAddr}})
-	}
-
-	var pd swarm.PeerDetails
-	if address.IsZero() && dialAddr != "" {
-		pd = t.peerStore.PeerWithDialInfo(swarm.PeerDialInfo{TransportName, dialAddr})
-
-	} else if !address.IsZero() {
-		peerDetails := t.peerStore.PeersFromTransportWithAddress(TransportName, address)
-		// @@TODO: choose the one we prefer intelligently?
-		if len(peerDetails) > 0 {
-			pd = peerDetails[0]
-		}
-	}
-	if pd == nil || reflect.ValueOf(pd).IsNil() {
-		peer.PeerDetails = swarm.NewEphemeralPeerDetails(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: dialAddr})
-	} else {
-		peer.PeerDetails = pd
+		peer.PeerDetails = t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, dialAddr}, deviceUniqueID(sessionID))
 	}
 	return peer
 }

@@ -190,7 +190,7 @@ func (s *HTTPServer) AddPeer(r *http.Request, args *AddPeerArgs, resp *AddPeerRe
 	if s.peerStore == nil {
 		return types.ErrUnsupported
 	}
-	s.peerStore.AddDialInfos([]swarm.PeerDialInfo{{TransportName: args.TransportName, DialAddr: args.DialAddr}})
+	s.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: args.TransportName, DialAddr: args.DialAddr}, "")
 	return nil
 }
 

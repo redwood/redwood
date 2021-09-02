@@ -62,7 +62,7 @@ func NewAuthProtocol(transports []swarm.Transport, keyStore identity.KeyStore, p
 	}
 }
 
-const ProtocolName = "auth"
+const ProtocolName = "protoauth"
 
 func (ap *authProtocol) Name() string {
 	return ProtocolName
@@ -152,7 +152,7 @@ func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn Auth
 		}
 		encpubkey := crypto.AsymEncPubkeyFromBytes(proof.AsymEncPubkey)
 
-		ap.peerStore.AddVerifiedCredentials(peerConn.DialInfo(), sigpubkey.Address(), sigpubkey, encpubkey)
+		ap.peerStore.AddVerifiedCredentials(peerConn.DialInfo(), peerConn.DeviceSpecificID(), sigpubkey.Address(), sigpubkey, encpubkey)
 	}
 
 	return nil

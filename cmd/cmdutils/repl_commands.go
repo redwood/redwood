@@ -261,7 +261,7 @@ var (
 			if len(args) < 2 {
 				return errors.New("requires 2 arguments: addpeer <transport> <dial addr>")
 			}
-			app.PeerStore.AddDialInfos([]swarm.PeerDialInfo{{args[0], args[1]}})
+			app.PeerStore.AddDialInfo(swarm.PeerDialInfo{args[0], args[1]}, "")
 			return nil
 		},
 	}
