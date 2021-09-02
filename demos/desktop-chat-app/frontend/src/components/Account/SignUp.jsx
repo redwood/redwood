@@ -46,7 +46,7 @@ const SAccountCardDesc = styled.p`
     text-align: center;
 `
 
-const SAccountCardContent = styled.div`
+const SAccountCardContent = styled.form`
     display: flex;
     align-items: center;
     justify-content: center;
@@ -90,7 +90,8 @@ const SErrorMessage = styled.div`
 function SignUp({ setMnemonic, profileName, setProfileName, password, setPassword, confirmPassword, setConfirmPassword, setLoadingText, errorMessage, setErrorMessage }) {
     let { signup } = useLoginStatus()
 
-    let onClickSignUp = useCallback(async () => {
+    let onSubmitSignUp = useCallback(async (event) => {
+		event.preventDefault()
         setErrorMessage('')
         setLoadingText('Creating profile...')
         try {
@@ -110,7 +111,7 @@ function SignUp({ setMnemonic, profileName, setProfileName, password, setPasswor
     }, [profileName, password, confirmPassword, setMnemonic, setErrorMessage, setLoadingText])
 
     return (
-        <Fragment>
+        <SAccountCardContent onSubmit={onSubmitSignUp}>
             { errorMessage ? <SErrorMessage>{errorMessage}</SErrorMessage> : null}
             <InputLabel label={'Profile Name'}>
                 <Input
@@ -133,15 +134,15 @@ function SignUp({ setMnemonic, profileName, setProfileName, password, setPasswor
                     type={'password'}
                 />
             </InputLabel>
-            <SLink to={'/profiles'}>Existing profiles.</SLink>
+            <SLink to={'/profiles'}>Import existing account.</SLink>
             <SLink to={'/signin'}>Sign into an account.</SLink>
             <Button
-                onClick={onClickSignUp}
-                primary
+				type="submit"
+				primary
                 style={{ width: '100%', marginTop: 12 }}
                 disabled={!(!!profileName && !!password && !!confirmPassword)}
             >Sign Up</Button>
-        </Fragment>
+        </SAccountCardContent>
     )
 }
 
@@ -161,7 +162,7 @@ function ConfirmDisplay({ mnemonic, setMnemonic, profileName, password, setLoadi
     }, [profileName, mnemonic, password, setErrorMessage, setLoadingText, login])
 
     return (
-        <Fragment>
+        <SAccountCardContent>
             { errorMessage ? <SErrorMessage>{errorMessage}</SErrorMessage> : null}
             <ConfirmValueWrapper style={{ marginBottom: 24 }}>
                 <span>Profile Name:</span>
@@ -175,7 +176,7 @@ function ConfirmDisplay({ mnemonic, setMnemonic, profileName, password, setLoadi
                 <Button onClick={() => setMnemonic('')} primary style={{ width: '45%', marginTop: 12 }}>Cancel</Button>
                 <Button onClick={onClickLogin} primary style={{ width: '45%', marginTop: 12 }}>Create</Button>
             </ConfirmButtonWrapper>
-        </Fragment>
+        </SAccountCardContent>
     )
 }
 
@@ -197,34 +198,31 @@ function Account() {
         <SAccount>
             {/* <SAccountHeader /> */}
             <SAccountCard>
-                <SAccountCardHeader>Sign Up</SAccountCardHeader>
-                <SAccountCardDesc>{ mnemonic ? 'Please save your mnemonic and keep it secure.' : 'Create an account.'}</SAccountCardDesc>
-                <SAccountCardContent>
-                    { mnemonic ?
-                        <ConfirmDisplay
-                            mnemonic={mnemonic}
-                            setMnemonic={setMnemonic}
-                            profileName={profileName}
-                            password={password}
-                            setLoadingText={setLoadingText}
-                            errorMessage={errorMessage}
-                            setErrorMessage={setErrorMessage}
-                        />
-                    : <SignUp
-                        setMnemonic={setMnemonic}
-                        profileName={profileName}
-                        setProfileName={setProfileName}
-                        password={password}
-                        setPassword={setPassword}
-                        confirmPassword={confirmPassword}
-                        setConfirmPassword={setConfirmPassword}
-                        setLoadingText={setLoadingText}
-                        errorMessage={errorMessage}
-                        setErrorMessage={setErrorMessage}
-                    />
-                    }
-
-                </SAccountCardContent>
+				<SAccountCardHeader>Sign Up</SAccountCardHeader>
+				<SAccountCardDesc>{mnemonic ? 'Please save your mnemonic and keep it secure.' : 'Create an account.'}</SAccountCardDesc>
+				{mnemonic ?
+					<ConfirmDisplay
+						mnemonic={mnemonic}
+						setMnemonic={setMnemonic}
+						profileName={profileName}
+						password={password}
+						setLoadingText={setLoadingText}
+						errorMessage={errorMessage}
+						setErrorMessage={setErrorMessage}
+					/>
+					: <SignUp
+						setMnemonic={setMnemonic}
+						profileName={profileName}
+						setProfileName={setProfileName}
+						password={password}
+						setPassword={setPassword}
+						confirmPassword={confirmPassword}
+						setConfirmPassword={setConfirmPassword}
+						setLoadingText={setLoadingText}
+						errorMessage={errorMessage}
+						setErrorMessage={setErrorMessage}
+					/>
+				}
                 { loadingText ? <Loading text={loadingText} /> : null }
             </SAccountCard>
         </SAccount>

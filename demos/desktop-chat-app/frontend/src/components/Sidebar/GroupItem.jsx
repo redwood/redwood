@@ -38,19 +38,22 @@ const SItemInfo = styled.div`
 
 const SItemInfoSub = styled.div`
     display: flex;
-    justify-content: space-between;
+	justify-content: space-between;
+	width: 190.55px;
 `
 
 const STime = styled.div`
     padding-right: 12px;
     white-space: nowrap;
-    font-size: 0.7rem;
+	font-size: 0.6rem;
+	padding-top: 1px;
     color: ${props => props.theme.color.grey[50]}
 `
 
 const ChatName = styled.div`
     font-weight: 500;
-    font-size: 12px;
+	font-size: 12px;
+	white-space: nowrap;
     color: ${props => props.selected ? props.theme.color.white : props.theme.color.grey[100]};
 `
 
@@ -63,6 +66,12 @@ const MostRecentMessage = styled.div`
 `
 
 function GroupItem({ selected, color, avatar, name, text, time, ...props }) {
+	let choppedName = name
+
+	if (name.length > 14) {
+		choppedName = `${name.substring(0, 14)}...`
+	}
+
     return (
         <SItemContainer selected={selected} {...props}>
             <SAvatarCircle color={color}>
@@ -70,7 +79,7 @@ function GroupItem({ selected, color, avatar, name, text, time, ...props }) {
             </SAvatarCircle>
             <SItemInfo selected={selected}>
                 <SItemInfoSub>
-                    <ChatName selected={selected}>{name}</ChatName>
+                    <ChatName selected={selected}>{choppedName}</ChatName>
                     <STime>{time}</STime>
                 </SItemInfoSub>
                 {/* <MostRecentMessage>{text}</MostRecentMessage> */}

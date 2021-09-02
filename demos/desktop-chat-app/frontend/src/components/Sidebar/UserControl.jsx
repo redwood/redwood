@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import styled from 'styled-components'
+import { toast } from 'react-toastify'
+
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
-import Input from '../Input'
+import Input, { InputLabel } from '../Input'
 import Button from '../Button'
 import UserAvatar from '../UserAvatar'
 import { useRedwood, useStateTree } from '@redwood.dev/client/react'
@@ -11,6 +13,7 @@ import useNavigation from '../../hooks/useNavigation'
 import useUsers from '../../hooks/useUsers'
 import useServerAndRoomInfo from '../../hooks/useServerAndRoomInfo'
 import UploadAvatar from '../UploadAvatar'
+import cancelIcon from './assets/cancel.svg'
 
 const SUserControlContainer = styled.div`
     display: flex;
@@ -63,6 +66,22 @@ const SUserAvatar = styled(UserAvatar)`
     height: 40px;
 `
 
+const SCloseBtnContainer = styled.div`
+	height: 16px;
+	width: 16px;
+	cursor: pointer;
+	img {
+		height: 14px;
+		width: 12px;
+	}
+`
+
+const ToastCloseBtn = ({ closeToast }) => (
+	<SCloseBtnContainer className="Toastify__close-button Toastify__close-button--light" onClick={closeToast}>
+		<img src={cancelIcon} alt="Cancel Icon" />
+	</SCloseBtnContainer>
+)
+
 function UserControl() {
     let { onPresent, onDismiss } = useModal('user profile')
     let { httpHost, nodeIdentities } = useRedwood()
@@ -98,13 +117,24 @@ function UserControl() {
             <UserProfileModal
                 onDismiss={onDismiss}
                 currentUsername={username}
-                userPhotoURL={userPhotoURL}
+				userPhotoURL={userPhotoURL}
+				nodeAddress={nodeAddress}
             />
         </SUserControlContainer>
     )
 }
 
-function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
+const SInput = styled(Input)`
+	min-width: 280px;
+`
+
+const SToastContent = styled.div`
+	background: #2a2d32;
+	color: rgba(255, 255, 255, .8);
+	font-size: 16px;
+`
+
+function UserProfileModal({ onDismiss, currentUsername, userPhotoURL, nodeAddress }) {
     const [username, setUsername] = useState('')
     const [iconImg, setIconImg] = useState(null)
     const [iconFile, setIconFile] = useState(null)
@@ -119,7 +149,18 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
         setUsername(currentUsername)
         setIconImg(userPhotoURL)
       }
-    }, [currentUsername, userPhotoURL])
+	}, [currentUsername, userPhotoURL])
+	
+	const copyPublicKey = () => {
+		navigator.clipboard.writeText(nodeAddress)
+		toast(<SToastContent>Public Key Copied!</SToastContent>, {
+			autoClose: 4500,
+			style: {
+				background: '#2a2d32',
+			},
+			closeButton: ToastCloseBtn,
+		})
+	}
 
     const onSave = useCallback(async () => {
         if (!api || !nodeIdentities || nodeIdentities.length === 0) { return }
@@ -160,18 +201,19 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL }) {
                   setIconImg={setIconImg}
                   setIconFile={setIconFile}
                 />
-                <Input
-                  value={username}
-                  onChange={onChangeUsername}
-                  label={'Username'}
-                  width={'460px'}
-                />
+				<InputLabel label={'Username'}>
+					<SInput
+						value={username}
+						onChange={onChangeUsername}
+					/>
+				</InputLabel>
                 {/* <div>
                     Username:
                     <Input value={username} onChange={onChangeUsername} />
                 </div> */}
             </ModalContent>
             <ModalActions>
+				<Button onClick={copyPublicKey}>Copy Key</Button>
                 <Button onClick={onSave} primary>Save</Button>
             </ModalActions>
         </Modal>
