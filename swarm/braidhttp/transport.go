@@ -1159,9 +1159,8 @@ func (t *transport) makePeerConn(writer io.Writer, flusher http.Flusher, dialAdd
 
 	if !address.IsZero() {
 		peer.PeerDetails = t.peerStore.AddVerifiedCredentials(swarm.PeerDialInfo{TransportName, dialAddr}, deviceUniqueID(sessionID), address, nil, nil)
-	} else if dialAddr != "" {
-		peer.PeerDetails = t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, dialAddr}, deviceUniqueID(sessionID))
 	}
+	peer.PeerDetails = t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, dialAddr}, deviceUniqueID(sessionID))
 	return peer
 }
 

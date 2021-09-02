@@ -131,8 +131,10 @@ func (s *peerStore) ensurePeerDetails(dialInfo PeerDialInfo, deviceUniqueID stri
 	pd, exists := s.peers[dialInfo]
 	if !exists {
 		pd = newPeerDetails(s, dialInfo, deviceUniqueID)
-		s.peers[dialInfo] = pd
-		s.unverifiedPeers[dialInfo] = struct{}{}
+		if dialInfo.DialAddr != "" {
+			s.unverifiedPeers[dialInfo] = struct{}{}
+			s.peers[dialInfo] = pd
+		}
 	}
 
 	if deviceUniqueID != "" {
@@ -451,6 +453,7 @@ func (s *peerStore) deletePeers(dialInfos []PeerDialInfo) error {
 }
 
 type PeerDetails interface {
+	Dialable() bool
 	Addresses() []types.Address
 	DialInfo() PeerDialInfo
 	DeviceUniqueID() string
@@ -503,6 +506,13 @@ func newPeerDetails(peerStore *peerStore, dialInfo PeerDialInfo, deviceUniqueID 
 	}
 }
 
+func (p *peerDetails) Dialable() bool {
+	if p == nil || p.dialInfo.DialAddr == "" {
+		return false
+	}
+	return true
+}
+
 func (p *peerDetails) Addresses() []types.Address {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
@@ -551,10 +561,6 @@ func (p *peerDetails) UpdateConnStats(success bool) {
 	p.peerStore.muPeers.Lock()
 	defer p.peerStore.muPeers.Unlock()
 
-	if !success {
-		log.NewLogger("").Debugf("update %v %+v", p.dialInfo, errors.New(""))
-	}
-
 	now := time.Now()
 	if success {
 		p.lastContact = now
@@ -597,62 +603,6 @@ func (p *peerDetails) Ready() bool {
 func (p *peerDetails) RemainingBackoff() time.Duration {
 	p.peerStore.muPeers.RLock()
 	defer p.peerStore.muPeers.RUnlock()
-	_, remaining := p.backoff.Ready()
-	return remaining
-}
-
-// @@TODO: remove this and use transport-defined unique IDs to
-// identify peers so that *everything* is tracked
-type ephemeralPeerDetails peerDetails
-
-func NewEphemeralPeerDetails(dialInfo PeerDialInfo, deviceUniqueID string) *ephemeralPeerDetails {
-	return &ephemeralPeerDetails{
-		dialInfo:       dialInfo,
-		deviceUniqueID: deviceUniqueID,
-		backoff:        utils.ExponentialBackoff{Min: 10 * time.Second, Max: 3 * time.Minute},
-	}
-}
-
-func (p *ephemeralPeerDetails) Addresses() []types.Address { return nil }
-func (p *ephemeralPeerDetails) PublicKeys(addr types.Address) (crypto.SigningPublicKey, crypto.AsymEncPubkey) {
-	return nil, nil
-}
-func (p *ephemeralPeerDetails) DialInfo() PeerDialInfo         { return p.dialInfo }
-func (p *ephemeralPeerDetails) DeviceUniqueID() string         { return p.deviceUniqueID }
-func (p *ephemeralPeerDetails) AddStateURI(stateURI string)    {}
-func (p *ephemeralPeerDetails) RemoveStateURI(stateURI string) {}
-func (p *ephemeralPeerDetails) StateURIs() utils.StringSet     { return nil }
-func (p *ephemeralPeerDetails) UpdateConnStats(success bool) {
-	now := time.Now()
-	if success {
-		p.lastContact = now
-		p.failures = 0
-	} else {
-		p.lastContact = now
-		p.lastFailure = now
-		p.failures++
-		p.backoff.Next()
-	}
-}
-
-func (p *ephemeralPeerDetails) LastContact() time.Time {
-	return p.lastContact
-}
-
-func (p *ephemeralPeerDetails) LastFailure() time.Time {
-	return p.lastFailure
-}
-
-func (p *ephemeralPeerDetails) Failures() uint64 {
-	return p.failures
-}
-
-func (p *ephemeralPeerDetails) Ready() bool {
-	ready, _ := p.backoff.Ready()
-	return ready
-}
-
-func (p *ephemeralPeerDetails) RemainingBackoff() time.Duration {
 	_, remaining := p.backoff.Ready()
 	return remaining
 }

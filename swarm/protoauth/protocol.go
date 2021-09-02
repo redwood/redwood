@@ -213,11 +213,9 @@ func (t *processPeersTask) processPeers(ctx context.Context) {
 
 		for _, tpt := range t.transports {
 			for _, peerDetails := range t.peerStore.PeersFromTransport(tpt.Name()) {
-				if !peerDetails.Ready() {
+				if !peerDetails.Ready() || !peerDetails.Dialable() {
 					continue
-				}
-
-				if peerDetails.DialInfo().TransportName != tpt.Name() {
+				} else if peerDetails.DialInfo().TransportName != tpt.Name() {
 					continue
 				}
 
@@ -254,7 +252,7 @@ func (t *processPeersTask) processPeers(ctx context.Context) {
 	// Verify unverified peers
 	{
 		for _, unverifiedPeer := range t.peerStore.UnverifiedPeers() {
-			if !unverifiedPeer.Ready() {
+			if !unverifiedPeer.Ready() || !unverifiedPeer.Dialable() {
 				continue
 			}
 

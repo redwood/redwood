@@ -2,6 +2,7 @@ package libp2p
 
 import (
 	"sort"
+	"strings"
 
 	cid "github.com/ipfs/go-cid"
 	corepeer "github.com/libp2p/go-libp2p-core/peer"
@@ -53,6 +54,7 @@ func multiaddrsFromPeerInfo(pinfo corepeer.AddrInfo) []ma.Multiaddr {
 	for _, addr := range deduped {
 		multiaddrs = append(multiaddrs, addr)
 	}
+	multiaddrs = filterUselessMultiaddrs(multiaddrs)
 
 	sort.Sort(peerstoreaddr.AddrList(multiaddrs))
 
@@ -69,6 +71,17 @@ func multiaddrsFromPeerInfo(pinfo corepeer.AddrInfo) []ma.Multiaddr {
 	// 	}
 	// 	return false
 	// })
+	return multiaddrs
+}
+
+func filterUselessMultiaddrs(mas []ma.Multiaddr) []ma.Multiaddr {
+	multiaddrs := make([]ma.Multiaddr, 0, len(mas))
+	for _, addr := range mas {
+		if !strings.Contains(addr.String(), "/p2p/") {
+			continue
+		}
+		multiaddrs = append(multiaddrs, addr)
+	}
 	return multiaddrs
 }
 
