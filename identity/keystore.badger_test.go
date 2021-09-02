@@ -6,6 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/pkg/errors"
+	"github.com/status-im/doubleratchet"
 	"github.com/stretchr/testify/require"
 
 	"redwood.dev/identity"
@@ -147,6 +148,7 @@ func TestBadgerKeyStore_NewIdentity(t *testing.T) {
 	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.InsecureScryptParams)
 	err := ks.Unlock("password", "")
 	require.NoError(t, err)
+	defer ks.Close()
 
 	ids, err := ks.Identities()
 	require.NoError(t, err)
@@ -215,6 +217,7 @@ func TestBadgerKeyStore_SignHash(t *testing.T) {
 	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.InsecureScryptParams)
 	err := ks.Unlock("password", "")
 	require.NoError(t, err)
+	defer ks.Close()
 
 	ids, err := ks.Identities()
 	require.NoError(t, err)
@@ -270,4 +273,100 @@ func TestBadgerKeyStore_MarshalsGethCryptoJSONToDB(t *testing.T) {
 	err = node.NodeAt(state.Keypath("blah"), nil).Scan(&cryptoJSON2)
 	require.NoError(t, err)
 	require.Equal(t, cryptoJSON, cryptoJSON2)
+}
+
+func TestBadgerKeyStore_RatchetSessionStore(t *testing.T) {
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.InsecureScryptParams)
+	err := ks.Unlock("password", "")
+	require.NoError(t, err)
+	defer ks.Close()
+
+	var (
+		sk = [32]byte{
+			0xeb, 0x8, 0x10, 0x7c, 0x33, 0x54, 0x0, 0x20,
+			0xe9, 0x4f, 0x6c, 0x84, 0xe4, 0x39, 0x50, 0x5a,
+			0x2f, 0x60, 0xbe, 0x81, 0xa, 0x78, 0x8b, 0xeb,
+			0x1e, 0x2c, 0x9, 0x8d, 0x4b, 0x4d, 0xc1, 0x40,
+		}
+		aliceSessionID = []byte("alice-session-id")
+		bobSessionID   = []byte("bob-session-id")
+
+		aliceMessage1 = []byte("hi bob")
+		bobMessage1   = []byte("hi alice")
+		aliceMessage2 = []byte("cool")
+		bobMessage2   = []byte("neat")
+	)
+
+	err = ks.RatchetSessionStore().SaveSharedKey(aliceSessionID, sk[:])
+	require.NoError(t, err)
+	err = ks.RatchetSessionStore().SaveSharedKey(bobSessionID, sk[:])
+	require.NoError(t, err)
+
+	keyPair, err := doubleratchet.DefaultCrypto{}.GenerateDH()
+	require.NoError(t, err)
+
+	alice, err := doubleratchet.NewWithRemoteKey(aliceSessionID, sk[:], keyPair.PublicKey(), ks.RatchetSessionStore(), doubleratchet.WithKeysStorage(ks.RatchetKeyStore()))
+	require.NoError(t, err)
+
+	bob, err := doubleratchet.New(bobSessionID, sk[:], keyPair, ks.RatchetSessionStore(), doubleratchet.WithKeysStorage(ks.RatchetKeyStore()))
+	require.NoError(t, err)
+
+	msg, err := alice.RatchetEncrypt(aliceMessage1, nil)
+	require.NoError(t, err)
+
+	m, err := bob.RatchetDecrypt(msg, nil)
+	require.NoError(t, err)
+	require.Equal(t, aliceMessage1, m)
+
+	msg, err = bob.RatchetEncrypt(bobMessage1, nil)
+	require.NoError(t, err)
+
+	m, err = alice.RatchetDecrypt(msg, nil)
+	require.NoError(t, err)
+	require.Equal(t, bobMessage1, m)
+
+	alice2, err := doubleratchet.Load(aliceSessionID, ks.RatchetSessionStore())
+	require.NoError(t, err)
+
+	bob2, err := doubleratchet.Load(bobSessionID, ks.RatchetSessionStore())
+	require.NoError(t, err)
+
+	msg, err = alice2.RatchetEncrypt(aliceMessage2, nil)
+	require.NoError(t, err)
+
+	m, err = bob2.RatchetDecrypt(msg, nil)
+	require.NoError(t, err)
+	require.Equal(t, aliceMessage2, m)
+
+	msg, err = bob2.RatchetEncrypt(bobMessage2, nil)
+	require.NoError(t, err)
+
+	m, err = alice2.RatchetDecrypt(msg, nil)
+	require.NoError(t, err)
+	require.Equal(t, bobMessage2, m)
+}
+
+func TestBadgerKeyStore_RatchetKeyStore(t *testing.T) {
+	ks := identity.NewBadgerKeyStore(t.TempDir(), identity.InsecureScryptParams)
+	err := ks.Unlock("password", "")
+	require.NoError(t, err)
+	defer ks.Close()
+
+	rks := ks.RatchetKeyStore()
+
+	var (
+		sessionID = []byte("foo bar")
+		pubKey    = doubleratchet.Key("asdfasdfasdffdsafdsafdsa")
+		msgNum    = uint(12345)
+		mk        = doubleratchet.Key("xyzzy zork xyzzy zork xyzzy zork xyzzy zork")
+		keySeqNum = uint(4665)
+	)
+
+	err = rks.Put(sessionID, pubKey, msgNum, mk, keySeqNum)
+	require.NoError(t, err)
+
+	mk2, ok, err := rks.Get(pubKey, msgNum)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, mk, mk2)
 }

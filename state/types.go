@@ -25,6 +25,7 @@ type Node interface {
 	NodeInfo(keypath Keypath) (NodeType, ValueType, uint64, error)
 	Length() (uint64, error)
 	Subkeys() []Keypath
+	NumSubkeys() uint64
 	Exists(keypath Keypath) (bool, error)
 	NodeAt(keypath Keypath, rng *Range) Node
 	ParentNodeFor(keypath Keypath) (Node, Keypath)

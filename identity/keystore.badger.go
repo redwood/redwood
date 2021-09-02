@@ -1,12 +1,16 @@
 package identity
 
 import (
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"sort"
+	"strconv"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/pkg/errors"
+	"github.com/status-im/doubleratchet"
 
 	"redwood.dev/crypto"
 	"redwood.dev/log"
@@ -475,4 +479,278 @@ func (ks *BadgerKeyStore) loadUser(password string) (_ *badgerUser, err error) {
 		Extra:              encryptedUser.Extra,
 	}
 	return user, nil
+}
+
+func (ks *BadgerKeyStore) RatchetSessionStore() RatchetSessionStore {
+	return (*ratchetSessionStore)(ks)
+}
+
+func (ks *BadgerKeyStore) RatchetKeyStore() RatchetKeyStore {
+	return (*ratchetKeyStore)(ks)
+}
+
+type ratchetSessionStore BadgerKeyStore
+
+var _ RatchetSessionStore = (*ratchetSessionStore)(nil)
+
+type ratchetSessionCodec struct {
+	DHr                      doubleratchet.Key `tree:"DHr"`
+	DHs                      dhPair            `tree:"DHs"`
+	RootChainKey             doubleratchet.Key `tree:"RootChainKey"`
+	SendChainKey             doubleratchet.Key `tree:"SendChainKey"`
+	SendChainN               uint64            `tree:"SendChainN"`
+	RecvChainKey             doubleratchet.Key `tree:"RecvChainKey"`
+	RecvChainN               uint64            `tree:"RecvChainN"`
+	PN                       uint64            `tree:"PN"`
+	MaxSkip                  uint64            `tree:"MaxSkip"`
+	HKr                      doubleratchet.Key `tree:"HKr"`
+	NHKr                     doubleratchet.Key `tree:"NHKr"`
+	HKs                      doubleratchet.Key `tree:"HKs"`
+	NHKs                     doubleratchet.Key `tree:"NHKs"`
+	MaxKeep                  uint64            `tree:"MaxKeep"`
+	MaxMessageKeysPerSession int64             `tree:"MaxMessageKeysPerSession"`
+	Step                     uint64            `tree:"Step"`
+	KeysCount                uint64            `tree:"KeysCount"`
+}
+
+type dhPair struct {
+	Private doubleratchet.Key `tree:"PrivateKey"`
+	Public  doubleratchet.Key `tree:"PublicKey"`
+}
+
+func (p dhPair) PrivateKey() doubleratchet.Key {
+	return p.Private
+}
+
+func (p dhPair) PublicKey() doubleratchet.Key {
+	return p.Public
+}
+
+func (p dhPair) String() string {
+	return fmt.Sprintf("{privateKey: %s publicKey: %s}", p.Private, p.Public)
+}
+
+func (s *ratchetSessionStore) ratchetSessionKeypath(sessionID []byte) state.Keypath {
+	return state.Keypath("ratchet").Push(sessionID)
+}
+
+func (s *ratchetSessionStore) ratchetSessionSharedKeyKeypath(sessionID []byte) state.Keypath {
+	return state.Keypath("ratchet").Push(sessionID).Pushs("SharedKey")
+}
+
+func (s *ratchetSessionStore) LoadSharedKey(sessionID []byte) ([]byte, error) {
+	node := s.db.State(false)
+	defer node.Close()
+
+	sharedKey, is, err := node.BytesValue(s.ratchetSessionSharedKeyKeypath(sessionID))
+	if err != nil {
+		return nil, err
+	} else if !is {
+		return nil, errors.Errorf("SharedKey: wrong type")
+	}
+	return sharedKey, nil
+}
+
+func (s *ratchetSessionStore) SaveSharedKey(sessionID, sharedKey []byte) error {
+	node := s.db.State(true)
+	defer node.Close()
+
+	err := node.Set(s.ratchetSessionSharedKeyKeypath(sessionID), nil, sharedKey)
+	if err != nil {
+		return err
+	}
+	return node.Save()
+}
+
+func (s *ratchetSessionStore) Load(sessionID []byte) (*doubleratchet.State, error) {
+	node := s.db.State(false)
+	defer node.Close()
+
+	sharedKey, err := s.LoadSharedKey(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	var codec ratchetSessionCodec
+	err = node.NodeAt(s.ratchetSessionKeypath(sessionID), nil).Scan(&codec)
+	if err != nil {
+		return nil, err
+	}
+
+	state := doubleratchet.DefaultState(sharedKey)
+	state.Crypto = doubleratchet.DefaultCrypto{}
+	state.DHr = codec.DHr
+	state.DHs = codec.DHs
+	state.RootCh.CK = codec.RootChainKey
+	state.SendCh.CK = codec.SendChainKey
+	state.SendCh.N = uint32(codec.SendChainN)
+	state.RecvCh.CK = codec.RecvChainKey
+	state.RecvCh.N = uint32(codec.RecvChainN)
+	state.PN = uint32(codec.PN)
+	state.MkSkipped = (*ratchetKeyStore)(s)
+	state.MaxSkip = uint(codec.MaxSkip)
+	state.HKr = codec.HKr
+	state.NHKr = codec.NHKr
+	state.HKs = codec.HKs
+	state.NHKs = codec.NHKs
+	state.MaxKeep = uint(codec.MaxKeep)
+	state.MaxMessageKeysPerSession = int(codec.MaxMessageKeysPerSession)
+	state.Step = uint(codec.Step)
+	state.KeysCount = uint(codec.KeysCount)
+	return &state, nil
+}
+
+func (s *ratchetSessionStore) Save(sessionID []byte, state *doubleratchet.State) error {
+	node := s.db.State(true)
+	defer node.Close()
+
+	codec := ratchetSessionCodec{
+		DHr:                      state.DHr,
+		DHs:                      dhPair{Private: state.DHs.PrivateKey(), Public: state.DHs.PublicKey()},
+		RootChainKey:             state.RootCh.CK,
+		SendChainKey:             state.SendCh.CK,
+		SendChainN:               uint64(state.SendCh.N),
+		RecvChainKey:             state.RecvCh.CK,
+		RecvChainN:               uint64(state.RecvCh.N),
+		PN:                       uint64(state.PN),
+		MaxSkip:                  uint64(state.MaxSkip),
+		HKr:                      state.HKr,
+		NHKr:                     state.NHKr,
+		HKs:                      state.HKs,
+		NHKs:                     state.NHKs,
+		MaxKeep:                  uint64(state.MaxKeep),
+		MaxMessageKeysPerSession: int64(state.MaxMessageKeysPerSession),
+		Step:                     uint64(state.Step),
+		KeysCount:                uint64(state.KeysCount),
+	}
+
+	err := node.Set(s.ratchetSessionKeypath(sessionID), nil, codec)
+	if err != nil {
+		return err
+	}
+	return node.Save()
+}
+
+type ratchetKeyStore BadgerKeyStore
+
+var _ RatchetKeyStore = (*ratchetKeyStore)(nil)
+
+type ratchetKeyCodec struct {
+	MessageKey doubleratchet.Key
+	SeqNum     uint64
+	SessionID  []byte
+}
+
+var ratchetKeystoreRootKeypath = state.Keypath("rk")
+
+func (s *ratchetKeyStore) ratchetPubkeyKeypath(pubKey doubleratchet.Key) state.Keypath {
+	hexKey := hex.EncodeToString([]byte(pubKey))
+	return ratchetKeystoreRootKeypath.Pushs(hexKey)
+}
+
+func (s *ratchetKeyStore) ratchetMsgkeyKeypath(pubKey doubleratchet.Key, msgNum uint) state.Keypath {
+	strMsgNum := strconv.FormatUint(uint64(msgNum), 10)
+	return s.ratchetPubkeyKeypath(pubKey).Pushs(strMsgNum)
+}
+
+// Get returns a message key by the given key and message number.
+func (s *ratchetKeyStore) Get(pubKey doubleratchet.Key, msgNum uint) (mk doubleratchet.Key, ok bool, err error) {
+	node := s.db.State(false)
+	defer node.Close()
+
+	innerNode := node.NodeAt(s.ratchetMsgkeyKeypath(pubKey, msgNum), nil)
+
+	exists, err := innerNode.Exists(nil)
+	if err != nil {
+		return nil, false, err
+	} else if !exists {
+		return nil, false, nil
+	}
+
+	var codec ratchetKeyCodec
+	err = innerNode.Scan(&codec)
+	if errors.Cause(err) == types.Err404 {
+		return nil, false, nil
+	} else if err != nil {
+		return nil, false, err
+	}
+	return codec.MessageKey, true, nil
+}
+
+// Put saves the given mk under the specified key and msgNum.
+func (s *ratchetKeyStore) Put(sessionID []byte, pubKey doubleratchet.Key, msgNum uint, mk doubleratchet.Key, keySeqNum uint) error {
+	node := s.db.State(true)
+	defer node.Close()
+
+	codec := ratchetKeyCodec{
+		MessageKey: mk,
+		SeqNum:     uint64(keySeqNum),
+		SessionID:  sessionID,
+	}
+
+	err := node.Set(s.ratchetMsgkeyKeypath(pubKey, msgNum), nil, codec)
+	if err != nil {
+		return err
+	}
+	return node.Save()
+}
+
+// DeleteMk ensures there's no message key under the specified key and msgNum.
+func (s *ratchetKeyStore) DeleteMk(k doubleratchet.Key, msgNum uint) error {
+	node := s.db.State(true)
+	defer node.Close()
+
+	err := node.Delete(s.ratchetMsgkeyKeypath(k, msgNum), nil)
+	if err != nil {
+		return err
+	}
+	return node.Save()
+}
+
+// DeleteOldMKeys deletes old message keys for a session.
+func (s *ratchetKeyStore) DeleteOldMks(sessionID []byte, deleteUntilSeqKey uint) error {
+	// node := s.db.State(true)
+	// defer node.Close()
+
+	// node.ChildIterator(s.ratchetPubkeyKeypath(k), prefetchValues, prefetchSize)
+	return nil
+}
+
+// TruncateMks truncates the number of keys to maxKeys.
+func (s *ratchetKeyStore) TruncateMks(sessionID []byte, maxKeys int) error {
+	return nil
+}
+
+// Count returns number of message keys stored under the specified key.
+func (s *ratchetKeyStore) Count(pubKey doubleratchet.Key) (uint, error) {
+	node := s.db.State(false)
+	defer node.Close()
+
+	n := node.NodeAt(s.ratchetPubkeyKeypath(pubKey), nil).NumSubkeys()
+	return uint(n), nil
+}
+
+// All returns all the keys
+func (s *ratchetKeyStore) All() (map[string]map[uint]doubleratchet.Key, error) {
+	node := s.db.State(false)
+	defer node.Close()
+
+	m := make(map[string]map[uint]doubleratchet.Key)
+
+	iter := node.ChildIterator(ratchetKeystoreRootKeypath, true, 10)
+	defer iter.Close()
+
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		var key ratchetKeyCodec
+		err := iter.Node().Scan(&key)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, exists := m[string(key.SessionID)]; !exists {
+			m[string(key.SessionID)] = make(map[uint]doubleratchet.Key)
+		}
+		m[string(key.SessionID)][uint(key.SeqNum)] = key.MessageKey
+	}
+	return m, nil
 }

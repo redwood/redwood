@@ -242,6 +242,26 @@ func (tx *DBNode) Subkeys() []Keypath {
 	return keypaths
 }
 
+func (tx *DBNode) NumSubkeys() uint64 {
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = false
+	iter := tx.tx.NewIterator(opts)
+	defer iter.Close()
+
+	startKeypath := append(tx.addKeyPrefix(tx.rootKeypath), KeypathSeparator[0])
+
+	var i uint64
+	for iter.Seek(startKeypath); iter.ValidForPrefix(startKeypath); iter.Next() {
+		item := iter.Item()
+		absKeypath := Keypath(item.Key())
+		subkey := tx.rmKeyPrefix(absKeypath).RelativeTo(tx.rootKeypath).Part(0)
+		if len(subkey) > 0 {
+			i++
+		}
+	}
+	return i
+}
+
 func (n *DBNode) NodeInfo(keypath Keypath) (NodeType, ValueType, uint64, error) {
 	item, err := n.tx.Get(n.addKeyPrefix(n.rootKeypath.Push(keypath)))
 	if err == badger.ErrKeyNotFound {
