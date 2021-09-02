@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import styled from 'styled-components'
 import { Redirect, useHistory } from 'react-router-dom'
 import { Code as CodeIcon } from '@material-ui/icons'
+import { ToastContainer } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
 
 import { useRedwood } from '@redwood.dev/client/react'
 import ServerBar from './components/Sidebar/ServerBar'
@@ -83,7 +85,7 @@ function Main() {
     let [showDebugView, setShowDebugView] = useState(false)
     let onClickShowDebugView = useCallback(() => {
         setShowDebugView(!showDebugView)
-    }, [showDebugView, setShowDebugView])
+	}, [showDebugView, setShowDebugView])
 
     return (
         <Layout>
@@ -98,6 +100,7 @@ function Main() {
             </HeaderAndContent>
 
             <ContactsModal onDismiss={onDismissContactsModal} />
+			<ToastContainer />
         </Layout>
     )
 }
@@ -123,8 +126,10 @@ const ChatTitle = styled.div`
     padding-top: 12px;
     padding-left: 18px;
     color: ${props => props.theme.color.white};
-    width: calc(${props => props.theme.chatSidebarWidth} - 18px);
-    height: calc(100% - 12px);
+	// width: calc(${props => props.theme.chatSidebarWidth} - 18px);
+	white-space: nowrap;
+	text-overflow: none;
+	height: calc(100% - 12px);
 `
 
 const SCodeIcon = styled(CodeIcon)`
@@ -140,8 +145,8 @@ function HeaderBar({ onClickShowDebugView, className }) {
         <HeaderBarContainer className={className}>
             <ServerTitle>{currentServer && currentServer.name} /</ServerTitle>
             <ChatTitle>{currentRoom && roomName}</ChatTitle>
-            <Spacer size="flex" />
-            <SCodeIcon style={{ color: 'white' }} onClick={onClickShowDebugView} />
+            {/* <Spacer size="flex" /> */}
+            <SCodeIcon style={{ color: 'white', marginLeft: 'auto' }} onClick={onClickShowDebugView} />
         </HeaderBarContainer>
     )
 }
