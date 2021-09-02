@@ -30,6 +30,7 @@ import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 import useNavigation from '../hooks/useNavigation'
 import useAddressBook from '../hooks/useAddressBook'
 import useUsers from '../hooks/useUsers'
+import emojiSheet from './../assets/emoji-mart-twitter-images.png'
 // import strToColor from '../utils/strToColor'
 
 
@@ -664,7 +665,10 @@ function Chat({ className }) {
                 { showEmojiKeyboard ? <EmojiWrapper>
                   <Picker
                     useButton={false}
-                    title={'Redwood Chat'}
+					title={'Redwood Chat'}
+					backgroundImageFn={(set, sheetSize) => {
+						return emojiSheet
+					}}
                     perLine={8}
                     set='twitter'
                     theme='dark'

@@ -11,7 +11,7 @@ import { sortBy } from 'lodash'
 import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
-import Input from '../Input'
+import Input, { InputLabel } from '../Input'
 import PeerRow from '../PeerRow'
 import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 import useModal from '../../hooks/useModal'
@@ -218,19 +218,23 @@ function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
     function closeModal() {
       setNewChatName()
       onDismiss()
-    }
+	}
+	
+	const WInput = styled(Input)`
+		width: 280px;	
+	`
 
     return (
         <Modal modalKey="new chat">
             <ModalTitle closeModal={closeModal}>Create a Chat</ModalTitle>
             <ModalContent>
-                <Input
-                  value={newChatName}
-                  onChange={onChangeNewChatName}
-                  onKeyDown={onKeyDown}
-                  label={'Chat Name'}
-                  width={'460px'}
-                />
+				<InputLabel label={'Chat Name'}>
+					<WInput
+						value={newChatName}
+						onChange={onChangeNewChatName}
+						onKeyDown={onKeyDown}
+					/>
+				</InputLabel>
             </ModalContent>
             <ModalActions>
                 <Button primary onClick={onClickCreate}>Create</Button>
@@ -250,7 +254,8 @@ const useCheckboxStyles = makeStyles(muiTheme => ({
 
 const SNewDMModalContent = styled(ModalContent)`
     max-height: 60vh;
-    overflow: scroll;
+	overflow: scroll;
+	min-width: 400px;
 
     /* Chrome, Safari, Opera */
     &::-webkit-scrollbar {
@@ -260,11 +265,19 @@ const SNewDMModalContent = styled(ModalContent)`
     scrollbar-width: none;  /* Firefox */
 `
 
+const SEmptyPeers = styled.div`
+	color: rgba(255, 255, 255, .5);
+	width: 100%;
+	text-align: center;
+	font-size: 12px;
+	margin-top: 24px;
+`
+
 function NewDMModal({ serverRooms, onDismiss, navigate }) {
     const { nodeIdentities } = useRedwood()
     const [sender, setSender] = useState('')
     const api = useAPI()
-    let { peersByAddress } = usePeers()
+	let { peersByAddress } = usePeers()
     let peers = Object.keys(peersByAddress).map(addr => peersByAddress[addr]).filter(peer => !peer.isSelf)
 
     useEffect(() => {
@@ -296,12 +309,20 @@ function NewDMModal({ serverRooms, onDismiss, navigate }) {
 
     peers = sortBy(peers, ['address'])
 
-    const checkboxStyles = useCheckboxStyles()
+	const checkboxStyles = useCheckboxStyles()
+
+	let emptyPeers = null
+	let noSelectedPeers = Object.keys(selectedPeers).length === 0
+
+	if (peers.length === 0) {
+		emptyPeers = <SEmptyPeers>No peers were found.</SEmptyPeers>
+	}
 
     return (
         <Modal modalKey="new dm">
-            <ModalTitle>Start a DM</ModalTitle>
+            <ModalTitle closeModal={onDismiss}>Start a DM</ModalTitle>
             <SNewDMModalContent>
+				{emptyPeers}
                 {peers.map(peer => (
                     <div style={{ display: 'flex' }} key={peer.address}>
                         <Checkbox checked={!!selectedPeers[peer.address]} onChange={() => onClickPeer(peer.address)} classes={checkboxStyles} />
@@ -310,7 +331,7 @@ function NewDMModal({ serverRooms, onDismiss, navigate }) {
                 ))}
             </SNewDMModalContent>
             <ModalActions>
-                <Button primary onClick={onClickCreate}>Create</Button>
+                <Button primary onClick={onClickCreate} disabled={noSelectedPeers}>Create</Button>
             </ModalActions>
         </Modal>
     )
