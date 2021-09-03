@@ -10,8 +10,8 @@ WIP
 
 ```tsx
 import React, { useRef } from 'react'
-import Redwood from 'redwood-p2p-client'
-import { RedwoodProvider, useRedwood, useStateTree } from 'redwood-p2p-client/react'
+import Redwood from '@redwood.dev/client'
+import { RedwoodProvider, useRedwood, useStateTree } from '@redwood.dev/client/react'
 
 const identity = Redwood.identity.random()
 
@@ -19,7 +19,6 @@ function App() {
     return (
         <RedwoodProvider
             httpHost="http://localhost:8080"
-            webrtc={true}
             identity={identity}
         >
             <ChatRoom />
@@ -34,8 +33,9 @@ function ChatRoom() {
 
     function onClickSend() {
         redwoodClient.put({
+            stateURI: 'chat.redwood.dev/general'
             patches: [
-                '.messages[-0:-0] = ' + Redwood.utils.JSON.stringify({
+                '.messages[0:0] = ' + Redwood.utils.JSON.stringify({
                     sender: identity.address,
                     text:   textInput.current.value,
                 }),
