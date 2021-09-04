@@ -132,7 +132,9 @@ function ChatBarItem({ stateURI, selected, onClick }) {
     const chatState = useStateTree(stateURI)
     const [latestMessageTime, setLatestMessageTime] = useState(null)
     const [server, room] = stateURI.split('/')
-    const roomName = useRoomName(server, room)
+	const roomName = useRoomName(server, room)
+	
+	console.log('chatState', server, room, chatState)
 
     let latestTimestamp
     let mostRecentMessageText
