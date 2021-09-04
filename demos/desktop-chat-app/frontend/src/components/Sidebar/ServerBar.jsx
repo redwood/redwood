@@ -62,7 +62,7 @@ const Spacer = styled.div`
 function ServerBar({ className, verticalPadding }) {
     const { selectedServer, navigate } = useNavigation()
     const [isLoaded, setIsLoaded] = useState(false)
-    const joinedServers = useJoinedServers()
+	const joinedServers = useJoinedServers()
 
     const { onPresent: onPresentContactsModal } = useModal('contacts')
     const { onPresent: onPresentAddServerModal, onDismiss: onDismissAddServerModal } = useModal('add server')

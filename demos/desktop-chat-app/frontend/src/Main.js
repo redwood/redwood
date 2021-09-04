@@ -5,7 +5,8 @@ import { Code as CodeIcon } from '@material-ui/icons'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 
-import { useRedwood } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+
 import ServerBar from './components/Sidebar/ServerBar'
 import Sidebar from './components/Sidebar'
 import Chat from './components/Chat'
@@ -75,7 +76,9 @@ const SHeaderBar = styled(HeaderBar)`
 `
 
 function Main() {
-    const { onDismiss: onDismissContactsModal } = useModal('contacts')
+	const { onDismiss: onDismissContactsModal } = useModal('contacts')
+	const { registryStateURI } = useNavigation()
+
     let { isLoggedIn } = useLoginStatus()
 
     if (!isLoggedIn) {
