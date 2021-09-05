@@ -31,7 +31,6 @@ import useNavigation from '../hooks/useNavigation'
 import useAddressBook from '../hooks/useAddressBook'
 import useUsers from '../hooks/useUsers'
 import emojiSheet from './../assets/emoji-mart-twitter-images.png'
-
 // import strToColor from '../utils/strToColor'
 
 

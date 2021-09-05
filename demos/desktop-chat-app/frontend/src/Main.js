@@ -4,7 +4,6 @@ import { Redirect, useHistory } from 'react-router-dom'
 import { Code as CodeIcon } from '@material-ui/icons'
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
-
 import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 
 import ServerBar from './components/Sidebar/ServerBar'

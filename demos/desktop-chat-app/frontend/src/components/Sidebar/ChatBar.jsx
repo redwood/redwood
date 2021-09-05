@@ -226,6 +226,10 @@ function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
       onDismiss()
 	}
 	
+	const WInput = styled(Input)`
+		width: 280px;	
+	`
+
     return (
         <Modal modalKey="new chat">
             <ModalTitle closeModal={closeModal}>Create a Chat</ModalTitle>
