@@ -133,8 +133,8 @@ function ChatBarItem({ stateURI, selected, onClick }) {
     const [latestMessageTime, setLatestMessageTime] = useState(null)
     const [server, room] = stateURI.split('/')
 	const roomName = useRoomName(server, room)
-	
-	console.log('chatState', server, room, chatState)
+
+	// Put notification sound and alert here
 
     let latestTimestamp
     let mostRecentMessageText
@@ -174,6 +174,10 @@ function ChatBarItem({ stateURI, selected, onClick }) {
 
 const SInput = styled(Input)`
     width: 460px;
+`
+
+const WInput = styled(Input)`
+width: 280px;	
 `
 
 function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
@@ -222,10 +226,6 @@ function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
       onDismiss()
 	}
 	
-	const WInput = styled(Input)`
-		width: 280px;	
-	`
-
     return (
         <Modal modalKey="new chat">
             <ModalTitle closeModal={closeModal}>Create a Chat</ModalTitle>

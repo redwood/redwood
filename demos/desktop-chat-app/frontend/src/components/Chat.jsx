@@ -13,7 +13,6 @@ import data from 'emoji-mart/data/all.json'
 import { Node, createEditor, Editor, Transforms, Range } from 'slate'
 import { withReact, ReactEditor } from 'slate-react'
 import { withHistory } from 'slate-history'
-import { toast } from 'react-toastify'
 
 import Button from './Button'
 import Input from './Input'
@@ -32,8 +31,7 @@ import useNavigation from '../hooks/useNavigation'
 import useAddressBook from '../hooks/useAddressBook'
 import useUsers from '../hooks/useUsers'
 import emojiSheet from './../assets/emoji-mart-twitter-images.png'
-import notificationSound from './../assets/mmm.mp3'
-import cancelIcon from './../assets/cancel.svg'
+
 // import strToColor from '../utils/strToColor'
 
 
@@ -186,28 +184,6 @@ const EmptyChatContainer = styled(Container)`
     justify-content: center;
 `
 
-const SCloseBtnContainer = styled.div`
-	height: 16px;
-	width: 16px;
-	cursor: pointer;
-	img {
-		height: 14px;
-		width: 12px;
-	}
-`
-
-const ToastCloseBtn = ({ closeToast }) => (
-	<SCloseBtnContainer className="Toastify__close-button Toastify__close-button--light" onClick={closeToast}>
-		<img src={cancelIcon} alt="Cancel Icon" />
-	</SCloseBtnContainer>
-)
-
-const SToastContent = styled.div`
-	background: #2a2d32;
-	color: rgba(255, 255, 255, .8);
-	font-size: 16px;
-`
-
 function Chat({ className }) {
     const { nodeIdentities } = useRedwood()
     const api = useAPI()
@@ -272,19 +248,6 @@ function Chat({ className }) {
       }
 	}
 	
-	function fireNotificationAlert(info) {
-		console.log(info)
-		const audio = new Audio(notificationSound)
-		toast(<SToastContent>New message in {selectedServer}/{selectedRoom}!</SToastContent>, {
-			autoClose: 4500,
-			style: {
-				background: '#2a2d32',
-			},
-			closeButton: ToastCloseBtn,
-		})
-		audio.play()
-	}
-
     let mentionUsers = []
     const userAddresses = Object.keys(users || {})
     if (userAddresses.length) {
@@ -449,12 +412,13 @@ function Chat({ className }) {
     }
 
     const onClickSend = useCallback(async () => {
-        const plainMessage = serializeMessageText()
-        if (!api || (!plainMessage && attachments.length === 0)) { return }
+		const plainMessage = serializeMessageText()
+		// const attachmentCount = Array.prototype.map.call(attachmentsInput.current.files, x => x).length
+        if (!api || !plainMessage) { return }
         // Replace with markdown serializer
         await api.sendMessage(plainMessage, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
         setAttachments([])
-        setPreviews([])
+		setPreviews([])
         setEmojiSearchWord('')
 
         // Reset SlateJS cursor
@@ -463,15 +427,17 @@ function Chat({ className }) {
         editor.selection = { anchor: point, focus: point };
         editor.history = { redos: [], undos: [] };
 
-        setMessageText(initialMessageText)
-    }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api])
+		setMessageText(initialMessageText)
+		
+		attachmentsInput.current.value = ''
+    }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api, previews])
 
     useEffect(() => {
         // Scrolls on new messages
         if (messageTextContainer.current) {
           setTimeout(() => {
 			messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
-			fireNotificationAlert()
+			// fireNotificationAlert()
           }, 0)
         }
     }, [numMessages])
@@ -615,9 +581,12 @@ function Chat({ className }) {
     }
 
     function removePreview(itemIdx) {
-      let clonedPreviews = [...previews]
-      clonedPreviews.splice(itemIdx, 1)
-      setPreviews(clonedPreviews)
+	  let clonedPreviews = [...previews]
+	  let clonedAttachments = [...attachments]
+	  clonedPreviews.splice(itemIdx, 1)
+	  clonedAttachments.splice(itemIdx, 1)
+	  setPreviews(clonedPreviews)
+	  setAttachments(clonedAttachments)
     }
 
     function onChangeAttachments() {
@@ -627,7 +596,7 @@ function Chat({ className }) {
             return
         }
 
-        let files = Array.prototype.map.call(attachmentsInput.current.files, x => x)
+		let files = Array.prototype.map.call(attachmentsInput.current.files, x => x)
         setAttachments(files)
         setPreviews(new Array(files.length))
 

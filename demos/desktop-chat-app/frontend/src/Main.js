@@ -1,13 +1,17 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import styled from 'styled-components'
+import styled, { useTheme } from 'styled-components'
 import { Redirect, useHistory } from 'react-router-dom'
 import { Code as CodeIcon } from '@material-ui/icons'
-import { ToastContainer } from 'react-toastify'
+import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 
 import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 
 import ServerBar from './components/Sidebar/ServerBar'
+import UserAvatar from './components/UserAvatar'
+import NormalizeMessage from './components/ChatHelpers/NormalizeMessage'
+import ToastCloseBtn from './components/Toast/ToastCloseBtn'
+import ToastContent from './components/Toast/ToastContent'
 import Sidebar from './components/Sidebar'
 import Chat from './components/Chat'
 import StateTreeDebugView from './components/StateTreeDebugView'
@@ -17,7 +21,11 @@ import useNavigation from './hooks/useNavigation'
 import useCurrentServerAndRoom from './hooks/useCurrentServerAndRoom'
 import useModal from './hooks/useModal'
 import useRoomName from './hooks/useRoomName'
+import useUsers from './hooks/useUsers'
 import useLoginStatus from './hooks/useLoginStatus'
+import useServerAndRoomInfo from './hooks/useServerAndRoomInfo'
+import useAddressBook from './hooks/useAddressBook'
+import notificationSound from './assets/notification-sound.mp3'
 
 const serverBarVerticalPadding = '12px'
 
@@ -77,7 +85,10 @@ const SHeaderBar = styled(HeaderBar)`
 
 function Main() {
 	const { onDismiss: onDismissContactsModal } = useModal('contacts')
-	const { registryStateURI } = useNavigation()
+	const { selectedStateURI, navigate } = useNavigation()
+	const { servers, rooms } = useServerAndRoomInfo()
+
+	const roomKeys = Object.keys(rooms || {}).filter((key) => key !== 'chat.local/address-book')
 
     let { isLoggedIn } = useLoginStatus()
 
@@ -100,12 +111,132 @@ function Main() {
                     <SChat />
                     {showDebugView && <SStateTreeDebugView />}
                 </Content>
+				{ roomKeys.map((key) => <NotificationMount navigate={navigate} selectedStateURI={selectedStateURI} roomPath={key} />) }
             </HeaderAndContent>
 
             <ContactsModal onDismiss={onDismissContactsModal} />
 			<ToastContainer />
         </Layout>
     )
+}
+
+const SToastContent = styled(ToastContent)`
+
+`
+const ToastLeft = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: center;
+`
+
+const ToastRight = styled.div`
+	display: flex;
+	flex-direction: column;
+	padding-left: 12px;
+	width: 217px;
+	padding-bottom: 4px;
+`
+
+const SToastRoom = styled.div`
+	font-size: 10px;
+	color: rgba(255,255,255, .6);
+	span {
+		font-size: 12px;
+		color: ${props => props.themePrimaryColor};
+		text-decoration: underline;
+	}
+`
+const SToastUser = styled.div`
+	padding-top: 4px;
+	font-size: 10px;
+`
+
+function fireNotificationAlert({
+	roomPath,
+	messageText,
+	displayName,
+	themePrimaryColor,
+	navigateToMessage,
+	setToastId,
+}) {
+	let parsedDisplayName = displayName
+
+	if (displayName.length > 25) {
+		parsedDisplayName = `${displayName.substring(0, 25)}...`
+	}
+
+	const audio = new Audio(notificationSound)
+	let toastId = toast(<SToastContent onClick={navigateToMessage}>
+		<ToastLeft>
+			<UserAvatar address={displayName} />
+		</ToastLeft>
+		<ToastRight>
+			<SToastRoom themePrimaryColor={themePrimaryColor}>New message in <span>{roomPath}</span>!</SToastRoom>
+			<NormalizeMessage isNotification style={{ fontSize: 14 }} msgText={messageText} />
+			<SToastUser>Sent by {parsedDisplayName}</SToastUser>
+		</ToastRight>
+	</SToastContent>, {
+		autoClose: 4500,
+		style: {
+			background: '#2a2d32',
+		},
+		closeButton: ToastCloseBtn,
+	})
+
+	setToastId(toastId)
+	audio.play()
+}
+
+// Used to mount the room state and notify users when new messages come in
+function NotificationMount(props) {
+	const roomState = useStateTree(props.roomPath)
+	let { users } = useUsers(props.roomPath)
+	const messages = (roomState || {}).messages || []
+	const numMessages = messages.length
+	const latestMessage = messages[messages.length - 1] || {}
+	const addressBook = useAddressBook()
+	const theme = useTheme()
+	const [toastId, setToastId] = useState(null)
+
+	const [isLoading, setIsLoading ] = useState(true)
+
+	const [server, room] = props.roomPath.split('/')
+
+	const navigateToMessage = () => {
+		props.navigate(server, room)
+		toast.dismiss(toastId)
+	}
+	
+	useEffect(() => {
+		if (props.roomPath === props.selectedStateURI && document.hasFocus()) {
+			return
+		}
+
+		if (isLoading) {
+			setIsLoading(false)
+			return
+		}
+
+		if (messages.length === 0) {
+			return
+		}
+
+		let userAddress = (latestMessage.sender || "").toLowerCase()
+		let user = (users && users[userAddress]) || {}
+		let displayName = addressBook[userAddress] || user.username || latestMessage.sender
+		
+		fireNotificationAlert({
+			roomPath: props.roomPath,
+			messageText: latestMessage.text,
+			displayName,
+			themePrimaryColor: theme.color.indigo[500],
+			navigateToMessage,
+			setToastId,
+
+		})
+	}, [numMessages])
+
+	return <div style={{ display: 'none' }}></div>
 }
 
 const HeaderBarContainer = styled.div`

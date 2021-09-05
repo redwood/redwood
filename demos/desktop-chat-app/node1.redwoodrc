@@ -1,5 +1,5 @@
 BootstrapPeers: []
-DataRoot: node1_data/timothy
+DataRoot: node1_data/destiny
 DNSOverHTTPSURL: ""
 Libp2pTransport:
     Enabled: true
