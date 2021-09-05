@@ -40,7 +40,7 @@ const SEmojiPreview = styled(Twemoji)`
 `
 
 
-function NormalizeMessage({ msgText, preview, selected }) {
+function NormalizeMessage({ msgText, preview, selected, style = {}, isNotification }) {
   const [content, setContent] = useState([])
   useEffect(() => {
     try {
@@ -100,7 +100,20 @@ function NormalizeMessage({ msgText, preview, selected }) {
     return <SNormalizeMessage selected={selected} style={{ overflow: 'hidden', fontSize: 11, maxHeight: 17 }} preview={preview}>{content[0]}</SNormalizeMessage>
   }
 
-  return <SNormalizeMessage selected={true}>{content.map((item, idx) => {
+  if (isNotification) {
+	return <SNormalizeMessage style={{
+		overflow: 'hidden',
+		fontSize: style.fontSize,
+		maxHeight: 50,
+	}} selected={true}>{content.map((item, idx) => {
+		if ((content.length - 1) === idx) {
+		  return <Fragment>{item}</Fragment> 
+		}
+		return <Fragment>{item}<br /></Fragment>
+	  })}</SNormalizeMessage>
+  }
+
+  return <SNormalizeMessage style={style} selected={true}>{content.map((item, idx) => {
     if ((content.length - 1) === idx) {
       return <Fragment>{item}</Fragment> 
     }
