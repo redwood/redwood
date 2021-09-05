@@ -8,6 +8,7 @@ import 'react-toastify/dist/ReactToastify.css'
 import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 
 import ServerBar from './components/Sidebar/ServerBar'
+import Loading from './components/Account/Loading'
 import UserAvatar from './components/UserAvatar'
 import NormalizeMessage from './components/ChatHelpers/NormalizeMessage'
 import ToastCloseBtn from './components/Toast/ToastCloseBtn'
@@ -87,8 +88,16 @@ function Main() {
 	const { onDismiss: onDismissContactsModal } = useModal('contacts')
 	const { selectedStateURI, navigate } = useNavigation()
 	const { servers, rooms } = useServerAndRoomInfo()
+	const [isLoading, setIsLoading] = useState(true)
+	let { nodeIdentities } = useRedwood()
 
 	const roomKeys = Object.keys(rooms || {}).filter((key) => key !== 'chat.local/address-book')
+
+	useEffect(() => {
+		if (nodeIdentities) {
+			setIsLoading(false)
+		}
+	}, [nodeIdentities])
 
     let { isLoggedIn } = useLoginStatus()
 
@@ -116,6 +125,7 @@ function Main() {
 
             <ContactsModal onDismiss={onDismissContactsModal} />
 			<ToastContainer />
+			{ isLoading ? <Loading text={'Loading account and chats...'} /> : null }
         </Layout>
     )
 }
