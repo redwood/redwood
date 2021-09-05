@@ -223,20 +223,12 @@ func (p *peerConn) FetchBlobManifest(blobID blob.ID) (blob.Manifest, error) {
 	return blob.Manifest{}, types.ErrUnimplemented
 }
 
-func (p *peerConn) ReadBlobManifestRequest() (blob.ID, error) {
-	return blob.ID{}, types.ErrUnimplemented
-}
-
 func (p *peerConn) SendBlobManifest(m blob.Manifest, exists bool) error {
 	return types.ErrUnimplemented
 }
 
 func (p *peerConn) FetchBlobChunk(sha3 types.Hash) ([]byte, error) {
 	return nil, types.ErrUnimplemented
-}
-
-func (p *peerConn) ReadBlobChunkRequest() (sha3 types.Hash, err error) {
-	return types.Hash{}, types.ErrUnimplemented
 }
 
 func (p *peerConn) SendBlobChunk(chunk []byte, exists bool) error {

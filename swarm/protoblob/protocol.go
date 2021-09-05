@@ -34,10 +34,8 @@ type BlobTransport interface {
 type BlobPeerConn interface {
 	swarm.PeerConn
 	FetchBlobManifest(blobID blob.ID) (blob.Manifest, error)
-	ReadBlobManifestRequest() (blob.ID, error)
 	SendBlobManifest(m blob.Manifest, exists bool) error
 	FetchBlobChunk(sha3 types.Hash) ([]byte, error)
-	ReadBlobChunkRequest() (sha3 types.Hash, err error)
 	SendBlobChunk(chunk []byte, exists bool) error
 }
 

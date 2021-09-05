@@ -125,6 +125,10 @@ func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.
 func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn AuthPeerConn) (err error) {
 	defer utils.WithStack(&err)
 
+	if !peerConn.Ready() || !peerConn.Dialable() {
+		return errors.Wrapf(swarm.ErrUnreachable, "peer: %v", peerConn.DialInfo())
+	}
+
 	err = peerConn.EnsureConnected(ctx)
 	if err != nil {
 		return err
@@ -268,8 +272,6 @@ func (t *processPeersTask) processPeers(ctx context.Context) {
 			} else if errors.Cause(err) == types.ErrConnection {
 				continue
 			} else if err != nil {
-				continue
-			} else if !peerConn.Ready() {
 				continue
 			}
 

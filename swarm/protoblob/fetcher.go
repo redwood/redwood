@@ -213,6 +213,12 @@ func (f *fetcher) getPeer(ctx context.Context) (BlobPeerConn, error) {
 			return nil, err
 		} else if peer == nil || reflect.ValueOf(peer).IsNil() {
 			panic("peer is nil")
+		} else if !peer.Dialable() {
+			f.peerPool.ReturnPeer(peer, true)
+			continue
+		} else if !peer.Ready() {
+			f.peerPool.ReturnPeer(peer, false)
+			continue
 		}
 
 		// Ensure the peer supports the blob protocol

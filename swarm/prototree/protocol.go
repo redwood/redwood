@@ -603,6 +603,8 @@ func (tp *treeProtocol) broadcastToPrivateRecipients(
 			if err != nil {
 				tp.Errorf("error creating connection to peer %v: %v", peerDetails.DialInfo(), err)
 				continue
+			} else if !maybePeer.Ready() || !maybePeer.Dialable() {
+				continue
 			}
 			peer, is := maybePeer.(TreePeerConn)
 			if !is {
@@ -645,6 +647,8 @@ func (tp *treeProtocol) broadcastToPeerConn(
 ) {
 	_, alreadySent := alreadySentPeers.LoadOrStore(peerConn.DeviceSpecificID(), struct{}{})
 	if alreadySent {
+		return
+	} else if !peerConn.Ready() || !peerConn.Dialable() {
 		return
 	}
 
@@ -743,7 +747,6 @@ func (tp *treeProtocol) broadcastToWritableSubscriber(
 type broadcastTxsToStateURIProvidersTask struct {
 	process.PeriodicTask
 	log.Logger
-	treeProto                 TreeProtocol
 	treeStore                 Store
 	peerStore                 swarm.PeerStore
 	transports                map[string]TreeTransport
@@ -804,6 +807,8 @@ func (t *broadcastTxsToStateURIProvidersTask) broadcastTxsToStateURIProviders(ct
 				if err != nil {
 					t.Errorf("while creating NewPeerConn: %v", err)
 					return
+				} else if !peerConn.Ready() || !peerConn.Dialable() {
+					return
 				}
 				treePeer, is := peerConn.(TreePeerConn)
 				if !is {
@@ -834,7 +839,6 @@ func (t *broadcastTxsToStateURIProvidersTask) broadcastTxsToStateURIProviders(ct
 type announceP2PStateURIsTask struct {
 	process.PeriodicTask
 	log.Logger
-	treeProto                 TreeProtocol
 	txStore                   tree.TxStore
 	peerStore                 swarm.PeerStore
 	controllerHub             tree.ControllerHub
@@ -896,6 +900,8 @@ func (t *announceP2PStateURIsTask) announceP2PStateURIs(ctx context.Context) {
 					continue
 				} else if err != nil {
 					t.Errorf("while creating NewPeerConn: %v", err)
+					continue
+				} else if !peerConn.Ready() || !peerConn.Dialable() {
 					continue
 				}
 				treePeer, is := peerConn.(TreePeerConn)

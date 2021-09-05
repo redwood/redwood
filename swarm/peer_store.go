@@ -114,11 +114,17 @@ func (s *peerStore) AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) Pe
 		s.muPeers.Lock()
 		defer s.muPeers.Unlock()
 
-		pd, exists = s.ensurePeerDetails(dialInfo, deviceUniqueID)
+		var needsSave bool
+		pd, exists, needsSave = s.ensurePeerDetails(dialInfo, deviceUniqueID)
+		if !needsSave {
+			return
+		}
 
-		err := s.savePeerDetails(pd)
-		if err != nil {
-			s.Warnf("could not save modifications to peerstore DB: %v", err)
+		if needsSave {
+			err := s.savePeerDetails(pd)
+			if err != nil {
+				s.Warnf("could not save modifications to peerstore DB: %v", err)
+			}
 		}
 	}()
 	if !exists && s.onNewUnverifiedPeer != nil {
@@ -127,7 +133,7 @@ func (s *peerStore) AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) Pe
 	return pd
 }
 
-func (s *peerStore) ensurePeerDetails(dialInfo PeerDialInfo, deviceUniqueID string) (*peerDetails, bool) {
+func (s *peerStore) ensurePeerDetails(dialInfo PeerDialInfo, deviceUniqueID string) (_ *peerDetails, knownPeer bool, needsSave bool) {
 	pd, exists := s.peers[dialInfo]
 	if !exists {
 		pd = newPeerDetails(s, dialInfo, deviceUniqueID)
@@ -135,9 +141,14 @@ func (s *peerStore) ensurePeerDetails(dialInfo PeerDialInfo, deviceUniqueID stri
 			s.unverifiedPeers[dialInfo] = struct{}{}
 			s.peers[dialInfo] = pd
 		}
+		needsSave = true
 	}
 
 	if deviceUniqueID != "" {
+		if pd.deviceUniqueID != deviceUniqueID {
+			needsSave = true
+		}
+
 		pd.deviceUniqueID = deviceUniqueID
 
 		if _, ok := s.peersWithDeviceUniqueID[deviceUniqueID]; !ok {
@@ -145,7 +156,7 @@ func (s *peerStore) ensurePeerDetails(dialInfo PeerDialInfo, deviceUniqueID stri
 		}
 		s.peersWithDeviceUniqueID[deviceUniqueID][dialInfo] = pd
 	}
-	return pd, exists
+	return pd, exists, needsSave
 }
 
 func (s *peerStore) AddVerifiedCredentials(
@@ -164,7 +175,7 @@ func (s *peerStore) AddVerifiedCredentials(
 	s.muPeers.Lock()
 	defer s.muPeers.Unlock()
 
-	pd, _ := s.ensurePeerDetails(dialInfo, deviceUniqueID)
+	pd, _, _ := s.ensurePeerDetails(dialInfo, deviceUniqueID)
 
 	pd.peerStore = s
 	if pd.addresses == nil {

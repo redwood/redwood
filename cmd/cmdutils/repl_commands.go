@@ -190,7 +190,7 @@ var (
 		"peers",
 		"list all known peers",
 		func(args []string, app *App) error {
-			fmtPeerRow := func(addr, dialAddr string, lastContact, lastFailure time.Time, failures uint64, remainingBackoff time.Duration, stateURIs []string) []string {
+			fmtPeerRow := func(addr, dialAddr, duID string, lastContact, lastFailure time.Time, failures uint64, remainingBackoff time.Duration, stateURIs []string) []string {
 				if len(addr) > 10 {
 					addr = addr[:4] + "..." + addr[len(addr)-4:]
 				}
@@ -210,16 +210,19 @@ var (
 				if remainingBackoff == 0 {
 					remainingBackoffStr = ""
 				}
-				return []string{addr, dialAddr, lastContactStr, lastFailureStr, failuresStr, remainingBackoffStr, fmt.Sprintf("%v", stateURIs)}
+				if len(duID) > 4 {
+					duID = duID[:4] + "..."
+				}
+				return []string{addr, dialAddr, duID, lastContactStr, lastFailureStr, failuresStr, remainingBackoffStr, fmt.Sprintf("%v", stateURIs)}
 			}
 
 			var data [][]string
 			for _, peer := range app.PeerStore.Peers() {
 				for _, addr := range peer.Addresses() {
-					data = append(data, fmtPeerRow(addr.Hex(), peer.DialInfo().DialAddr, peer.LastContact(), peer.LastFailure(), peer.Failures(), peer.RemainingBackoff(), peer.StateURIs().Slice()))
+					data = append(data, fmtPeerRow(addr.Hex(), peer.DialInfo().DialAddr, peer.DeviceUniqueID(), peer.LastContact(), peer.LastFailure(), peer.Failures(), peer.RemainingBackoff(), peer.StateURIs().Slice()))
 				}
 				if len(peer.Addresses()) == 0 {
-					data = append(data, fmtPeerRow("?", peer.DialInfo().DialAddr, peer.LastContact(), peer.LastFailure(), peer.Failures(), peer.RemainingBackoff(), peer.StateURIs().Slice()))
+					data = append(data, fmtPeerRow("?", peer.DialInfo().DialAddr, peer.DeviceUniqueID(), peer.LastContact(), peer.LastFailure(), peer.Failures(), peer.RemainingBackoff(), peer.StateURIs().Slice()))
 				}
 			}
 
@@ -236,10 +239,11 @@ var (
 			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
 			table.SetCenterSeparator("|")
 			table.SetRowLine(true)
-			table.SetHeader([]string{"Address", "DialAddr", "LastContact", "LastFailure", "Failures", "Backoff", "StateURIs"})
+			table.SetHeader([]string{"Address", "DialAddr", "DeviceID", "LastContact", "LastFailure", "Failures", "Backoff", "StateURIs"})
 			table.SetAutoMergeCellsByColumnIndex([]int{0, 1})
 			table.SetColumnColor(
 				tablewriter.Colors{tablewriter.Bold, tablewriter.FgCyanColor},
+				tablewriter.Colors{},
 				tablewriter.Colors{},
 				tablewriter.Colors{},
 				tablewriter.Colors{},
