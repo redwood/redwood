@@ -1,6 +1,6 @@
 name: Release
 
-on: [tags]
+on: [create]
 
 jobs:
     create_release:
