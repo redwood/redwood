@@ -27,6 +27,7 @@ import useLoginStatus from './hooks/useLoginStatus'
 import useServerAndRoomInfo from './hooks/useServerAndRoomInfo'
 import useAddressBook from './hooks/useAddressBook'
 import notificationSound from './assets/notification-sound.mp3'
+import notificationGilfoyle from './assets/notification-gilfoyle.mp3'
 
 const serverBarVerticalPadding = '12px'
 
@@ -90,9 +91,32 @@ function Main(props) {
 	const { servers, rooms } = useServerAndRoomInfo()
 	const [isLoading, setIsLoading] = useState(true)
 	const [shouldRedirect, setShouldRedirect] = useState(false)
+	const [changeNotificationSound, setChangeNotificationSound] = useState(false)
 	let { nodeIdentities } = useRedwood()
 
 	const roomKeys = Object.keys(rooms || {}).filter((key) => key !== 'chat.local/address-book')
+
+	useEffect(() => {
+		function switchNotificationSound(event) {
+			if (event.ctrlKey && event.key === '2') {
+				setChangeNotificationSound(!changeNotificationSound)
+				if (!changeNotificationSound) {
+					const audio = new Audio(notificationGilfoyle)
+					audio.play()
+				} else {
+					const audio = new Audio(notificationSound)
+					audio.play()
+				}
+			}
+
+		}
+
+		document.addEventListener('keypress', switchNotificationSound)
+
+		return () => {
+			document.removeEventListener('keypress', switchNotificationSound)
+		}
+	})
 
 	useEffect(() => {
 		if (nodeIdentities) {
@@ -133,7 +157,13 @@ function Main(props) {
                     <SChat />
                     {showDebugView && <SStateTreeDebugView />}
                 </Content>
-				{ roomKeys.map((key) => <NotificationMount navigate={navigate} selectedStateURI={selectedStateURI} roomPath={key} />) }
+				{ roomKeys.map((key) => <NotificationMount
+											changeNotificationSound={changeNotificationSound}
+											navigate={navigate}
+											selectedStateURI={selectedStateURI}
+											roomPath={key}
+											key={key}
+										/>) }
             </HeaderAndContent>
 
             <ContactsModal onDismiss={onDismissContactsModal} />
@@ -181,6 +211,7 @@ function fireNotificationAlert({
 	themePrimaryColor,
 	navigateToMessage,
 	setToastId,
+	changeNotificationSound,
 }) {
 	let parsedDisplayName = displayName
 
@@ -188,7 +219,6 @@ function fireNotificationAlert({
 		parsedDisplayName = `${displayName.substring(0, 25)}...`
 	}
 
-	const audio = new Audio(notificationSound)
 	let toastId = toast(<SToastContent onClick={navigateToMessage}>
 		<ToastLeft>
 			<UserAvatar address={displayName} />
@@ -207,7 +237,14 @@ function fireNotificationAlert({
 	})
 
 	setToastId(toastId)
-	audio.play()
+
+	if (changeNotificationSound) {
+		const audio = new Audio(notificationGilfoyle)
+		audio.play()
+	} else {
+		const audio = new Audio(notificationSound)
+		audio.play()
+	}
 }
 
 // Used to mount the room state and notify users when new messages come in
@@ -255,7 +292,7 @@ function NotificationMount(props) {
 			themePrimaryColor: theme.color.indigo[500],
 			navigateToMessage,
 			setToastId,
-
+			changeNotificationSound: props.changeNotificationSound,
 		})
 	}, [numMessages])
 
