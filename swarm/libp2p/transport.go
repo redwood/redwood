@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 
@@ -226,7 +225,9 @@ func (t *transport) Start() error {
 			err = t.libp2pHost.Connect(t.Process.Ctx(), relay)
 			if err != nil {
 				t.Errorf("couldn't connect to static relay: %v", err)
+				return
 			}
+			t.Successf("connected to static relay %v", relay)
 		}()
 	}
 
@@ -254,14 +255,14 @@ func (t *transport) Start() error {
 
 	// Update our node's info in the peer store
 	myDialAddrs := utils.NewStringSet(nil)
-	for _, addr := range t.libp2pHost.Addrs() {
+	for _, addr := range filterUselessMultiaddrs(t.libp2pHost.Addrs()) {
 		addrStr := addr.String()
 		myDialAddrs.Add(addrStr)
 	}
 	if t.reachableAt != "" {
 		myDialAddrs.Add(t.reachableAt)
 	}
-	myDialAddrs = cleanLibp2pAddrs(myDialAddrs, t.peerID)
+	// myDialAddrs = cleanLibp2pAddrs(myDialAddrs, t.peerID)
 
 	if len(myDialAddrs) > 0 {
 		for dialAddr := range myDialAddrs {
@@ -272,6 +273,7 @@ func (t *transport) Start() error {
 			for _, identity := range identities {
 				t.peerStore.AddVerifiedCredentials(
 					swarm.PeerDialInfo{TransportName: TransportName, DialAddr: dialAddr},
+					t.libp2pHost.ID().Pretty(),
 					identity.SigKeypair.SigningPublicKey.Address(),
 					identity.SigKeypair.SigningPublicKey,
 					identity.AsymEncKeypair.AsymEncPubkey,
@@ -384,7 +386,7 @@ func (t *transport) Connected(network netp2p.Network, conn netp2p.Conn) {
 
 	addr := conn.RemoteMultiaddr().String() + "/p2p/" + conn.RemotePeer().Pretty()
 	t.Debugf("libp2p connected: %v", addr)
-	t.peerStore.AddDialInfos([]swarm.PeerDialInfo{{TransportName: TransportName, DialAddr: addr}})
+	t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: addr}, deviceUniqueID(conn.RemotePeer()))
 }
 
 func (t *transport) Disconnected(network netp2p.Network, conn netp2p.Conn) {
@@ -426,6 +428,8 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	// Ensure all peers discovered on the libp2p layer are in the peer store
 	if pinfo.ID == peer.ID("") {
 		return
+	} else if pinfo.ID == t.libp2pHost.ID() {
+		return
 	}
 	// dialInfos := peerDialInfosFromPeerInfo(pinfo)
 	// t.peerStore.AddDialInfos(dialInfos)
@@ -438,23 +442,23 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	}
 
 	if i > 0 {
-		t.Infof(0, "mDNS: peer %+v found", pinfo.ID.Pretty())
+		t.Infof(0, "%v: peer %+v found", via, pinfo.ID.Pretty())
 	}
 
 	t.addPeerInfosToPeerStore([]corepeer.AddrInfo{pinfo})
 
-	peer := t.makeDisconnectedPeerConn(pinfo)
-	if peer == nil {
-		t.Infof(0, "mDNS: peer %+v is nil", pinfo.ID.Pretty())
+	peer, err := t.makeDisconnectedPeerConn(pinfo)
+	if err != nil {
+		t.Errorf("while making disconnected peer conn (%v): %v", pinfo.ID.Pretty(), err)
 		return
 	}
 
 	ctx, cancel := utils.CombinedContext(t.Process.Ctx(), 10*time.Second)
 	defer cancel()
 
-	err := peer.EnsureConnected(ctx)
+	err = peer.EnsureConnected(ctx)
 	if err != nil {
-		t.Errorf("error connecting to mDNS peer %v: %v", pinfo, err)
+		t.Errorf("error connecting to %v peer %v: %v", via, pinfo, err)
 	}
 	// if len(dialInfos) > 0 {
 	//  err := t.libp2pHost.Connect(ctx, pinfo)
@@ -540,6 +544,16 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 		}
 		t.HandleAckReceived(ackMsg.StateURI, ackMsg.TxID, peer)
 
+	case msgType_AnnounceP2PStateURI:
+		defer peer.Close()
+
+		stateURI, ok := msg.Payload.(string)
+		if !ok {
+			t.Errorf("P2PStateURI message: bad payload: (%T) %v", msg.Payload, msg.Payload)
+			return
+		}
+		t.HandleP2PStateURIReceived(stateURI, peer)
+
 	case msgType_ChallengeIdentityRequest:
 		defer peer.Close()
 
@@ -587,12 +601,14 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 	case msgType_AnnouncePeers:
 		defer peer.Close()
 
-		tuples, ok := msg.Payload.([]swarm.PeerDialInfo)
+		dialInfos, ok := msg.Payload.([]swarm.PeerDialInfo)
 		if !ok {
 			t.Errorf("Announce peers: bad payload: (%T) %v", msg.Payload, msg.Payload)
 			return
 		}
-		t.peerStore.AddDialInfos(tuples)
+		for _, dialInfo := range dialInfos {
+			t.peerStore.AddDialInfo(dialInfo, "")
+		}
 
 	default:
 		panic("protocol error")
@@ -610,8 +626,7 @@ func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Pee
 	} else if pinfo.ID == t.peerID {
 		return nil, errors.WithStack(swarm.ErrPeerIsSelf)
 	}
-	peer := t.makeDisconnectedPeerConn(*pinfo)
-	return peer, nil
+	return t.makeDisconnectedPeerConn(*pinfo)
 }
 
 func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<-chan prototree.TreePeerConn, error) {
@@ -646,8 +661,9 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<
 				// @@TODO: validate peer as an authorized provider via web of trust, certificate authority,
 				// whitelist, etc.
 
-				peer := t.makeDisconnectedPeerConn(pinfo)
-				if peer == nil {
+				peer, err := t.makeDisconnectedPeerConn(pinfo)
+				if err != nil {
+					t.Errorf("while making disconnected peer conn (%v): %v", peer.DialInfo().DialAddr, err)
 					continue
 				} else if peer.DialInfo().DialAddr == "" {
 					continue
@@ -688,8 +704,11 @@ func (t *transport) ProvidersOfBlob(ctx context.Context, refID blob.ID) (<-chan 
 
 				// t.Infof(0, `found peer %v for ref "%v"`, pinfo.ID, refID.String())
 
-				peer := t.makeDisconnectedPeerConn(pinfo)
-				if peer == nil || peer.DialInfo().DialAddr == "" {
+				peer, err := t.makeDisconnectedPeerConn(pinfo)
+				if err != nil {
+					t.Errorf("while making disconnected peer conn (%v): %v", pinfo.ID.Pretty(), err)
+					continue
+				} else if peer.DialInfo().DialAddr == "" {
 					continue
 				}
 
@@ -723,8 +742,11 @@ func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Addr
 				continue
 			}
 
-			peer := t.makeDisconnectedPeerConn(pinfo)
-			if peer == nil || peer.DialInfo().DialAddr == "" {
+			peer, err := t.makeDisconnectedPeerConn(pinfo)
+			if err != nil {
+				t.Errorf("while making disconnected peer conn (%v): %v", pinfo.ID.Pretty(), err)
+				continue
+			} else if peer.DialInfo().DialAddr == "" {
 				continue
 			}
 
@@ -759,73 +781,45 @@ func (t *transport) addPeerInfosToPeerStore(pinfos []corepeer.AddrInfo) {
 		if pinfo.ID == peer.ID("") {
 			continue
 		}
-		dialInfos := peerDialInfosFromPeerInfo(pinfo)
-		t.peerStore.AddDialInfos(dialInfos)
+		for _, dialInfo := range peerDialInfosFromPeerInfo(pinfo) {
+			t.peerStore.AddDialInfo(dialInfo, deviceUniqueID(pinfo.ID))
+		}
 	}
 }
 
 func (t *transport) makeConnectedPeerConn(stream netp2p.Stream) *peerConn {
 	pinfo := t.libp2pHost.Peerstore().PeerInfo(stream.Conn().RemotePeer())
 	peer := &peerConn{t: t, pinfo: pinfo, stream: stream}
-	dialAddrs := multiaddrsFromPeerInfo(pinfo)
 
-	var dialInfos []swarm.PeerDialInfo
-	dialAddrs.ForEach(func(dialAddr string) bool {
-		dialInfo := swarm.PeerDialInfo{TransportName: TransportName, DialAddr: dialAddr}
-		dialInfos = append(dialInfos, dialInfo)
-		return true
-	})
-	t.peerStore.AddDialInfos(dialInfos)
+	duID := deviceUniqueID(pinfo.ID)
 
-	for _, dialInfo := range dialInfos {
-		peer.PeerDetails = t.peerStore.PeerWithDialInfo(dialInfo)
-		if peer.PeerDetails != nil {
-			break
-		}
+	for _, addr := range multiaddrsFromPeerInfo(pinfo) {
+		t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: addr.String()}, duID)
 	}
-	if peer.PeerDetails == nil {
+
+	pds := t.peerStore.PeersWithDeviceUniqueID(duID)
+	if len(pds) == 0 {
 		return nil
 	}
+	peer.PeerDetails = pds[0]
 	return peer
 }
 
-func (t *transport) makeDisconnectedPeerConn(pinfo corepeer.AddrInfo) *peerConn {
+func (t *transport) makeDisconnectedPeerConn(pinfo corepeer.AddrInfo) (*peerConn, error) {
 	peer := &peerConn{t: t, pinfo: pinfo, stream: nil}
-	dialAddrs := multiaddrsFromPeerInfo(pinfo)
-	if dialAddrs.Len() == 0 {
-		return nil
+
+	duID := deviceUniqueID(pinfo.ID)
+
+	multiaddrs := multiaddrsFromPeerInfo(pinfo)
+	if len(multiaddrs) == 0 {
+		return nil, swarm.ErrUnreachable
 	}
 
-	var peerDetails swarm.PeerDetails
-	dialAddrs.ForEach(func(dialAddr string) bool {
-		peerDetails = t.peerStore.PeerWithDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: dialAddr})
-		if peerDetails != nil {
-			return false
-		}
-		return true
-	})
-	if reflect.ValueOf(peerDetails).IsNil() {
-		var dialInfos []swarm.PeerDialInfo
-		dialAddrs.ForEach(func(dialAddr string) bool {
-			dialInfos = append(dialInfos, swarm.PeerDialInfo{TransportName: TransportName, DialAddr: dialAddr})
-			return true
-		})
-		t.peerStore.AddDialInfos(dialInfos)
-		var peerDetails swarm.PeerDetails
-		for _, dialInfo := range dialInfos {
-			peerDetails = t.peerStore.PeerWithDialInfo(dialInfo)
-			if peerDetails != nil {
-				break
-			}
-		}
-		if reflect.ValueOf(peerDetails).IsNil() {
-			return nil
-		}
-		peer.PeerDetails = peerDetails
-	} else {
-		peer.PeerDetails = peerDetails
+	peer.PeerDetails = t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: multiaddrs[0].String()}, duID)
+	for _, addr := range multiaddrs[1:] {
+		t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: addr.String()}, duID)
 	}
-	return peer
+	return peer, nil
 }
 
 type DHT interface {

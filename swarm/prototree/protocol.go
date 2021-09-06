@@ -34,6 +34,7 @@ type TreeTransport interface {
 	OnTxReceived(handler TxReceivedCallback)
 	OnAckReceived(handler AckReceivedCallback)
 	OnWritableSubscriptionOpened(handler WritableSubscriptionOpenedCallback)
+	OnP2PStateURIReceived(handler P2PStateURIReceivedCallback)
 }
 
 //go:generate mockery --name TreePeerConn --output ./mocks/ --case=underscore
@@ -42,6 +43,7 @@ type TreePeerConn interface {
 	Subscribe(ctx context.Context, stateURI string) (ReadableSubscription, error)
 	Put(ctx context.Context, tx *tree.Tx, state state.Node, leaves []types.ID) error
 	Ack(stateURI string, txID types.ID) error
+	AnnounceP2PStateURI(ctx context.Context, stateURI string) error
 }
 
 type treeProtocol struct {
@@ -62,6 +64,7 @@ type treeProtocol struct {
 	writableSubscriptionsMu sync.RWMutex
 
 	broadcastTxsToStateURIProvidersTask *broadcastTxsToStateURIProvidersTask
+	announceP2PStateURIsTask            *announceP2PStateURIsTask
 }
 
 var (
@@ -96,10 +99,11 @@ func NewTreeProtocol(
 		writableSubscriptions: make(map[string]map[WritableSubscription]struct{}),
 	}
 	tp.broadcastTxsToStateURIProvidersTask = NewBroadcastTxsToStateURIProvidersTask(10*time.Second, store, peerStore, transportsMap)
+	tp.announceP2PStateURIsTask = NewAnnounceP2PStateURIsTask(10*time.Second, txStore, peerStore, controllerHub, transportsMap)
 	return tp
 }
 
-const ProtocolName = "tree"
+const ProtocolName = "prototree"
 
 func (tp *treeProtocol) Name() string {
 	return ProtocolName
@@ -118,6 +122,7 @@ func (tp *treeProtocol) Start() error {
 		tpt.OnTxReceived(tp.handleTxReceived)
 		tpt.OnAckReceived(tp.handleAckReceived)
 		tpt.OnWritableSubscriptionOpened(tp.handleWritableSubscriptionOpened)
+		tpt.OnP2PStateURIReceived(tp.handleP2PStateURIReceived)
 	}
 
 	tp.Process.Go(nil, "initial subscribe", func(ctx context.Context) {
@@ -133,6 +138,10 @@ func (tp *treeProtocol) Start() error {
 	})
 
 	err = tp.Process.SpawnChild(nil, tp.broadcastTxsToStateURIProvidersTask)
+	if err != nil {
+		return err
+	}
+	err = tp.Process.SpawnChild(nil, tp.announceP2PStateURIsTask)
 	if err != nil {
 		return err
 	}
@@ -305,6 +314,15 @@ func (tp *treeProtocol) handleTxReceived(tx tree.Tx, peerConn TreePeerConn) {
 func (tp *treeProtocol) handleAckReceived(stateURI string, txID types.ID, peerConn TreePeerConn) {
 	tp.Infof(0, "ack received: tx=%v peer=%v", txID.Hex(), peerConn.DialInfo().DialAddr)
 	tp.store.MarkTxSeenByPeer(peerConn.DeviceSpecificID(), stateURI, txID)
+}
+
+func (tp *treeProtocol) handleP2PStateURIReceived(stateURI string, peerConn TreePeerConn) {
+	tp.Infof(0, "p2p state URI received: stateURI=%v peer=%v", stateURI, peerConn.DialInfo().DialAddr)
+
+	err := tp.subscribe(context.TODO(), stateURI)
+	if err != nil {
+		tp.Errorf("while subscribing to p2p state URI %v: %v", stateURI, err)
+	}
 }
 
 type FetchHistoryOpts struct {
@@ -585,6 +603,8 @@ func (tp *treeProtocol) broadcastToPrivateRecipients(
 			if err != nil {
 				tp.Errorf("error creating connection to peer %v: %v", peerDetails.DialInfo(), err)
 				continue
+			} else if !maybePeer.Ready() || !maybePeer.Dialable() {
+				continue
 			}
 			peer, is := maybePeer.(TreePeerConn)
 			if !is {
@@ -627,6 +647,8 @@ func (tp *treeProtocol) broadcastToPeerConn(
 ) {
 	_, alreadySent := alreadySentPeers.LoadOrStore(peerConn.DeviceSpecificID(), struct{}{})
 	if alreadySent {
+		return
+	} else if !peerConn.Ready() || !peerConn.Dialable() {
 		return
 	}
 
@@ -725,7 +747,6 @@ func (tp *treeProtocol) broadcastToWritableSubscriber(
 type broadcastTxsToStateURIProvidersTask struct {
 	process.PeriodicTask
 	log.Logger
-	treeProto                 TreeProtocol
 	treeStore                 Store
 	peerStore                 swarm.PeerStore
 	transports                map[string]TreeTransport
@@ -786,6 +807,8 @@ func (t *broadcastTxsToStateURIProvidersTask) broadcastTxsToStateURIProviders(ct
 				if err != nil {
 					t.Errorf("while creating NewPeerConn: %v", err)
 					return
+				} else if !peerConn.Ready() || !peerConn.Dialable() {
+					return
 				}
 				treePeer, is := peerConn.(TreePeerConn)
 				if !is {
@@ -809,6 +832,97 @@ func (t *broadcastTxsToStateURIProvidersTask) broadcastTxsToStateURIProviders(ct
 					}
 				}
 			})
+		}
+	}
+}
+
+type announceP2PStateURIsTask struct {
+	process.PeriodicTask
+	log.Logger
+	txStore                   tree.TxStore
+	peerStore                 swarm.PeerStore
+	controllerHub             tree.ControllerHub
+	transports                map[string]TreeTransport
+	txsForStateURIProviders   map[string][]*tree.Tx
+	txsForStateURIProvidersMu sync.Mutex
+}
+
+func NewAnnounceP2PStateURIsTask(
+	interval time.Duration,
+	txStore tree.TxStore,
+	peerStore swarm.PeerStore,
+	controllerHub tree.ControllerHub,
+	transports map[string]TreeTransport,
+) *announceP2PStateURIsTask {
+	t := &announceP2PStateURIsTask{
+		Logger:                  log.NewLogger("tree proto"),
+		txStore:                 txStore,
+		peerStore:               peerStore,
+		controllerHub:           controllerHub,
+		transports:              transports,
+		txsForStateURIProviders: make(map[string][]*tree.Tx),
+	}
+	t.PeriodicTask = *process.NewPeriodicTask("BroadcastTxsToStateURIProvidersTask", interval, t.announceP2PStateURIs)
+	return t
+}
+
+func (t *announceP2PStateURIsTask) announceP2PStateURIs(ctx context.Context) {
+	t.Debugf("announcing p2p state URIs")
+
+	stateURIs, err := t.txStore.KnownStateURIs()
+	if err != nil {
+		t.Errorf("while fetching state URIs from tx store: %v", err)
+		return
+	}
+	for _, stateURI := range stateURIs {
+		is, err := t.controllerHub.IsPrivate(stateURI)
+		if err != nil {
+			t.Errorf("while determining if state URI %v is private: %v", stateURI, err)
+			continue
+		} else if !is {
+			continue
+		}
+
+		members, err := t.controllerHub.Members(stateURI)
+		if err != nil {
+			t.Errorf("while fetching members of state URI %v: %v", stateURI, err)
+			continue
+		}
+
+		for peerAddress := range members {
+			for _, peerDetails := range t.peerStore.PeersWithAddress(peerAddress) {
+				tpt, exists := t.transports[peerDetails.DialInfo().TransportName]
+				if !exists {
+					continue
+				}
+				peerConn, err := tpt.NewPeerConn(ctx, peerDetails.DialInfo().DialAddr)
+				if errors.Cause(err) == swarm.ErrPeerIsSelf {
+					continue
+				} else if err != nil {
+					t.Errorf("while creating NewPeerConn: %v", err)
+					continue
+				} else if !peerConn.Ready() || !peerConn.Dialable() {
+					continue
+				}
+				treePeer, is := peerConn.(TreePeerConn)
+				if !is {
+					t.Errorf("peer is not TreePeerConn, should be impossible")
+					continue
+				}
+
+				t.Process.Go(nil, peerDetails.DialInfo().String(), func(ctx context.Context) {
+					err := treePeer.EnsureConnected(ctx)
+					if err != nil {
+						return
+					}
+					defer treePeer.Close()
+
+					err = treePeer.AnnounceP2PStateURI(ctx, stateURI)
+					if err != nil {
+						return
+					}
+				})
+			}
 		}
 	}
 }

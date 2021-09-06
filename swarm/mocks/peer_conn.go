@@ -86,6 +86,20 @@ func (_m *PeerConn) DeviceSpecificID() string {
 	return r0
 }
 
+// DeviceUniqueID provides a mock function with given fields:
+func (_m *PeerConn) DeviceUniqueID() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // DialInfo provides a mock function with given fields:
 func (_m *PeerConn) DialInfo() swarm.PeerDialInfo {
 	ret := _m.Called()
@@ -95,6 +109,20 @@ func (_m *PeerConn) DialInfo() swarm.PeerDialInfo {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(swarm.PeerDialInfo)
+	}
+
+	return r0
+}
+
+// Dialable provides a mock function with given fields:
+func (_m *PeerConn) Dialable() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(bool)
 	}
 
 	return r0

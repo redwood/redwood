@@ -274,6 +274,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 		if err != nil {
 			return
 		}
+		defer sub.Process.Autoclose()
 
 		ticker := time.NewTicker(wsPingPeriod)
 
@@ -282,7 +283,6 @@ func (sub *wsWritableSubscription) Start() (err error) {
 
 		sub.Process.Go(nil, "write", func(ctx context.Context) {
 			defer ticker.Stop()
-			defer sub.Close()
 
 			for {
 				select {
@@ -302,8 +302,6 @@ func (sub *wsWritableSubscription) Start() (err error) {
 		})
 
 		sub.Process.Go(nil, "read", func(ctx context.Context) {
-			defer sub.Close()
-
 			for {
 				select {
 				case <-ctx.Done():

@@ -64,6 +64,20 @@ func (_m *TreePeerConn) Addresses() []types.Address {
 	return r0
 }
 
+// AnnounceP2PStateURI provides a mock function with given fields: ctx, stateURI
+func (_m *TreePeerConn) AnnounceP2PStateURI(ctx context.Context, stateURI string) error {
+	ret := _m.Called(ctx, stateURI)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, stateURI)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // AnnouncePeers provides a mock function with given fields: ctx, peerDialInfos
 func (_m *TreePeerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.PeerDialInfo) error {
 	ret := _m.Called(ctx, peerDialInfos)
@@ -106,6 +120,20 @@ func (_m *TreePeerConn) DeviceSpecificID() string {
 	return r0
 }
 
+// DeviceUniqueID provides a mock function with given fields:
+func (_m *TreePeerConn) DeviceUniqueID() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // DialInfo provides a mock function with given fields:
 func (_m *TreePeerConn) DialInfo() swarm.PeerDialInfo {
 	ret := _m.Called()
@@ -115,6 +143,20 @@ func (_m *TreePeerConn) DialInfo() swarm.PeerDialInfo {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(swarm.PeerDialInfo)
+	}
+
+	return r0
+}
+
+// Dialable provides a mock function with given fields:
+func (_m *TreePeerConn) Dialable() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(bool)
 	}
 
 	return r0

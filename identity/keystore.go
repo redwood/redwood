@@ -1,7 +1,8 @@
 package identity
 
 import (
-	"errors"
+	"github.com/pkg/errors"
+	"github.com/status-im/doubleratchet"
 
 	"redwood.dev/crypto"
 	"redwood.dev/types"
@@ -25,8 +26,21 @@ type KeyStore interface {
 	OpenMessageFrom(usingIdentity types.Address, senderPublicKey crypto.AsymEncPubkey, msgEncrypted []byte) ([]byte, error)
 	LocalSymEncKey() crypto.SymEncKey
 
+	RatchetSessionStore() RatchetSessionStore
+	RatchetKeyStore() RatchetKeyStore
+
 	ExtraUserData(key string) (interface{}, bool, error)
 	SaveExtraUserData(key string, value interface{}) error
+}
+
+type RatchetSessionStore interface {
+	doubleratchet.SessionStorage
+	LoadSharedKey(sessionID []byte) ([]byte, error)
+	SaveSharedKey(sessionID, sharedKey []byte) error
+}
+
+type RatchetKeyStore interface {
+	doubleratchet.KeysStorage
 }
 
 var (

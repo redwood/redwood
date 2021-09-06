@@ -207,6 +207,9 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		identity2 := testutils.RandomIdentity(t)
 		dialInfo := swarm.PeerDialInfo{"foo", "bar"}
 
+		peerConn.On("Ready").Return(true).Maybe()
+		peerConn.On("Dialable").Return(true).Maybe()
+		peerConn.On("DeviceSpecificID").Return("foo").Maybe()
 		peerConn.On("EnsureConnected", mock.Anything).Return(nil).Once()
 		peerConn.On("DialInfo").Return(dialInfo)
 
@@ -234,8 +237,8 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 			call.ReturnArguments = mock.Arguments{resp, nil}
 		})
 
-		peerStore.On("AddVerifiedCredentials", dialInfo, identity1.Address(), identity1.SigKeypair.SigningPublicKey, identity1.AsymEncKeypair.AsymEncPubkey).Once()
-		peerStore.On("AddVerifiedCredentials", dialInfo, identity2.Address(), identity2.SigKeypair.SigningPublicKey, identity2.AsymEncKeypair.AsymEncPubkey).Once()
+		peerStore.On("AddVerifiedCredentials", dialInfo, "foo", identity1.Address(), identity1.SigKeypair.SigningPublicKey, identity1.AsymEncKeypair.AsymEncPubkey).Return(nil).Once()
+		peerStore.On("AddVerifiedCredentials", dialInfo, "foo", identity2.Address(), identity2.SigKeypair.SigningPublicKey, identity2.AsymEncKeypair.AsymEncPubkey).Return(nil).Once()
 
 		err := proto.ChallengePeerIdentity(context.Background(), peerConn)
 		require.NoError(t, err)
@@ -276,6 +279,9 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		expectedErr := errors.New("")
 
 		peerConn.On("EnsureConnected", mock.Anything).Return(expectedErr).Once()
+		peerConn.On("Ready").Return(true).Maybe()
+		peerConn.On("Dialable").Return(true).Maybe()
+		peerConn.On("DeviceSpecificID").Return("foo").Maybe()
 
 		err := proto.ChallengePeerIdentity(context.Background(), peerConn)
 		require.Equal(t, expectedErr, errors.Cause(err))
@@ -315,6 +321,9 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 
 		expectedErr := errors.New("")
 
+		peerConn.On("Ready").Return(true).Maybe()
+		peerConn.On("Dialable").Return(true).Maybe()
+		peerConn.On("DeviceSpecificID").Return("foo").Maybe()
 		peerConn.On("EnsureConnected", mock.Anything).Return(nil).Once()
 		peerConn.On("ChallengeIdentity", mock.Anything).Return(expectedErr)
 
@@ -356,6 +365,9 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 
 		expectedErr := errors.New("")
 
+		peerConn.On("Ready").Return(true).Maybe()
+		peerConn.On("Dialable").Return(true).Maybe()
+		peerConn.On("DeviceSpecificID").Return("foo").Maybe()
 		peerConn.On("EnsureConnected", mock.Anything).Return(nil).Once()
 		peerConn.On("ChallengeIdentity", mock.Anything).Return(nil)
 		peerConn.On("ReceiveChallengeIdentityResponse").Return(nil, expectedErr).Once()
@@ -400,6 +412,9 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		identity2 := testutils.RandomIdentity(t)
 		dialInfo := swarm.PeerDialInfo{"foo", "bar"}
 
+		peerConn.On("Ready").Return(true).Maybe()
+		peerConn.On("Dialable").Return(true).Maybe()
+		peerConn.On("DeviceSpecificID").Return("foo").Maybe()
 		peerConn.On("EnsureConnected", mock.Anything).Return(nil).Once()
 		peerConn.On("DialInfo").Return(dialInfo)
 
@@ -434,7 +449,7 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 			call.ReturnArguments = mock.Arguments{resp, nil}
 		})
 
-		peerStore.On("AddVerifiedCredentials", dialInfo, identity1.Address(), identity1.SigKeypair.SigningPublicKey, identity1.AsymEncKeypair.AsymEncPubkey).Once()
+		peerStore.On("AddVerifiedCredentials", dialInfo, "foo", identity1.Address(), identity1.SigKeypair.SigningPublicKey, identity1.AsymEncKeypair.AsymEncPubkey).Return(nil).Once()
 
 		err := proto.ChallengePeerIdentity(context.Background(), peerConn)
 		require.Error(t, err)

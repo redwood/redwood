@@ -137,6 +137,14 @@ func (peer *peerConn) Ack(stateURI string, txID types.ID) (err error) {
 	return peer.writeMsg(Msg{Type: msgType_Ack, Payload: ackMsg{stateURI, txID}})
 }
 
+func (peer *peerConn) AnnounceP2PStateURI(ctx context.Context, stateURI string) (err error) {
+	err = peer.ensureStreamWithProtocol(ctx, PROTO_MAIN)
+	if err != nil {
+		return err
+	}
+	return peer.writeMsg(Msg{Type: msgType_AnnounceP2PStateURI, Payload: stateURI})
+}
+
 func (peer *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) error {
 	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_MAIN)
 	if err != nil {

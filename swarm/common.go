@@ -27,6 +27,7 @@ type PeerConn interface {
 }
 
 var (
-	ErrProtocol   = errors.New("protocol error")
-	ErrPeerIsSelf = errors.New("peer is self")
+	ErrProtocol    = errors.New("protocol error")
+	ErrPeerIsSelf  = errors.New("peer is self")
+	ErrUnreachable = errors.New("peer unreachable")
 )

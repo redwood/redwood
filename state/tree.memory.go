@@ -145,6 +145,18 @@ func (n *MemoryNode) Subkeys() []Keypath {
 	return keypaths
 }
 
+func (n *MemoryNode) NumSubkeys() uint64 {
+	var i uint64
+	_ = n.scanKeypathsWithPrefix(n.keypath, nil, func(kp Keypath, _ int) error {
+		subkey := kp.RelativeTo(n.keypath).Part(0)
+		if len(subkey) > 0 {
+			i++
+		}
+		return nil
+	})
+	return i
+}
+
 // NodeAt returns the tree.Node corresponding to the given keypath in
 // the state tree.  If the keypath doesn't exist, a MemoryNode is still
 // returned, but calling .Value on it will return a result with

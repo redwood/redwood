@@ -138,3 +138,7 @@ func putRequestFromTx(
 	}
 	return req, nil
 }
+
+func deviceUniqueID(sessionID types.ID) string {
+	return sessionID.Hex()
+}

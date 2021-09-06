@@ -58,6 +58,7 @@ func (p *peerStore) SavePeerDetails(peerDetails *peerDetails) error {
 func NewPeerDetails(
 	peerStore *peerStore,
 	dialInfo PeerDialInfo,
+	deviceUniqueID string,
 	addresses utils.AddressSet,
 	sigpubkeys map[types.Address]crypto.SigningPublicKey,
 	encpubkeys map[types.Address]crypto.AsymEncPubkey,
@@ -69,6 +70,7 @@ func NewPeerDetails(
 	return &peerDetails{
 		peerStore,
 		dialInfo,
+		deviceUniqueID,
 		addresses,
 		sigpubkeys,
 		encpubkeys,

@@ -18,6 +18,7 @@ import (
 	"redwood.dev/rpc"
 	"redwood.dev/state"
 	"redwood.dev/tree"
+	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
@@ -106,6 +107,8 @@ func (app *App) Start() error {
 		return err
 	}
 
+	app.started = true
+
 	app.initializeLocalState()
 	app.monitorForDMs()
 
@@ -113,6 +116,7 @@ func (app *App) Start() error {
 }
 
 func (app *App) Close() error {
+	app.started = false
 	return app.Process.Close()
 }
 
@@ -158,6 +162,7 @@ func (app *App) monitorForDMs() {
 				}()
 				if !found {
 					err := app.TreeProto.SendTx(ctx, tree.Tx{
+						ID:       types.RandomID(),
 						StateURI: "chat.local/dms",
 						Patches: []tree.Patch{{
 							Keypath: roomKeypath,

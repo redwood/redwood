@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>BuildMachineOSBuild</key>
+    <string>16F73</string>
+    <key>CFBundleDisplayName</key>
+    <string>Redwood Chat</string>
+    <key>CFBundleExecutable</key>
+    <string>Redwood Chat</string>
+    <key>CFBundleIconFile</key>
+    <string>Redwood Chat.icns</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.redwood-chat.app</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Redwood Chat</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.0.9</string>
+    <key>CFBundleVersion</key>
+    <string>0.0.9</string>
+    <key>DTSDKBuild</key>
+    <string>16E185</string>
+    <key>DTSDKName</key>
+    <string>macosx10.1210.12</string>
+    <key>DTXcode</key>
+    <string>0833</string>
+    <key>DTXcodeBuild</key>
+    <string>8E3004b</string>
+    <key>LSApplicationCategoryType</key>
+    <string>financial</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.9.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSMainNibFile</key>
+    <string>MainMenu</string>
+    <key>NSPrincipalClass</key>
+    <string>AtomApplication</string>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2021 Bryn Bellomy</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+      <key>NSExceptionDomains</key>
+      <dict>
+        <key>localhost</key>
+        <dict>
+          <key>NSTemporaryExceptionAllowsInsecureHTTPSLoads</key>
+          <false/>
+          <key>NSIncludesSubdomains</key>
+          <false/>
+          <key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
+          <true/>
+          <key>NSTemporaryExceptionMinimumTLSVersion</key>
+          <string>1.0</string>
+          <key>NSTemporaryExceptionRequiresForwardSecrecy</key>
+          <false/>
+        </dict>
+      </dict>
+    </dict>
+  </dict>
+</plist>

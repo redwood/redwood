@@ -164,7 +164,7 @@ export default function(redwoodClient, ownAddress) {
                             },
                         },
                     },
-                    'Members': recipients,
+                    'Members': users,
                     'users': users,
                     'messages': [],
                 }),

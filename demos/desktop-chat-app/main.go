@@ -159,6 +159,10 @@ func (gui *GUI) Start() error {
 func (gui *GUI) Close() (err error) {
 	gui.closeOnce.Do(func() {
 		gui.webview.Destroy()
+		gui.webview.Dispatch(func() {
+			gui.webview.Destroy()
+			gui.webview.Terminate()
+		})
 	})
 	return nil
 }

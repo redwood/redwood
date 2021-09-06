@@ -148,6 +148,11 @@ func (_m *TreeTransport) OnAckReceived(handler prototree.AckReceivedCallback) {
 	_m.Called(handler)
 }
 
+// OnP2PStateURIReceived provides a mock function with given fields: handler
+func (_m *TreeTransport) OnP2PStateURIReceived(handler prototree.P2PStateURIReceivedCallback) {
+	_m.Called(handler)
+}
+
 // OnTxReceived provides a mock function with given fields: handler
 func (_m *TreeTransport) OnTxReceived(handler prototree.TxReceivedCallback) {
 	_m.Called(handler)

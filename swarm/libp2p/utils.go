@@ -8,13 +8,13 @@ import (
 	corepeer "github.com/libp2p/go-libp2p-core/peer"
 	peer "github.com/libp2p/go-libp2p-peer"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
+	peerstoreaddr "github.com/libp2p/go-libp2p-peerstore/addr"
 	ma "github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
 	"redwood.dev/swarm"
-	"redwood.dev/utils"
 )
 
 func cidForString(s string) (cid.Cid, error) {
@@ -26,7 +26,7 @@ func cidForString(s string) (cid.Cid, error) {
 	return c, nil
 }
 
-func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *utils.SortedStringSet {
+func multiaddrsFromPeerInfo(pinfo corepeer.AddrInfo) []ma.Multiaddr {
 	multiaddrs, err := peerstore.InfoToP2pAddrs(&pinfo)
 	if err != nil {
 		panic(err)
@@ -41,29 +41,20 @@ func multiaddrsFromPeerInfo(pinfo peerstore.PeerInfo) *utils.SortedStringSet {
 	for _, addr := range deduped {
 		multiaddrs = append(multiaddrs, addr)
 	}
+	multiaddrs = filterUselessMultiaddrs(multiaddrs)
+	sort.Sort(peerstoreaddr.AddrList(multiaddrs))
+	return multiaddrs
+}
 
-	// Sort them
-	sort.Slice(multiaddrs, func(i, j int) bool {
-		if val := protocolValue(multiaddrs[i], protoIP4); val != "" {
-			if val == "127" {
-				return true
-			} else if val == "192" {
-				return true
-			}
-		} else if protocolValue(multiaddrs[i], protoDNS4) != "" {
-			return true
+func filterUselessMultiaddrs(mas []ma.Multiaddr) []ma.Multiaddr {
+	multiaddrs := make([]ma.Multiaddr, 0, len(mas))
+	for _, addr := range mas {
+		if !strings.Contains(addr.String(), "/p2p/") {
+			continue
 		}
-		return false
-	})
-
-	// Filter and clean them
-	multiaddrStrings := make([]string, 0, len(multiaddrs))
-	for _, addr := range multiaddrs {
-		if cleaned := cleanLibp2pAddr(addr.String(), pinfo.ID); cleaned != "" {
-			multiaddrStrings = append(multiaddrStrings, cleaned)
-		}
+		multiaddrs = append(multiaddrs, addr)
 	}
-	return utils.NewSortedStringSet(multiaddrStrings)
+	return multiaddrs
 }
 
 func addrInfosFromStrings(ss []string) (infos []corepeer.AddrInfo, err error) {
@@ -83,43 +74,6 @@ func addrInfosFromStrings(ss []string) (infos []corepeer.AddrInfo, err error) {
 	return infos, err
 }
 
-func cleanLibp2pAddr(addrStr string, peerID peer.ID) string {
-	// if addrStr[:len("/p2p-circuit")] == "/p2p-circuit" {
-	// 	return ""
-	// }
-
-	addrStr = strings.Replace(addrStr, "/ipfs/", "/p2p/", 1)
-
-	if !strings.Contains(addrStr, "/p2p/") {
-		addrStr = addrStr + "/p2p/" + peerID.Pretty()
-	}
-	return addrStr
-}
-
-func cleanLibp2pAddrs(addrStrs utils.StringSet, peerID peer.ID) utils.StringSet {
-	keep := utils.NewStringSet(nil)
-	for addrStr := range addrStrs {
-		if strings.Index(addrStr, "/ip4/172.") == 0 {
-			// continue
-			// } else if strings.Index(addrStr, "/ip4/0.0.0.0") == 0 {
-			//  continue
-			// } else if strings.Index(addrStr, "/ip4/127.0.0.1") == 0 {
-			//  continue
-			// } else if addrStr[:len("/p2p-circuit")] == "/p2p-circuit" {
-			// 	continue
-		}
-
-		addrStr = strings.Replace(addrStr, "/ipfs/", "/p2p/", 1)
-
-		if !strings.Contains(addrStr, "/p2p/") {
-			addrStr = addrStr + "/p2p/" + peerID.Pretty()
-		}
-
-		keep.Add(addrStr)
-	}
-	return keep
-}
-
 func protocolValue(addr ma.Multiaddr, proto ma.Protocol) string {
 	val, err := addr.ValueForProtocol(proto.Code)
 	if err == ma.ErrProtocolNotFound {
@@ -128,26 +82,14 @@ func protocolValue(addr ma.Multiaddr, proto ma.Protocol) string {
 	return val
 }
 
-// func sortLibp2pAddrs(addrs StringSet) SortedStringSet {
-//  s := addrs.Slice()
-//  sort.Slice(s, func(i, j int) bool {
-//         net.ParseIP(s[i])
-//         strconv.ParseUint(s[i][])
-//         switch s[i][:3] {
-//         case "127":
-//             return true
-//         case "192"
-//         }
-//  })
-//  return utils.NewSortedStringSet(s)
-// }
-
-func peerDialInfosFromPeerInfo(pinfo peerstore.PeerInfo) []swarm.PeerDialInfo {
-	addrs := multiaddrsFromPeerInfo(pinfo)
+func peerDialInfosFromPeerInfo(pinfo corepeer.AddrInfo) []swarm.PeerDialInfo {
 	var dialInfos []swarm.PeerDialInfo
-	addrs.ForEach(func(addr string) bool {
-		dialInfos = append(dialInfos, swarm.PeerDialInfo{TransportName: TransportName, DialAddr: addr})
-		return true
-	})
+	for _, addr := range multiaddrsFromPeerInfo(pinfo) {
+		dialInfos = append(dialInfos, swarm.PeerDialInfo{TransportName: TransportName, DialAddr: addr.String()})
+	}
 	return dialInfos
+}
+
+func deviceUniqueID(peerID peer.ID) string {
+	return peerID.Pretty()
 }

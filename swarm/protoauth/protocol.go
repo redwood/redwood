@@ -62,7 +62,7 @@ func NewAuthProtocol(transports []swarm.Transport, keyStore identity.KeyStore, p
 	}
 }
 
-const ProtocolName = "auth"
+const ProtocolName = "protoauth"
 
 func (ap *authProtocol) Name() string {
 	return ProtocolName
@@ -125,6 +125,10 @@ func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.
 func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn AuthPeerConn) (err error) {
 	defer utils.WithStack(&err)
 
+	if !peerConn.Ready() || !peerConn.Dialable() {
+		return errors.Wrapf(swarm.ErrUnreachable, "peer: %v", peerConn.DialInfo())
+	}
+
 	err = peerConn.EnsureConnected(ctx)
 	if err != nil {
 		return err
@@ -152,7 +156,7 @@ func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn Auth
 		}
 		encpubkey := crypto.AsymEncPubkeyFromBytes(proof.AsymEncPubkey)
 
-		ap.peerStore.AddVerifiedCredentials(peerConn.DialInfo(), sigpubkey.Address(), sigpubkey, encpubkey)
+		ap.peerStore.AddVerifiedCredentials(peerConn.DialInfo(), peerConn.DeviceSpecificID(), sigpubkey.Address(), sigpubkey, encpubkey)
 	}
 
 	return nil
@@ -213,11 +217,9 @@ func (t *processPeersTask) processPeers(ctx context.Context) {
 
 		for _, tpt := range t.transports {
 			for _, peerDetails := range t.peerStore.PeersFromTransport(tpt.Name()) {
-				if !peerDetails.Ready() {
+				if !peerDetails.Ready() || !peerDetails.Dialable() {
 					continue
-				}
-
-				if peerDetails.DialInfo().TransportName != tpt.Name() {
+				} else if peerDetails.DialInfo().TransportName != tpt.Name() {
 					continue
 				}
 
@@ -254,7 +256,7 @@ func (t *processPeersTask) processPeers(ctx context.Context) {
 	// Verify unverified peers
 	{
 		for _, unverifiedPeer := range t.peerStore.UnverifiedPeers() {
-			if !unverifiedPeer.Ready() {
+			if !unverifiedPeer.Ready() || !unverifiedPeer.Dialable() {
 				continue
 			}
 
@@ -270,8 +272,6 @@ func (t *processPeersTask) processPeers(ctx context.Context) {
 			} else if errors.Cause(err) == types.ErrConnection {
 				continue
 			} else if err != nil {
-				continue
-			} else if !peerConn.Ready() {
 				continue
 			}
 

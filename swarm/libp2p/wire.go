@@ -32,6 +32,7 @@ const (
 	msgType_ChallengeIdentityRequest  msgType = "challenge identity"
 	msgType_ChallengeIdentityResponse msgType = "challenge identity response"
 	msgType_AnnouncePeers             msgType = "announce peers"
+	msgType_AnnounceP2PStateURI       msgType = "announce p2p stateURI"
 )
 
 type ackMsg struct {
@@ -119,6 +120,10 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 			return err
 		}
 		msg.Payload = ep
+
+	case msgType_AnnounceP2PStateURI:
+		stateURI := string(m.PayloadBytes)
+		msg.Payload = stateURI[1 : len(stateURI)-1] // remove quotes
 
 	case msgType_ChallengeIdentityRequest:
 		var challenge protoauth.ChallengeMsg

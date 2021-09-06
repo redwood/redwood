@@ -202,12 +202,7 @@ func (c *controller) Members() (utils.AddressSet, error) {
 	defer iter.Close()
 
 	for iter.Rewind(); iter.Valid(); iter.Next() {
-		addrHex, ok, err := iter.Node().StringValue(nil)
-		if err != nil {
-			return nil, err
-		} else if !ok {
-			continue
-		}
+		addrHex := iter.Node().Keypath().Part(-1).String()
 
 		addr, err := types.AddressFromHex(addrHex)
 		if err != nil {
