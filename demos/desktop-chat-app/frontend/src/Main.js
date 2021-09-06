@@ -84,11 +84,12 @@ const SHeaderBar = styled(HeaderBar)`
     width: 100%;
 `
 
-function Main() {
+function Main(props) {
 	const { onDismiss: onDismissContactsModal } = useModal('contacts')
 	const { selectedStateURI, navigate } = useNavigation()
 	const { servers, rooms } = useServerAndRoomInfo()
 	const [isLoading, setIsLoading] = useState(true)
+	const [shouldRedirect, setShouldRedirect] = useState(false)
 	let { nodeIdentities } = useRedwood()
 
 	const roomKeys = Object.keys(rooms || {}).filter((key) => key !== 'chat.local/address-book')
@@ -99,16 +100,28 @@ function Main() {
 		}
 	}, [nodeIdentities])
 
-    let { isLoggedIn } = useLoginStatus()
+	let { isLoggedIn, profilesFetched } = useLoginStatus()
 
-    if (!isLoggedIn) {
-        return <Redirect to={'/signin'} />
-    }
+	useEffect(() => {
+		if (profilesFetched) {
+			if (!isLoggedIn) {
+				setShouldRedirect(true)
+			}
+		}
+	}, [profilesFetched])
+
 
     let [showDebugView, setShowDebugView] = useState(false)
     let onClickShowDebugView = useCallback(() => {
         setShowDebugView(!showDebugView)
 	}, [showDebugView, setShowDebugView])
+
+	if (shouldRedirect) {
+		if ((props.profileNames || []).length === 0) {
+			return <Redirect to={'/signup'} />
+		}
+		return <Redirect to={'/profiles'} />
+	}
 
     return (
         <Layout>

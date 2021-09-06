@@ -56,7 +56,7 @@ const SAccountCardContent = styled.form`
 `
 
 const SLink = styled(Link)`
-    font-size: 10px;
+    font-size: 12px;
     color: #635bff;
     margin-top: 8px;
 `
@@ -110,7 +110,7 @@ const SErrorMessage = styled.div`
 function Profile(props) {
     return (
         <SProfile onClick={() => props.onClick(props.profileName)}>
-            <UserAvatar username={props.profileName} />
+            <UserAvatar address={props.profileName} />
             <span>{props.profileName}</span>
         </SProfile>
     )
@@ -168,8 +168,8 @@ function SelectProfile(props) {
 						)
 					}) : <SAccountCardDesc>No profiles to display.</SAccountCardDesc>}
 				</SProfileWrapper>
-				<SLink to={'/signin'}>Sign into account.</SLink>
-				<SLink to={'/signup'}>Create an account.</SLink>
+				<SLink to={'/signin'}>Import existing profile.</SLink>
+				<SLink to={'/signup'}>Create a profile.</SLink>
 			</SSelectProfile>
 		</SAccountCardContent>
     )

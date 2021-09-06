@@ -55,7 +55,7 @@ const SAccountCardContent = styled.form`
 `
 
 const SLink = styled(Link)`
-    font-size: 10px;
+    font-size: 12px;
     color: #635bff;
     margin-top: 8px;
 `
@@ -87,7 +87,7 @@ const SErrorMessage = styled.div`
     color: red;
 `
 
-function SignUp({ setMnemonic, profileName, setProfileName, password, setPassword, confirmPassword, setConfirmPassword, setLoadingText, errorMessage, setErrorMessage }) {
+function SignUp({ profileNames, setMnemonic, profileName, setProfileName, password, setPassword, confirmPassword, setConfirmPassword, setLoadingText, errorMessage, setErrorMessage }) {
     let { signup } = useLoginStatus()
 
     let onSubmitSignUp = useCallback(async (event) => {
@@ -134,8 +134,8 @@ function SignUp({ setMnemonic, profileName, setProfileName, password, setPasswor
                     type={'password'}
                 />
             </InputLabel>
-            <SLink to={'/profiles'}>Import existing account.</SLink>
-            <SLink to={'/signin'}>Sign into an account.</SLink>
+            <SLink to={'/profiles'}>Existing Profiles ({profileNames.length}).</SLink>
+            <SLink to={'/signin'}>Import existing profile.</SLink>
             <Button
 				type="submit"
 				primary
@@ -180,7 +180,7 @@ function ConfirmDisplay({ mnemonic, setMnemonic, profileName, password, setLoadi
     )
 }
 
-function Account() {
+function Account(props) {
     const { isLoggedIn } = useLoginStatus()
 
     const [profileName, setProfileName] = useState('')
@@ -199,7 +199,7 @@ function Account() {
             {/* <SAccountHeader /> */}
             <SAccountCard>
 				<SAccountCardHeader>Sign Up</SAccountCardHeader>
-				<SAccountCardDesc>{mnemonic ? 'Please save your mnemonic and keep it secure.' : 'Create an account.'}</SAccountCardDesc>
+				<SAccountCardDesc>{mnemonic ? 'Please save your mnemonic and keep it secure.' : 'Create a profile.'}</SAccountCardDesc>
 				{mnemonic ?
 					<ConfirmDisplay
 						mnemonic={mnemonic}
@@ -221,6 +221,7 @@ function Account() {
 						setLoadingText={setLoadingText}
 						errorMessage={errorMessage}
 						setErrorMessage={setErrorMessage}
+						profileNames={props.profileNames || []}
 					/>
 				}
                 { loadingText ? <Loading text={loadingText} /> : null }

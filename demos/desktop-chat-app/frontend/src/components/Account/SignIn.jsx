@@ -55,7 +55,7 @@ const SAccountCardContent = styled.form`
 `
 
 const SLink = styled(Link)`
-    font-size: 10px;
+    font-size: 12px;
     color: #635bff;
     margin-top: 8px;
 `
@@ -65,12 +65,11 @@ const SErrorMessage = styled.div`
     color: red;
 `
 
-function SignIn({ mnemonic, setMnemonic, profileName, setProfileName, password, setPassword, errorMessage, setErrorMessage, setLoadingText }) {
-    let { login } = useLoginStatus()
+function SignIn({ profileNames, mnemonic, setMnemonic, profileName, setProfileName, password, setPassword, errorMessage, setErrorMessage, setLoadingText }) {
+	let { login } = useLoginStatus()
 
     let onSubmitLogin = useCallback(async (event) => {
 		event.preventDefault()
-		console.log('working')
         setErrorMessage('')
         setLoadingText('Validating and generating mnemonic...')
         try {
@@ -106,8 +105,8 @@ function SignIn({ mnemonic, setMnemonic, profileName, setProfileName, password, 
                     type={'password'}
                 />
             </InputLabel>
-            <SLink to={'/profiles'}>Import existing account.</SLink>
-            <SLink to={'/signup'}>Create an account.</SLink>
+            <SLink to={'/profiles'}>Existing Profiles ({profileNames.length}).</SLink>
+            <SLink to={'/signup'}>Create an profile.</SLink>
             <Button
 				primary
 				style={{ width: '100%', marginTop: 12 }}
@@ -134,7 +133,7 @@ function Account(props) {
         <SAccount>
             {/* <SAccountHeader /> */}
             <SAccountCard>
-                <SAccountCardHeader>Import Existing Account</SAccountCardHeader>
+                <SAccountCardHeader>Import Existing Profile</SAccountCardHeader>
                 <SAccountCardDesc>Always keep your mnemonic safe.</SAccountCardDesc>
                     <SignIn
                         mnemonic={mnemonic}
@@ -145,7 +144,8 @@ function Account(props) {
                         setPassword={setPassword}
                         errorMessage={errorMessage}
                         setErrorMessage={setErrorMessage}
-                        setLoadingText={setLoadingText}
+						setLoadingText={setLoadingText}
+						profileNames={props.profileNames || []}
                     />
                 { loadingText ? <Loading text={loadingText} /> : null }
             </SAccountCard>
