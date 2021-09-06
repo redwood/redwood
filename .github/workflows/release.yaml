@@ -168,7 +168,7 @@ jobs:
             - name: Zip
               uses: papeloto/action-zip@v1
               with:
-                  files: demos/desktop-chat-app/${{ matrix.app_name }}
+                  files: demos/desktop-chat-app/${{ matrix.app_name }} demos/desktop-chat-app/README.md
                   dest:  demos/desktop-chat-app/${{ matrix.zip_name }}
 
             - name: Upload artifacts
