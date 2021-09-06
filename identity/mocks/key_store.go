@@ -250,6 +250,38 @@ func (_m *KeyStore) PublicIdentities() ([]identity.Identity, error) {
 	return r0, r1
 }
 
+// RatchetKeyStore provides a mock function with given fields:
+func (_m *KeyStore) RatchetKeyStore() identity.RatchetKeyStore {
+	ret := _m.Called()
+
+	var r0 identity.RatchetKeyStore
+	if rf, ok := ret.Get(0).(func() identity.RatchetKeyStore); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(identity.RatchetKeyStore)
+		}
+	}
+
+	return r0
+}
+
+// RatchetSessionStore provides a mock function with given fields:
+func (_m *KeyStore) RatchetSessionStore() identity.RatchetSessionStore {
+	ret := _m.Called()
+
+	var r0 identity.RatchetSessionStore
+	if rf, ok := ret.Get(0).(func() identity.RatchetSessionStore); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(identity.RatchetSessionStore)
+		}
+	}
+
+	return r0
+}
+
 // SaveExtraUserData provides a mock function with given fields: key, value
 func (_m *KeyStore) SaveExtraUserData(key string, value interface{}) error {
 	ret := _m.Called(key, value)

@@ -16,14 +16,36 @@ type PeerStore struct {
 	mock.Mock
 }
 
-// AddDialInfos provides a mock function with given fields: dialInfos
-func (_m *PeerStore) AddDialInfos(dialInfos []swarm.PeerDialInfo) {
-	_m.Called(dialInfos)
+// AddDialInfo provides a mock function with given fields: dialInfo, deviceUniqueID
+func (_m *PeerStore) AddDialInfo(dialInfo swarm.PeerDialInfo, deviceUniqueID string) swarm.PeerDetails {
+	ret := _m.Called(dialInfo, deviceUniqueID)
+
+	var r0 swarm.PeerDetails
+	if rf, ok := ret.Get(0).(func(swarm.PeerDialInfo, string) swarm.PeerDetails); ok {
+		r0 = rf(dialInfo, deviceUniqueID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(swarm.PeerDetails)
+		}
+	}
+
+	return r0
 }
 
-// AddVerifiedCredentials provides a mock function with given fields: dialInfo, address, sigpubkey, encpubkey
-func (_m *PeerStore) AddVerifiedCredentials(dialInfo swarm.PeerDialInfo, address types.Address, sigpubkey crypto.SigningPublicKey, encpubkey crypto.AsymEncPubkey) {
-	_m.Called(dialInfo, address, sigpubkey, encpubkey)
+// AddVerifiedCredentials provides a mock function with given fields: dialInfo, deviceUniqueID, address, sigpubkey, encpubkey
+func (_m *PeerStore) AddVerifiedCredentials(dialInfo swarm.PeerDialInfo, deviceUniqueID string, address types.Address, sigpubkey crypto.SigningPublicKey, encpubkey crypto.AsymEncPubkey) swarm.PeerDetails {
+	ret := _m.Called(dialInfo, deviceUniqueID, address, sigpubkey, encpubkey)
+
+	var r0 swarm.PeerDetails
+	if rf, ok := ret.Get(0).(func(swarm.PeerDialInfo, string, types.Address, crypto.SigningPublicKey, crypto.AsymEncPubkey) swarm.PeerDetails); ok {
+		r0 = rf(dialInfo, deviceUniqueID, address, sigpubkey, encpubkey)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(swarm.PeerDetails)
+		}
+	}
+
+	return r0
 }
 
 // AllDialInfos provides a mock function with given fields:
@@ -148,6 +170,22 @@ func (_m *PeerStore) PeersWithAddress(address types.Address) []swarm.PeerDetails
 	var r0 []swarm.PeerDetails
 	if rf, ok := ret.Get(0).(func(types.Address) []swarm.PeerDetails); ok {
 		r0 = rf(address)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]swarm.PeerDetails)
+		}
+	}
+
+	return r0
+}
+
+// PeersWithDeviceUniqueID provides a mock function with given fields: deviceUniqueID
+func (_m *PeerStore) PeersWithDeviceUniqueID(deviceUniqueID string) []swarm.PeerDetails {
+	ret := _m.Called(deviceUniqueID)
+
+	var r0 []swarm.PeerDetails
+	if rf, ok := ret.Get(0).(func(string) []swarm.PeerDetails); ok {
+		r0 = rf(deviceUniqueID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]swarm.PeerDetails)

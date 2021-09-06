@@ -88,6 +88,20 @@ func (_m *BlobPeerConn) DeviceSpecificID() string {
 	return r0
 }
 
+// DeviceUniqueID provides a mock function with given fields:
+func (_m *BlobPeerConn) DeviceUniqueID() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // DialInfo provides a mock function with given fields:
 func (_m *BlobPeerConn) DialInfo() swarm.PeerDialInfo {
 	ret := _m.Called()
@@ -97,6 +111,20 @@ func (_m *BlobPeerConn) DialInfo() swarm.PeerDialInfo {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(swarm.PeerDialInfo)
+	}
+
+	return r0
+}
+
+// Dialable provides a mock function with given fields:
+func (_m *BlobPeerConn) Dialable() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(bool)
 	}
 
 	return r0
@@ -222,50 +250,6 @@ func (_m *BlobPeerConn) PublicKeys(addr types.Address) (crypto.SigningPublicKey,
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).(crypto.AsymEncPubkey)
 		}
-	}
-
-	return r0, r1
-}
-
-// ReadBlobChunkRequest provides a mock function with given fields:
-func (_m *BlobPeerConn) ReadBlobChunkRequest() (types.Hash, error) {
-	ret := _m.Called()
-
-	var r0 types.Hash
-	if rf, ok := ret.Get(0).(func() types.Hash); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(types.Hash)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// ReadBlobManifestRequest provides a mock function with given fields:
-func (_m *BlobPeerConn) ReadBlobManifestRequest() (blob.ID, error) {
-	ret := _m.Called()
-
-	var r0 blob.ID
-	if rf, ok := ret.Get(0).(func() blob.ID); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(blob.ID)
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
-	} else {
-		r1 = ret.Error(1)
 	}
 
 	return r0, r1
