@@ -268,7 +268,7 @@ func (f *fetcher) readUntilErrorOrShutdown(ctx context.Context, peer BlobPeerCon
 			f.workPool.ReturnFailedJob(sha3)
 			return errors.Wrapf(err, "while storing chunk %v", sha3)
 		}
-		f.Debugf("fetched chunk %v (%v/%v) for blob %v", sha3, i, f.workPool.NumJobs(), f.blobID)
+		f.Debugf("fetched chunk %v (%v/%v) for blob %v", sha3, i+1, f.workPool.NumJobs(), f.blobID)
 		f.workPool.MarkJobComplete()
 
 		select {
