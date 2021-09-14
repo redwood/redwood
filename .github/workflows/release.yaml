@@ -1,6 +1,9 @@
 name: Release
 
-on: [create]
+on:
+    push:
+        tags:
+            - '**'
 
 jobs:
     create_release:
@@ -93,10 +96,10 @@ jobs:
                       app_name: redwood-chat
                       zip_name: redwood-chat-ubuntu.zip
                     - platform: macos-11
-                      app_name: RedwoodChat.app
+                      app_name: RedwoodChat.app/
                       zip_name: redwood-chat-macos-11.zip
                     - platform: macos-10.15
-                      app_name: RedwoodChat.app
+                      app_name: RedwoodChat.app/
                       zip_name: redwood-chat-macos-10.15.zip
 
 
@@ -161,15 +164,18 @@ jobs:
               working-directory: demos/desktop-chat-app
 
             - name: Package macOS app
-              run:  mkdir -p ./packaging/RedwoodChat.app/Contents/MacOS && mv ./redwood-chat ./packaging/RedwoodChat.app/Contents/MacOS/ && mv ./packaging/RedwoodChat.app .
+              run:  mkdir -p ./packaging/RedwoodChat.app/Contents/MacOS && mv ./redwood-chat ./packaging/RedwoodChat.app/Contents/MacOS/ && chmod +x ./packaging/RedwoodChat.app/Contents/MacOS/redwood-chat && mv ./packaging/RedwoodChat.app .
               if:   ${{ matrix.platform == 'macos-11' || matrix.platform == 'macos-10.15' }}
               working-directory: demos/desktop-chat-app
 
             - name: Zip
-              uses: papeloto/action-zip@v1
-              with:
-                  files: demos/desktop-chat-app/${{ matrix.app_name }} demos/desktop-chat-app/README.md
-                  dest:  demos/desktop-chat-app/${{ matrix.zip_name }}
+              run:  zip -qq -r ${{ matrix.zip_name }} ${{ matrix.app_name }}
+              working-directory: demos/desktop-chat-app
+              # uses: papeloto/action-zip@v1
+              # with:
+              #     files: demos/desktop-chat-app/${{ matrix.app_name }} demos/desktop-chat-app/README.md
+              #     dest:  demos/desktop-chat-app/${{ matrix.zip_name }}
+              #     recursive: false
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v2
