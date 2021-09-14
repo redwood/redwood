@@ -23,7 +23,7 @@ import Profiles from './components/Account/Profiles'
 function App() {
     let [httpHost, setHttpHost] = useState()
     let [rpcEndpoint, setRpcEndpoint] = useState()
-    let { isLoggedIn } = useLoginStatus()
+	let { isLoggedIn, profileNames } = useLoginStatus()
 
     useEffect(() => {
         if (isLoggedIn) {
@@ -50,16 +50,22 @@ function App() {
                                     <Router>
                                         <Switch>
                                             <Route path="/signin">
-                                                <SignIn />
+                                                <SignIn
+													profileNames={profileNames}
+												/>
                                             </Route>
                                             <Route path="/signup">
-                                                <SignUp />
+                                                <SignUp
+													profileNames={profileNames}
+												/>
                                             </Route>
                                             <Route path="/profiles">
                                                 <Profiles />
                                             </Route>
                                             <Route>
-                                                <Main />
+                                                <Main
+													profileNames={profileNames}
+												/>
                                             </Route>
                                         </Switch>
                                     </Router>

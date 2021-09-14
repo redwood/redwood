@@ -30,6 +30,8 @@ import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 import useNavigation from '../hooks/useNavigation'
 import useAddressBook from '../hooks/useAddressBook'
 import useUsers from '../hooks/useUsers'
+import emojiSheet from './../assets/emoji-mart-twitter-images.png'
+
 // import strToColor from '../utils/strToColor'
 
 
@@ -244,8 +246,8 @@ function Chat({ className }) {
       } catch (e) {
         console.error(e)
       }
-    }
-
+	}
+	
     let mentionUsers = []
     const userAddresses = Object.keys(users || {})
     if (userAddresses.length) {
@@ -410,12 +412,13 @@ function Chat({ className }) {
     }
 
     const onClickSend = useCallback(async () => {
-        const plainMessage = serializeMessageText()
+		const plainMessage = serializeMessageText()
+		// const attachmentCount = Array.prototype.map.call(attachmentsInput.current.files, x => x).length
         if (!api || !plainMessage) { return }
         // Replace with markdown serializer
         await api.sendMessage(plainMessage, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
         setAttachments([])
-        setPreviews([])
+		setPreviews([])
         setEmojiSearchWord('')
 
         // Reset SlateJS cursor
@@ -424,14 +427,17 @@ function Chat({ className }) {
         editor.selection = { anchor: point, focus: point };
         editor.history = { redos: [], undos: [] };
 
-        setMessageText(initialMessageText)
-    }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api])
+		setMessageText(initialMessageText)
+		
+		attachmentsInput.current.value = ''
+    }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api, previews])
 
     useEffect(() => {
         // Scrolls on new messages
         if (messageTextContainer.current) {
           setTimeout(() => {
-            messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
+			messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
+			// fireNotificationAlert()
           }, 0)
         }
     }, [numMessages])
@@ -575,9 +581,12 @@ function Chat({ className }) {
     }
 
     function removePreview(itemIdx) {
-      let clonedPreviews = [...previews]
-      clonedPreviews.splice(itemIdx, 1)
-      setPreviews(clonedPreviews)
+	  let clonedPreviews = [...previews]
+	  let clonedAttachments = [...attachments]
+	  clonedPreviews.splice(itemIdx, 1)
+	  clonedAttachments.splice(itemIdx, 1)
+	  setPreviews(clonedPreviews)
+	  setAttachments(clonedAttachments)
     }
 
     function onChangeAttachments() {
@@ -587,7 +596,7 @@ function Chat({ className }) {
             return
         }
 
-        let files = Array.prototype.map.call(attachmentsInput.current.files, x => x)
+		let files = Array.prototype.map.call(attachmentsInput.current.files, x => x)
         setAttachments(files)
         setPreviews(new Array(files.length))
 
@@ -664,7 +673,10 @@ function Chat({ className }) {
                 { showEmojiKeyboard ? <EmojiWrapper>
                   <Picker
                     useButton={false}
-                    title={'Redwood Chat'}
+					title={'Redwood Chat'}
+					backgroundImageFn={(set, sheetSize) => {
+						return emojiSheet
+					}}
                     perLine={8}
                     set='twitter'
                     theme='dark'

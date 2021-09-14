@@ -8,6 +8,7 @@ export const green = {
 
 export const indigo = {
   500: 'hsl(231deg 36% 53%)',
+  700: '#303f9f',
 }
 
 export const red = {
@@ -17,6 +18,7 @@ export const red = {
 }
 
 export const grey = {
+	700: '#616161',
     600: 'hsl(220 8% 12% / 1)',
     500: 'hsl(220 8% 16% / 1)',
     400: 'hsl(220 8% 18% / 1)',

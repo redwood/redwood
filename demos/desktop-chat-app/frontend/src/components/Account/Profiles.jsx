@@ -47,7 +47,7 @@ const SAccountCardDesc = styled.p`
     text-align: center;
 `
 
-const SAccountCardContent = styled.div`
+const SAccountCardContent = styled.form`
     display: flex;
     align-items: center;
     justify-content: center;
@@ -56,7 +56,7 @@ const SAccountCardContent = styled.div`
 `
 
 const SLink = styled(Link)`
-    font-size: 10px;
+    font-size: 12px;
     color: #635bff;
     margin-top: 8px;
 `
@@ -110,7 +110,7 @@ const SErrorMessage = styled.div`
 function Profile(props) {
     return (
         <SProfile onClick={() => props.onClick(props.profileName)}>
-            <UserAvatar username={props.profileName} />
+            <UserAvatar address={props.profileName} />
             <span>{props.profileName}</span>
         </SProfile>
     )
@@ -119,8 +119,9 @@ function Profile(props) {
 function SignIn({ password, setPassword, profileNames, selectedProfile, setSelectedProfile, errorMessage, setErrorMessage, loadingText, setLoadingText }) {
     let { login } = useLoginStatus()
 
-    let onClickLogin = useCallback(async () => {
+    let onSubmitLogin = useCallback(async (event) => {
         try {
+			event.preventDefault()
             setErrorMessage('')
             setLoadingText('Signing into profile...')
             await login({ profileName: selectedProfile, password })
@@ -131,7 +132,7 @@ function SignIn({ password, setPassword, profileNames, selectedProfile, setSelec
     }, [selectedProfile, password, setErrorMessage, setLoadingText, login])
 
     return (
-        <Fragment>
+        <SAccountCardContent onSubmit={onSubmitLogin}>
             { errorMessage ? <SErrorMessage>{errorMessage}</SErrorMessage> : null}
             <InputLabel label={'Password'}>
                 <Input
@@ -143,32 +144,34 @@ function SignIn({ password, setPassword, profileNames, selectedProfile, setSelec
             <SBackProfiles onClick={() => setSelectedProfile('')}>Select another profile ({profileNames.length})</SBackProfiles>
             <SLink to={'/signin'}>Leave</SLink>
             <Button
-                onClick={onClickLogin}
+				type="submit"
                 primary
                 style={{ width: '100%', marginTop: 12 }}
                 disabled={!password}
             >Sign In</Button>
-        </Fragment>
+        </SAccountCardContent>
     )
 }
 
 function SelectProfile(props) {
     return (
-        <SSelectProfile>
-            <SProfileWrapper>
-                {props.profileNames.length > 0 ? props.profileNames.map((profileName, key) => {
-                    return (
-                        <Profile
-                            key={key}
-                            onClick={() => props.setSelectedProfile(profileName)}
-                            profileName={profileName}
-                        />
-                    )
-                }) : <SAccountCardDesc>No profiles to display.</SAccountCardDesc>}
-            </SProfileWrapper>
-            <SLink to={'/signin'}>Sign into account.</SLink>
-            <SLink to={'/signup'}>Create an account.</SLink>
-        </SSelectProfile>
+		<SAccountCardContent>
+			<SSelectProfile>
+				<SProfileWrapper>
+					{props.profileNames.length > 0 ? props.profileNames.map((profileName, key) => {
+						return (
+							<Profile
+								key={key}
+								onClick={() => props.setSelectedProfile(profileName)}
+								profileName={profileName}
+							/>
+						)
+					}) : <SAccountCardDesc>No profiles to display.</SAccountCardDesc>}
+				</SProfileWrapper>
+				<SLink to={'/signin'}>Import existing profile.</SLink>
+				<SLink to={'/signup'}>Create a profile.</SLink>
+			</SSelectProfile>
+		</SAccountCardContent>
     )
 }
 
@@ -188,7 +191,6 @@ function Account(props) {
             <SAccountCard>
                 <SAccountCardHeader>Profiles</SAccountCardHeader>
                 <SAccountCardDesc>{ `Profile Name: ${selectedProfile}` || '---'}</SAccountCardDesc>
-                <SAccountCardContent>
                     { selectedProfile ?
                         <SignIn
                             password={password}
@@ -205,7 +207,6 @@ function Account(props) {
                             profileNames={profileNames}
                             setSelectedProfile={setSelectedProfile}
                     />}
-                </SAccountCardContent>
                 { loadingText ? <Loading text={loadingText} /> : null }
             </SAccountCard>
         </SAccount>

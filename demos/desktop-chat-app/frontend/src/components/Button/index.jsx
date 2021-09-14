@@ -7,8 +7,11 @@ import theme from '../../theme'
 const usePrimaryButtonStyles = makeStyles({
     root: {
         backgroundColor: theme.color.indigo[500],
-        color: theme.color.white,
-    },
+		color: theme.color.white,
+		'&&:hover': {
+			backgroundColor: theme.color.indigo[700],
+		},
+	},
     disabled: {
         '&&': {
             backgroundColor: theme.color.grey[100],
@@ -21,8 +24,12 @@ const usePrimaryButtonStyles = makeStyles({
 
 const useNonPrimaryButtonStyles = makeStyles({
     root: {
-        backgroundColor: theme.color.grey[200],
-        color: theme.color.white,
+		backgroundColor: theme.color.grey[100],
+		color: theme.color.white,
+		'&&:hover': {
+			backgroundColor: theme.color.grey[200],
+			color: theme.color.grey[50],
+		},
     },
     disabled: {
         '&&': {

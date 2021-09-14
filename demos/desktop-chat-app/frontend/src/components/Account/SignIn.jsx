@@ -46,7 +46,7 @@ const SAccountCardDesc = styled.p`
     text-align: center;
 `
 
-const SAccountCardContent = styled.div`
+const SAccountCardContent = styled.form`
     display: flex;
     align-items: center;
     justify-content: center;
@@ -55,7 +55,7 @@ const SAccountCardContent = styled.div`
 `
 
 const SLink = styled(Link)`
-    font-size: 10px;
+    font-size: 12px;
     color: #635bff;
     margin-top: 8px;
 `
@@ -65,10 +65,11 @@ const SErrorMessage = styled.div`
     color: red;
 `
 
-function SignIn({ mnemonic, setMnemonic, profileName, setProfileName, password, setPassword, errorMessage, setErrorMessage, setLoadingText }) {
-    let { login } = useLoginStatus()
+function SignIn({ profileNames, mnemonic, setMnemonic, profileName, setProfileName, password, setPassword, errorMessage, setErrorMessage, setLoadingText }) {
+	let { login } = useLoginStatus()
 
-    let onClickLogin = useCallback(async () => {
+    let onSubmitLogin = useCallback(async (event) => {
+		event.preventDefault()
         setErrorMessage('')
         setLoadingText('Validating and generating mnemonic...')
         try {
@@ -81,7 +82,7 @@ function SignIn({ mnemonic, setMnemonic, profileName, setProfileName, password, 
     }, [profileName, mnemonic, password, setErrorMessage, setLoadingText, login])
 
     return (
-        <Fragment>
+		<SAccountCardContent onSubmit={onSubmitLogin}>
             {errorMessage ? <SErrorMessage>{errorMessage}</SErrorMessage> : null}
             <InputLabel label={'Profile Name'}>
                 <Input
@@ -104,10 +105,15 @@ function SignIn({ mnemonic, setMnemonic, profileName, setProfileName, password, 
                     type={'password'}
                 />
             </InputLabel>
-            <SLink to={'/profiles'}>Existing profiles.</SLink>
-            <SLink to={'/signup'}>Create an account.</SLink>
-            <Button onClick={onClickLogin} primary style={{ width: '100%', marginTop: 12 }} disabled={!(!!mnemonic && !!profileName && !!password)}>Sign In</Button>
-        </Fragment>
+            <SLink to={'/profiles'}>Existing Profiles ({profileNames.length}).</SLink>
+            <SLink to={'/signup'}>Create an profile.</SLink>
+            <Button
+				primary
+				style={{ width: '100%', marginTop: 12 }}
+				disabled={!(!!mnemonic && !!profileName && !!password)}
+				type="submit"
+			>Sign In</Button>
+		</SAccountCardContent>
     )
 }
 
@@ -127,9 +133,8 @@ function Account(props) {
         <SAccount>
             {/* <SAccountHeader /> */}
             <SAccountCard>
-                <SAccountCardHeader>Sign In</SAccountCardHeader>
+                <SAccountCardHeader>Import Existing Profile</SAccountCardHeader>
                 <SAccountCardDesc>Always keep your mnemonic safe.</SAccountCardDesc>
-                <SAccountCardContent>
                     <SignIn
                         mnemonic={mnemonic}
                         setMnemonic={setMnemonic}
@@ -139,9 +144,9 @@ function Account(props) {
                         setPassword={setPassword}
                         errorMessage={errorMessage}
                         setErrorMessage={setErrorMessage}
-                        setLoadingText={setLoadingText}
+						setLoadingText={setLoadingText}
+						profileNames={props.profileNames || []}
                     />
-                </SAccountCardContent>
                 { loadingText ? <Loading text={loadingText} /> : null }
             </SAccountCard>
         </SAccount>

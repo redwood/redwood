@@ -8,7 +8,7 @@ import Tooltip from '../Tooltip'
 import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
-import Input from '../Input'
+import Input, { InputLabel } from '../Input'
 import { ServerFab, DMButton } from '../ServerFab'
 import AddServerModal from './AddServerModal'
 import { useRedwood, useStateTree } from '@redwood.dev/client/react'
@@ -62,7 +62,7 @@ const Spacer = styled.div`
 function ServerBar({ className, verticalPadding }) {
     const { selectedServer, navigate } = useNavigation()
     const [isLoaded, setIsLoaded] = useState(false)
-    const joinedServers = useJoinedServers()
+	const joinedServers = useJoinedServers()
 
     const { onPresent: onPresentContactsModal } = useModal('contacts')
     const { onPresent: onPresentAddServerModal, onDismiss: onDismissAddServerModal } = useModal('add server')
@@ -112,7 +112,7 @@ function ServerBar({ className, verticalPadding }) {
                 </ServerIconWrapper>
             </Tooltip>
 
-            <Tooltip title="Import existing server" placement="right" arrow>
+            <Tooltip title="Join existing server" placement="right" arrow>
                 <ServerIconWrapper onClick={onClickImportServer}>
                     <CircularButton><ImportIcon style={{ color: theme.color.indigo[500] }} /></CircularButton>
                 </ServerIconWrapper>
@@ -161,17 +161,19 @@ function ImportServerModal({ onDismiss }) {
 
     return (
         <Modal modalKey="import server">
-            <ModalTitle closeModal={onDismiss}>Import a Server</ModalTitle>
+            <ModalTitle closeModal={onDismiss}>Join a Server</ModalTitle>
             <ModalContent>
-                <SInput
-                    value={serverName}
-                    onChange={onChangeServerName}
-                    label={'Server Name'}
-                    width={'460px'}
-                />
+				<InputLabel label={'Server Name'}>
+					<SInput
+						value={serverName}
+						onChange={onChangeServerName}
+						label={'Server Name'}
+						width={'460px'}
+					/>
+				</InputLabel>
             </ModalContent>
             <ModalActions>
-                <Button onClick={onClickImport} primary>Import</Button>
+                <Button onClick={onClickImport} primary>Join</Button>
             </ModalActions>
         </Modal>
     )

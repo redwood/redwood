@@ -6,13 +6,15 @@ export const Context = createContext({
     login: () => {},
     logout: () => {},
     checkLogin: () => {},
-    isLoggedIn: false,
+	isLoggedIn: false,
+	profilesFetched: false,
     profileNames: [],
 })
 
 function Provider({ apiEndpoint, children }) {
     let [isLoggedIn, setIsLoggedIn] = useState(false)
-    let [profileNames, setProfileNames] = useState([])
+	let [profileNames, setProfileNames] = useState([])
+	let [profilesFetched, setProfilesFetched] = useState(false)
 
     let signup = useCallback(async ({ profileName }) => {
         let resp = await fetch(`${apiEndpoint}/api/confirm-profile`, {
@@ -52,11 +54,12 @@ function Provider({ apiEndpoint, children }) {
             return
         }
 
-        let resp = await fetch(`${apiEndpoint}/api/logout`, { method: 'POST' })
+		let resp = await fetch(`${apiEndpoint}/api/logout`, { method: 'POST' })
         if (resp.status >= 400) {
             const errorText = await resp.text()
             throw new Error(errorText)
-        }
+		}
+		setProfilesFetched(false)
         await getProfileNames()
         setIsLoggedIn(false)
     }, [apiEndpoint, isLoggedIn, setIsLoggedIn])
@@ -76,7 +79,8 @@ function Provider({ apiEndpoint, children }) {
     async function getProfileNames() {
         try {
             let resp = await (await fetch(`${apiEndpoint}/api/profile-names`, { method: 'GET' })).json()
-            setProfileNames(resp.profileNames || [])
+			setProfileNames(resp.profileNames || [])
+			setProfilesFetched(true)
         } catch (err) {
             setProfileNames([])
         }
@@ -87,7 +91,7 @@ function Provider({ apiEndpoint, children }) {
     }, [apiEndpoint])
 
     return (
-      <Context.Provider value={{ signup, login, logout, checkLogin, isLoggedIn, profileNames }}>
+      <Context.Provider value={{ signup, login, logout, checkLogin, isLoggedIn, profileNames, profilesFetched }}>
           {children}
       </Context.Provider>
     )
