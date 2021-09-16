@@ -72,13 +72,25 @@ function NormalizeMessage({ msgText, preview, selected, style = {}, isNotificati
             return decorator
           } else if (msgChild.type === 'emoji') {
             if (preview) {
-              return <SEmojiPreview svg text={msgChild.value} />
-            }
+              return <SEmojiPreview
+				  svg
+				  text={msgChild.value}
+				  options={{
+					ext: 'svg',
+					protocol: 'https',
+					baseUrl: 'twemoji.maxcdn.com/v/12.1.3/svg/',
+					localSvg: true,
+				  }}
+				/>
+			}
+			
+			console.log('msgChild', msgChild.value)
 
             return <SEmoji svg text={msgChild.value} options={{
-              protocol: 'https',
-              baseUrl: 'twemoji.maxcdn.com/v/12.1.3/svg/',
-              ext: 'svg'
+				ext: 'svg',
+				protocol: 'https',
+				baseUrl: 'twemoji.maxcdn.com/v/12.1.3/svg/',
+				localSvg: true,
             }} />
 
             // if (msgChild.value === ':smiley:') {
@@ -115,9 +127,9 @@ function NormalizeMessage({ msgText, preview, selected, style = {}, isNotificati
 
   return <SNormalizeMessage style={style} selected={true}>{content.map((item, idx) => {
     if ((content.length - 1) === idx) {
-      return <Fragment>{item}</Fragment> 
+      return <Fragment key={idx}>{item}</Fragment> 
     }
-    return <Fragment>{item}<br /></Fragment>
+    return <Fragment key={idx}>{item}<br /></Fragment>
   })}</SNormalizeMessage>
 }
 

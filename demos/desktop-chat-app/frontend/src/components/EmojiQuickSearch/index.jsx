@@ -170,7 +170,8 @@ function EmojiQuickSearch(props) {
               options={{
                 protocol: 'https',
                 baseUrl: 'twemoji.maxcdn.com/v/12.1.3/svg/',
-                ext: 'svg'
+				ext: 'svg',
+				localSvg: true,
               }} 
             /> 
             {emoji}

@@ -31,6 +31,9 @@ import useNavigation from '../hooks/useNavigation'
 import useAddressBook from '../hooks/useAddressBook'
 import useUsers from '../hooks/useUsers'
 import emojiSheet from './../assets/emoji-mart-twitter-images.png'
+import downloadIcon from './../assets/download.svg'
+import cancelIcon from './../assets/cancel-2.svg'
+import uploadIcon from './../assets/upload.svg'
 
 // import strToColor from '../utils/strToColor'
 
@@ -84,6 +87,11 @@ const HiddenInput = styled.input`
     width: 1px;
 `
 
+const AdditionHiddenInput = styled.input`
+	opacity: 0;
+	width: 1px;
+`
+
 const AddAttachmentButton = styled(AddIcon)`
     position: absolute;
     cursor: pointer;
@@ -107,11 +115,21 @@ const MessageDetails = styled.div`
 `
 
 const SAttachment = styled(Attachment)`
-    max-width: 200px;
+    max-width: 500px;
 `
 
 const ImgPreviewContainer = styled.div`
-    height: ${props => props.show ? 'unset' : '0px'};
+	transition: .3s ease-in-out all;
+	transform: ${props => props.show ? 'translateY(0px)' : 'translateY(100px)'};
+	height: ${props => props.show ? 'unset' : '0px'};
+	border: 1px solid rgba(255, 255, 255, .2);
+	padding-top: 8px;
+	margin-right: 18px;
+	padding-left: 12px;
+	background: #27282c;
+	border-radius: 6px;
+	display: flex;
+	flex-wrap: wrap;
 `
 
 const ImgPreview = styled.img`
@@ -124,7 +142,8 @@ const ImgPreview = styled.img`
 const SImgPreviewWrapper = styled.div`
     position: relative;
     display: inline-block;
-    margin-right: 12px;
+	margin-right: 12px;
+	padding-bottom: 4px;
     button {
       cursor: pointer;
       border: none;
@@ -148,6 +167,24 @@ const SImgPreviewWrapper = styled.div`
         height: 18px;
       }
     }
+`
+
+const SAddNewAttachment = styled.div`
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	margin-right: 12px;
+	border: 1px dashed rgba(255,255,255,.5);
+	max-height: 108.47px;
+	margin: 3px;
+	padding-left: 8px;
+	padding-right: 8px;
+	> img {
+		height: 60px;
+		transform: scale(1.1);
+	}
 `
 
 const withMentions = editor => {
@@ -209,7 +246,8 @@ function Chat({ className }) {
     const [showEmojiKeyboard, setShowEmojiKeyboard] = useState(false)
 
     const theme = useTheme()
-    const attachmentsInput = useRef()
+	const attachmentsInput = useRef()
+	const newAttachmentsInput = useRef()
     const messageTextContainer = useRef()
     const mentionRef = useRef()
     const controlsRef = useRef()
@@ -275,7 +313,7 @@ function Chat({ className }) {
           }
         }
       }
-    }, [selectedStateURI, users, nodeIdentities])
+	}, [selectedStateURI, users, nodeIdentities])
 
 
     useEffect(() => {
@@ -413,8 +451,7 @@ function Chat({ className }) {
 
     const onClickSend = useCallback(async () => {
 		const plainMessage = serializeMessageText()
-		// const attachmentCount = Array.prototype.map.call(attachmentsInput.current.files, x => x).length
-        if (!api || !plainMessage) { return }
+        if (!api || (!plainMessage && attachments.length === 0)) { return }
         // Replace with markdown serializer
         await api.sendMessage(plainMessage, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
         setAttachments([])
@@ -436,8 +473,9 @@ function Chat({ className }) {
         // Scrolls on new messages
         if (messageTextContainer.current) {
           setTimeout(() => {
-			messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
-			// fireNotificationAlert()
+			if (messageTextContainer.current !== null) {
+				messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
+			}
           }, 0)
         }
     }, [numMessages])
@@ -457,7 +495,6 @@ function Chat({ className }) {
               }]
             }
           }
-          console.log(JSON.stringify(initialMessageText[0]), JSON.stringify(trimmedNode))
 
           if (JSON.stringify(initialMessageText[0]) === JSON.stringify(trimmedNode)) {
             if (!isEmpty) {
@@ -574,10 +611,14 @@ function Chat({ className }) {
           event.preventDefault()
         }
       }
-    }, [messageText, emojisFound, indexMention, searchMention, targetMention])
+    }, [messageText, emojisFound, indexMention, searchMention, targetMention, attachments, previews])
 
     function onClickAddAttachment() {
         attachmentsInput.current.click()
+	}
+	
+	function onClickAddNewAttachment() {
+        newAttachmentsInput.current.click()
     }
 
     function removePreview(itemIdx) {
@@ -587,9 +628,9 @@ function Chat({ className }) {
 	  clonedAttachments.splice(itemIdx, 1)
 	  setPreviews(clonedPreviews)
 	  setAttachments(clonedAttachments)
-    }
-
-    function onChangeAttachments() {
+	}
+	
+	function onChangeAttachments(event) {
         if (!attachmentsInput || !attachmentsInput.current || !attachmentsInput.current.files || attachmentsInput.current.files.length === 0) {
             setAttachments([])
             setPreviews([])
@@ -597,7 +638,7 @@ function Chat({ className }) {
         }
 
 		let files = Array.prototype.map.call(attachmentsInput.current.files, x => x)
-        setAttachments(files)
+		setAttachments(files)
         setPreviews(new Array(files.length))
 
         for (let i = 0; i < files.length; i++) {
@@ -606,9 +647,25 @@ function Chat({ className }) {
                 const reader = new FileReader()
                 reader.addEventListener('load', () => {
                     setPreviews(prev => {
-                        prev[i] = reader.result
+						prev[i] = reader.result
                         return [ ...prev ]
-                    })
+					})
+                }, false)
+                reader.readAsDataURL(file)
+			})(i)
+		}
+	}
+
+    function addNewAttachment(event) {
+		let files = Array.prototype.map.call(newAttachmentsInput.current.files, x => x)
+		setAttachments([ ...attachments, files])
+
+        for (let i = 0; i < files.length; i++) {
+            (function (i) {
+                let file = files[i]
+                const reader = new FileReader()
+                reader.addEventListener('load', () => {
+                    setPreviews([...previews, reader.result])
                 }, false)
                 reader.readAsDataURL(file)
             })(i)
@@ -648,6 +705,22 @@ function Chat({ className }) {
                         <ImgPreview src={dataURL} key={dataURL} />
                     </SImgPreviewWrapper>
                 ) : null)}
+				<SAddNewAttachment>
+					<img src={uploadIcon} alt="Upload" />
+					<Button
+						primary
+						style={{
+							width: '108px',
+							marginTop: 12,
+							fontSize: 10,
+							padding: '3px 6px',
+							paddingTop: '4px',
+							lineHeight: '1.25',
+						}}
+						onClick={onClickAddNewAttachment}
+					>Add File(s)</Button>
+				</SAddNewAttachment>
+				<AdditionHiddenInput type="file" multiple ref={newAttachmentsInput} onChange={addNewAttachment} />
                 <HiddenInput type="file" multiple ref={attachmentsInput} onChange={onChangeAttachments} />
             </ImgPreviewContainer>
             <ControlsContainer ref={controlsRef}>
@@ -834,34 +907,72 @@ const SMessageParseContainer = styled.div`
 
 const SModalContent = styled(ModalContent)`
     width: 600px;
-    flex-direction: column;
+	flex-direction: column;
+	align-items: center;
+	padding: 24px;
 `
 
 const Metadata = styled.div`
-    padding-bottom: 4px;
+	padding-top: 8px;
 `
 
 const Filename = styled.span`
-    font-size: 0.8rem;
+	font-size: 1rem;
 `
 
 const Filesize = styled.span`
-    font-size: 0.8rem;
+    font-size: 1rem;
     color: ${props => props.theme.color.grey[100]};
 `
 
+const FileActionWrapper = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  transform: translateY(-12px);
+  width: 100%;
+  img {
+	  cursor: pointer;
+	  transition: all .1s ease-in-out;
+	  height: 28px;
+	  &:first-child {
+		  margin-right: 18px;
+	  }
+	  &:hover {
+		  transform: scale(1.1);
+	  }
+  }
+`
+
+const downloadImage = async (url, fileName) => {
+	const image = await fetch(url)
+	const imageBlog = await image.blob()
+	const imageURL = URL.createObjectURL(imageBlog)
+	const link = document.createElement('a')
+	link.href = imageURL
+	link.download = fileName
+	document.body.appendChild(link)
+	link.click()
+	document.body.removeChild(link)
+}
+
 function AttachmentPreviewModal({ attachment, url }) {
+	const { onDismiss } = useModal('attachment preview')
+
     if (!attachment) {
         return null
     }
     return (
         <Modal modalKey="attachment preview">
             <SModalContent>
-                <Metadata>
+				<FileActionWrapper>
+					<img alt="Download" src={downloadIcon} onClick={() => downloadImage(url, attachment.filename)} />
+					<img alt="Close" src={cancelIcon}  onClick={onDismiss} />
+				</FileActionWrapper>
+                <Embed contentType={attachment['Content-Type']} url={url} height={'350px'} />
+				<Metadata>
                     <Filename>{attachment.filename} </Filename>
                     <Filesize>({filesize(attachment['Content-Length'])})</Filesize>
                 </Metadata>
-                <Embed contentType={attachment['Content-Type']} url={url} width={600} />
             </SModalContent>
         </Modal>
     )

@@ -7,17 +7,26 @@ import Image from '../Image'
 import { isImage, isPDF } from '../../utils/contentTypes'
 
 const Wrapper = styled.div`
-    width: ${props => props.width}px;
+	width: ${props => props.width}px;
+	cursor: pointer;
 `
 
 const SImage = styled(Image)`
-    width: ${props => props.width ? props.width + 'px' : '100%'};
+	height: ${props => props.height || 'auto'};
+    width: ${props => props.height ? 'auto' : '100%'};
 `
 
-function Embed({ contentType, url, width, className }) {
+function Embed({ contentType, url, height, width, className, loadFailed, setLoadFailed, onClick }) {
     let content
     if (isImage(contentType)) {
-        return <SImage src={url} width={width} className={className} />
+		return <SImage
+			loadFailed={loadFailed}
+			setLoadFailed={setLoadFailed}
+			onClick={onClick}
+			src={url}
+			height={height}
+			className={className}
+		/>
     } else if (isPDF(contentType)) {
         return <PDF url={url} width={width} className={className} />
     }
