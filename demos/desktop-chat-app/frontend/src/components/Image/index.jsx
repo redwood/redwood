@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react'
-import styled, { useTheme } from 'styled-components'
+import React, { useState, useEffect, useCallback } from 'react'
+import styled, { useTheme} from 'styled-components'
+import useNavigation from './../../hooks/useNavigation'
 import loadingSvg from '../Account/assets/loading.svg'
+import gooLoading from './../Account/assets/loading-goo.svg'
+import failedSvg from './../../assets/failed-image.svg'
+import Button from './../Button'
 
 const LoadingIconWrapper = styled.div`
     max-width: 100px;
@@ -8,23 +12,85 @@ const LoadingIconWrapper = styled.div`
     height: 40px;
 `
 
-function Image({ src, className, ...props }) {
-    let [ready, setReady] = useState(false)
+const FailedImageWrapper = styled.div`
+	display: flex;
+	flex-direction: column;
+	width: 120px;
+	> span {
+		font-size: 12px;
+		color: #ff3e3e;
+		text-align: center;
+		margin-bottom: 8px;
+		font-weight: 500;
+	}
+	img {
+		height: 72px;
+	}
+`
 
-    useEffect(() => {
-        (async function () {
-            while (true) {
-                let resp = await fetch(src)
-                if (resp.status === 200) {
-                    setReady(true)
-                    break
-                }
-                await sleep(1000)
-            }
-        })()
-    }, [src])
+function Image({
+	src,
+	className,
+	loadFailed,
+	setLoadFailed,
+	onClick,
+	...props
+}) {
+	const [ready, setReady] = useState(true)
+	const { selectedStateURI } = useNavigation()
 
-    let theme = useTheme()
+	const fetchImage = useCallback(async () => {
+		let failedIntervals = 0
+		let cancelRequest = false
+		while (true) {
+			if (cancelRequest) {
+				break
+			}
+			let resp = await fetch(src)
+			if (resp.status === 200) {
+				failedIntervals = 0
+				setReady(true)
+				break
+			}
+			if (failedIntervals >= 1) {
+				setLoadFailed(true)
+				break
+			}
+			// await sleep(1000)
+			failedIntervals++
+		}
+
+		return () => { cancelRequest = true }
+	}, [selectedStateURI])
+
+	useEffect(() => {
+		if (loadFailed === 'retry') {
+			setLoadFailed(false)
+			fetchImage()
+		}
+	}, [loadFailed])
+
+    useEffect(fetchImage, [src])
+
+	let theme = useTheme()
+	
+	if (loadFailed === 'failed') {
+		return <FailedImageWrapper>
+			<span>Image Failed to Load</span>
+			<img alt="Image Failed" src={failedSvg} />
+			<Button
+				primary
+				style={{
+					width: '100%',
+					marginTop: 12,
+					fontSize: 12,
+					padding: '3px 6px',
+					lineHeight: '1.25',
+				}}
+				onClick={() => setLoadFailed('retry')}
+            >Retry Image</Button>
+		</FailedImageWrapper>
+	}
 
     if (!ready) {
         // NOTE: Need to handle this in a dynamtic way
@@ -64,7 +130,22 @@ function Image({ src, className, ...props }) {
               </svg>
             </LoadingIconWrapper>
           ) 
-        }
+		}
+		return (
+			<LoadingIconWrapper style={props.style || {
+				height: 120,
+				width: 120,
+			}}>
+				<img alt="Loading Icon" src={gooLoading} style={{
+					height: 120,
+					width: 120,
+					background: '#2a2d32',
+					borderRadius: 4,
+					border: '1px solid rgba(255, 255, 255, .2)',
+				}} />
+			</LoadingIconWrapper>
+		)
+
         return (
             <LoadingIconWrapper style={props.style || {}}>
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 44 44" stroke="#fff">
@@ -81,8 +162,8 @@ function Image({ src, className, ...props }) {
               </svg>
             </LoadingIconWrapper>
         )
-    }
-    return <img src={src} className={className} {...props} />
+	}
+    return <img style={{ cursor: onClick ? 'pointer' : 'default' }} onClick={onClick} src={src} className={className} {...props} />
 }
 
 function sleep(ms) {

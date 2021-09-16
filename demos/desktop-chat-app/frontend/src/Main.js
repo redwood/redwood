@@ -33,7 +33,8 @@ const serverBarVerticalPadding = '12px'
 
 const Layout = styled.div`
     display: flex;
-    height: 100vh;
+	height: 100vh;
+	overflow: hidden;
 `
 
 const HeaderAndContent = styled.div`
