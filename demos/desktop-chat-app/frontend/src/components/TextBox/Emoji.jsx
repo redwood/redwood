@@ -28,7 +28,14 @@ function Emoji({ attributes, children, element }) {
       contentEditable={false}
     >
       <SEmojiPreview
-        text={element.value}
+		text={element.value}
+		options={{
+			protocol: 'https',
+			baseUrl: 'twemoji.maxcdn.com/v/12.1.3/svg/',
+			ext: 'svg',
+			localSvg: true,
+		}}
+		
       />
       {children}
     </SEmojiWrapper>
