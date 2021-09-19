@@ -136,6 +136,7 @@ function SignIn({ password, setPassword, profileNames, selectedProfile, setSelec
             { errorMessage ? <SErrorMessage>{errorMessage}</SErrorMessage> : null}
             <InputLabel label={'Password'}>
                 <Input
+                    autoFocus
                     value={password}
                     onChange={(event) => setPassword(event.currentTarget.value)}
                     type={'password'}
