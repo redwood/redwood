@@ -34,6 +34,7 @@ import emojiSheet from './../assets/emoji-mart-twitter-images.png'
 import downloadIcon from './../assets/download.svg'
 import cancelIcon from './../assets/cancel-2.svg'
 import uploadIcon from './../assets/upload.svg'
+import fileIcon from './Attachment/file.svg'
 
 // import strToColor from '../utils/strToColor'
 
@@ -133,17 +134,29 @@ const ImgPreviewContainer = styled.div`
 `
 
 const ImgPreview = styled.img`
-    height: 100px;
-    border: 1px dashed rgba(255, 255, 255, .5);
+    height: 60px;
     padding: 4px;
     margin: 3px;
+    display: inline-block;
 `
 
 const SImgPreviewWrapper = styled.div`
+    border: 1px dashed rgba(255, 255, 255, .5);
     position: relative;
     display: inline-block;
 	margin-right: 12px;
 	padding-bottom: 4px;
+  span {
+    display: inline-block;
+    font-size: 10px;
+    max-width: 120px;
+    text-overflow: hidden;
+    padding-left: 4px;
+    padding-right: 4px;
+    overflow: hidden;
+    text-align: center;
+
+  }
     button {
       cursor: pointer;
       border: none;
@@ -455,7 +468,7 @@ function Chat({ className }) {
         // Replace with markdown serializer
         await api.sendMessage(plainMessage, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
         setAttachments([])
-		setPreviews([])
+      setPreviews([])
         setEmojiSearchWord('')
 
         // Reset SlateJS cursor
@@ -613,21 +626,27 @@ function Chat({ className }) {
       }
     }, [messageText, emojisFound, indexMention, searchMention, targetMention, attachments, previews])
 
-    function onClickAddAttachment() {
-        attachmentsInput.current.click()
-	}
+  function onClickAddAttachment() {
+    if (previews.length === 0) {
+      attachmentsInput.current.files === ''
+    }
+    attachmentsInput.current.click()
+  }
 	
 	function onClickAddNewAttachment() {
-        newAttachmentsInput.current.click()
-    }
+    newAttachmentsInput.current.click()
+  }
 
-    function removePreview(itemIdx) {
-	  let clonedPreviews = [...previews]
-	  let clonedAttachments = [...attachments]
-	  clonedPreviews.splice(itemIdx, 1)
-	  clonedAttachments.splice(itemIdx, 1)
-	  setPreviews(clonedPreviews)
-	  setAttachments(clonedAttachments)
+  function removePreview(itemIdx) {
+    let clonedPreviews = [...previews]
+    let clonedAttachments = [...attachments]
+    clonedPreviews.splice(itemIdx, 1)
+    clonedAttachments.splice(itemIdx, 1)
+    setPreviews(clonedPreviews)
+    setAttachments(clonedAttachments)
+    if (clonedPreviews.length === 0) {
+      attachmentsInput.current.files === ''
+    }
 	}
 	
 	function onChangeAttachments(event) {
@@ -702,7 +721,13 @@ function Chat({ className }) {
                         <button onClick={() => removePreview(idx)}>
                             <CloseIcon />
                         </button>
-                        <ImgPreview src={dataURL} key={dataURL} />
+                    <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <ImgPreview onError={(event) => { event.target.src = fileIcon }} src={dataURL} key={dataURL} />
+                    </div>
+
+                    <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span>{attachments[idx].name}</span>
+                    </div> 
                     </SImgPreviewWrapper>
                 ) : null)}
 				<SAddNewAttachment>

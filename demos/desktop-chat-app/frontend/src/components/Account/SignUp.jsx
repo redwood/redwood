@@ -118,6 +118,7 @@ function SignUp({ profileNames, setMnemonic, profileName, setProfileName, passwo
                     value={profileName}
                     onChange={(event) => setProfileName(event.currentTarget.value)}
                     type={'text'}
+                    autoFocus
                 />
             </InputLabel>
             <InputLabel label={'Password'}>

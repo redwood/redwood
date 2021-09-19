@@ -89,6 +89,7 @@ function SignIn({ profileNames, mnemonic, setMnemonic, profileName, setProfileNa
                     value={profileName}
                     onChange={(event) => setProfileName(event.currentTarget.value)}
                     type={'text'}
+                    autoFocus
                 />
             </InputLabel>
             <InputLabel label={'Mnemonic'}>
