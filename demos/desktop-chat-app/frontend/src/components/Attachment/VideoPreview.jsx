@@ -1,0 +1,162 @@
+import React, { useState, useRef, Fragment } from 'react'
+import styled from 'styled-components'
+import filesize from 'filesize.js'
+
+import VideoJS from './../VideoJS'
+import loadingGoo from './../Account/assets/loading-goo.svg'
+import Button from './../Button'
+
+const loadFile = async (url) => {
+	try {
+		let resp = await fetch(url, {
+            method: 'GET',
+		})
+		const blob = await resp.blob()
+		const downloadUrl = window.URL.createObjectURL(blob)
+		return downloadUrl
+	} catch (err) {
+		console.log('err', err)
+	}
+}
+
+const SVideoPreviewWrapper = styled.div`
+	position: relative;
+`
+
+const VideoTitleWrapper = styled.div`
+	display: flex;
+	background: black;
+	margin-top: 8px;
+	justify-content: space-between;
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 4px;
+	padding-bottom: 8px;
+	span {
+		font-size: 10px;
+		color: rgba(255, 255, 255, .8);
+		&:nth-child(2) {
+			color: rgba(255, 255, 255, .4);
+		}
+	}
+`
+
+const VideoLoadingOverlay = styled.div`
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	background: rgba(0, 0, 0, .6);
+	top: 0px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-direction: column;
+	> img {
+		height: 108px;
+	}
+	> span {
+		font-size: 14px;
+		font-weight: 500;
+	}
+`
+
+function VideoLoading() {
+	return (
+		<VideoLoadingOverlay>
+			<img src={loadingGoo} alt="Loading" />
+			<span>Loading video...</span>
+		</VideoLoadingOverlay>
+	)
+}
+
+function VideoDownloading() {
+	return (
+		<VideoLoadingOverlay>
+			<img src={loadingGoo} alt="Loading" />
+			<span>Downloading video...</span>
+		</VideoLoadingOverlay>
+	)
+}
+
+
+function VideoPreview(props) {
+	const { url, attachment } = props
+	const [didDownload, setDidDownload] = useState(false)
+	const [isLoading, setIsLoading] = useState(false)
+	const [isDownloading, setIsDownloading] = useState(false)
+	const [blobUrl, setBlobUrl] = useState(url)
+	const videoRef = useRef(null)
+
+	const downloadImage = async (url, fileName) => {
+		setIsDownloading(true)
+		const image = await fetch(url)
+		const imageBlog = await image.blob()
+		const imageURL = URL.createObjectURL(imageBlog)
+		const link = document.createElement('a')
+		link.href = imageURL
+		link.download = fileName
+		document.body.appendChild(link)
+		link.click()
+		document.body.removeChild(link)
+		setIsDownloading(false)
+	}	
+
+	const onClick = async () => {
+		try {
+			if (videoRef.current && !didDownload) {
+				videoRef.current.player.pause()
+				setIsLoading(true)
+				const downloadUrl = await loadFile(url)
+				setBlobUrl(downloadUrl)
+				setDidDownload(true)
+				setIsLoading(false)
+				
+				videoRef.current.player.src({ type: attachment['Content-Type'], src: downloadUrl })
+				videoRef.current.player.load()
+				videoRef.current.player.play()
+			}
+		} catch (err) {
+			console.log('err', err)
+		}
+	}
+
+	const videoJsOptions = {
+		autoplay: false,
+		playbackRates: [0.5, 1, 1.25, 1.5, 2],
+		width: 500,
+		height: 250,
+		controls: true,
+		sources: [
+		  {
+			src: url,
+			type: "video/mp4",
+		  },
+		],
+	  };
+
+	  return (
+		  <Fragment>
+			  <SVideoPreviewWrapper onClick={onClick}>
+				  <VideoTitleWrapper>
+					  <span>{attachment.filename}</span>
+					  <span>{filesize(attachment['Content-Length'])}</span>
+				  </VideoTitleWrapper>
+				  <VideoJS ref={videoRef} {...videoJsOptions} />
+				  {isLoading ? <VideoLoading /> : null}
+				  {isDownloading ? <VideoDownloading /> : null}
+			  </SVideoPreviewWrapper>
+			  <Button
+				  style={{
+					  width: '100%',
+					  fontSize: 12,
+					  padding: '4px 8px'
+				  }}
+				  disabled={isDownloading}
+				  primary
+				  onClick={() => downloadImage(url, attachment.filename)}
+			  >Download Video</Button>
+		  </Fragment>
+	  )
+}
+
+export default VideoPreview

@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import styled, { useTheme } from 'styled-components'
 import filesize from 'filesize.js'
-import VideoJS from './../VideoJS'
 import Embed from '../Embed'
 import { isImage, isPDF, isVideo, isAudio } from '../../utils/contentTypes'
 import fileIcon from './file.svg'
 import Button from './../Button'
+import VideoPreview from './VideoPreview'
 
 const ImageWrapper = styled.div`
     padding: 4px 0;
@@ -64,7 +64,7 @@ const downloadImage = async (url, fileName) => {
 	document.body.removeChild(link)
 }
 
-const loadAudio = async (url) => {
+const loadFile = async (url) => {
 	try {
 		let resp = await fetch(url, {
             method: 'GET',
@@ -90,7 +90,7 @@ function Attachment(props) {
 	useEffect(async () => {
 		if (url) {
 			try {
-				const downloadUrl = await loadAudio(url)
+				const downloadUrl = await loadFile(url)
 				setIsLoading(false)
 				audioRef.current.src = downloadUrl
 				console.log(audioRef)
@@ -132,31 +132,13 @@ function Attachment(props) {
 	}
 
 	if (isVideo(attachment.filename)) {
-		const videoJsOptions = {
-			autoplay: false,
-			playbackRates: [0.5, 1, 1.25, 1.5, 2],
-			width: 720,
-			height: 300,
-			controls: true,
-			sources: [
-			  {
-				src: url,
-				type: "video/mp4",
-			  },
-			],
-		  };
 
-		//   return (
-		// 	  <video>
-		// 		  <source type="video/mp4" src="http://localhost:8080/messages[2]/attachments[0]?state_uri=test%2Ftest&filename=else.mp4" />
-		// 	  </video>
-		//   )
-
-		  return (
-			<div>
-				  <VideoJS {...videoJsOptions} />
-		  </div>
-		  )
+		return (
+			<VideoPreview
+				url={url}
+				attachment={attachment}
+			/>
+		)
 	}
 
 	if (!Wrapper) {

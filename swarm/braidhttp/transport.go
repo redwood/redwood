@@ -651,7 +651,6 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	keypath = state.JoinKeypaths(newParts, []byte("/"))
 
 	var rng *state.Range
-	fmt.Println(r.Header.Get("Range"))
 	if rstr := r.Header.Get("Range"); rstr != "" && rstr != "bytes=0-" {
 		// Range: -10:-5
 		// @@TODO: real json Range parsing

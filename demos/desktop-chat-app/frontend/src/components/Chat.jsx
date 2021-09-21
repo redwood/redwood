@@ -143,19 +143,23 @@ const ImgPreview = styled.img`
 const SImgPreviewWrapper = styled.div`
     border: 1px dashed rgba(255, 255, 255, .5);
     position: relative;
-    display: inline-block;
 	margin-right: 12px;
-	padding-bottom: 4px;
+	padding-bottom: 8px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	align-self: center;
   span {
     display: inline-block;
     font-size: 10px;
     max-width: 120px;
-    text-overflow: hidden;
+    text-overflow: ellipsis;
     padding-left: 4px;
     padding-right: 4px;
     overflow: hidden;
     text-align: center;
-
+	white-space: nowrap;
   }
     button {
       cursor: pointer;
@@ -194,6 +198,7 @@ const SAddNewAttachment = styled.div`
 	margin: 3px;
 	padding-left: 8px;
 	padding-right: 8px;
+	padding-bottom: 8px;
 	> img {
 		height: 60px;
 		transform: scale(1.1);
@@ -677,7 +682,7 @@ function Chat({ className }) {
 
     function addNewAttachment(event) {
 		let files = Array.prototype.map.call(newAttachmentsInput.current.files, x => x)
-		setAttachments([ ...attachments, files])
+		setAttachments([ ...attachments, ...files])
 
         for (let i = 0; i < files.length; i++) {
             (function (i) {
@@ -697,7 +702,7 @@ function Chat({ className }) {
         </EmptyChatContainer>
     }
 
-    const ownAddress = nodeIdentities && nodeIdentities[0] ? nodeIdentities[0].address : null
+	const ownAddress = nodeIdentities && nodeIdentities[0] ? nodeIdentities[0].address : null
 
     return (
         <Container className={className}>
@@ -726,7 +731,7 @@ function Chat({ className }) {
                     </div>
 
                     <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span>{attachments[idx].name}</span>
+                        <span>{attachments[idx] ? attachments[idx].name : 'File'}</span>
                     </div> 
                     </SImgPreviewWrapper>
                 ) : null)}
