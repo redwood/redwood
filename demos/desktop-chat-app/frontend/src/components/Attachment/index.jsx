@@ -1,11 +1,14 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import styled, { useTheme } from 'styled-components'
 import filesize from 'filesize.js'
+import ReactAudioPlayer from 'react-audio-player'
+
 import Embed from '../Embed'
 import { isImage, isPDF, isVideo, isAudio } from '../../utils/contentTypes'
 import fileIcon from './file.svg'
 import Button from './../Button'
 import VideoPreview from './VideoPreview'
+import AudioPlayer from './../AudioPlayer'
 
 const ImageWrapper = styled.div`
     padding: 4px 0;
@@ -81,24 +84,10 @@ function Attachment(props) {
 	const { attachment, url, onClick, className } = props
 
 	const [loadFailed, setLoadFailed] = useState(false)
-	const [isLoading, setIsLoading] = useState(true)
 	const audioRef = useRef(null)
     const _onClick = useCallback(() => {
         onClick(attachment, url)
 	}, [attachment, url, onClick])
-	
-	useEffect(async () => {
-		if (url) {
-			try {
-				const downloadUrl = await loadFile(url)
-				setIsLoading(false)
-				audioRef.current.src = downloadUrl
-				console.log(audioRef)
-			} catch (err) {
-				console.log('err', err)
-			}
-		}
-	}, [url])
 
 	let Wrapper
     if (isImage(attachment['Content-Type'])) {
@@ -115,9 +104,15 @@ function Attachment(props) {
 
 	if (isAudio(attachment['Content-Type'])) {
 
-		if (isLoading) {
-			return <div>Loading audio...</div>
-		}
+		return (
+			<AudioPlayer
+				src={url}
+				controls
+				ref={audioRef}
+				attachment={attachment}
+				contentType={attachment['Content-Type']}
+			/>
+		)
 
 		return (
 			<audio
