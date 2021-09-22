@@ -8776,12 +8776,6 @@ react-app-polyfill@^2.0.0:
     regenerator-runtime "^0.13.7"
     whatwg-fetch "^3.4.1"
 
-"react-audio-player@git+https://github.com/justinmc/react-audio-player.git":
-  version "0.17.0"
-  resolved "git+https://github.com/justinmc/react-audio-player.git#27b0de14b6dce16723430b42e4cfabd3af295b78"
-  dependencies:
-    prop-types "^15.7.2"
-
 react-dev-utils@^11.0.1:
   version "11.0.4"
   resolved "https://registry.yarnpkg.com/react-dev-utils/-/react-dev-utils-11.0.4.tgz#a7ccb60257a1ca2e0efe7a83e38e6700d17aa37a"
