@@ -5,6 +5,7 @@ import filesize from 'filesize.js'
 import VideoJS from './../VideoJS'
 import loadingGoo from './../Account/assets/loading-goo.svg'
 import Button from './../Button'
+import reloadIcon from './../../assets/reload.svg'
 
 const loadFile = async (url) => {
 	try {
@@ -88,12 +89,46 @@ const SPlayOverlay = styled.div`
 	cursor: pointer;
 `
 
+const SErrorOverlay = styled.div`
+	position: absolute;	
+	height: 100%;
+	width: 100%;
+	top: 0px;
+	background: rgba(0,0,0, .9);
+	z-index: 999;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	&:hover {
+		img {
+			transform: rotate(360deg) scale(0.8);
+		}
+	}
+	span {
+		color: rgba(255, 255, 255, .8);
+		&:nth-child(3) {
+			font-weight: 500;
+			font-size: 16px;
+		}
+	}
+	> img {
+		transition: all ease-in-out .25s;
+		height: 72px;
+		margin-top: 8px;
+		margin-bottom: 8px;
+	}
+`
+
 
 function VideoPreview(props) {
 	const { url, attachment } = props
 	const [didDownload, setDidDownload] = useState(false)
 	const [isLoading, setIsLoading] = useState(false)
 	const [isDownloading, setIsDownloading] = useState(false)
+	const [hasError, setHasError] = useState(false)
 	const [blobUrl, setBlobUrl] = useState(url)
 	const videoRef = useRef(null)
 
@@ -109,12 +144,13 @@ function VideoPreview(props) {
 		link.click()
 		document.body.removeChild(link)
 		setIsDownloading(false)
-	}	
+	}
 
-	const onClick = async () => {
+	const onClick = async (retry) => {
 		try {
 			if (isLoading) { return }
-			if (videoRef.current && !didDownload) {
+			if (retry || (videoRef.current && !didDownload)) {
+				setHasError(false)
 				videoRef.current.player.pause()
 				setIsLoading(true)
 				const downloadUrl = await loadFile(url)
@@ -127,8 +163,13 @@ function VideoPreview(props) {
 				videoRef.current.player.play()
 			}
 		} catch (err) {
+			setHasError(true)
 			console.log('err', err)
 		}
+	}
+
+	const onError = () => {
+		setHasError(true)
 	}
 
 	const videoJsOptions = {
@@ -152,8 +193,15 @@ function VideoPreview(props) {
 					  <span>{attachment.filename}</span>
 					  <span>{filesize(attachment['Content-Length'])}</span>
 				  </VideoTitleWrapper>
-				  <VideoJS ref={videoRef} {...videoJsOptions} />
-				  { !didDownload ? <SPlayOverlay onClick={onClick} /> : null }
+				  <VideoJS ref={videoRef} onError={onError} {...videoJsOptions} />
+				  { hasError ? (
+					  <SErrorOverlay onClick={() => onClick(true)}>
+						  <span>Problem loading video</span>
+						  <img alt="Reload" src={reloadIcon} />
+						  <span>Click to retry</span>
+					  </SErrorOverlay>
+				  ) : null}
+				  { !didDownload ? <SPlayOverlay onClick={() => onClick()} /> : null }
 				  {isLoading ? <VideoLoading /> : null}
 				  {isDownloading ? <VideoDownloading /> : null}
 			  </SVideoPreviewWrapper>
