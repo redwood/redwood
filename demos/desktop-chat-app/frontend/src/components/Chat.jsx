@@ -35,7 +35,7 @@ import downloadIcon from './../assets/download.svg'
 import cancelIcon from './../assets/cancel-2.svg'
 import uploadIcon from './../assets/upload.svg'
 import fileIcon from './Attachment/file.svg'
-
+import { isImage } from './../utils/contentTypes'
 // import strToColor from '../utils/strToColor'
 
 
@@ -285,7 +285,7 @@ function Chat({ className }) {
     }, [setPreviewedAttachment, onPresentPreviewModal])
 
     const numMessages = ((roomState || {}).messages || []).length
-    const [messages, setMessages] = useState([])
+	const [messages, setMessages] = useState([])
 
     // Init Slate Editor
     // const editor = useMemo(() => withMentions(withHistory(withReact(createEditor()))), [])
@@ -667,15 +667,23 @@ function Chat({ className }) {
 
         for (let i = 0; i < files.length; i++) {
             (function (i) {
-                let file = files[i]
-                const reader = new FileReader()
-                reader.addEventListener('load', () => {
-                    setPreviews(prev => {
-						prev[i] = reader.result
-                        return [ ...prev ]
+				let file = files[i]
+				if (isImage(file.type)) {
+					const reader = new FileReader()
+					reader.addEventListener('load', () => {
+						setPreviews(prev => {
+							prev[i] = reader.result
+							return [ ...prev ]
+						})
+					}, false)
+					reader.readAsDataURL(file)					
+				} else {
+					setPreviews(prev => {
+						prev[i] = 'file'
+						return [ ...prev ]
 					})
-                }, false)
-                reader.readAsDataURL(file)
+				}
+
 			})(i)
 		}
 	}

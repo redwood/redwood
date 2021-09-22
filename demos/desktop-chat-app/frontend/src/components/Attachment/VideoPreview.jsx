@@ -78,6 +78,16 @@ function VideoDownloading() {
 	)
 }
 
+const SPlayOverlay = styled.div`
+	position: absolute;	
+	height: 100%;
+	width: 100%;
+	top: 0px;
+	background: transparent;
+	z-index: 999;
+	cursor: pointer;
+`
+
 
 function VideoPreview(props) {
 	const { url, attachment } = props
@@ -103,6 +113,7 @@ function VideoPreview(props) {
 
 	const onClick = async () => {
 		try {
+			if (isLoading) { return }
 			if (videoRef.current && !didDownload) {
 				videoRef.current.player.pause()
 				setIsLoading(true)
@@ -129,19 +140,20 @@ function VideoPreview(props) {
 		sources: [
 		  {
 			src: url,
-			type: "video/mp4",
+			type: attachment['Content-Type'],
 		  },
 		],
 	  };
 
 	  return (
 		  <Fragment>
-			  <SVideoPreviewWrapper onClick={onClick}>
+			  <SVideoPreviewWrapper>
 				  <VideoTitleWrapper>
 					  <span>{attachment.filename}</span>
 					  <span>{filesize(attachment['Content-Length'])}</span>
 				  </VideoTitleWrapper>
 				  <VideoJS ref={videoRef} {...videoJsOptions} />
+				  { !didDownload ? <SPlayOverlay onClick={onClick} /> : null }
 				  {isLoading ? <VideoLoading /> : null}
 				  {isDownloading ? <VideoDownloading /> : null}
 			  </SVideoPreviewWrapper>
