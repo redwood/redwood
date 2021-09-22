@@ -565,34 +565,47 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rng *state.Range
-	if rstr := r.Header.Get("Range"); rstr != "" && rstr != "bytes=0-" {
-		// Range: -10:-5
-		// @@TODO: real json Range parsing
-		parts := strings.SplitN(rstr, "=", 2)
-		if len(parts) != 2 {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
-		} else if parts[0] != "json" {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
+	if rstr := r.Header.Get("Range"); rstr != "" {
+		parts := strings.Split(rstr, "=")
+		if len(parts) == 2 {
+			if parts[0] == "bytes" {
+				parts = strings.Split(parts[1], "-")
+				start, err := strconv.ParseUint(parts[0], 10, 64)
+				if err != nil {
+					panic(err)
+				}
+				rng = &state.Range{Start: int64(start)}
+			}
 		}
-		parts = strings.SplitN(parts[1], ":", 2)
-		if len(parts) != 2 {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
-		}
-		start, err := strconv.ParseInt(parts[0], 10, 64)
-		if err != nil {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
-		}
-		end, err := strconv.ParseInt(parts[1], 10, 64)
-		if err != nil {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
-		}
-		rng = &state.Range{start, end}
 	}
+	// if rstr := r.Header.Get("Range"); rstr != "" && rstr != "bytes=0-" {
+	// 	// Range: -10:-5
+	// 	// @@TODO: real json Range parsing
+	// 	parts := strings.SplitN(rstr, "=", 2)
+	// 	if len(parts) != 2 {
+	// 		http.Error(w, "bad Range header", http.StatusBadRequest)
+	// 		return
+	// 	} else if parts[0] != "json" {
+	// 		http.Error(w, "bad Range header", http.StatusBadRequest)
+	// 		return
+	// 	}
+	// 	parts = strings.SplitN(parts[1], ":", 2)
+	// 	if len(parts) != 2 {
+	// 		http.Error(w, "bad Range header", http.StatusBadRequest)
+	// 		return
+	// 	}
+	// 	start, err := strconv.ParseInt(parts[0], 10, 64)
+	// 	if err != nil {
+	// 		http.Error(w, "bad Range header", http.StatusBadRequest)
+	// 		return
+	// 	}
+	// 	end, err := strconv.ParseInt(parts[1], 10, 64)
+	// 	if err != nil {
+	// 		http.Error(w, "bad Range header", http.StatusBadRequest)
+	// 		return
+	// 	}
+	// 	rng = &state.Range{start, end}
+	// }
 
 	// Add the "Parents" header
 	{
@@ -661,7 +674,7 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			node = node.NodeAt(keypath, rng)
 		} else {
 			var exists bool
-			node, exists, err = nelson.Seek(node, keypath, t.controllerHub, t.blobStore)
+			_, exists, err = nelson.Seek(node, keypath, t.controllerHub, t.blobStore)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 				return
@@ -669,9 +682,9 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, fmt.Sprintf("not found: %v", keypath), http.StatusNotFound)
 				return
 			}
-			keypath = nil
+			// keypath = nil
 
-			node, err = node.CopyToMemory(keypath, rng)
+			node, err = node.CopyToMemory(keypath, nil)
 			if errors.Cause(err) == types.Err404 {
 				http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
 				return
@@ -715,6 +728,9 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	}
 	if contentLength > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+		if rng != nil && rng.End == 0 {
+			rng.End = contentLength
+		}
 	}
 
 	resourceLength, err := node.Length()
@@ -749,6 +765,14 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		respBuf = ioutil.NopCloser(bytes.NewBuffer(j))
 	}
 	defer respBuf.Close()
+
+	if rng != nil {
+		buf := &bytes.Buffer{}
+		io.Copy(buf, respBuf)
+		bs := buf.Bytes()
+		bs = bs[int(rng.Start):int(rng.End)]
+		respBuf = io.NopCloser(bytes.NewBuffer(bs))
+	}
 
 	// Right now, this is just to facilitate the Chrome extension
 	allowSubscribe := map[string]bool{
