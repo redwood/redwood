@@ -107,7 +107,7 @@ function SignIn({ profileNames, mnemonic, setMnemonic, profileName, setProfileNa
                 />
             </InputLabel>
             <SLink to={'/profiles'}>Existing Profiles ({profileNames.length}).</SLink>
-            <SLink to={'/signup'}>Create an profile.</SLink>
+            <SLink to={'/signup'}>Create a profile.</SLink>
             <Button
 				primary
 				style={{ width: '100%', marginTop: 12 }}
