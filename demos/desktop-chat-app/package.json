@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "@types/node-fetch": "^2.5.8",
+    "css-math": "^0.4.0",
     "form-data": "^3.0.0",
     "fs": "0.0.1-security",
     "isomorphic-fetch": "^3.0.0",
