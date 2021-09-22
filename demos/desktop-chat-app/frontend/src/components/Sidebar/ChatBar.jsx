@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useHistory } from 'react-router-dom'
 import styled, { useTheme } from 'styled-components'
 import { Avatar, Checkbox } from '@material-ui/core'
@@ -177,7 +177,7 @@ const SInput = styled(Input)`
 `
 
 const WInput = styled(Input)`
-width: 280px;	
+    width: 280px;
 `
 
 function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
@@ -221,17 +221,26 @@ function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
         }
     }
 
+    const inputRef = useRef()
+
+    const onOpen = useCallback(() => {
+        if (!!inputRef.current) {
+            inputRef.current.focus()
+        }
+    }, [])
+
     function closeModal() {
-      setNewChatName()
-      onDismiss()
+        setNewChatName()
+        onDismiss()
 	}
 	
     return (
-        <Modal modalKey="new chat">
+        <Modal modalKey="new chat" onOpen={onOpen} closeModal={closeModal}>
             <ModalTitle closeModal={closeModal}>Create a Chat</ModalTitle>
             <ModalContent>
 				<InputLabel label={'Chat Name'}>
 					<WInput
+                        ref={inputRef}
 						value={newChatName}
 						onChange={onChangeNewChatName}
 						onKeyDown={onKeyDown}
