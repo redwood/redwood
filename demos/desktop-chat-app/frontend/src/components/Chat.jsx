@@ -13,6 +13,7 @@ import data from 'emoji-mart/data/all.json'
 import { Node, createEditor, Editor, Transforms, Range } from 'slate'
 import { withReact, ReactEditor } from 'slate-react'
 import { withHistory } from 'slate-history'
+import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 
 import Button from './Button'
 import Input from './Input'
@@ -26,7 +27,7 @@ import UserAvatar from './UserAvatar'
 import useModal from '../hooks/useModal'
 import useServerRegistry from '../hooks/useServerRegistry'
 import useAPI from '../hooks/useAPI'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { isImage } from './../utils/contentTypes'
 import useNavigation from '../hooks/useNavigation'
 import useAddressBook from '../hooks/useAddressBook'
 import useUsers from '../hooks/useUsers'
@@ -35,7 +36,6 @@ import downloadIcon from './../assets/download.svg'
 import cancelIcon from './../assets/cancel-2.svg'
 import uploadIcon from './../assets/upload.svg'
 import fileIcon from './Attachment/file.svg'
-import { isImage } from './../utils/contentTypes'
 // import strToColor from '../utils/strToColor'
 
 
@@ -83,9 +83,14 @@ const SIconButton = styled(IconButton)`
     height: 100%;
 `
 
-const HiddenInput = styled.input`
+const HiddenInput = styled.form`
     opacity: 0;
-    width: 1px;
+	width: 1px;
+	display: inline-block;
+	input {
+		opacity: 0;
+		width: 1px;
+	}
 `
 
 const AdditionHiddenInput = styled.input`
@@ -265,6 +270,7 @@ function Chat({ className }) {
 
     const theme = useTheme()
 	const attachmentsInput = useRef()
+	const attachmentForm = useRef()
 	const newAttachmentsInput = useRef()
     const messageTextContainer = useRef()
     const mentionRef = useRef()
@@ -631,27 +637,29 @@ function Chat({ className }) {
       }
     }, [messageText, emojisFound, indexMention, searchMention, targetMention, attachments, previews])
 
-  function onClickAddAttachment() {
-    if (previews.length === 0) {
-      attachmentsInput.current.files === ''
-    }
-    attachmentsInput.current.click()
-  }
+	function onClickAddAttachment() {
+		if (previews.length === 0) {
+			attachmentsInput.current.value === ''
+			attachmentForm.current.reset()
+		}
+		attachmentsInput.current.click()
+	}
 	
 	function onClickAddNewAttachment() {
-    newAttachmentsInput.current.click()
-  }
+		newAttachmentsInput.current.click()
+	}
 
-  function removePreview(itemIdx) {
-    let clonedPreviews = [...previews]
-    let clonedAttachments = [...attachments]
-    clonedPreviews.splice(itemIdx, 1)
-    clonedAttachments.splice(itemIdx, 1)
-    setPreviews(clonedPreviews)
-    setAttachments(clonedAttachments)
-    if (clonedPreviews.length === 0) {
-      attachmentsInput.current.files === ''
-    }
+	function removePreview(itemIdx) {
+		let clonedPreviews = [...previews]
+		let clonedAttachments = [...attachments]
+		clonedPreviews.splice(itemIdx, 1)
+		clonedAttachments.splice(itemIdx, 1)
+		setPreviews(clonedPreviews)
+		setAttachments(clonedAttachments)
+		if (clonedPreviews.length === 0) {
+			attachmentsInput.current.value === ''
+			attachmentForm.current.reset()
+		}
 	}
 	
 	function onChangeAttachments(event) {
@@ -759,7 +767,9 @@ function Chat({ className }) {
 					>Add File(s)</Button>
 				</SAddNewAttachment>
 				<AdditionHiddenInput type="file" multiple ref={newAttachmentsInput} onChange={addNewAttachment} />
-                <HiddenInput type="file" multiple ref={attachmentsInput} onChange={onChangeAttachments} />
+                <HiddenInput ref={attachmentForm}>
+					<input type="file" multiple ref={attachmentsInput} onChange={onChangeAttachments} />
+				</HiddenInput>
             </ImgPreviewContainer>
             <ControlsContainer ref={controlsRef}>
                 <AddAttachmentButton onClick={onClickAddAttachment} style={{ color: theme.color.white }} />
