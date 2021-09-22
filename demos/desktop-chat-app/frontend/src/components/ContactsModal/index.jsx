@@ -19,31 +19,32 @@ import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
 import usePeers from '../../hooks/usePeers'
 import useAddressBook from '../../hooks/useAddressBook'
+import useTraceUpdate from '../../hooks/useTraceUpdate'
 import strToColor from '../../utils/strToColor'
 import theme from '../../theme'
 
 function ContactsModal({ onDismiss }) {
     let { activeModalProps: { initiallyFocusedContact } } = useModal('contacts')
-    let [activeStep, setActiveStep] = useState(initiallyFocusedContact ? 1 : 0)
+    let [activeStep, setActiveStep] = useState(1)
     let [selectedPeer, setSelectedPeer] = useState(initiallyFocusedContact)
 
     useEffect(() => {
-        setActiveStep(initiallyFocusedContact ? 2 : 1)
+        // setActiveStep(initiallyFocusedContact ? 2 : 1)
         setSelectedPeer(initiallyFocusedContact)
     }, [initiallyFocusedContact])
 
     let showAddPeer = useCallback(address => {
         setActiveStep(0)
-    }, [setActiveStep, activeStep])
+    }, [setActiveStep])
 
     let showPeerList = useCallback(address => {
         setActiveStep(1)
-    }, [setActiveStep, activeStep])
+    }, [setActiveStep])
 
     let showPeerDetails = useCallback(address => {
         setActiveStep(2)
         setSelectedPeer(address)
-    }, [setActiveStep, activeStep])
+    }, [setActiveStep, setSelectedPeer])
 
     let onClickBack = useCallback(() => {
         if (activeStep === 0) { return }
@@ -51,27 +52,35 @@ function ContactsModal({ onDismiss }) {
     }, [setActiveStep, activeStep])
 
     let handleDismiss = useCallback(() => {
-        setActiveStep(0)
+        setActiveStep(1)
         setSelectedPeer(null)
         onDismiss()
     }, [onDismiss, setActiveStep, setSelectedPeer])
 
+    let onOpen = useCallback(() => {
+        if (!!initiallyFocusedContact) {
+            showPeerDetails(initiallyFocusedContact)
+        } else {
+            showPeerList()
+        }
+    }, [initiallyFocusedContact, showPeerDetails, showPeerList])
+
     let panes = [{
-        width: 480,
-        height: 190,
+        width: '480px',
+        height: '190px',
         content: <AddPeerPane key="one" showPeerList={showPeerList} />,
     }, {
-        width: 480,
-        height: 190,
+        width: '480px',
+        height: '50vh',
         content: <PeerListPane key="two" showAddPeer={showAddPeer} showPeerDetails={showPeerDetails} />,
     }, {
-        width: 800,
-        height: 390,
+        width: '800px',
+        height: '390px',
         content: <PeerDetailPane key="three" selectedPeer={selectedPeer} onClickBack={onClickBack} />,
     }]
 
     return (
-        <Modal modalKey="contacts">
+        <Modal modalKey="contacts" onOpen={onOpen} closeModal={handleDismiss}>
             <ModalTitle closeModal={handleDismiss}>Contacts</ModalTitle>
             <ModalContent>
                 <SlidingPane activePane={activeStep} panes={panes} />
@@ -129,16 +138,57 @@ function AddPeerPane({ showPeerList, ...props }) {
     )
 }
 
+const SPeerListPaneContent = styled(Pane)`
+    overflow-y: scroll;
+
+    /* Chrome, Safari, Opera */
+    &::-webkit-scrollbar {
+        display: none;
+    }
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+`
+
 function PeerListPane({ showAddPeer, showPeerDetails, ...props }) {
     let { peersByAddress } = usePeers()
     let peers = Object.keys(peersByAddress).map(addr => peersByAddress[addr]).filter(peer => !peer.isSelf)
     return (
         <Pane {...props}>
-            <PaneContent>
+            <SPeerListPaneContent>
                 {peers.map(peer => (
                     <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
                 ))}
-            </PaneContent>
+                {peers.map(peer => (
+                    <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
+                ))}
+                {peers.map(peer => (
+                    <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
+                ))}
+                {peers.map(peer => (
+                    <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
+                ))}
+                {peers.map(peer => (
+                    <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
+                ))}
+                {peers.map(peer => (
+                    <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
+                ))}
+                {peers.map(peer => (
+                    <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
+                ))}
+                {peers.map(peer => (
+                    <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
+                ))}
+                {peers.map(peer => (
+                    <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
+                ))}
+                {peers.map(peer => (
+                    <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
+                ))}
+                {peers.map(peer => (
+                    <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
+                ))}
+            </SPeerListPaneContent>
             <PaneActions>
                 <Button onClick={showAddPeer}>Add peer</Button>
             </PaneActions>
