@@ -36,6 +36,13 @@ const VideoTitleWrapper = styled.div`
 	span {
 		font-size: 10px;
 		color: rgba(255, 255, 255, .8);
+		&:first-child {
+			max-width: 300px;
+			text-overflow: ellipsis;
+			overflow: hidden;
+			text-align: center;
+			white-space: nowrap;
+		}
 		&:nth-child(2) {
 			color: rgba(255, 255, 255, .4);
 		}
@@ -81,9 +88,9 @@ function VideoDownloading() {
 
 const SPlayOverlay = styled.div`
 	position: absolute;	
-	height: 100%;
+	height: calc(100% - 8px);
 	width: 100%;
-	top: 0px;
+	top: 8px;
 	background: transparent;
 	z-index: 999;
 	cursor: pointer;
@@ -209,7 +216,9 @@ function VideoPreview(props) {
 				  style={{
 					  width: '100%',
 					  fontSize: 12,
-					  padding: '4px 8px'
+					  padding: '4px 8px',
+					  borderTopLeftRadius: '0px',
+					  borderTopRightRadius: '0px',
 				  }}
 				  disabled={isDownloading}
 				  primary

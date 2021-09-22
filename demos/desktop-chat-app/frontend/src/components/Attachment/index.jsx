@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import styled, { useTheme } from 'styled-components'
 import filesize from 'filesize.js'
-import ReactAudioPlayer from 'react-audio-player'
 
 import Embed from '../Embed'
 import { isImage, isPDF, isVideo, isAudio } from '../../utils/contentTypes'
