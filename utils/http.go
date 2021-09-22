@@ -210,6 +210,8 @@ func GuessContentTypeFromFilename(filename string) string {
 			return "image/png"
 		case "jpg", "jpeg":
 			return "image/jpeg"
+		case "mp4":
+			return "video/mp4"
 		}
 	}
 	return "application/octet-stream"
