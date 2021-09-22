@@ -1,4 +1,4 @@
-import React, { useContext } from 'react'
+import React, { useContext, useEffect } from 'react'
 import ReactDOM from 'react-dom'
 import styled, { keyframes } from 'styled-components'
 import * as tinycolor from 'tinycolor2'
@@ -7,18 +7,33 @@ import CloseIcon from '@material-ui/icons/Close';
 import { Context } from '../../contexts/Modals'
 import useModal from '../../hooks/useModal'
 import Spacer from '../Spacer'
+import useTraceUpdate from '../../hooks/useTraceUpdate'
 
 
-function Modal({ children, height, modalKey, closeModal }) {
+function Modal({ children, height, modalKey, onOpen, closeModal }) {
     const modalRoot = document.getElementById('modal-root')
     const { activeModalKey } = useContext(Context)
     const { onDismiss } = useModal(modalKey)
+
+    useEffect(() => {
+        if (!modalRoot) {
+            return
+        } else if (modalKey !== activeModalKey) {
+            return
+        }
+        if (!!onOpen) {
+            console.log({onOpen, modalRoot, activeModalKey, modalKey})
+            onOpen()
+        }
+    }, [onOpen, modalRoot, activeModalKey, modalKey])
+
     closeModal = closeModal || onDismiss
     if (!modalRoot) {
         return null
     } else if (modalKey !== activeModalKey) {
         return null
     }
+
     return ReactDOM.createPortal(
         <StyledModalWrapper>
             <StyledModalBackdrop onClick={closeModal} />
