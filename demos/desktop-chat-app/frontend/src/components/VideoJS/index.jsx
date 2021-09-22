@@ -9,7 +9,10 @@ export default class VideoPlayer extends React.Component {
     // instantiate video.js
     this.player = videojs(this.videoNode, this.props, function onPlayerReady() {
 	});
-	console.log(this.player)
+
+	const { onError } = this.props
+
+	this.player.on('error', onError)
   }
 
   // destroy player on unmount

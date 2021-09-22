@@ -52,7 +52,7 @@ function Image({
 				setReady(true)
 				break
 			}
-			if (failedIntervals >= 1) {
+			if (failedIntervals >= 7) {
 				setLoadFailed(true)
 				break
 			}
