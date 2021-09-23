@@ -79,6 +79,56 @@ const Leaf = ({ attributes, children, leaf }) => {
 }
 
 function TextBox(props) {
+  const onKeyDown = useCallback((event) => {
+    if (targetMention && mentionUsers.length > 0) {
+      switch (event.key) {
+      case 'ArrowDown':
+          event.preventDefault()
+          const prevIndex = indexMention >= mentionUsers.length - 1 ? 0 : indexMention + 1
+          setIndexMention(prevIndex)
+          break
+      case 'ArrowUp':
+          event.preventDefault()
+          const nextIndex = indexMention <= 0 ? mentionUsers.length - 1 : indexMention - 1
+          setIndexMention(nextIndex)
+          break
+      case 'Tab':
+      case 'Enter':
+          const selectedUser = mentionUsers[indexMention]
+          if (selectedUser) {
+            event.preventDefault()
+
+            Transforms.select(editor, targetMention)
+
+            insertMention(editor, selectedUser)
+            setTargetMention(null)
+          }
+          break
+      case 'Escape':
+          event.preventDefault()
+          setTargetMention(null)
+          break
+      }
+    } else {
+      // Emoji Handling
+      if (event.code === 'Enter' && !event.shiftKey) {
+        if (!emojisFound || (!emojisFound && emojiSearchWord)) {
+          event.preventDefault()
+          event.stopPropagation()
+
+          onClickSend()
+        }
+      }
+    }
+
+    if (emojiSearchWord) {
+      if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
+        event.preventDefault()
+      }
+    }
+  }, [messageText, emojisFound, indexMention, searchMention, targetMention])
+
+
   const renderElement = useCallback((props) => {
     const { element, attributes, children } = props
     switch (element.type) {
@@ -132,7 +182,6 @@ function TextBox(props) {
         <MentionSuggestion
           mentionUsers={props.mentionUsers}
           indexMention={props.indexMention}
-          mentionRef={props.mentionRef}
           controlsRef={props.controlsRef}
         />
       )}
