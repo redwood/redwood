@@ -12,7 +12,7 @@ const SNormalizeMessage = styled.div`
   span.emoji-mart-emoji {
     top: ${props => props.preview ? '2px' : '4px'};
   }
-` 
+`
 
 const SCode = styled.code`
   background: #2f3340;
@@ -73,31 +73,31 @@ function NormalizeMessage({ msgText, preview, selected, style = {}, isNotificati
           } else if (msgChild.type === 'emoji') {
             if (preview) {
               return <SEmojiPreview
-				  svg
-				  text={msgChild.value}
-				  options={{
-					ext: 'svg',
-					protocol: 'https',
-					baseUrl: 'twemoji.maxcdn.com/v/12.1.3/svg/',
-					localSvg: true,
-				  }}
-				/>
-			}
-			
-			console.log('msgChild', msgChild.value)
+                  svg
+                  text={msgChild.value}
+                  options={{
+                    ext: 'svg',
+                    protocol: 'https',
+                    baseUrl: 'twemoji.maxcdn.com/v/12.1.3/svg/',
+                    localSvg: true,
+                  }}
+                />
+            }
+
+            console.log('msgChild', msgChild.value)
 
             return <SEmoji svg text={msgChild.value} options={{
-				ext: 'svg',
-				protocol: 'https',
-				baseUrl: 'twemoji.maxcdn.com/v/12.1.3/svg/',
-				localSvg: true,
+                ext: 'svg',
+                protocol: 'https',
+                baseUrl: 'twemoji.maxcdn.com/v/12.1.3/svg/',
+                localSvg: true,
             }} />
 
             // if (msgChild.value === ':smiley:') {
             //   return <Emoji backgroundImageFn={() => emojiSheet} emoji={msgChild.value.replace(':', '').replace(':', '')} size={preview ? 14 : 21} />
             // }
           } else if (msgChild.type === 'mention') {
-            return <Mention element={msgChild} style={{ userSelect: 'auto' }} absolute preview={preview} />        
+            return <Mention element={msgChild} style={{ userSelect: 'auto' }} absolute preview={preview} />
           }
         })
       })
@@ -113,21 +113,21 @@ function NormalizeMessage({ msgText, preview, selected, style = {}, isNotificati
   }
 
   if (isNotification) {
-	return <SNormalizeMessage style={{
-		overflow: 'hidden',
-		fontSize: style.fontSize,
-		maxHeight: 50,
-	}} selected={true}>{content.map((item, idx) => {
-		if ((content.length - 1) === idx) {
-		  return <Fragment>{item}</Fragment> 
-		}
-		return <Fragment>{item}<br /></Fragment>
-	  })}</SNormalizeMessage>
+    return <SNormalizeMessage style={{
+        overflow: 'hidden',
+        fontSize: style.fontSize,
+        maxHeight: 50,
+    }} selected={true}>{content.map((item, idx) => {
+        if ((content.length - 1) === idx) {
+          return <Fragment>{item}</Fragment>
+        }
+        return <Fragment>{item}<br /></Fragment>
+      })}</SNormalizeMessage>
   }
 
   return <SNormalizeMessage style={style} selected={true}>{content.map((item, idx) => {
     if ((content.length - 1) === idx) {
-      return <Fragment key={idx}>{item}</Fragment> 
+      return <Fragment key={idx}>{item}</Fragment>
     }
     return <Fragment key={idx}>{item}<br /></Fragment>
   })}</SNormalizeMessage>

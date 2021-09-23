@@ -87,12 +87,24 @@ const SRightSuggestion = styled.div`
   }
 `
 
-function MentionSuggestion({ mentionUsers, indexMention, mentionRef, controlsRef }) {
+function MentionSuggestion({ mentionUsers, indexMention, controlsRef }) {
+  const mentionRef = useRef()
+
+  useEffect(() => {
+    if (targetMention && mentionUsers.length > 0) {
+      const el = mentionRef.current
+      const domRange = ReactEditor.toDOMRange(editor, targetMention)
+      const rect = domRange.getBoundingClientRect()
+      const topCalc = 68 + (mentionUsers.length * 28)
+
+      el.style.top = `-${topCalc}px`
+      el.style.left = '0px'
+    }
+  }, [mentionUsers.length, editor, indexMention, searchMention, targetMention])
+
   return (
     <Portal controlsRef={controlsRef}>
-      <SMentionSuggestion
-        ref={mentionRef}
-      >
+      <SMentionSuggestion ref={mentionRef}>
         <SSuggestionHeader>Users</SSuggestionHeader>
         {mentionUsers.map((user, i) => {
           let displayText = <span>{user.address.slice(0, 7)} <small>(public key)</small></span>
