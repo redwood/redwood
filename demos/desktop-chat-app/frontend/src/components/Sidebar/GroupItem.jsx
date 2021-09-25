@@ -1,8 +1,7 @@
 import React from 'react'
 import styled from 'styled-components'
-import { Emoji } from 'emoji-mart'
 
-import NormalizeMessage from './../ChatHelpers/NormalizeMessage'
+import NormalizeMessage from './../Chat/NormalizeMessage'
 
 const SItemContainer = styled.div`
     display: flex;
