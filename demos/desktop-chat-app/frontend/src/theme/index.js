@@ -1,4 +1,3 @@
-
 export const white = 'rgba(255,255,255,0.8)'
 export const black = '#000'
 
@@ -7,8 +6,8 @@ export const green = {
 }
 
 export const indigo = {
-  500: 'hsl(231deg 36% 53%)',
-  700: '#303f9f',
+    500: 'hsl(231deg 36% 53%)',
+    700: '#303f9f',
 }
 
 export const red = {
@@ -18,14 +17,14 @@ export const red = {
 }
 
 export const grey = {
-	700: '#616161',
+    700: '#616161',
     600: 'hsl(220 8% 12% / 1)',
     500: 'hsl(220 8% 16% / 1)',
     400: 'hsl(220 8% 18% / 1)',
     300: 'hsl(220 8% 21% / 1)',
     200: 'hsl(220 8% 24% / 1)',
     100: 'hsl(220 8% 36% / 1)',
-     50: 'hsl(220 8% 48% / 1)',
+    50: 'hsl(220 8% 48% / 1)',
 }
 
 const theme = {
@@ -60,7 +59,7 @@ const theme = {
         6: 48,
         7: 64,
     },
-    topBarSize: 56
+    topBarSize: 56,
 }
 
 export default theme

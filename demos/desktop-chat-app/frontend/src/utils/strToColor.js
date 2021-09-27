@@ -1,17 +1,15 @@
-// import memoize from 'lodash/memoize'
-
-const strToColor = function(str) {
-    return colors[getHashCode(str) % colors.length]
-}
+const strToColor = (str) => colors[getHashCode(str) % colors.length]
 
 export default strToColor
 
 function getHashCode(str) {
-    var hash = 0
-    if (str.length === 0) { return hash }
-    for (var i = 0; i < str.length; i++) {
+    let hash = 0
+    if (str.length === 0) {
+        return hash
+    }
+    for (let i = 0; i < str.length; i += 1) {
         hash = str.charCodeAt(i) + ((hash << 5) - hash)
-        hash = hash & hash // Convert to 32bit integer
+        hash &= hash // Convert to 32bit integer
     }
     if (hash < 0) {
         hash *= -1
@@ -19,7 +17,7 @@ function getHashCode(str) {
     return hash
 }
 
-var colors = [
+const colors = [
     '#FF8A80',
     '#FF5252',
     '#FF1744',

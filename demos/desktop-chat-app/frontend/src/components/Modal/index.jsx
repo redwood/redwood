@@ -2,27 +2,32 @@ import React, { useContext, useEffect } from 'react'
 import ReactDOM from 'react-dom'
 import styled, { keyframes } from 'styled-components'
 import * as tinycolor from 'tinycolor2'
-import CloseIcon from '@material-ui/icons/Close';
+import CloseIcon from '@material-ui/icons/Close'
 
 import { Context } from '../../contexts/Modals'
 import useModal from '../../hooks/useModal'
 import Spacer from '../Spacer'
-import useTraceUpdate from '../../hooks/useTraceUpdate'
 
-
-function Modal({ children, height, modalKey, onOpen, closeModal }) {
+function Modal({
+    children,
+    height,
+    modalKey,
+    onOpen,
+    closeModal: paramCloseModal,
+}) {
     const modalRoot = document.getElementById('modal-root')
     const { activeModalKey } = useContext(Context)
     const { onDismiss } = useModal(modalKey)
+    let closeModal = paramCloseModal
 
     useEffect(() => {
         if (!modalRoot) {
             return
-        } else if (modalKey !== activeModalKey) {
+        }
+        if (modalKey !== activeModalKey) {
             return
         }
-        if (!!onOpen) {
-            console.log({onOpen, modalRoot, activeModalKey, modalKey})
+        if (onOpen) {
             onOpen()
         }
     }, [onOpen, modalRoot, activeModalKey, modalKey])
@@ -30,18 +35,20 @@ function Modal({ children, height, modalKey, onOpen, closeModal }) {
     closeModal = closeModal || onDismiss
     if (!modalRoot) {
         return null
-    } else if (modalKey !== activeModalKey) {
+    }
+    if (modalKey !== activeModalKey) {
         return null
     }
 
     return ReactDOM.createPortal(
         <StyledModalWrapper>
             <StyledModalBackdrop onClick={closeModal} />
-                <StyledResponsiveWrapper>
-                    <StyledModal height={height}>{children}</StyledModal>
-                </StyledResponsiveWrapper>
-        </StyledModalWrapper>
-    , modalRoot)
+            <StyledResponsiveWrapper>
+                <StyledModal height={height}>{children}</StyledModal>
+            </StyledResponsiveWrapper>
+        </StyledModalWrapper>,
+        modalRoot,
+    )
 }
 
 const StyledModalWrapper = styled.div`
@@ -50,13 +57,20 @@ const StyledModalWrapper = styled.div`
     flex-direction: column;
     justify-content: center;
     position: fixed;
-    top: 0; right: 0; bottom: 0; left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
 `
 
 const StyledModalBackdrop = styled.div`
-    background-color: ${props => tinycolor(props.theme.color.grey[600]).setAlpha(0.8)};
+    background-color: ${(props) =>
+        tinycolor(props.theme.color.grey[600]).setAlpha(0.8)};
     position: absolute;
-    top: 0; right: 0; bottom: 0; left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
 `
 
 const mobileKeyframes = keyframes`
@@ -74,24 +88,21 @@ const StyledResponsiveWrapper = styled.div`
     flex-direction: column;
     justify-content: flex-end;
     position: relative;
-    // width: 100%;
-    // max-width: 512px;
-    @media (max-width: ${props => props.theme.breakpoints.mobile}px) {
+    @media (max-width: ${(props) => props.theme.breakpoints.mobile}px) {
         flex: 1;
         position: absolute;
         top: 100%;
         right: 0;
         left: 0;
-        max-height: calc(100% - ${props => props.theme.spacing[4]}px);
+        max-height: calc(100% - ${(props) => props.theme.spacing[4]}px);
         animation: ${mobileKeyframes} 0.3s forwards ease-out;
     }
 `
 
 const StyledModal = styled.div`
-    height: ${props => props.height || 'unset'};
-    // padding: 0 20px;
-    background-color: ${props => props.theme.color.grey[400]};
-    color: ${props => props.theme.color.white};
+    height: ${(props) => props.height || 'unset'};
+    background-color: ${(props) => props.theme.color.grey[400]};
+    color: ${(props) => props.theme.color.white};
     border-radius: 6px;
     display: flex;
     flex-direction: column;
@@ -112,22 +123,22 @@ function ModalTitle({ children, closeModal }) {
 }
 
 const StyledModalClose = styled.div`
-  height: 100%;
-  width: ${props => props.theme.topBarSize}px;
-  background-color: ${props => props.theme.color.grey[200]};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-top-right-radius: 6px;
-  cursor: pointer;
-  transition: all ease-in-out .15s;
-  &:hover {
-    background-color: ${props => props.theme.color.grey[100]};
-    svg {
-      transform: scale(1.2);
-      transition: all ease-in-out .15s;
+    height: 100%;
+    width: ${(props) => props.theme.topBarSize}px;
+    background-color: ${(props) => props.theme.color.grey[200]};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top-right-radius: 6px;
+    cursor: pointer;
+    transition: all ease-in-out 0.15s;
+    &:hover {
+        background-color: ${(props) => props.theme.color.grey[100]};
+        svg {
+            transform: scale(1.2);
+            transition: all ease-in-out 0.15s;
+        }
     }
-  }
 `
 
 const StyledModalTitle = styled.div`
@@ -137,22 +148,25 @@ const StyledModalTitle = styled.div`
     font-size: 20px;
     font-weight: 500;
     padding-left: 24px;
-    height: ${props => props.theme.topBarSize}px;
-    // background-color: ${props => props.theme.color.grey[300]};
+    height: ${(props) => props.theme.topBarSize}px;
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;
-    border-bottom: 1px solid ${props => props.theme.color.grey[200]};
+    border-bottom: 1px solid ${(props) => props.theme.color.grey[200]};
 `
 
 function ModalContent({ className, children }) {
-    return <StyledModalContent className={className}>{children}</StyledModalContent>
+    return (
+        <StyledModalContent className={className}>
+            {children}
+        </StyledModalContent>
+    )
 }
 
 const StyledModalContent = styled.div`
     display: flex;
     flex-direction: column;
-    padding: ${props => props.theme.spacing[4]}px;
-    @media (max-width: ${props => props.theme.breakpoints.mobile}px) {
+    padding: ${(props) => props.theme.spacing[4]}px;
+    @media (max-width: ${(props) => props.theme.breakpoints.mobile}px) {
         flex: 1;
         overflow: auto;
     }
@@ -164,9 +178,7 @@ function ModalActions({ children }) {
         <StyledModalActions>
             {React.Children.map(children, (child, i) => (
                 <>
-                    <StyledModalAction>
-                        {child}
-                    </StyledModalAction>
+                    <StyledModalAction>{child}</StyledModalAction>
                     {i < l - 1 && <Spacer />}
                 </>
             ))}
@@ -176,11 +188,11 @@ function ModalActions({ children }) {
 
 const StyledModalActions = styled.div`
     align-items: center;
-    background-color: ${props => props.theme.color.grey[200]}00;
+    background-color: ${(props) => props.theme.color.grey[200]}00;
     display: flex;
     justify-content: space-evenly;
     margin: 0;
-    padding: ${props => props.theme.spacing[3]}px;
+    padding: ${(props) => props.theme.spacing[3]}px;
 `
 
 const StyledModalAction = styled.div`
@@ -188,8 +200,4 @@ const StyledModalAction = styled.div`
 `
 
 export default Modal
-export {
-    ModalTitle,
-    ModalContent,
-    ModalActions,
-}
+export { ModalTitle, ModalContent, ModalActions }

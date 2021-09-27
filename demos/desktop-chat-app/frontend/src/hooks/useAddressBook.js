@@ -2,8 +2,8 @@ import { useRef } from 'react'
 import { useStateTree } from '@redwood.dev/client/react'
 
 function useAddressBook() {
-    let defaultValue = useRef({})
-    let addressBook = useStateTree('chat.local/address-book')
+    const defaultValue = useRef({})
+    const addressBook = useStateTree('chat.local/address-book')
     if (addressBook && addressBook.value) {
         return addressBook.value
     }

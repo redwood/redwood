@@ -5,18 +5,17 @@ import InputLabel from '@material-ui/core/InputLabel'
 import MenuItem from '@material-ui/core/MenuItem'
 import FormControl from '@material-ui/core/FormControl'
 import Select from '@material-ui/core/Select'
-import NativeSelect from '@material-ui/core/NativeSelect'
 import InputBase from '@material-ui/core/InputBase'
 import theme from '../../theme'
 
 const BootstrapInput = withStyles((muiTheme) => ({
     root: {
-        'label': {
+        label: {
             paddingTop: 10,
         },
 
         'label + &': {
-            marginTop: 20, //theme.spacing(3),
+            marginTop: 20, // theme.spacing(3),
         },
     },
     input: {
@@ -27,18 +26,18 @@ const BootstrapInput = withStyles((muiTheme) => ({
         fontSize: 16,
         padding: '10px 26px 10px 12px',
         transition: muiTheme.transitions.create(['border-color', 'box-shadow']),
-        // Use the system font instead of the default Roboto font.
+        // NOTE: Use the system font instead of the default Roboto font.
         fontFamily: [
-          '-apple-system',
-          'BlinkMacSystemFont',
-          '"Segoe UI"',
-          'Roboto',
-          '"Helvetica Neue"',
-          'Arial',
-          'sans-serif',
-          '"Apple Color Emoji"',
-          '"Segoe UI Emoji"',
-          '"Segoe UI Symbol"',
+            '-apple-system',
+            'BlinkMacSystemFont',
+            '"Segoe UI"',
+            'Roboto',
+            '"Helvetica Neue"',
+            'Arial',
+            'sans-serif',
+            '"Apple Color Emoji"',
+            '"Segoe UI Emoji"',
+            '"Segoe UI Symbol"',
         ].join(','),
 
         '&:focus': {
@@ -49,11 +48,9 @@ const BootstrapInput = withStyles((muiTheme) => ({
     },
 }))(InputBase)
 
-const useFormControlStyles = makeStyles(theme => ({
+const useFormControlStyles = makeStyles(() => ({
     margin: {
-        // width: 'calc(100% - 12px)',
         width: '100%',
-        // margin: theme.spacing(1),
     },
 }))
 
@@ -122,7 +119,13 @@ function CustomSelect({ label, items, value, onChange, className }) {
     const selectMenuItemClasses = useSelectMenuItemStyles()
     return (
         <FormControl className={clsx(formControlClasses.margin, className)}>
-            <InputLabel shrink id="demo-customized-select-label" classes={labelClasses}>{label}</InputLabel>
+            <InputLabel
+                shrink
+                id="demo-customized-select-label"
+                classes={labelClasses}
+            >
+                {label}
+            </InputLabel>
             <Select
                 labelId="demo-customized-select-label"
                 id="demo-customized-select"
@@ -135,11 +138,17 @@ function CustomSelect({ label, items, value, onChange, className }) {
                     classes: selectMenuClasses,
                 }}
             >
-                {items.map(item => (
-                    <MenuItem key={item.value} value={item.value} classes={selectMenuItemClasses}>{item.text}</MenuItem>
+                {items.map((item) => (
+                    <MenuItem
+                        key={item.value}
+                        value={item.value}
+                        classes={selectMenuItemClasses}
+                    >
+                        {item.text}
+                    </MenuItem>
                 ))}
             </Select>
-      </FormControl>
+        </FormControl>
     )
 }
 

@@ -1,10 +1,8 @@
-import React, { useState } from 'react'
+import React from 'react'
 import styled from 'styled-components'
 
 import ChatBar from './ChatBar'
 import UserControl from './UserControl'
-import GroupItem from './GroupItem'
-
 
 const Container = styled.div`
     display: flex;
@@ -17,9 +15,8 @@ const BarContainer = styled.div`
     height: 100%;
 `
 
-
 const SChatBar = styled(ChatBar)`
-    width: ${props => props.theme.chatSidebarWidth};
+    width: ${(props) => props.theme.chatSidebarWidth};
     flex-grow: 1;
 `
 

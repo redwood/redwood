@@ -1,13 +1,11 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React from 'react'
 import styled from 'styled-components'
 import { parser as cssMath } from 'css-math'
 
 const Container = styled.div`
     position: relative;
-    width: ${props => props.width};
-    height: ${props => props.height ? props.height : 'unset'};
-    // min-height: ${props => props.minHeight ? props.minHeight : 'unset'};
-    // max-height: ${props => props.maxHeight ? props.maxHeight : 'unset'};
+    width: ${(props) => props.width};
+    height: ${(props) => (props.height ? props.height : 'unset')};
     transition: all 0.4s cubic-bezier(0.86, 0.16, 0.16, 0.78);
     overflow: hidden;
 `
@@ -15,9 +13,8 @@ const Container = styled.div`
 const PaneWrapper = styled.div`
     position: absolute;
     top: 0;
-    left: ${props => props.left};
-    width: ${props => props.width};
-    // transition: left 0.2s ease-in-out;
+    left: ${(props) => props.left};
+    width: ${(props) => props.width};
     transition: left 0.4s cubic-bezier(0.86, 0.16, 0.16, 0.78);
     display: flex;
 `
@@ -39,13 +36,28 @@ export const PaneContent = styled.div`
 `
 
 function SlidingPane({ panes, activePane, className }) {
-    let pane = panes[activePane]
-    let totalWidth = panes.reduce((total, p) => cssMath(`${total} + ${p.width}`), '0px')
-    let left = panes.slice(0, activePane).reduce((total, p) => cssMath(`${total} - ${p.width}`), '0px')
+    const pane = panes[activePane]
+    const totalWidth = panes.reduce(
+        (total, p) => cssMath(`${total} + ${p.width}`),
+        '0px',
+    )
+    const left = panes
+        .slice(0, activePane)
+        .reduce((total, p) => cssMath(`${total} - ${p.width}`), '0px')
     return (
-        <Container width={pane.width} height={pane.height} minHeight={pane.minHeight} maxHeight={pane.maxHeight} className={className}>
+        <Container
+            width={pane.width}
+            height={pane.height}
+            minHeight={pane.minHeight}
+            maxHeight={pane.maxHeight}
+            className={className}
+        >
             <PaneWrapper activePane={activePane} left={left} width={totalWidth}>
-                {panes.map(p => React.cloneElement(p.content, { style: { width: p.width, height: p.height } }))}
+                {panes.map((p) =>
+                    React.cloneElement(p.content, {
+                        style: { width: p.width, height: p.height },
+                    }),
+                )}
             </PaneWrapper>
         </Container>
     )

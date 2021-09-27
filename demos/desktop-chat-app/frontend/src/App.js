@@ -1,9 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react'
-import {
-    BrowserRouter as Router,
-    Switch,
-    Route,
-} from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { BrowserRouter as Router, Switch, Route } from 'react-router-dom'
 import { ThemeProvider } from 'styled-components'
 import { RedwoodProvider } from '@redwood.dev/client/react'
 
@@ -21,9 +17,9 @@ import SignUp from './components/Account/SignUp'
 import Profiles from './components/Account/Profiles'
 
 function App() {
-    let [httpHost, setHttpHost] = useState()
-    let [rpcEndpoint, setRpcEndpoint] = useState()
-	let { isLoggedIn, profileNames } = useLoginStatus()
+    const [httpHost, setHttpHost] = useState()
+    const [rpcEndpoint, setRpcEndpoint] = useState()
+    const { isLoggedIn, profileNames } = useLoginStatus()
 
     useEffect(() => {
         if (isLoggedIn) {
@@ -40,7 +36,7 @@ function App() {
             <RedwoodProvider
                 httpHost={httpHost}
                 rpcEndpoint={rpcEndpoint}
-                useWebsocket={true}
+                useWebsocket
             >
                 <APIProvider>
                     <NavigationProvider>
@@ -51,21 +47,21 @@ function App() {
                                         <Switch>
                                             <Route path="/signin">
                                                 <SignIn
-													profileNames={profileNames}
-												/>
+                                                    profileNames={profileNames}
+                                                />
                                             </Route>
                                             <Route path="/signup">
                                                 <SignUp
-													profileNames={profileNames}
-												/>
+                                                    profileNames={profileNames}
+                                                />
                                             </Route>
                                             <Route path="/profiles">
                                                 <Profiles />
                                             </Route>
                                             <Route>
                                                 <Main
-													profileNames={profileNames}
-												/>
+                                                    profileNames={profileNames}
+                                                />
                                             </Route>
                                         </Switch>
                                     </Router>

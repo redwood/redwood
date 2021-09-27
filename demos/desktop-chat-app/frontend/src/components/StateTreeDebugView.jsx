@@ -1,4 +1,4 @@
-import React, { Fragment, useState } from 'react'
+import React, { useState } from 'react'
 import styled from 'styled-components'
 import { useRedwood } from '@redwood.dev/client/react'
 
@@ -16,8 +16,8 @@ const SStateTreeDebugView = styled.div`
     &::-webkit-scrollbar {
         display: none;
     }
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
 `
 
 const StateURI = styled.div`
@@ -33,13 +33,13 @@ function StateTreeDebugView({ className }) {
     const { stateTrees } = useRedwood()
     const [disableMetadata, setDisableMetadata] = useState(true)
 
-    let trees = {}
-    for (let key of Object.keys(stateTrees)) {
+    const trees = {}
+    for (const key of Object.keys(stateTrees)) {
         trees[key] = { ...stateTrees[key] }
     }
     if (disableMetadata) {
-        for (let key of Object.keys(trees)) {
-            for (let key2 of Object.keys(trees[key])) {
+        for (const key of Object.keys(trees)) {
+            for (const key2 of Object.keys(trees[key])) {
                 if (key2 === 'Merge-Type' || key2 === 'Validator') {
                     delete trees[key][key2]
                 }
@@ -51,23 +51,37 @@ function StateTreeDebugView({ className }) {
         <SStateTreeDebugView className={className}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <h2 style={{ padding: 0 }}>State trees</h2>
-                <button style={{ marginBottom: 32, cursor: 'pointer' }} onClick={() => setDisableMetadata(!disableMetadata)}>Toggle metadata</button>
+                <button
+                    type="button"
+                    style={{ marginBottom: 32, cursor: 'pointer' }}
+                    onClick={() => setDisableMetadata(!disableMetadata)}
+                >
+                    Toggle metadata
+                </button>
             </div>
-            {Object.keys(trees).map(stateURI => (
-                <SStateTree tree={trees[stateURI]} stateURI={stateURI} key={stateURI} />
+            {Object.keys(trees).map((stateURI) => (
+                <SStateTree
+                    tree={trees[stateURI]}
+                    stateURI={stateURI}
+                    key={stateURI}
+                />
             ))}
         </SStateTreeDebugView>
     )
 }
 
 function StateTree({ tree, stateURI, className }) {
-    let [open, setOpen] = useState(false)
+    const [open, setOpen] = useState(false)
     return (
         <div className={className}>
             <StateURI onClick={() => setOpen(!open)}>&gt; {stateURI}</StateURI>
-            {open && <div>
-                <pre><code>{JSON.stringify(tree, null, '    ')}</code></pre>
-            </div>}
+            {open && (
+                <div>
+                    <pre>
+                        <code>{JSON.stringify(tree, null, '    ')}</code>
+                    </pre>
+                </div>
+            )}
         </div>
     )
 }

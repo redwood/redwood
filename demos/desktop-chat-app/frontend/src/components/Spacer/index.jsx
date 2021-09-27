@@ -18,18 +18,14 @@ function Spacer({ size = 'md' }) {
     }
 
     if (size === 'flex') {
-        return (
-            <div style={{ flexGrow: 1 }} />
-        )
+        return <div style={{ flexGrow: 1 }} />
     }
-    return (
-        <StyledSpacer size={s} />
-    )
+    return <StyledSpacer size={s} />
 }
 
 const StyledSpacer = styled.div`
-    height: ${props => props.size}px;
-    width: ${props => props.size}px;
+    height: ${(props) => props.size}px;
+    width: ${(props) => props.size}px;
 `
 
 export default Spacer

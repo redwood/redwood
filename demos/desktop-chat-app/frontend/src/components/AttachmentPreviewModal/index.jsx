@@ -8,7 +8,6 @@ import useModal from '../../hooks/useModal'
 import Embed from '../Embed'
 import Modal from '../Modal'
 
-
 const SModalContent = styled(ModalContent)`
     width: 600px;
     flex-direction: column;
@@ -26,25 +25,25 @@ const Filename = styled.span`
 
 const Filesize = styled.span`
     font-size: 1rem;
-    color: ${props => props.theme.color.grey[100]};
+    color: ${(props) => props.theme.color.grey[100]};
 `
 
 const FileActionWrapper = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  transform: translateY(-12px);
-  width: 100%;
-  img {
-      cursor: pointer;
-      transition: all .1s ease-in-out;
-      height: 28px;
-      &:first-child {
-          margin-right: 18px;
-      }
-      &:hover {
-          transform: scale(1.1);
-      }
-  }
+    display: flex;
+    justify-content: flex-end;
+    transform: translateY(-12px);
+    width: 100%;
+    img {
+        cursor: pointer;
+        transition: all 0.1s ease-in-out;
+        height: 28px;
+        &:first-child {
+            margin-right: 18px;
+        }
+        &:hover {
+            transform: scale(1.1);
+        }
+    }
 `
 
 const downloadImage = async (url, fileName) => {
@@ -69,13 +68,23 @@ function AttachmentPreviewModal({ attachment, url }) {
         <Modal modalKey="attachment preview">
             <SModalContent>
                 <FileActionWrapper>
-                    <img alt="Download" src={downloadIcon} onClick={() => downloadImage(url, attachment.filename)} />
-                    <img alt="Close" src={cancelIcon}  onClick={onDismiss} />
+                    <img
+                        alt="Download"
+                        src={downloadIcon}
+                        onClick={() => downloadImage(url, attachment.filename)}
+                    />
+                    <img alt="Close" src={cancelIcon} onClick={onDismiss} />
                 </FileActionWrapper>
-                <Embed contentType={attachment['Content-Type']} url={url} height={'350px'} />
+                <Embed
+                    contentType={attachment['Content-Type']}
+                    url={url}
+                    height="350px"
+                />
                 <Metadata>
                     <Filename>{attachment.filename} </Filename>
-                    <Filesize>({filesize(attachment['Content-Length'])})</Filesize>
+                    <Filesize>
+                        ({filesize(attachment['Content-Length'])})
+                    </Filesize>
                 </Metadata>
             </SModalContent>
         </Modal>

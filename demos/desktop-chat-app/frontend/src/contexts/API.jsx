@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useState, useEffect } from 'react'
+import React, { createContext, useState, useEffect } from 'react'
 import { useRedwood } from '@redwood.dev/client/react'
 import createAPI from '../api'
 
@@ -12,15 +12,14 @@ function Provider({ children }) {
         if (!redwoodClient) {
             return
         }
-        let ownAddress = nodeIdentities && nodeIdentities.length > 0 ? nodeIdentities[0].address : null
+        const ownAddress =
+            nodeIdentities && nodeIdentities.length > 0
+                ? nodeIdentities[0].address
+                : null
         setAPI(createAPI(redwoodClient, ownAddress))
     }, [redwoodClient, nodeIdentities])
 
-    return (
-      <Context.Provider value={api}>
-          {children}
-      </Context.Provider>
-    )
+    return <Context.Provider value={api}>{children}</Context.Provider>
 }
 
 export default Provider

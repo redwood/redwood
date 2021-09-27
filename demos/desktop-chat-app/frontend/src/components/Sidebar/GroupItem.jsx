@@ -1,21 +1,24 @@
 import React from 'react'
 import styled from 'styled-components'
 
-import NormalizeMessage from './../Chat/NormalizeMessage'
+import NormalizeMessage from '../Chat/NormalizeMessage'
 
 const SItemContainer = styled.div`
     display: flex;
     align-items: center;
     padding-top: 8px;
     padding-bottom: 8px;
-    background: ${props => props.selected ? props.theme.color.grey[200] : 'transparent'};
-    color: ${props => props.selected ? props.theme.color.white : props.theme.color.grey[600]};
+    background: ${(props) =>
+        props.selected ? props.theme.color.grey[200] : 'transparent'};
+    color: ${(props) =>
+        props.selected ? props.theme.color.white : props.theme.color.grey[600]};
 `
 
 const SAvatarCircle = styled.div`
     height: 28px;
     width: 28px;
-    background: ${props => props.color ? props.color : props.theme.color.indigo[500]};
+    background: ${(props) =>
+        props.color ? props.color : props.theme.color.indigo[500]};
     display: flex;
     align-items: center;
     justify-content: center;
@@ -37,39 +40,32 @@ const SItemInfo = styled.div`
 
 const SItemInfoSub = styled.div`
     display: flex;
-	justify-content: space-between;
-	width: 190.55px;
+    justify-content: space-between;
+    width: 190.55px;
 `
 
 const STime = styled.div`
     padding-right: 12px;
     white-space: nowrap;
-	font-size: 0.6rem;
-	padding-top: 1px;
-    color: ${props => props.theme.color.grey[50]}
+    font-size: 0.6rem;
+    padding-top: 1px;
+    color: ${(props) => props.theme.color.grey[50]};
 `
 
 const ChatName = styled.div`
     font-weight: 500;
-	font-size: 12px;
-	white-space: nowrap;
-    color: ${props => props.selected ? props.theme.color.white : props.theme.color.grey[100]};
-`
-
-const MostRecentMessage = styled.div`
     font-size: 12px;
-    color: rgba(255, 255, 255, .6);
-    text-overflow: ellipsis;
     white-space: nowrap;
-    overflow: hidden;
+    color: ${(props) =>
+        props.selected ? props.theme.color.white : props.theme.color.grey[100]};
 `
 
 function GroupItem({ selected, color, avatar, name, text, time, ...props }) {
-	let choppedName = name
+    let choppedName = name
 
-	if (name.length > 14) {
-		choppedName = `${name.substring(0, 14)}...`
-	}
+    if (name.length > 14) {
+        choppedName = `${name.substring(0, 14)}...`
+    }
 
     return (
         <SItemContainer selected={selected} {...props}>
@@ -81,15 +77,6 @@ function GroupItem({ selected, color, avatar, name, text, time, ...props }) {
                     <ChatName selected={selected}>{choppedName}</ChatName>
                     <STime>{time}</STime>
                 </SItemInfoSub>
-                {/* <MostRecentMessage>{text}</MostRecentMessage> */}
-                {/* <MostRecentMessage>
-                  <Emoji emoji={'smiley'} size={14}  />
-                  <Emoji emoji={'smiley'} size={14}  />
-                  <Emoji emoji={'smiley'} size={14}  />
-                  <Emoji emoji={'smiley'} size={14}  />
-                  <Emoji emoji={'smiley'} size={14}  />
-                  dmawl mawld mawldmawlda mwkdl kawmdkl mw
-                </MostRecentMessage> */}
                 <NormalizeMessage preview msgText={text} selected={selected} />
             </SItemInfo>
         </SItemContainer>
