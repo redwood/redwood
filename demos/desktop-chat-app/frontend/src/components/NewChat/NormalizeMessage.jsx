@@ -133,7 +133,7 @@ function NormalizeMessage({
         } catch (e) {
             setContent([msgText])
         }
-    }, [msgText, preview])
+    }, [msgText])
 
     if (preview) {
         return (

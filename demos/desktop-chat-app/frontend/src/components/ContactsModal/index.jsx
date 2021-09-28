@@ -129,7 +129,7 @@ function AddPeerPane({ showPeerList, ...props }) {
         setTransport('libp2p')
         setDialAddr('')
         showPeerList()
-    }, [transport, dialAddr])
+    }, [showPeerList])
 
     return (
         <Pane {...props}>

@@ -58,7 +58,7 @@ function PDF({ url, width }) {
         }
         const actualWidth = viewBox[2]
         setScale(width / actualWidth)
-    }, [url, pdfPage, setScale])
+    }, [url, pdfPage, setScale, width])
 
     let height = 0
     if (pdfPage) {
