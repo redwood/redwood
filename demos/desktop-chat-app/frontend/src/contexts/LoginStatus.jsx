@@ -78,8 +78,9 @@ function Provider({ apiEndpoint, children }) {
             const jsonResp = await resp.text()
             setIsLoggedIn(jsonResp === 'true')
             await getProfileNames()
+            return true
         } catch (err) {
-            throw new Error(err)
+            return err
         }
     }, [apiEndpoint])
 

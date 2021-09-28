@@ -6,7 +6,13 @@
         "node": true,
         "jest": true
     },
-    "extends": ["airbnb", "prettier", "prettier/react", "prettier/unicorn"],
+    "extends": [
+        "airbnb",
+        "prettier",
+        "prettier/react",
+        "prettier/unicorn",
+        "plugin:react-hooks/recommended"
+    ],
     "plugins": ["prettier", "unicorn", "react", "react-hooks", "jsx-a11y"],
     "globals": {
         "Atomics": "readonly",

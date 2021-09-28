@@ -3,15 +3,15 @@ import React, { useState } from 'react'
 import Modal, { ModalTitle, ModalContent } from '../Modal'
 import Stepper from '../Stepper'
 import SlidingPane from '../SlidingPane'
-import NameAndIconPane from '../AddServer/NameAndIconPane'
-import ChooseHostingPane from '../AddServer/ChooseHostingPane'
-import ConfigureHostingPane from '../AddServer/ConfigureHostingPane'
-import ConfirmationPane from '../AddServer/ConfirmationPane'
+import NameAndIconPane from './NameAndIconPane'
+import ChooseHostingPane from './ChooseHostingPane'
+import ConfigureHostingPane from './ConfigureHostingPane'
+import ConfirmationPane from './ConfirmationPane'
 
 function AddServerModal({ onDismiss }) {
     const [activeStep, setActiveStep] = useState(0)
     const [requestValues, setRequestValues] = useState({})
-    const [provider, setProvider] = useState()
+    const [provider, setProvider] = useState('none')
 
     const steps =
         !!provider && provider !== 'none'
@@ -41,13 +41,14 @@ function AddServerModal({ onDismiss }) {
         {
             title: 'Name and icon',
             width: '500px',
-            height: '190px',
+            height: '230px',
             content: (
                 <NameAndIconPane
                     key="one"
                     setRequestValues={setRequestValues}
                     onClickBack={onClickBack}
                     onClickNext={onClickNext}
+                    activeStep={activeStep}
                 />
             ),
         },
@@ -62,6 +63,7 @@ function AddServerModal({ onDismiss }) {
                     setProvider={setProvider}
                     onClickBack={onClickBack}
                     onClickNext={onClickNext}
+                    activeStep={activeStep}
                 />
             ),
         },
@@ -75,13 +77,14 @@ function AddServerModal({ onDismiss }) {
                     setRequestValues={setRequestValues}
                     onClickBack={onClickBack}
                     onClickNext={onClickNext}
+                    activeStep={activeStep}
                 />
             ),
         },
         {
             title: 'Confirmation',
-            width: 600,
-            height: 510,
+            width: '600px',
+            height: '510px',
             content: (
                 <ConfirmationPane
                     key="four"
@@ -89,6 +92,7 @@ function AddServerModal({ onDismiss }) {
                     requestValues={requestValues}
                     onClickBack={onClickBack}
                     closeModal={closeModal}
+                    activeStep={activeStep}
                 />
             ),
         },

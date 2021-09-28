@@ -122,6 +122,7 @@ function SignUp({
             setMnemonic,
             setErrorMessage,
             setLoadingText,
+            signup,
         ],
     )
 
