@@ -8,8 +8,6 @@
 **Prerequisites**
 
 - Go 1.16
-- Node.js 10+
-- Ensure that you've run `yarn` inside the `frontend` directory.
 
 **Running the demo**
 
@@ -17,35 +15,25 @@ In one terminal:
 
 ```sh
 cd frontend && yarn && yarn build && cd ..
-go run *.go --dev
+go run *.go --dev --config ./redwoodrc
 ```
 
-In a second terminal:
-
-```sh
-node setup.js
-```
+A native desktop app should open. Windows will be supported shortly.
 
 ---
 
-**Working on the demo**
+**Development workflow**
 
 In one terminal:
 
 ```sh
-go run *.go --dev
+go run *.go --dev --config ./redwoodrc
 ```
 
 In a second terminal:
 
 ```sh
 yarn start
-```
-
-In a third terminal:
-
-```sh
-node setup.js
 ```
 
 Now, open a browser to http://localhost:3000 (`yarn start` should do this automatically).
