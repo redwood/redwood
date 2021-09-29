@@ -97,7 +97,15 @@ function Provider({ children }) {
 
         setServers(newServers)
         setRooms(newRooms)
-    }, [stateTrees, privateTreeMembers, nodeIdentities, addressBook])
+    }, [
+        stateTrees,
+        privateTreeMembers,
+        nodeIdentities,
+        addressBook,
+        api,
+        subscribe,
+        subscribedStateURIs,
+    ])
 
     return (
         <Context.Provider value={{ servers, rooms }}>

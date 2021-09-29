@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 import useAddressBook from './useAddressBook'
 import useUsers from './useUsers'
@@ -10,6 +10,11 @@ function useRoomName(server, room) {
     const addressBook = useAddressBook()
     const { users } = useUsers(stateURI)
     const [roomName, setRoomName] = useState(room)
+
+    const selectedURITree = useMemo(
+        () => (privateTreeMembers || {})[stateURI],
+        [privateTreeMembers, stateURI],
+    )
 
     useEffect(() => {
         if (!roomState) {
@@ -45,10 +50,11 @@ function useRoomName(server, room) {
         room,
         roomState,
         privateTreeMembers,
-        (privateTreeMembers || {})[stateURI],
+        selectedURITree,
         nodeIdentities,
         users,
         addressBook,
+        stateURI,
     ])
 
     return roomName

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { Checkbox } from '@material-ui/core'
 import { AddCircleOutline as AddIcon, ExitToApp } from '@material-ui/icons'
@@ -106,11 +106,13 @@ function ChatBar({ className }) {
     }, [isLoggedIn, logout])
 
     const registryState = useStateTree(registryStateURI)
-    const serverRooms = Object.keys(
-        (registryState ? registryState.rooms : {}) || {},
+    const serverRooms = useMemo(
+        () =>
+            Object.keys((registryState ? registryState.rooms : {}) || {})
+                .filter((room) => !!room)
+                .map((room) => `${selectedServer}/${room}`),
+        [registryState, selectedServer],
     )
-        .filter((room) => !!room)
-        .map((room) => `${selectedServer}/${room}`)
 
     return (
         <ChatBarWrapper className={className}>

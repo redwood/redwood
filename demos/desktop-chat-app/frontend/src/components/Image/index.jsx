@@ -46,7 +46,11 @@ function Image({
             if (cancelRequest) {
                 break
             }
-            const resp = await fetch(src)
+            console.log('hit', src)
+            const resp = await fetch(
+                'http://localhost:8080/messages[27]/attachments[0]?state_uri=t%2Ft',
+            )
+            console.log(resp)
             if (resp.status === 200) {
                 failedIntervals = 0
                 setReady(true)
@@ -64,16 +68,16 @@ function Image({
         return () => {
             cancelRequest = true
         }
-    }, [selectedStateURI])
+    }, [src, setLoadFailed])
 
     useEffect(() => {
         if (loadFailed === 'retry') {
             setLoadFailed(false)
             fetchImage()
         }
-    }, [loadFailed])
+    }, [loadFailed, fetchImage, setLoadFailed])
 
-    useEffect(fetchImage, [src])
+    useEffect(fetchImage, [src, fetchImage])
 
     if (loadFailed === 'failed') {
         return (
