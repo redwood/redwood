@@ -1,13 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, memo } from 'react'
 import styled from 'styled-components'
 import { usePdf } from '@mikecousins/react-pdf'
 import Image from '../Image'
 import { isImage, isPDF } from '../../utils/contentTypes'
 
-const SImage = styled(Image)`
+const SImage = memo(styled(Image)`
     height: ${(props) => props.height || 'auto'};
     width: ${(props) => (props.height ? 'auto' : '100%')};
-`
+`)
 
 function Embed({
     contentType,
@@ -78,4 +78,4 @@ function PDF({ url, width }) {
     )
 }
 
-export default Embed
+export default memo(Embed)

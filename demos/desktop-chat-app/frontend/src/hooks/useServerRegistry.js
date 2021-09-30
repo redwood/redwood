@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useStateTree } from '@redwood.dev/client/react'
+import { useStateTree } from '../components/redwood.js/dist/main/react'
 import useServerAndRoomInfo from './useServerAndRoomInfo'
 
 function useServerRegistry(serverName) {

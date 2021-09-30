@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import styled from 'styled-components'
-import { useRedwood } from '@redwood.dev/client/react'
+import { useRedwood } from './redwood.js/dist/main/react'
 
 const SStateTreeDebugView = styled.div`
     padding: 20px;

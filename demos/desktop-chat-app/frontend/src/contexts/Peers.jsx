@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react'
-import { useRedwood } from '@redwood.dev/client/react'
 import { uniq } from 'lodash'
+import { useRedwood } from '../components/redwood.js/dist/main/react'
 
 export const Context = createContext({
     peersByAddress: {},

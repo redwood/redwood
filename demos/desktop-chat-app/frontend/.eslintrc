@@ -30,7 +30,7 @@
             "version": "detect"
         }
     },
-    "ignorePatterns": ["node_modules/"],
+    "ignorePatterns": ["node_modules/", "src/components/redwood.js/**"],
     "rules": {
         "prettier/prettier": 1,
         "arrow-body-style": [2, "as-needed"],

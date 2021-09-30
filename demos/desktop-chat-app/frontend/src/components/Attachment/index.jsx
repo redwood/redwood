@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, memo } from 'react'
 import styled from 'styled-components'
 import filesize from 'filesize.js'
 
@@ -9,32 +9,32 @@ import Button from '../Button'
 import VideoPreview from './VideoPreview'
 import AudioPlayer from '../AudioPlayer'
 
-const ImageWrapper = styled.div`
+const ImageWrapper = memo(styled.div`
     padding: 4px 0;
     cursor: default;
-`
+`)
 
-const EmbedWrapper = styled.div`
+const EmbedWrapper = memo(styled.div`
     padding: 4px 4px;
     background-color: ${(props) => props.theme.color.grey[500]};
     border-radius: 8px;
     cursor: default;
-`
+`)
 
-const Metadata = styled.div`
+const Metadata = memo(styled.div`
     padding-bottom: 4px;
-`
+`)
 
-const Filename = styled.span`
+const Filename = memo(styled.span`
     font-size: 0.8rem;
-`
+`)
 
-const Filesize = styled.span`
+const Filesize = memo(styled.span`
     font-size: 0.8rem;
     color: ${(props) => props.theme.color.grey[100]};
-`
+`)
 
-const SDownloadLink = styled.a`
+const SDownloadLink = memo(styled.a`
     color: ${(props) => props.theme.color.white};
     text-decoration: none;
     cursor: pointer;
@@ -43,16 +43,16 @@ const SDownloadLink = styled.a`
         color: hsl(231deg 36% 53%);
         text-decoration: underline;
     }
-`
+`)
 
-const SInvalidAttachmentWrapper = styled.div`
+const SInvalidAttachmentWrapper = memo(styled.div`
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     > img {
         height: 120px;
     }
-`
+`)
 
 const downloadImage = async (url, fileName) => {
     const image = await fetch(url)
@@ -67,6 +67,7 @@ const downloadImage = async (url, fileName) => {
 }
 
 function Attachment(props) {
+    console.log('rerender')
     const { attachment, url, onClick, className } = props
 
     const [loadFailed, setLoadFailed] = useState(false)
@@ -163,4 +164,4 @@ function Attachment(props) {
     )
 }
 
-export default Attachment
+export default memo(Attachment)
