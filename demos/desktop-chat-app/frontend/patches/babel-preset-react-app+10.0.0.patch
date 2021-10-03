@@ -1,0 +1,18 @@
+diff --git a/node_modules/babel-preset-react-app/create.js b/node_modules/babel-preset-react-app/create.js
+index 99a930b..42a7401 100644
+--- a/node_modules/babel-preset-react-app/create.js
++++ b/node_modules/babel-preset-react-app/create.js
+@@ -96,7 +96,12 @@ module.exports = function (api, opts, env) {
+           // Will use the native built-in instead of trying to polyfill
+           // behavior for any plugins that require one.
+           ...(opts.runtime !== 'automatic' ? { useBuiltIns: true } : {}),
+-          runtime: opts.runtime || 'classic',
++
++          // runtime: opts.runtime || 'classic',
++          // See https://github.com/welldone-software/why-did-you-render/issues/154#issuecomment-732711993
++          runtime: 'automatic',
++          development: process.env.NODE_ENV === 'development',
++          importSource: '@welldone-software/why-did-you-render',
+         },
+       ],
+       isTypeScriptEnabled && [require('@babel/preset-typescript').default],
