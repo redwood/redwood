@@ -22,7 +22,8 @@ import data from 'emoji-mart/data/all.json'
 import { Node, createEditor, Editor, Transforms, Range } from 'slate'
 import { withReact, ReactEditor } from 'slate-react'
 import { withHistory } from 'slate-history'
-import { useRedwood, useStateTree } from './redwood.js/dist/main/react'
+import useRedwood from '../hooks/useRedwood'
+import useStateTree from '../hooks/useStateTree'
 
 import Button from './Button'
 import Input from './Input'
@@ -112,6 +113,7 @@ const AddAttachmentButton = styled(AddIcon)`
     z-index: 999;
     left: 12px;
     bottom: 22px;
+    color: white;
 `
 
 const UserAvatarPlaceholder = styled.div`
@@ -212,6 +214,7 @@ const SAddNewAttachment = styled.div`
         transform: scale(1.1);
     }
 `
+
 /* eslint-disable */
 const withMentions = (editor) => {
     const { isInline, isVoid } = editor
@@ -730,15 +733,13 @@ function Chat({ className }) {
         ],
     )
 
-    /* eslint-disable */
-    function onClickAddAttachment() {
+    const onClickAddAttachment = useCallback(() => {
         if (previews.length === 0) {
-            attachmentsInput.current.value === ''
+            attachmentsInput.current.value = ''
             attachmentForm.current.reset()
         }
         attachmentsInput.current.click()
-    }
-    /* eslint-enable */
+    }, [previews.length, attachmentForm, attachmentsInput])
 
     function onClickAddNewAttachment() {
         newAttachmentsInput.current.click()
@@ -760,7 +761,6 @@ function Chat({ className }) {
     /* eslint-enable */
 
     function onChangeAttachments(event) {
-        console.log('onChangeAttachments')
         if (
             !attachmentsInput ||
             !attachmentsInput.current ||
@@ -807,7 +807,6 @@ function Chat({ className }) {
     /* eslint-enable */
 
     function addNewAttachment(event) {
-        console.log('addNewAttachment')
         const files = Array.prototype.map.call(
             newAttachmentsInput.current.files,
             (x) => x,
@@ -818,7 +817,6 @@ function Chat({ className }) {
             ;(function (i) {
                 const file = files[i]
                 const reader = new FileReader()
-                console.log('file', file)
                 reader.addEventListener(
                     'load',
                     () => {
@@ -934,10 +932,7 @@ function Chat({ className }) {
                 </HiddenInput>
             </ImgPreviewContainer>
             <ControlsContainer ref={controlsRef}>
-                <AddAttachmentButton
-                    onClick={onClickAddAttachment}
-                    style={{ color: theme.color.white }}
-                />
+                <AddAttachmentButton onClick={onClickAddAttachment} />
                 {/* <MessageInput ref={messageInputRef} onKeyDown={onKeyDown} onChange={onChangeMessageText} value={messageText} /> */}
                 <TextBox
                     onKeyDown={onKeyDown}
@@ -1161,4 +1156,6 @@ const EmojiWrapper = styled.div`
     right: 20px;
 `
 
-export default memo(Chat)
+Chat.whyDidIRender = true
+
+export default Chat

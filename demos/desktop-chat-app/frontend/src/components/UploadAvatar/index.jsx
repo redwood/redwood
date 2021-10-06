@@ -66,6 +66,9 @@ const SAvatarOverflow = styled.div`
 const SAvatarImg = styled.img`
     height: 72px;
 `
+const SPhotoCameraIcon = styled(PhotoCameraIcon)`
+    color: white;
+`
 
 function UploadAvatar({ iconImg, setIconImg, setIconFile }) {
     const fileUploadRef = useRef(null)
@@ -98,7 +101,7 @@ function UploadAvatar({ iconImg, setIconImg, setIconFile }) {
     let content = (
         <SUploadAvatarCircle onClick={handleFileUpload}>
             <AddCircleIcon classes={circleIconClasses} />
-            <PhotoCameraIcon style={{ color: theme.color.white }} />
+            <SPhotoCameraIcon />
             <span>UPLOAD</span>
         </SUploadAvatarCircle>
     )

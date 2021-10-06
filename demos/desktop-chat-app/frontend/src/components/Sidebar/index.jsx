@@ -1,4 +1,4 @@
-import React from 'react'
+import { memo } from 'react'
 import styled from 'styled-components'
 
 import ChatBar from './ChatBar'
@@ -25,9 +25,9 @@ const ChatAndUserWrapper = styled.div`
     flex-direction: column;
 `
 
-function Sidebar({ className }) {
+function Sidebar() {
     return (
-        <Container className={className}>
+        <Container>
             <BarContainer>
                 <ChatAndUserWrapper>
                     <SChatBar />
@@ -38,4 +38,4 @@ function Sidebar({ className }) {
     )
 }
 
-export default Sidebar
+export default memo(Sidebar)

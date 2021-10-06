@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, memo } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import styled from 'styled-components'
 import { Redirect } from 'react-router-dom'
 import { Code as CodeIcon } from '@material-ui/icons'
 import { ToastContainer } from 'react-toastify'
-import { useRedwood } from './components/redwood.js/dist/main/react'
+import useRedwood from './hooks/useRedwood'
 import 'react-toastify/dist/ReactToastify.css'
 
 import ServerBar from './components/Sidebar/ServerBar'
@@ -17,25 +17,27 @@ import StateTreeDebugView from './components/StateTreeDebugView'
 import ContactsModal from './components/ContactsModal'
 import useNavigation from './hooks/useNavigation'
 import useCurrentServerAndRoom from './hooks/useCurrentServerAndRoom'
+import useServerAndRoomInfo from './hooks/useServerAndRoomInfo'
 import useModal from './hooks/useModal'
+import useAddressBook from './hooks/useAddressBook'
 import useRoomName from './hooks/useRoomName'
 import useLoginStatus from './hooks/useLoginStatus'
 
 const serverBarVerticalPadding = '12px'
 
-const Layout = memo(styled.div`
+const Layout = styled.div`
     display: flex;
     height: 100vh;
     overflow: hidden;
-`)
+`
 
-const HeaderAndContent = memo(styled.div`
+const HeaderAndContent = styled.div`
     display: flex;
     flex-direction: column;
     flex-grow: 1;
-`)
+`
 
-const Content = memo(styled.div`
+const Content = styled.div`
     height: calc(100vh - 50px);
     max-height: calc(100vh - 50px);
     display: flex;
@@ -43,46 +45,62 @@ const Content = memo(styled.div`
     font-family: 'Noto Sans KR';
     font-weight: 300;
     color: ${(props) => props.theme.color.white};
-`)
+`
 
-const SServerBar = memo(styled(ServerBar)`
+const SServerBar = styled(ServerBar)`
     width: 72px;
     min-width: 72px;
     height: calc(100% - 2 * ${() => serverBarVerticalPadding});
     background: ${(props) => props.theme.color.grey[600]};
-`)
+`
 
-const SChat = memo(styled(Chat)`
+const SChat = styled(Chat)`
     flex-grow: 1;
     padding-left: 16px;
-`)
+`
 
-const SStateTreeDebugView = memo(styled(StateTreeDebugView)`
+const SStateTreeDebugView = styled(StateTreeDebugView)`
     width: 600px;
-`)
+`
 
-const SHeaderBar = memo(styled(HeaderBar)`
+const SHeaderBar = styled(HeaderBar)`
     background-color: ${(props) => props.theme.color.grey[200]};
     border-bottom: 2px solid ${(props) => props.theme.color.grey[300]};
     height: 48px;
     width: 100%;
-`)
+`
 
-// APIProvider, PeersProvider, ServerAndRoomInfoProvider, NavigationProvider
-
-function Main(props) {
+function Main({
+    isLoggedIn,
+    profilesFetched,
+    profileNames,
+    connectionError,
+    checkingLogin,
+}) {
     const { onDismiss: onDismissContactsModal } = useModal('contacts')
     const [isLoading, setIsLoading] = useState(true)
     const [shouldRedirect, setShouldRedirect] = useState(false)
     const [showDebugView, setShowDebugView] = useState(false)
-    const { isLoggedIn, profilesFetched } = useLoginStatus()
-    const { nodeIdentities } = useRedwood()
+    const {
+        nodeIdentities,
+        setHttpHost,
+        setRpcEndpoint,
+        httpHost,
+        rpcEndpoint,
+    } = useRedwood()
+    const { selectedStateURI, navigate } = useNavigation()
+    const { rooms } = useServerAndRoomInfo()
+    const addressBook = useAddressBook()
 
-    const { renderCountRef } = props
-    if (renderCountRef.current) {
-        renderCountRef.current += 1
-        console.log(renderCountRef.current)
-    }
+    useEffect(() => {
+        if (isLoggedIn) {
+            setHttpHost('http://localhost:8080')
+            setRpcEndpoint('http://localhost:8081')
+        } else {
+            setHttpHost()
+            setRpcEndpoint()
+        }
+    }, [httpHost, rpcEndpoint, setHttpHost, setRpcEndpoint, isLoggedIn])
 
     const onClickShowDebugView = useCallback(() => {
         setShowDebugView(!showDebugView)
@@ -102,8 +120,15 @@ function Main(props) {
         }
     }, [profilesFetched, isLoggedIn])
 
+    if (checkingLogin) {
+        return <Redirect to="/loading" />
+    }
+    if (connectionError) {
+        return <Redirect to="/connection-error" />
+    }
+
     if (shouldRedirect) {
-        if ((props.profileNames || []).length === 0) {
+        if ((profileNames || []).length === 0) {
             return <Redirect to="/signup" />
         }
         return <Redirect to="/profiles" />
@@ -119,7 +144,13 @@ function Main(props) {
                     <SChat />
                     {showDebugView && <SStateTreeDebugView />}
                 </Content>
-                <NotificationMounter />
+                <NotificationMounter
+                    navigate={navigate}
+                    selectedStateURI={selectedStateURI}
+                    rooms={rooms}
+                    addressBook={addressBook}
+                    nodeIdentities={nodeIdentities}
+                />
             </HeaderAndContent>
 
             <ContactsModal onDismiss={onDismissContactsModal} />
@@ -129,11 +160,11 @@ function Main(props) {
     )
 }
 
-const HeaderBarContainer = memo(styled.div`
+const HeaderBarContainer = styled.div`
     display: flex;
-`)
+`
 
-const ServerTitle = memo(styled.div`
+const ServerTitle = styled.div`
     font-size: 1.1rem;
     font-weight: 500;
     padding-top: 12px;
@@ -142,9 +173,9 @@ const ServerTitle = memo(styled.div`
     background-color: ${(props) => props.theme.color.grey[400]};
     width: calc(${(props) => props.theme.chatSidebarWidth} - 18px);
     height: calc(100% - 12px);
-`)
+`
 
-const ChatTitle = memo(styled.div`
+const ChatTitle = styled.div`
     font-size: 1.1rem;
     font-weight: 500;
     padding-top: 12px;
@@ -153,30 +184,13 @@ const ChatTitle = memo(styled.div`
     white-space: nowrap;
     text-overflow: none;
     height: calc(100% - 12px);
-`)
+`
 
-const SCodeIcon = memo(styled(CodeIcon)`
+const SCodeIcon = styled(CodeIcon)`
     padding: 12px;
     cursor: pointer;
-`)
+`
 
-// function HeaderBar({ onClickShowDebugView, className }) {
-//     const { selectedServer, selectedRoom } = useNavigation()
-//     const { currentRoom, currentServer } = useCurrentServerAndRoom()
-//     const roomName = useRoomName(selectedServer, selectedRoom)
-
-//     console.log('render - header bar')
-
-//     return (
-//         <HeaderBarContainer className={className}>
-//             <ServerTitle>{currentServer && currentServer.name} /</ServerTitle>
-//             <ChatTitle>{currentRoom && roomName}</ChatTitle>
-//             <SCodeIcon
-//                 style={{ color: 'white', marginLeft: 'auto' }}
-//                 onClick={onClickShowDebugView}
-//             />
-//         </HeaderBarContainer>
-//     )
-// }
+Main.whyDidIRender = true
 
 export default Main

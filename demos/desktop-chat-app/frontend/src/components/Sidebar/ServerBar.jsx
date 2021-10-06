@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect, memo } from 'react'
-import styled from 'styled-components'
+import { useState, useCallback, useEffect } from 'react'
+import styled, { css } from 'styled-components'
 import { IconButton } from '@material-ui/core'
 import {
     Add as AddIcon,
@@ -17,7 +17,6 @@ import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
 import useJoinedServers from '../../hooks/useJoinedServers'
-import mTheme from '../../theme'
 
 const Container = styled.div`
     display: flex;
@@ -33,6 +32,13 @@ const Container = styled.div`
     scrollbar-width: none; /* Firefox */
 `
 
+const selectedServerFab = css`
+    opacity: 1 !important;
+    img {
+        transform: scale(1);
+    }
+`
+
 const ServerIconWrapper = styled.div`
     display: flex;
     justify-content: center;
@@ -41,12 +47,31 @@ const ServerIconWrapper = styled.div`
     cursor: pointer;
     text-transform: uppercase;
     transition: 0.12s ease-in-out all;
+    opacity: 0.6;
+    img {
+        transform: scale(0.9);
+    }
+
+    ${({ selected }) => selected && selectedServerFab}
 
     &:hover {
+        opacity: 0.8;
         img {
-            transform: scale(1.125);
+            transform: scale(1.125) !important;
         }
     }
+`
+
+const SFaceIcon = styled(FaceIcon)`
+    color: ${({ theme }) => theme.color.indigo[500]};
+`
+
+const SImportIcon = styled(ImportIcon)`
+    color: ${({ theme }) => theme.color.indigo[500]};
+`
+
+const SAddIcon = styled(AddIcon)`
+    color: ${({ theme }) => theme.color.indigo[500]};
 `
 
 const CircularButton = styled(IconButton)`
@@ -113,7 +138,7 @@ function ServerBar({ className, verticalPadding }) {
             <Tooltip title="Contacts" placement="right" arrow>
                 <ServerIconWrapper onClick={onClickContacts}>
                     <CircularButton>
-                        <FaceIcon style={{ color: mTheme.color.indigo[500] }} />
+                        <SFaceIcon />
                     </CircularButton>
                 </ServerIconWrapper>
             </Tooltip>
@@ -121,9 +146,7 @@ function ServerBar({ className, verticalPadding }) {
             <Tooltip title="Join existing server" placement="right" arrow>
                 <ServerIconWrapper onClick={onClickImportServer}>
                     <CircularButton>
-                        <ImportIcon
-                            style={{ color: mTheme.color.indigo[500] }}
-                        />
+                        <SImportIcon />
                     </CircularButton>
                 </ServerIconWrapper>
             </Tooltip>
@@ -131,7 +154,7 @@ function ServerBar({ className, verticalPadding }) {
             <Tooltip title="Create new server" placement="right" arrow>
                 <ServerIconWrapper onClick={onClickAddServer}>
                     <CircularButton>
-                        <AddIcon style={{ color: mTheme.color.indigo[500] }} />
+                        <SAddIcon />
                     </CircularButton>
                 </ServerIconWrapper>
             </Tooltip>
@@ -195,4 +218,6 @@ function ImportServerModal({ onDismiss }) {
     )
 }
 
-export default memo(ServerBar)
+export default ServerBar
+
+ServerBar.whyDidIRender = true

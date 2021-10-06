@@ -6,11 +6,11 @@ import useNavigation from '../../hooks/useNavigation'
 import useCurrentServerAndRoom from '../../hooks/useCurrentServerAndRoom'
 import useRoomName from '../../hooks/useRoomName'
 
-const HeaderBarContainer = memo(styled.div`
+const HeaderBarContainer = styled.div`
     display: flex;
-`)
+`
 
-const ServerTitle = memo(styled.div`
+const ServerTitle = styled.div`
     font-size: 1.1rem;
     font-weight: 500;
     padding-top: 12px;
@@ -19,9 +19,9 @@ const ServerTitle = memo(styled.div`
     background-color: ${(props) => props.theme.color.grey[400]};
     width: calc(${(props) => props.theme.chatSidebarWidth} - 18px);
     height: calc(100% - 12px);
-`)
+`
 
-const ChatTitle = memo(styled.div`
+const ChatTitle = styled.div`
     font-size: 1.1rem;
     font-weight: 500;
     padding-top: 12px;
@@ -30,28 +30,29 @@ const ChatTitle = memo(styled.div`
     white-space: nowrap;
     text-overflow: none;
     height: calc(100% - 12px);
-`)
+`
 
-const SCodeIcon = memo(styled(CodeIcon)`
+const SCodeIcon = styled(CodeIcon)`
     padding: 12px;
     cursor: pointer;
-`)
+    color: white;
+    margin-left: auto;
+`
 
 function HeaderBar({ onClickShowDebugView, className }) {
     const { selectedServer, selectedRoom } = useNavigation()
     const { currentRoom, currentServer } = useCurrentServerAndRoom()
     const roomName = useRoomName(selectedServer, selectedRoom)
 
+    // console.log(currentServer)
+
     return (
         <HeaderBarContainer className={className}>
             <ServerTitle>{currentServer && currentServer.name} /</ServerTitle>
             <ChatTitle>{currentRoom && roomName}</ChatTitle>
-            <SCodeIcon
-                style={{ color: 'white', marginLeft: 'auto' }}
-                onClick={onClickShowDebugView}
-            />
+            <SCodeIcon onClick={onClickShowDebugView} />
         </HeaderBarContainer>
     )
 }
 
-export default memo(HeaderBar)
+export default HeaderBar

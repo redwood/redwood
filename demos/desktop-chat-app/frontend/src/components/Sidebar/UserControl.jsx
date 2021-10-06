@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react'
 import styled from 'styled-components'
 import { toast } from 'react-toastify'
 
-import { useRedwood } from '../redwood.js/dist/main/react'
+import useRedwood from '../../hooks/useRedwood'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Input, { InputLabel } from '../Input'
 import Button from '../Button'

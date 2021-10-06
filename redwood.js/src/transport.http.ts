@@ -1,5 +1,5 @@
-import querystring from 'querystring'
-import url from 'url'
+import querystring from "querystring";
+import url from "url";
 import {
     Transport,
     Identity,
@@ -10,119 +10,138 @@ import {
     UnsubscribeFunc,
     NewStateMsg,
     NewStateCallbackWithError,
-    GetParams
-} from './types'
+    GetParams,
+} from "./types";
 
-let theFetch: typeof fetch = typeof window !== 'undefined'
-                                ? fetch
-                                : require('node-fetch')
+let theFetch: typeof fetch =
+    typeof window !== "undefined" ? fetch : require("node-fetch");
 
 interface SubscribeHeaders {
-    'State-URI': string
-    Accept:    string
-    Subscribe: SubscribeType
-    'From-Tx'?: string
+    "State-URI": string;
+    Accept: string;
+    Subscribe: SubscribeType;
+    "From-Tx"?: string;
 }
 
-type SubscribeType = 'states' | 'transactions' | 'states,transactions' | 'transactions,states'
+type SubscribeType =
+    | "states"
+    | "transactions"
+    | "states,transactions"
+    | "transactions,states";
 
-export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback }) {
-    const { httpHost, onFoundPeers } = opts
+export default function (opts: {
+    httpHost: string;
+    onFoundPeers?: PeersCallback;
+}) {
+    const { httpHost, onFoundPeers } = opts;
 
-    let knownPeers: PeersMap = {}
-    pollForPeers()
+    let knownPeers: PeersMap = {};
+    pollForPeers();
 
-    let alreadyRespondedTo: { [txID: string]: boolean } = {}
-    let websocketConn: WebSocket | undefined
-    let websocketConnected = false
-    let websocketPendingSubscribeOpts: any = []
+    let alreadyRespondedTo: { [txID: string]: boolean } = {};
+    let websocketConn: WebSocket | undefined;
+    let websocketConnected = false;
+    let websocketPendingSubscribeOpts: any = [];
 
-    let unsubscribes: UnsubscribeFunc[] = []
+    let unsubscribes: UnsubscribeFunc[] = [];
 
     async function close() {
         for (let unsubscribe of unsubscribes) {
-            unsubscribe()
+            unsubscribe();
         }
     }
 
     async function subscribe(opts: SubscribeParams) {
-        let { stateURI, keypath, fromTxID, states, txs, callback } = opts
+        let { stateURI, keypath, fromTxID, states, txs, callback } = opts;
         try {
-            let subscriptionType: SubscribeType
+            let subscriptionType: SubscribeType;
             if (states && txs) {
-                subscriptionType = 'states,transactions'
+                subscriptionType = "states,transactions";
             } else if (states) {
-                subscriptionType = 'states'
+                subscriptionType = "states";
             } else if (txs) {
-                subscriptionType = 'transactions'
+                subscriptionType = "transactions";
             } else {
-                throw new Error('must provide either `txs: true`, `states: true`, or both')
+                throw new Error(
+                    "must provide either `txs: true`, `states: true`, or both"
+                );
             }
 
-            let unsubscribe: UnsubscribeFunc
+            let unsubscribe: UnsubscribeFunc;
 
             if (opts.useWebsocket) {
                 if (!websocketConn) {
-                    let url = new URL(httpHost)
-                    url.searchParams.set('state_uri', stateURI)
-                    url.searchParams.set('keypath', keypath || '/')
-                    url.searchParams.set('subscription_type', subscriptionType)
+                    let url = new URL(httpHost);
+                    url.searchParams.set("state_uri", stateURI);
+                    url.searchParams.set("keypath", keypath || "/");
+                    url.searchParams.set("subscription_type", subscriptionType);
                     if (fromTxID) {
-                        url.searchParams.set('from_tx', fromTxID)
+                        url.searchParams.set("from_tx", fromTxID);
                     }
-                    url.protocol = 'ws'
-                    url.pathname = '/ws'
+                    url.protocol = "ws";
+                    url.pathname = "/ws";
 
-                    websocketConn = new WebSocket(url.toString())
+                    websocketConn = new WebSocket(url.toString());
                     websocketConn.onopen = function (evt) {
-                        websocketConnected = true
+                        websocketConnected = true;
                         for (let pendingSubscribeOpts of websocketPendingSubscribeOpts) {
                             if (!websocketConn) {
-                                continue
+                                continue;
                             }
-                            websocketConn.send(JSON.stringify({
-                                op: 'subscribe',
-                                params: pendingSubscribeOpts,
-                            }))
+                            websocketConn.send(
+                                JSON.stringify({
+                                    op: "subscribe",
+                                    params: pendingSubscribeOpts,
+                                })
+                            );
                         }
-                    }
+                    };
                     websocketConn.onclose = function (evt) {
-                        websocketConnected = false
-                    }
+                        websocketConnected = false;
+                    };
                     websocketConn.onmessage = function (evt) {
-                        let messages = (evt.data as string).split('\n').filter(x => x.trim().length > 0)
+                        let messages = (evt.data as string)
+                            .split("\n")
+                            .filter((x) => x.trim().length > 0);
                         for (let msg of messages) {
                             if (!websocketConn) {
-                                continue
+                                continue;
                             }
-                            if (msg === 'ping') {
-                                websocketConn.send('pong')
-                                continue
+                            if (msg === "ping") {
+                                websocketConn.send("pong");
+                                continue;
                             }
 
                             try {
-                                let { stateURI, tx, state, leaves } = JSON.parse(msg)
-                                callback(null, { stateURI, tx, state, leaves })
-                            } catch (err) {
-                                callback(err, undefined as any)
+                                let { stateURI, tx, state, leaves } =
+                                    JSON.parse(msg);
+                                callback(null, { stateURI, tx, state, leaves });
+                            } catch (err: any) {
+                                callback(err, undefined as any);
                             }
                         }
-                    }
+                    };
 
                     unsubscribes.push(() => {
-                        websocketConn?.close()
-                        websocketConn = undefined
-                    })
-
+                        websocketConn?.close();
+                        websocketConn = undefined;
+                    });
                 } else {
-                    let subscribeOpts = { stateURI, keypath, subscriptionType, fromTxID }
+                    let subscribeOpts = {
+                        stateURI,
+                        keypath,
+                        subscriptionType,
+                        fromTxID,
+                    };
                     if (websocketConnected) {
-                        websocketConn.send(JSON.stringify({
-                            op: 'subscribe',
-                            params: subscribeOpts,
-                        }))
+                        websocketConn.send(
+                            JSON.stringify({
+                                op: "subscribe",
+                                params: subscribeOpts,
+                            })
+                        );
                     } else {
-                        websocketPendingSubscribeOpts.push(subscribeOpts)
+                        websocketPendingSubscribeOpts.push(subscribeOpts);
                     }
                 }
                 unsubscribe = () => {
@@ -130,295 +149,310 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
                     //     websocketConn.close()
                     //     websocketConn = undefined
                     // }
-                }
-
+                };
             } else {
                 const headers: SubscribeHeaders = {
-                    'State-URI': stateURI,
-                    'Accept':    'application/json',
-                    'Subscribe': subscriptionType,
-                }
+                    "State-URI": stateURI,
+                    Accept: "application/json",
+                    Subscribe: subscriptionType,
+                };
                 if (fromTxID) {
-                    headers['From-Tx'] = fromTxID
+                    headers["From-Tx"] = fromTxID;
                 }
 
-                const resp = await wrappedFetch(keypath || '/', {
-                    method: 'GET',
+                const resp = await wrappedFetch(keypath || "/", {
+                    method: "GET",
                     headers,
-                })
+                });
                 if (!resp.ok || !resp.body) {
-                    callback('http transport: fetch failed', undefined as any)
-                    return
+                    callback("http transport: fetch failed", undefined as any);
+                    return;
                 }
-                unsubscribe = readSubscription(stateURI, resp.body.getReader(), (err, update) => {
-                    if (err) {
-                        callback(err, undefined as any)
-                        return
-                    }
-                    let { stateURI, tx, state, leaves } = update
-                    if (tx) {
-                        ack(tx.id)
-                        if (!alreadyRespondedTo[tx.id]) {
-                            alreadyRespondedTo[tx.id] = true
-                            callback(err, { stateURI, tx, state, leaves })
+                unsubscribe = readSubscription(
+                    stateURI,
+                    resp.body.getReader(),
+                    (err, update) => {
+                        if (err) {
+                            callback(err, undefined as any);
+                            return;
                         }
-                    } else {
-                        callback(err, { stateURI, tx, state, leaves })
+                        let { stateURI, tx, state, leaves } = update;
+                        if (tx) {
+                            ack(tx.id);
+                            if (!alreadyRespondedTo[tx.id]) {
+                                alreadyRespondedTo[tx.id] = true;
+                                callback(err, { stateURI, tx, state, leaves });
+                            }
+                        } else {
+                            callback(err, { stateURI, tx, state, leaves });
+                        }
                     }
-                })
+                );
             }
-            unsubscribes.push(unsubscribe)
-            return unsubscribe
-
+            unsubscribes.push(unsubscribe);
+            return unsubscribe;
         } catch (err) {
-            callback('http transport: ' + err, undefined as any)
-            return () => {}
+            callback("http transport: " + err, undefined as any);
+            return () => {};
         }
     }
 
-    function readSubscription(stateURI: string, reader: ReadableStreamDefaultReader<Uint8Array>, callback: NewStateCallbackWithError) {
-        let shouldStop = false
+    function readSubscription(
+        stateURI: string,
+        reader: ReadableStreamDefaultReader<Uint8Array>,
+        callback: NewStateCallbackWithError
+    ) {
+        let shouldStop = false;
         function unsubscribe() {
-            shouldStop = true
-            reader.cancel()
+            shouldStop = true;
+            reader.cancel();
         }
 
         setTimeout(async () => {
             try {
-                const decoder = new TextDecoder('utf-8')
-                let buffer = ''
+                const decoder = new TextDecoder("utf-8");
+                let buffer = "";
 
                 async function read() {
-                    const x = await reader.read()
+                    const x = await reader.read();
                     if (x.done) {
-                        return
+                        return;
                     }
 
-                    const newData = decoder.decode(x.value)
-                    buffer += newData
-                    let idx
-                    while ((idx = buffer.indexOf('\n')) > -1) {
+                    const newData = decoder.decode(x.value);
+                    buffer += newData;
+                    let idx;
+                    while ((idx = buffer.indexOf("\n")) > -1) {
                         if (shouldStop) {
-                            return
+                            return;
                         }
-                        const line = buffer.substring(0, idx).trim()
+                        const line = buffer.substring(0, idx).trim();
                         if (line.length > 0) {
-                            const payloadStr = line.substring(5).trim() // remove "data:" prefix
-                            let payload
+                            const payloadStr = line.substring(5).trim(); // remove "data:" prefix
+                            let payload;
                             try {
-                                payload = JSON.parse(payloadStr)
+                                payload = JSON.parse(payloadStr);
                             } catch (err) {
-                                console.error('Error parsing JSON:', payloadStr)
-                                callback('http transport: ' + err, undefined as any)
-                                return
+                                console.error(
+                                    "Error parsing JSON:",
+                                    payloadStr
+                                );
+                                callback(
+                                    "http transport: " + err,
+                                    undefined as any
+                                );
+                                return;
                             }
-                            callback(null, payload)
-
+                            callback(null, payload);
                         }
-                        buffer = buffer.substring(idx+1)
+                        buffer = buffer.substring(idx + 1);
                     }
                     if (shouldStop) {
-                        return
+                        return;
                     }
-                    read()
+                    read();
                 }
-                read()
-
+                read();
             } catch (err) {
-                callback('http transport: ' + err, undefined as any)
-                return
+                callback("http transport: " + err, undefined as any);
+                return;
             }
-        }, 0)
-        return unsubscribe
+        }, 0);
+        return unsubscribe;
     }
 
     async function get({ stateURI, keypath, raw }: GetParams) {
-        let url = keypath || '/'
-        if (url.length > 0 && url[0] !== '/') {
-            url = '/' + url
+        let url = keypath || "/";
+        if (url.length > 0 && url[0] !== "/") {
+            url = "/" + url;
         }
         if (raw) {
-            url = url + '?raw=1'
+            url = url + "?raw=1";
         }
-        return (await (await wrappedFetch(url, {
-            headers: {
-                'Accept': 'application/json',
-                'State-URI': stateURI,
-            },
-        })).json()) as any
+        return (await (
+            await wrappedFetch(url, {
+                headers: {
+                    Accept: "application/json",
+                    "State-URI": stateURI,
+                },
+            })
+        ).json()) as any;
     }
 
     // @@TODO: private tx functionality
     async function put(tx: Tx) {
-        let body: FormData | string
+        let body: FormData | string;
         if (tx.attachment) {
-            let fd: FormData
-            if (typeof window !== 'undefined') {
-                fd = new FormData()
+            let fd: FormData;
+            if (typeof window !== "undefined") {
+                fd = new FormData();
             } else {
-                let FormData = require('form-data')
-                fd = new FormData()
+                let FormData = require("form-data");
+                fd = new FormData();
             }
-            fd.append('attachment', tx.attachment)
-            fd.append('patches', tx.patches.join('\n'))
-            body = fd
-
+            fd.append("attachment", tx.attachment);
+            fd.append("patches", tx.patches.join("\n"));
+            body = fd;
         } else {
-            body = tx.patches.join('\n')
+            body = tx.patches.join("\n");
         }
 
-        await wrappedFetch('/', {
-            method: 'PUT',
+        await wrappedFetch("/", {
+            method: "PUT",
             body: body,
             headers: {
-                'State-URI': tx.stateURI,
-                'Version': tx.id,
-                'Parents': (tx.parents || []).join(','),
-                'Signature': tx.sig,
-                'Patch-Type': 'braid',
+                "State-URI": tx.stateURI,
+                Version: tx.id,
+                Parents: (tx.parents || []).join(","),
+                Signature: tx.sig,
+                "Patch-Type": "braid",
             },
-        })
+        });
     }
 
     async function ack(txID: string) {
-        await wrappedFetch('/', {
-            method: 'ACK',
+        await wrappedFetch("/", {
+            method: "ACK",
             body: txID,
-        })
+        });
     }
 
     async function storeBlob(file: string | Blob) {
-        let formData
-        if (typeof window !== 'undefined') {
-            formData = new FormData()
-            formData.append('blob', file)
+        let formData;
+        if (typeof window !== "undefined") {
+            formData = new FormData();
+            formData.append("blob", file);
         } else {
-            let FormData = require('form-data')
-            formData = new FormData()
-            formData.append('blob', file)
+            let FormData = require("form-data");
+            formData = new FormData();
+            formData.append("blob", file);
         }
 
         const resp = await wrappedFetch(`/`, {
-            method: 'POST',
+            method: "POST",
             headers: {
-                'Blob': 'true',
+                Blob: "true",
             },
             body: formData,
-        })
+        });
 
-        return (await resp.json())
+        return await resp.json();
     }
 
     async function authorize(identity: Identity) {
         const resp = await wrappedFetch(`/`, {
-            method: 'AUTHORIZE',
-        })
+            method: "AUTHORIZE",
+        });
 
-        const challengeHex = await resp.text()
-        const challenge = Buffer.from(challengeHex, 'hex')
-        const sigHex = identity.signBytes(challenge)
+        const challengeHex = await resp.text();
+        const challenge = Buffer.from(challengeHex, "hex");
+        const sigHex = identity.signBytes(challenge);
 
         const resp2 = await wrappedFetch(`/`, {
-            method: 'AUTHORIZE',
+            method: "AUTHORIZE",
             headers: {
-                'Response': sigHex,
+                Response: sigHex,
             },
-        })
+        });
     }
 
-    let cookies: { [cookie: string]: string } = {}
+    let cookies: { [cookie: string]: string } = {};
 
     async function wrappedFetch(path: string, options: any) {
-        if (typeof window === 'undefined') {
+        if (typeof window === "undefined") {
             // We have to manually parse and set cookies because isomorphic-fetch doesn't do it for us
-            let cookieStr = Object.keys(cookies).map(cookieName => `${cookieName}=${cookies[cookieName]}`).join(';')
+            let cookieStr = Object.keys(cookies)
+                .map((cookieName) => `${cookieName}=${cookies[cookieName]}`)
+                .join(";");
             options.headers = {
                 ...makeRequestHeaders(),
                 ...options.headers,
                 Cookie: cookieStr,
-            }
-
+            };
         } else {
             options.headers = {
                 ...makeRequestHeaders(),
                 ...options.headers,
-            }
+            };
         }
-        options.credentials = 'include'
+        options.credentials = "include";
 
-        path = path || ''
-        if (path[0] !== '/') {
-            path = '/' + (path || '')
+        path = path || "";
+        if (path[0] !== "/") {
+            path = "/" + (path || "");
         }
 
-        let url = !httpHost ? path : httpHost + path
+        let url = !httpHost ? path : httpHost + path;
 
-        const resp = await theFetch(url, options)
+        const resp = await theFetch(url, options);
         if (!resp.ok) {
-            let text = await resp.text()
-            throw { statusCode: resp.status, error: text }
+            let text = await resp.text();
+            throw { statusCode: resp.status, error: text };
         }
 
-        if (typeof window === 'undefined') {
+        if (typeof window === "undefined") {
             // Manual cookie parsing
-            let rawHeaders: { [k: string]: string[] } = (resp.headers as any).raw()
-            for (let str of (rawHeaders['set-cookie'] || [])) {
-                let keyVal = str.substr(0, str.indexOf(';')).split('=')
-                cookies[keyVal[0]] = keyVal[1]
+            let rawHeaders: { [k: string]: string[] } = (
+                resp.headers as any
+            ).raw();
+            for (let str of rawHeaders["set-cookie"] || []) {
+                let keyVal = str.substr(0, str.indexOf(";")).split("=");
+                cookies[keyVal[0]] = keyVal[1];
             }
         }
 
         // Receive list of peers from the Alt-Svc header
-        const altSvcHeader = resp.headers.get('Alt-Svc')
+        const altSvcHeader = resp.headers.get("Alt-Svc");
         if (altSvcHeader) {
-            const peers: PeersMap = {}
-            const peerHeaders = altSvcHeader.split(',').map(x => x.trim())
+            const peers: PeersMap = {};
+            const peerHeaders = altSvcHeader.split(",").map((x) => x.trim());
             for (let peer of peerHeaders) {
-                const x = peer.match(/^\s*(\w+)="([^"]+)"/)
-                if (!x) { continue }
-                const tptName = x[1]
-                const reachableAt = x[2]
-                peers[tptName] = peers[tptName] || {}
-                peers[tptName][reachableAt] = true
+                const x = peer.match(/^\s*(\w+)="([^"]+)"/);
+                if (!x) {
+                    continue;
+                }
+                const tptName = x[1];
+                const reachableAt = x[2];
+                peers[tptName] = peers[tptName] || {};
+                peers[tptName][reachableAt] = true;
             }
             if (onFoundPeers) {
-                onFoundPeers(peers)
+                onFoundPeers(peers);
             }
         }
-        return resp
+        return resp;
     }
 
     function pollForPeers() {
         setInterval(async () => {
             try {
-                await wrappedFetch(`/`, { method: 'HEAD' })
-            } catch(err) {
-                console.error('pollForPeers error ~>', err)
+                await wrappedFetch(`/`, { method: "HEAD" });
+            } catch (err) {
+                console.error("pollForPeers error ~>", err);
             }
-
-        }, 5000)
+        }, 5000);
     }
 
     function makeRequestHeaders() {
-        const headers: { [header: string]: string } = {}
-        const altSvc = []
+        const headers: { [header: string]: string } = {};
+        const altSvc = [];
         for (let tptName of Object.keys(knownPeers)) {
             for (let reachableAt of Object.keys(knownPeers[tptName])) {
-                altSvc.push(`${tptName}="${reachableAt}"`)
+                altSvc.push(`${tptName}="${reachableAt}"`);
             }
         }
         if (altSvc.length > 0) {
-            headers['Alt-Svc'] = altSvc.join(', ')
+            headers["Alt-Svc"] = altSvc.join(", ");
         }
-        return headers
+        return headers;
     }
 
     function foundPeers(peers: PeersMap) {
-        knownPeers = peers
+        knownPeers = peers;
     }
 
     return {
-        transportName:   () => 'http',
+        transportName: () => "http",
         altSvcAddresses: () => [],
         subscribe,
         get,
@@ -428,5 +462,5 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
         authorize,
         foundPeers,
         close,
-    } as Transport
+    } as Transport;
 }

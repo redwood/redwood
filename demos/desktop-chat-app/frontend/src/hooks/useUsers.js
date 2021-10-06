@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import { useStateTree } from '../components/redwood.js/dist/main/react'
+import useStateTree from './useStateTree'
 import useServerAndRoomInfo from './useServerAndRoomInfo'
 import useAddressBook from './useAddressBook'
 

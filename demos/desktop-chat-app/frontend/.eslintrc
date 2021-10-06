@@ -32,6 +32,7 @@
     },
     "ignorePatterns": ["node_modules/", "src/components/redwood.js/**"],
     "rules": {
+        "no-param-reassign": 0,
         "prettier/prettier": 1,
         "arrow-body-style": [2, "as-needed"],
         "class-methods-use-this": 0,
@@ -63,6 +64,8 @@
         "react/jsx-uses-vars": 2,
         "react/jsx-indent": 0,
         "react/prop-types": 0,
+        "react/react-in-jsx-scope": 0,
+        "react/jsx-uses-react": 0,
         "jsx-a11y/aria-props": 2,
         "jsx-a11y/heading-has-content": 0,
         "jsx-a11y/label-has-associated-control": [
@@ -78,7 +81,7 @@
         "react-hooks/rules-of-hooks": 2,
         "unicorn/prevent-abbreviations": "off",
         "jsx-a11y/click-events-have-key-events": 0,
-        "consistent-return": ["warn", { "treatUndefinedAsUnspecified": true }],
+        "consistent-return": 0,
         "no-constant-condition": ["error", { "checkLoops": false }],
         "jsx-a11y/no-noninteractive-element-interactions": 0,
         "jsx-a11y/media-has-caption": 0,

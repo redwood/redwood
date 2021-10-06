@@ -7,7 +7,8 @@ import moment from 'moment'
 import Redwood from '@redwood.dev/client'
 import { sortBy } from 'lodash'
 
-import { useRedwood, useStateTree } from '../redwood.js/dist/main/react'
+import useRedwood from '../../hooks/useRedwood'
+import useStateTree from '../../hooks/useStateTree'
 import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
@@ -65,10 +66,12 @@ const Spacer = styled.div`
 
 const SAddIcon = styled(AddIcon)`
     margin-right: 10px;
+    color: ${({ theme }) => theme.color.indigo[500]};
 `
 
 const SExitToApp = styled(ExitToApp)`
     margin-right: 10px;
+    color: ${({ theme }) => theme.color.indigo[500]};
 `
 
 function ChatBar({ className }) {
@@ -88,7 +91,6 @@ function ChatBar({ className }) {
     } = useModal('new chat')
     const { onPresent: onPresentNewDMModal, onDismiss: onDismissNewDMModal } =
         useModal('new dm')
-    const theme = useTheme()
 
     const onClickCreateNewChat = useCallback(() => {
         if (isDirectMessage) {
@@ -136,12 +138,11 @@ function ChatBar({ className }) {
 
             {!!selectedServer && (
                 <SControlWrapper onClick={onClickCreateNewChat}>
-                    <SAddIcon style={{ color: theme.color.indigo[500] }} />{' '}
-                    {isDirectMessage ? 'New message' : 'New chat'}
+                    <SAddIcon /> {isDirectMessage ? 'New message' : 'New chat'}
                 </SControlWrapper>
             )}
             <SControlWrapper onClick={onClickLogout}>
-                <SExitToApp style={{ color: theme.color.indigo[500] }} /> Logout
+                <SExitToApp /> Logout
             </SControlWrapper>
             <NewChatModal
                 selectedServer={selectedServer}

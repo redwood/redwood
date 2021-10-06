@@ -1,13 +1,13 @@
-import React, { createContext, useCallback, useState } from 'react'
+import { createContext, useCallback, useState } from 'react'
 
-export const Context = createContext({
+export const ModalsContext = createContext({
     activeModalKey: null,
     activeModalProps: {},
     onPresent: () => {},
     onDismiss: () => {},
 })
 
-function Modals({ children }) {
+function ModalsProvider({ children }) {
     const [activeModalKey, setActiveModalKey] = useState()
     const [activeModalProps, setActiveModalProps] = useState({})
 
@@ -30,7 +30,7 @@ function Modals({ children }) {
     )
 
     return (
-        <Context.Provider
+        <ModalsContext.Provider
             value={{
                 activeModalKey,
                 activeModalProps,
@@ -40,8 +40,8 @@ function Modals({ children }) {
         >
             {children}
             <div id="modal-root" />
-        </Context.Provider>
+        </ModalsContext.Provider>
     )
 }
 
-export default Modals
+export default ModalsProvider

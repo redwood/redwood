@@ -1,19 +1,132 @@
-import React, { createContext, useCallback, useState, useEffect } from 'react'
+import { createContext, useCallback, useEffect, useReducer } from 'react'
+import { createSlice } from '@reduxjs/toolkit'
 
-export const Context = createContext({
+const initialLoginStatusState = {
+    isLoggedIn: false,
+    profilesFetched: false,
+    profileNames: [],
+    checkedLogin: false,
+    connectionError: null,
+    checkingLogin: true,
+}
+
+const loginStatusInitialContext = {
     signup: () => {},
     login: () => {},
     logout: () => {},
     checkLogin: () => {},
-    isLoggedIn: false,
-    profilesFetched: false,
-    profileNames: [],
-})
+    ...initialLoginStatusState,
+}
 
-function Provider({ apiEndpoint, children }) {
-    const [isLoggedIn, setIsLoggedIn] = useState(false)
-    const [profileNames, setProfileNames] = useState([])
-    const [profilesFetched, setProfilesFetched] = useState(false)
+export const LoginStatusContext = createContext(loginStatusInitialContext)
+
+const updateIsLoggedInR = (state, action) => {
+    const { isLoggedIn } = action.payload
+
+    if (state.isLoggedIn !== isLoggedIn) {
+        state.isLoggedIn = isLoggedIn
+        return state
+    }
+}
+
+const updateProfilesFetchedR = (state, action) => {
+    const { profilesFetched } = action.payload
+
+    if (state.profilesFetched !== profilesFetched) {
+        state.profilesFetched = profilesFetched
+        return state
+    }
+}
+
+const updateProfileNamesR = (state, action) => {
+    const { profileNames } = action.payload
+
+    if (state.profileNames.length !== profileNames.length) {
+        state.profileNames = profileNames
+        return state
+    }
+}
+
+const updateCheckedLoginR = (state, action) => {
+    const { checkedLogin } = action.payload
+
+    if (state.checkedLogin !== checkedLogin) {
+        state.checkedLogin = checkedLogin
+    }
+
+    return state
+}
+
+const updateConnectionErrorR = (state, action) => {
+    const { connectionError } = action.payload
+
+    if (state.connectionError !== connectionError) {
+        state.connectionError = connectionError
+        return state
+    }
+}
+
+const updateCheckingLoginR = (state, action) => {
+    const { checkingLogin } = action.payload
+
+    if (state.checkLogin !== checkingLogin) {
+        state.checkingLogin = checkingLogin
+        return state
+    }
+}
+
+const useLoginStatusReducer = () => {
+    const { name, reducer, actions, caseReducers } = createSlice({
+        name: 'login-status',
+        initialState: initialLoginStatusState,
+        reducers: {
+            updateIsLoggedIn: updateIsLoggedInR,
+            updateProfilesFetched: updateProfilesFetchedR,
+            updateProfileNames: updateProfileNamesR,
+            updateCheckedLogin: updateCheckedLoginR,
+            updateConnectionError: updateConnectionErrorR,
+            updateCheckingLogin: updateCheckingLoginR,
+        },
+    })
+
+    const [state, dispatch] = useReducer(reducer, initialLoginStatusState)
+
+    return {
+        name,
+        actions,
+        reducer,
+        state,
+        dispatch,
+        caseReducers,
+    }
+}
+
+function LoginStatusProvider({ apiEndpoint, children }) {
+    // const [isLoggedIn, setIsLoggedIn] = useState(false)
+    // const [profileNames, setProfileNames] = useState([])
+    // const [profilesFetched, setProfilesFetched] = useState(false)
+    // const [checkedLogin, setCheckedLogin] = useState(false)
+    // const [connectionError, setConnectionError] = useState(null)
+    // const [checkingLogin, setCheckingLogin] = useState(true)
+    const {
+        state: {
+            isLoggedIn,
+            profilesFetched,
+            profileNames,
+            checkedLogin,
+            connectionError,
+            checkingLogin,
+        },
+        actions: {
+            updateIsLoggedIn,
+            updateProfilesFetched,
+            updateProfileNames,
+            updateCheckedLogin,
+            updateConnectionError,
+            updateCheckingLogin,
+        },
+        dispatch,
+    } = useLoginStatusReducer()
 
     const getProfileNames = useCallback(async () => {
         try {
@@ -22,12 +135,29 @@ function Provider({ apiEndpoint, children }) {
                     method: 'GET',
                 })
             ).json()
-            setProfileNames(resp.profileNames || [])
-            setProfilesFetched(true)
+            if (!profilesFetched) {
+                dispatch(updateProfilesFetched({ profilesFetched: true }))
+            }
+
+            if (profileNames.length !== (resp.profileNames || []).length) {
+                dispatch(
+                    updateProfileNames({
+                        profileNames: resp.profileNames || [],
+                    }),
+                )
+            }
         } catch (err) {
-            setProfileNames([])
+            console.log(err)
+            dispatch(updateProfileNames({ profileNames: [] }))
         }
-    }, [apiEndpoint])
+    }, [
+        dispatch,
+        updateProfileNames,
+        updateProfilesFetched,
+        apiEndpoint,
+        profileNames.length,
+        profilesFetched,
+    ])
 
     const signup = useCallback(
         async ({ profileName }) => {
@@ -62,9 +192,9 @@ function Provider({ apiEndpoint, children }) {
                 throw new Error(errorText)
             }
             await getProfileNames()
-            setIsLoggedIn(true)
+            dispatch(updateIsLoggedIn({ isLoggedIn: true }))
         },
-        [apiEndpoint, isLoggedIn, setIsLoggedIn, getProfileNames],
+        [apiEndpoint, isLoggedIn, updateIsLoggedIn, getProfileNames, dispatch],
     )
 
     const logout = useCallback(async () => {
@@ -79,31 +209,71 @@ function Provider({ apiEndpoint, children }) {
             const errorText = await resp.text()
             throw new Error(errorText)
         }
-        setProfilesFetched(false)
+        dispatch(updateProfilesFetched({ profilesFetched: false }))
+        // NOTE: Need to reset all context states here
         await getProfileNames()
-        setIsLoggedIn(false)
-    }, [apiEndpoint, isLoggedIn, setIsLoggedIn, getProfileNames])
+        dispatch(updateIsLoggedIn({ isLoggedIn: false }))
+    }, [
+        apiEndpoint,
+        isLoggedIn,
+        updateIsLoggedIn,
+        getProfileNames,
+        dispatch,
+        updateProfilesFetched,
+    ])
 
     const checkLogin = useCallback(async () => {
         try {
+            dispatch(updateCheckingLogin({ checkingLogin: true }))
             const resp = await fetch(`${apiEndpoint}/api/check-login`, {
                 method: 'POST',
             })
             const jsonResp = await resp.text()
-            setIsLoggedIn(jsonResp === 'true')
+            if (jsonResp === 'true') {
+                dispatch(updateIsLoggedIn({ isLoggedIn: true }))
+            }
+            dispatch(updateCheckingLogin({ checkingLogin: false }))
+            dispatch(updateConnectionError({ connectionError: false }))
             await getProfileNames()
             return true
         } catch (err) {
-            return err
+            dispatch(updateConnectionError({ connectionError: err.message }))
+            dispatch(updateCheckingLogin({ checkingLogin: false }))
+            return err.message
         }
-    }, [apiEndpoint, getProfileNames])
+    }, [
+        apiEndpoint,
+        getProfileNames,
+        isLoggedIn,
+        updateCheckingLogin,
+        updateConnectionError,
+        updateIsLoggedIn,
+        dispatch,
+    ])
+
+    const initialCheckLogin = useCallback(async () => {
+        if (!checkedLogin && !connectionError) {
+            try {
+                await checkLogin()
+                dispatch(updateCheckedLogin({ checkedLogin: true }))
+            } catch (err) {
+                dispatch(updateCheckedLogin({ checkedLogin: true }))
+            }
+        }
+    }, [
+        checkedLogin,
+        connectionError,
+        checkLogin,
+        dispatch,
+        updateCheckedLogin,
+    ])
 
     useEffect(() => {
-        checkLogin()
-    }, [apiEndpoint, checkLogin])
+        initialCheckLogin()
+    }, [])
 
     return (
-        <Context.Provider
+        <LoginStatusContext.Provider
             value={{
                 signup,
                 login,
@@ -112,11 +282,13 @@ function Provider({ apiEndpoint, children }) {
                 isLoggedIn,
                 profileNames,
                 profilesFetched,
+                connectionError,
+                checkingLogin,
             }}
         >
             {children}
-        </Context.Provider>
+        </LoginStatusContext.Provider>
     )
 }
 
-export default Provider
+export default LoginStatusProvider

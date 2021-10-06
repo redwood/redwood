@@ -1,8 +1,8 @@
 import { useMemo, useContext } from 'react'
-import { Context } from '../contexts/API'
+import { APIContext } from '../contexts/API'
 
 function useAPI() {
-    const api = useContext(Context)
+    const api = useContext(APIContext)
     return useMemo(() => api, [api])
 }
 

@@ -1,19 +1,13 @@
-import React, {
-    createContext,
-    useState,
-    useDebugValue,
-    useMemo,
-    useCallback,
-} from 'react'
+import { createContext, useState, useDebugValue, useMemo } from 'react'
 
-export const Context = createContext({
+export const NavigationContext = createContext({
     selectedStateURI: null,
     selectedServer: null,
     selectedRoom: null,
     navigate: () => {},
 })
 
-function Provider({ children }) {
+function NavigationProvider({ children }) {
     const [selectedServer, setServer] = useState(null)
     const [selectedRoom, setRoom] = useState(null)
 
@@ -33,7 +27,7 @@ function Provider({ children }) {
     }
 
     return (
-        <Context.Provider
+        <NavigationContext.Provider
             value={{
                 selectedStateURI,
                 selectedServer,
@@ -42,8 +36,8 @@ function Provider({ children }) {
             }}
         >
             {children}
-        </Context.Provider>
+        </NavigationContext.Provider>
     )
 }
 
-export default Provider
+export default NavigationProvider

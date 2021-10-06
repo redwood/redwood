@@ -1,13 +1,9 @@
-import { useRef } from 'react'
-import { useStateTree } from '../components/redwood.js/dist/main/react'
+import { useMemo, useContext } from 'react'
+import { AddressBookContext } from '../contexts/AddressBook'
 
 function useAddressBook() {
-    const defaultValue = useRef({})
-    const addressBook = useStateTree('chat.local/address-book')
-    if (addressBook && addressBook.value) {
-        return addressBook.value
-    }
-    return defaultValue.current
+    const addressBook = useContext(AddressBookContext)
+    return useMemo(() => addressBook, [addressBook])
 }
 
 export default useAddressBook

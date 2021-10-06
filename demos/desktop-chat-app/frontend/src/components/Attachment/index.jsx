@@ -9,32 +9,32 @@ import Button from '../Button'
 import VideoPreview from './VideoPreview'
 import AudioPlayer from '../AudioPlayer'
 
-const ImageWrapper = memo(styled.div`
+const ImageWrapper = styled.div`
     padding: 4px 0;
     cursor: default;
-`)
+`
 
-const EmbedWrapper = memo(styled.div`
+const EmbedWrapper = styled.div`
     padding: 4px 4px;
     background-color: ${(props) => props.theme.color.grey[500]};
     border-radius: 8px;
     cursor: default;
-`)
+`
 
-const Metadata = memo(styled.div`
+const Metadata = styled.div`
     padding-bottom: 4px;
-`)
+`
 
-const Filename = memo(styled.span`
+const Filename = styled.span`
     font-size: 0.8rem;
-`)
+`
 
-const Filesize = memo(styled.span`
+const Filesize = styled.span`
     font-size: 0.8rem;
     color: ${(props) => props.theme.color.grey[100]};
-`)
+`
 
-const SDownloadLink = memo(styled.a`
+const SDownloadLink = styled.a`
     color: ${(props) => props.theme.color.white};
     text-decoration: none;
     cursor: pointer;
@@ -43,16 +43,16 @@ const SDownloadLink = memo(styled.a`
         color: hsl(231deg 36% 53%);
         text-decoration: underline;
     }
-`)
+`
 
-const SInvalidAttachmentWrapper = memo(styled.div`
+const SInvalidAttachmentWrapper = styled.div`
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     > img {
         height: 120px;
     }
-`)
+`
 
 const downloadImage = async (url, fileName) => {
     const image = await fetch(url)
@@ -67,7 +67,6 @@ const downloadImage = async (url, fileName) => {
 }
 
 function Attachment(props) {
-    console.log('rerender')
     const { attachment, url, onClick, className } = props
 
     const [loadFailed, setLoadFailed] = useState(false)
@@ -163,5 +162,7 @@ function Attachment(props) {
         </Wrapper>
     )
 }
+
+Attachment.whyDidIRender = true
 
 export default memo(Attachment)

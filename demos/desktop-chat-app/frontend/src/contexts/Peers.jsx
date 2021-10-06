@@ -1,12 +1,12 @@
-import React, { createContext, useState, useEffect } from 'react'
+import { createContext, useState, useEffect } from 'react'
 import { uniq } from 'lodash'
-import { useRedwood } from '../components/redwood.js/dist/main/react'
+import useRedwood from '../hooks/useRedwood'
 
-export const Context = createContext({
+export const PeersContext = createContext({
     peersByAddress: {},
 })
 
-function Provider({ children }) {
+function PeersProvider({ children }) {
     const [peersByAddress, setPeersByAddress] = useState({})
     const { nodePeers, nodeIdentities } = useRedwood()
 
@@ -73,9 +73,9 @@ function Provider({ children }) {
     }, [nodePeers, nodeIdentities])
 
     return (
-        <Context.Provider value={{ peersByAddress }}>
+        <PeersContext.Provider value={{ peersByAddress }}>
             {children}
-        </Context.Provider>
+        </PeersContext.Provider>
     )
 }
 
@@ -83,4 +83,4 @@ function max(a, b) {
     return a < b ? b : a
 }
 
-export default Provider
+export default PeersProvider
