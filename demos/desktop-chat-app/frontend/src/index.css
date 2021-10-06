@@ -1,4 +1,4 @@
-@font-face {
+/* @font-face {
     font-family: 'Noto Sans KR';
     src: local('Noto Sans KR'),
         url(./assets/NotoSansKR-Medium.otf) format('opentype');
@@ -31,7 +31,7 @@
     src: local('Noto Sans KR'),
         url(./assets/NotoSansKR-Bold.otf) format('opentype');
     font-weight: 700;
-}
+} */
 
 body {
     margin: 0;

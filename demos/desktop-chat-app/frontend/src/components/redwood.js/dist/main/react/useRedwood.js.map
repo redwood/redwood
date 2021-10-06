@@ -1,0 +1,1 @@
+{"version":3,"file":"useRedwood.js","sourceRoot":"","sources":["../../../src/react/useRedwood.ts"],"names":[],"mappings":";;AAAA,iCAA4C;AAC5C,uDAAmD;AAEnD,SAAS,UAAU;IACf,MAAM,OAAO,GAAG,kBAAU,CAAC,gCAAc,CAAC,CAAC;IAC3C,OAAO,eAAO,CAAC,GAAG,EAAE,CAAC,OAAO,EAAE,CAAC,OAAO,CAAC,CAAC,CAAC;AAC7C,CAAC;AAED,kBAAe,UAAU,CAAC"}

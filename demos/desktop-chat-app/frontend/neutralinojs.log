@@ -1,0 +1,72 @@
+ERROR 2021-10-06 01:12:51,727 Unable to open ./static/css/main.b8df8b81.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:12:51,833 Unable to open ./static/js/main.3109ebd9.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:12:51,833 Unable to open ./static/js/main.3109ebd9.chunk.jsUnable to open ./init.neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:12:51,833 Unable to open ./static/js/2.554ffd1d.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:12:51,834 Unable to open ./neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:12:51,834 Unable to open ./static/css/2.4132b43c.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:13:42,383 Unable to open ../build/shhh.png api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:14:26,676 Unable to open ./Users/chrispena/Documents/red/redwood/demos/desktop-chat-app/frontend/build/shhh.png api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:15:33,491 Unable to open ./build/index.html api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:15:44,193 Unable to open ./build/index.html api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:45:32,789 Unable to open ./resources/appIcon.png api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:45:49,275 Unable to open ./resources/shhh.png api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:49:14,299 Unable to open ./resources/shhh.png api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:49:28,445 Unable to open ./resources/shhh.png api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:14,440 Unable to open ./static/css/main.b8df8b81.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:14,545 Unable to open ./static/css/2.4132b43c.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:14,545 Unable to open ./neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:14,545 Unable to open ./init.neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:14,545 Unable to open ./static/js/2.554ffd1d.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:14,546 Unable to open ./static/js/main.3109ebd9.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:58,682 Unable to open ./static/css/2.4132b43c.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:58,786 Unable to open ./static/js/main.3109ebd9.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:58,787 Unable to open ./static/js/2.554ffd1d.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:58,787 Unable to open ./init.neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:58,787 Unable to open ./neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 01:57:58,788 Unable to open ./static/css/main.b8df8b81.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:06:12,369 Unable to open ./resources/shhh.png api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:06:32,386 Unable to open ./static/css/2.4132b43c.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:06:32,389 Unable to open ./static/js/main.3109ebd9.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:06:32,491 Unable to open ./init.neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:06:32,491 Unable to open ./static/js/2.554ffd1d.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:06:32,491 Unable to open ./static/js/runtime-main.2afa5d53.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:06:32,491 Unable to open ./static/js/runtime-main.2afa5d53.jsUnable to open ./neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:06:32,491 Unable to open ./static/js/runtime-main.2afa5d53.jsUnable to open ./neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:06:32,492 Unable to open ./static/css/main.b8df8b81.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:14:49,877 Unable to open ./resources/shhh.png api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:15:28,409 Unable to open ./neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:15:28,511 Unable to open ./static/css/main.b8df8b81.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:15:28,514 Unable to open ./static/js/2.33c02e53.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:15:28,514 Unable to open ./static/js/2.33c02e53.chunk.jsUnable to open ./static/js/main.72ecbbcc.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:15:28,514 Unable to open ./static/js/2.33c02e53.chunk.jsUnable to open ./static/js/main.72ecbbcc.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:15:28,514 Unable to open ./static/js/2.33c02e53.chunk.jsUnable to open ./static/js/main.72ecbbcc.chunk.jsUnable to open ./static/css/2.4132b43c.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:24:14,001 Unable to open ./resources/shhh.png api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:24:37,059 Unable to open ./resources/shhh.png api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:25:14,690 Unable to open ./resources/index.html api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:25:35,604 Unable to open ./resources/index.html api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:25:52,565 Unable to open ./index.html api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:25:53,261 Unable to open ./index.html api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:26:11,415 Unable to open ./resources/index.html api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:29:01,875 Unable to open ./resources/shhh.png api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:03,756 Unable to open ./neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:03,862 Unable to open ./static/js/2.e8c19ee7.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:03,863 Unable to open ./static/js/runtime-main.56773067.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:03,863 Unable to open ./static/css/main.c74d7d6e.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:03,864 Unable to open ./static/css/2.fc7ac703.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:03,865 Unable to open ./static/js/main.03a336fd.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:09,187 Unable to open ./neutralino.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:09,293 Unable to open ./static/js/runtime-main.56773067.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:09,293 Unable to open ./static/js/2.e8c19ee7.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:09,294 Unable to open ./static/css/main.c74d7d6e.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:09,295 Unable to open ./static/js/main.03a336fd.chunk.js api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:30:09,295 Unable to open ./static/css/2.fc7ac703.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:36:27,241 Unable to open ./static/media/NotoSansKR-Regular.457762ea.otf api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:43:36,031 Unable to open ./static/media/NotoSansKR-Regular.457762ea.otf api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:43:36,035 Unable to open ./static/media/NotoSansKR-Medium.72ba4555.otf api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:43:36,041 Unable to open ./static/media/NotoSansKR-Light.7bad2c57.otf api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:43:36,046 Unable to open ./static/media/NotoSansKR-Thin.30fa6d56.otf api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 02:43:36,152 Unable to open ./static/media/NotoSansKR-Bold.29abf35d.otf api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 03:00:38,005 Unable to open ./static/css/2.fc7ac703.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 03:00:38,102 Unable to open ./static/css/main.b3fc5e11.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 03:00:45,228 Unable to open ./static/css/2.fc7ac703.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host
+ERROR 2021-10-06 03:00:45,332 Unable to open ./static/css/main.b3fc5e11.chunk.css api/debug/debug.cpp:14 chrispena@unknown-host

@@ -4,4 +4,5 @@ _attic/
 node_modules/
 demos/pair-programming-session/recordings
 dist/
+!demos/desktop-chat-app/frontend/src/components/redwood.js/dist/
 .envrc
