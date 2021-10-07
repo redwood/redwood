@@ -8,4 +8,3 @@ exports.initialTreeState = {
     subscribedStateURIs: {},
     unsubscribeList: {},
 };
-//# sourceMappingURL=state-tree.initial-state.js.map

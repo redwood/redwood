@@ -151,4 +151,3 @@ function createPeer(opts) {
         close,
     };
 }
-//# sourceMappingURL=index.js.map

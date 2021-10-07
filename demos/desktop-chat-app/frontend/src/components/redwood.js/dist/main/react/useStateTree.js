@@ -16,6 +16,7 @@ const react_1 = require("react");
 const useRedwood_1 = __importDefault(require("./useRedwood"));
 function useStateTree(stateURI, keypath) {
     const { redwoodClient, httpHost, useWebsocket, subscribe, subscribedStateURIs = {}, stateTrees, leaves, privateTreeMembers, updatePrivateTreeMembers, updateStateTree, getStateTree, } = useRedwood_1.default();
+    console.log(stateURI);
     const keypath_ = (keypath || "").length === 0 ? "/" : keypath;
     react_1.useEffect(() => {
         (function () {
@@ -49,4 +50,3 @@ function useStateTree(stateURI, keypath) {
     return !!stateURI ? stateTrees[stateURI] : null;
 }
 exports.default = useStateTree;
-//# sourceMappingURL=useStateTree.js.map

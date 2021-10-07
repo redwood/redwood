@@ -1,16 +1,16 @@
 import { BrowserRouter as Router, Route, Switch } from 'react-router-dom'
 import { ThemeProvider } from 'styled-components'
 
-import { ComposeComponents, MainProviders, mainProviderProps } from './contexts'
+// import { ComposeComponents, MainProviders, mainProviderProps } from './contexts'
 import LoginStatusProvider, { LoginStatusContext } from './contexts/LoginStatus'
 
 import SignIn from './components/Account/SignIn'
 import SignUp from './components/Account/SignUp'
 import Profiles from './components/Account/Profiles'
-import Main from './Main'
+// import Main from './Main'
 import theme from './theme'
 
-// @NOTE: Need to add this ConnectionError component somewhere universal
+// // @NOTE: Need to add this ConnectionError component somewhere universal
 import FullLoading from './components/FullLoading'
 import ConnectionError from './components/Error/Connection'
 
@@ -70,7 +70,7 @@ function Routes({
                 />
             </Route>
             <Route exact path="/">
-                <ComposeComponents
+                {/* <ComposeComponents
                     components={Object.values(MainProviders)}
                     componentProps={mainProviderProps}
                 >
@@ -80,7 +80,7 @@ function Routes({
                         connectionError={connectionError}
                         profileNames={profileNames}
                     />
-                </ComposeComponents>
+                </ComposeComponents> */}
             </Route>
         </>
     )

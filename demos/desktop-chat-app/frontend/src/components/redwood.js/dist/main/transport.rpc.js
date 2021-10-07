@@ -116,4 +116,3 @@ function createRPCClient({ endpoint, }) {
     };
 }
 exports.default = createRPCClient;
-//# sourceMappingURL=transport.rpc.js.map

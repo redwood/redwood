@@ -21,6 +21,7 @@ function useStateTree(stateURI: string | null | undefined, keypath?: string) {
         updateStateTree,
         getStateTree,
     } = useRedwood();
+    console.log(stateURI);
 
     const keypath_ = (keypath || "").length === 0 ? "/" : keypath;
 

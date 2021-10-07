@@ -99,4 +99,3 @@ function resolve_state(state, sender, txID, parents, patches) {
     return state;
 }
 exports.resolve_state = resolve_state;
-//# sourceMappingURL=resolver.dumb.browser.js.map

@@ -30,21 +30,27 @@ function useStateTree(stateURI) {
             // @@TODO: just read from the `.Members` keypath
             const { rpc } = redwoodClient
             if (rpc) {
-                getStateTree('privateTreeMembers', (currPTMembers) => {
-                    // If stateURI do not exist on privateTreeMembers fetch members and add to state
-                    const hasStateURIKey = Object.prototype.hasOwnProperty.call(
-                        currPTMembers,
-                        stateURI,
-                    )
-                    if (!hasStateURIKey) {
-                        rpc.privateTreeMembers(stateURI).then((members) => {
-                            updatePrivateTreeMembers(stateURI, members)
-                        })
-                    }
-                })
+                if (!privateTreeMembers[stateURI]) {
+                    rpc.privateTreeMembers(stateURI).then((members) => {
+                        updatePrivateTreeMembers(stateURI, members)
+                    })
+                }
+                // getStateTree('privateTreeMembers', (currPTMembers) => {
+                //     // If stateURI do not exist on privateTreeMembers fetch members and add to state
+                //     const hasStateURIKey =
+                //         Object.prototype.hasOwnProperty.call(
+                //             currPTMembers,
+                //             stateURI,
+                //         )
+                //     if (!hasStateURIKey) {
+                //         rpc.privateTreeMembers(stateURI).then((members) => {
+                //             updatePrivateTreeMembers(stateURI, members)
+                //         })
+                //     }
+                // })
             }
         })()
-    }, [redwoodClient, stateURI])
+    }, [redwoodClient, stateURI, privateTreeMembers])
 
     useDeepCompareEffect(() => {
         if (stateTrees[stateURI]) {

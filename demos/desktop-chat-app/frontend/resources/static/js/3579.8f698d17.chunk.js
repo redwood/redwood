@@ -1,1 +1,0 @@
-(this.webpackJsonpfrontend=this.webpackJsonpfrontend||[]).push([[3579],{4089:function(t,s,e){"use strict";e.r(s),s.default=e.p+"static/media/e50a.f02b94c8.svg"}}]);

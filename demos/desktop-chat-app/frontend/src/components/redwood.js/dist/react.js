@@ -529,7 +529,8 @@ const getStateTree = (state, action) => {
     const { cb, key } = action.payload;
     if (key === "privateTreeMembers") {
         const safeKey = key;
-        const safeState = toolkit_1.current(state[safeKey]);
+        const safeState = toolkit_1.current(state[safeKey] || {});
+        console.log("another");
         cb(safeState);
     }
     else {
@@ -617,6 +618,7 @@ const react_1 = require("react");
 const useRedwood_1 = __importDefault(require("./useRedwood"));
 function useStateTree(stateURI, keypath) {
     const { redwoodClient, httpHost, useWebsocket, subscribe, subscribedStateURIs = {}, stateTrees, leaves, privateTreeMembers, updatePrivateTreeMembers, updateStateTree, getStateTree, } = useRedwood_1.default();
+    console.log(stateURI);
     const keypath_ = (keypath || "").length === 0 ? "/" : keypath;
     react_1.useEffect(() => {
         (function () {

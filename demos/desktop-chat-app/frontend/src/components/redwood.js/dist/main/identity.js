@@ -55,4 +55,3 @@ function _constructIdentity(wallet) {
         },
     };
 }
-//# sourceMappingURL=identity.js.map

@@ -7,4 +7,3 @@ function useRedwood() {
     return react_1.useMemo(() => redwood, [redwood]);
 }
 exports.default = useRedwood;
-//# sourceMappingURL=useRedwood.js.map

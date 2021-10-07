@@ -10,4 +10,3 @@ var useRedwood_1 = require("./useRedwood");
 Object.defineProperty(exports, "useRedwood", { enumerable: true, get: function () { return __importDefault(useRedwood_1).default; } });
 var useStateTree_1 = require("./useStateTree");
 Object.defineProperty(exports, "useStateTree", { enumerable: true, get: function () { return __importDefault(useStateTree_1).default; } });
-//# sourceMappingURL=index.js.map

@@ -950,4 +950,3 @@ function deep_equals(a, b) {
             return false;
     return true;
 }
-//# sourceMappingURL=resolver.sync9.browser.js.map

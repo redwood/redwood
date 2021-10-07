@@ -60,7 +60,8 @@ const getStateTree = (state, action) => {
     const { cb, key } = action.payload;
     if (key === "privateTreeMembers") {
         const safeKey = key;
-        const safeState = toolkit_1.current(state[safeKey]);
+        const safeState = toolkit_1.current(state[safeKey] || {});
+        console.log("another");
         cb(safeState);
     }
     else {
@@ -105,4 +106,3 @@ const useTreeReducer = () => {
 };
 exports.useTreeReducer = useTreeReducer;
 exports.default = exports.useTreeReducer;
-//# sourceMappingURL=index.js.map

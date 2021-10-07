@@ -1,11 +1,4 @@
-import React, {
-    createContext,
-    useCallback,
-    useState,
-    useEffect,
-    useRef,
-} from "react";
-import { useEvent } from "react-use";
+import React, { createContext, useCallback, useState, useEffect } from "react";
 
 import { useTreeReducer } from "./reducers";
 import { initialTreeState } from "./reducers/state-tree.initial-state";

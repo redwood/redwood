@@ -109,7 +109,8 @@ const getStateTree: GetStateTreeReducer = (state, action) => {
 
     if (key === "privateTreeMembers") {
         const safeKey: keyof TreeState = key;
-        const safeState = current(state[safeKey]);
+        const safeState = current(state[safeKey] || {});
+        console.log("another");
         cb(safeState);
     } else {
         cb(current(state));

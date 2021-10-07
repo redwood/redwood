@@ -88,4 +88,3 @@ function default_1(opts) {
     };
 }
 exports.default = default_1;
-//# sourceMappingURL=transport.webrtc.js.map

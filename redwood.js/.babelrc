@@ -1,21 +1,22 @@
 {
-  "ignore": ["node_modules/**/*"],
-  "presets": [
-    ["@babel/preset-typescript"],
-    [
-      "@babel/preset-env",
-      {
-        "loose": true,
-        "targets": {
-          "browsers": "last 2 versions, > 0.5%, ie >= 11"
-        }
-      }
+    "ignore": ["node_modules/**/*"],
+    "presets": [
+        ["@babel/preset-typescript"],
+        [
+            "@babel/preset-env",
+            {
+                "loose": true,
+                "targets": {
+                    "browsers": "last 2 versions, > 0.05%, ie >= 11"
+                },
+                "corejs": 3
+            }
+        ],
+        "@babel/preset-react"
     ],
-    "@babel/preset-react"
-  ],
-  "plugins": [
-    "@babel/plugin-proposal-class-properties",
-    "babel-plugin-add-module-exports",
-    "@babel/plugin-transform-classes"
-  ]
+    "plugins": [
+        "@babel/plugin-proposal-class-properties",
+        "babel-plugin-add-module-exports",
+        "@babel/plugin-transform-classes"
+    ]
 }
