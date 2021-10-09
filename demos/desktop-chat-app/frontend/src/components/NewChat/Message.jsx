@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, memo } from 'react'
+import { useCallback, useMemo, memo } from 'react'
 import styled from 'styled-components'
 import moment from 'moment'
 import useRedwood from '../../hooks/useRedwood'
@@ -81,7 +81,13 @@ function MessageTimestamp({ dayDisplay, displayTime }) {
     )
 }
 
-function Message({ msg = {}, onClickAttachment, ownAddress, messageIndex }) {
+function Message({
+    msg = {},
+    onClickAttachment,
+    ownAddress,
+    messageIndex,
+    key,
+}) {
     const { selectedServer, selectedStateURI } = useNavigation()
     const { users, usersStateURI } = useUsers(selectedStateURI)
     const addressBook = useAddressBook()
@@ -112,10 +118,7 @@ function Message({ msg = {}, onClickAttachment, ownAddress, messageIndex }) {
     ])
     /* eslint-disable */
     return (
-        <MessageWrapper
-            firstByUser={msg.firstByUser}
-            key={selectedStateURI + messageIndex}
-        >
+        <MessageWrapper firstByUser={msg.firstByUser} key={key}>
             {msg.firstByUser ? (
                 <SUserAvatar
                     address={userAddress}

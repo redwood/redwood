@@ -2035,10 +2035,6 @@
     "@types/estree" "*"
     "@types/json-schema" "*"
 
-"@types/esrever@^0.2.0":
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/@types/esrever/-/esrever-0.2.0.tgz#96404a2284b2c7527f08a1e957f8a31705f9880f"
-
 "@types/estree@*":
   version "0.0.50"
   resolved "https://registry.yarnpkg.com/@types/estree/-/estree-0.0.50.tgz#1e0caa9364d3fccd2931c3ed96fdbeaa5d4cca83"
@@ -4909,10 +4905,6 @@ esrecurse@^4.1.0, esrecurse@^4.3.0:
   dependencies:
     estraverse "^5.2.0"
 
-esrever@^0.2.0:
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/esrever/-/esrever-0.2.0.tgz#96e9d28f4f1b1a76784cd5d490eaae010e7407b8"
-
 estraverse@^4.1.1:
   version "4.3.0"
   resolved "https://registry.yarnpkg.com/estraverse/-/estraverse-4.3.0.tgz#398ad3f3c5a24948be7725e83d11a7de28cdbd1d"
@@ -5869,11 +5861,7 @@ immer@8.0.1:
   version "8.0.1"
   resolved "https://registry.yarnpkg.com/immer/-/immer-8.0.1.tgz#9c73db683e2b3975c424fb0572af5889877ae656"
 
-immer@^7.0.0:
-  version "7.0.15"
-  resolved "https://registry.yarnpkg.com/immer/-/immer-7.0.15.tgz#dc3bc6db87401659d2e737c67a21b227c484a4ad"
-
-immer@^9.0.1:
+immer@^9.0.1, immer@^9.0.6:
   version "9.0.6"
   resolved "https://registry.yarnpkg.com/immer/-/immer-9.0.6.tgz#7a96bf2674d06c8143e327cbf73539388ddf1a73"
 
@@ -6246,9 +6234,10 @@ is-plain-object@^2.0.3, is-plain-object@^2.0.4:
   dependencies:
     isobject "^3.0.1"
 
-is-plain-object@^3.0.0:
-  version "3.0.1"
-  resolved "https://registry.yarnpkg.com/is-plain-object/-/is-plain-object-3.0.1.tgz#662d92d24c0aa4302407b0d45d21f2251c85f85b"
+is-plain-object@^5.0.0:
+  version "5.0.0"
+  resolved "https://registry.yarnpkg.com/is-plain-object/-/is-plain-object-5.0.0.tgz#4427f50ab3429e9025ea7d52e9043a9ef4159344"
+  integrity sha512-VRSzKkbMm5jMDoKLbltAkFQ5Qr7VDiTFGXxYFXXowVj387GeGNOCsOH6Msy00SGZ3Fp84b1Naa1psqgcCIEP5Q==
 
 is-potential-custom-element-name@^1.0.1:
   version "1.0.1"
@@ -7556,6 +7545,11 @@ nanocolors@^0.2.12, nanocolors@^0.2.2, nanocolors@^0.2.8:
 nanoid@^3.1.25:
   version "3.1.28"
   resolved "https://registry.yarnpkg.com/nanoid/-/nanoid-3.1.28.tgz#3c01bac14cb6c5680569014cc65a2f26424c6bd4"
+
+nanoid@^3.1.29:
+  version "3.1.29"
+  resolved "https://registry.yarnpkg.com/nanoid/-/nanoid-3.1.29.tgz#214fb2d7a33e1a5bef4757b779dfaeb6a4e5aeb4"
+  integrity sha512-dW2pUSGZ8ZnCFIlBIA31SV8huOGCHb6OwzVCc7A69rb/a+SgPBwfmLvK5TKQ3INPbRkcI8a/Owo0XbiTNH19wg==
 
 nanomatch@^1.2.9:
   version "1.2.13"
@@ -9402,6 +9396,19 @@ redux@^4.0.0, redux@^4.1.0:
   dependencies:
     "@babel/runtime" "^7.9.2"
 
+redwood-client-test@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/redwood-client-test/-/redwood-client-test-1.0.0.tgz#7c7e1cc32059b785885ce04373c9ddb528ab00aa"
+  integrity sha512-VW9RN3aE2FWlzh08y/Cdktaosav9Ohqk1RCK+C7cTzuJEJt84sQceslcCmQV2cGJEFNZCTw6WGfACPZpmHPmhg==
+  dependencies:
+    "@reduxjs/toolkit" "^1.6.1"
+    "@types/json-stable-stringify" "^1.0.32"
+    "@types/react" "^17.0.2"
+    ethers "^5.0.31"
+    json-stable-stringify "^1.0.1"
+    node-fetch "^2.6.1"
+    react-use "^17.3.1"
+
 regenerate-unicode-properties@^9.0.0:
   version "9.0.0"
   resolved "https://registry.yarnpkg.com/regenerate-unicode-properties/-/regenerate-unicode-properties-9.0.0.tgz#54d09c7115e1f53dc2314a974b32c1c344efe326"
@@ -10004,35 +10011,34 @@ slash@^3.0.0:
   version "3.0.0"
   resolved "https://registry.yarnpkg.com/slash/-/slash-3.0.0.tgz#6539be870c165adbd5240220dbe361f1bc4d4634"
 
-slate-history@^0.62.0:
-  version "0.62.0"
-  resolved "https://registry.yarnpkg.com/slate-history/-/slate-history-0.62.0.tgz#facd2e1ef249f979ecc0d0811d280515877d9352"
+slate-history@^0.66.6:
+  version "0.66.0"
+  resolved "https://registry.yarnpkg.com/slate-history/-/slate-history-0.66.0.tgz#ac63fddb903098ceb4c944433e3f75fe63acf940"
+  integrity sha512-6MWpxGQZiMvSINlCbMW43E2YBSVMCMCIwQfBzGssjWw4kb0qfvj0pIdblWNRQZD0hR6WHP+dHHgGSeVdMWzfng==
   dependencies:
-    immer "^7.0.0"
-    is-plain-object "^3.0.0"
+    is-plain-object "^5.0.0"
 
-slate-react@^0.62.0:
-  version "0.62.1"
-  resolved "https://registry.yarnpkg.com/slate-react/-/slate-react-0.62.1.tgz#5246fd5adbb680c9b06f08229b72079dec46b755"
+slate-react@^0.66.6:
+  version "0.66.6"
+  resolved "https://registry.yarnpkg.com/slate-react/-/slate-react-0.66.6.tgz#375cfa36e5a2fe26d7c39555d219fb0aa2d87c88"
+  integrity sha512-RufGxSyI/V8rjCqO3NDJSb5+jd0ldwSTini4fWekZMzRl0OhnoNhHcTpIYzyCaN5E7U8q2x1uUpj+W/RXWG/ZQ==
   dependencies:
     "@types/is-hotkey" "^0.1.1"
     "@types/lodash" "^4.14.149"
     direction "^1.0.3"
     is-hotkey "^0.1.6"
-    is-plain-object "^3.0.0"
+    is-plain-object "^5.0.0"
     lodash "^4.17.4"
     scroll-into-view-if-needed "^2.2.20"
     tiny-invariant "1.0.6"
 
-slate@^0.62.0:
-  version "0.62.1"
-  resolved "https://registry.yarnpkg.com/slate/-/slate-0.62.1.tgz#d17b174e9967f920dda23f77982b30582d9c68a7"
+slate@^0.66.6:
+  version "0.66.5"
+  resolved "https://registry.yarnpkg.com/slate/-/slate-0.66.5.tgz#bdd93a4422891341dd18a31ff7810f5cae60e40a"
+  integrity sha512-bG03uEKIm/gS6jQarKSNbHn2anemOON2vnSI3VGRd7MJJU5Yiwmutze0yHNO9uZwDLTB+LeDQYZeGu1ACWT0VA==
   dependencies:
-    "@types/esrever" "^0.2.0"
-    esrever "^0.2.0"
-    immer "^7.0.0"
-    is-plain-object "^3.0.0"
-    lodash "^4.17.4"
+    immer "^9.0.6"
+    is-plain-object "^5.0.0"
     tiny-warning "^1.0.3"
 
 slice-ansi@^4.0.0:
@@ -10845,6 +10851,7 @@ typedarray@^0.0.6:
 typescript@^4.4.3:
   version "4.4.3"
   resolved "https://registry.yarnpkg.com/typescript/-/typescript-4.4.3.tgz#bdc5407caa2b109efd4f82fe130656f977a29324"
+  integrity sha512-4xfscpisVgqqDfPaJo5vkd+Qd/ItkoagnHpufr+i2QCHBsNYp+G7UAoyFl8aPtx879u38wPV65rZ8qbGZijalA==
 
 unbox-primitive@^1.0.1:
   version "1.0.1"

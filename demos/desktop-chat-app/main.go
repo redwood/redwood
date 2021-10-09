@@ -7,6 +7,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/exec"
 	"runtime"
 	"sync"
 	"time"
@@ -14,7 +15,6 @@ import (
 	"github.com/brynbellomy/klog"
 	"github.com/urfave/cli"
 	"github.com/webview/webview"
-
 	"redwood.dev/cmd/cmdutils"
 	"redwood.dev/process"
 )
@@ -102,7 +102,21 @@ func main() {
 		defer masterProcess.Close()
 
 		api := newAPI(c.Uint("port"), c.String("config"), profileRoot, masterProcess)
-		gui := newGUI(api)
+		gui := &exec.Cmd{
+			Path:   "./frontend/dist/hush-chat/hush-chat-mac_x64",
+			Stdout: os.Stdout,
+			Stderr: os.Stderr,
+		}
+		if runtime.GOOS == "darwin" {
+			gui.Path = "./frontend/dist/hush-chat/hush-chat-mac_x64"
+		}
+		if runtime.GOOS == "windows" {
+			gui.Path = "./frontend/dist/hush-chat/hush-chat-win_x64.exe"
+		}
+		if runtime.GOOS == "linux" {
+			gui.Path = "./frontend/dist/hush-chat/hush-chat-linux_x64"
+		}
+		// gui := newGUI(api)
 
 		err = masterProcess.SpawnChild(context.TODO(), api)
 		if err != nil {
@@ -111,14 +125,18 @@ func main() {
 
 		go func() {
 			defer masterProcess.Close()
-			defer gui.Close()
+			defer func() {
+				gui.Process.Kill()
+			}()
+			// defer gui.Close()
 			select {
 			case <-cmdutils.AwaitInterrupt():
 			case <-api.Done():
-			case <-gui.chDone:
+				// case <-gui.chDone:
 			}
 		}()
-		gui.Start()
+		gui.Run()
+		// gui.Start()
 		return nil
 	}
 

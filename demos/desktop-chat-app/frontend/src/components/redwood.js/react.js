@@ -1,3 +1,3 @@
 
 
-module.exports = require('./dist/main/react')
+module.exports = require('./src/main/react')

@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { usePreviousDistinct } from 'react-use'
 import deepCompare from 'fast-deep-equal/es6/react'
-import { useRedwood as useRedwoodJSLib } from '../components/redwood.js/dist/main/react'
+import { useRedwood as useRedwoodJSLib } from 'redwood-client-test/react'
 
 // *GUIDELINE: If you ever need to add additional functionality to a 3rd party hook
 // Simply initialize the hook and invoke any need logic before returning the new context
