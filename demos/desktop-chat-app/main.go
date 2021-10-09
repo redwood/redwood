@@ -168,8 +168,8 @@ func (gui *GUI) Start() error {
 
 	debug := true
 	gui.webview = webview.New(debug)
-	gui.webview.SetTitle("Minimal webview example")
-	gui.webview.SetSize(800, 600, webview.HintNone)
+	gui.webview.SetTitle("Hush Chat")
+	gui.webview.SetSize(1330, 1000, webview.HintNone)
 	gui.webview.Navigate(fmt.Sprintf("http://localhost:%v/index.html", gui.api.port))
 	gui.webview.Run()
 	return nil
