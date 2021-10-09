@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import styled from 'styled-components'
 
 import { toast } from 'react-toastify'
-import useStateTree from '../../hooks/useStateTree'
 
 import ToastCloseBtn from '../Toast/ToastCloseBtn'
 import ToastContent from '../Toast/ToastContent'
@@ -11,7 +10,12 @@ import NormalizeMessage from '../Chat/NormalizeMessage'
 
 import notificationSound from '../../assets/notification-sound.mp3'
 import notificationGilfoyle from '../../assets/notification-gilfoyle.mp3'
+import useStateTree from '../../hooks/useStateTree'
+import useRedwood from '../../hooks/useRedwood'
 import useUsers from '../../hooks/useUsers'
+import useNavigation from '../../hooks/useNavigation'
+import useAddressBook from '../../hooks/useAddressBook'
+import useServerAndRoomInfo from '../../hooks/useServerAndRoomInfo'
 
 const SToastRoom = styled.div`
     font-size: 10px;
@@ -42,15 +46,36 @@ const ToastRight = styled.div`
     padding-bottom: 4px;
 `
 
-function Mounter({
-    rooms,
-    selectedStateURI,
-    navigate,
-    addressBook,
-    nodeIdentities,
-}) {
+function LogicMounter({ setIsLoading, isLoggedIn }) {
     const [changeNotificationSound, setChangeNotificationSound] =
         useState(false)
+    const { selectedStateURI, navigate } = useNavigation()
+    const { rooms } = useServerAndRoomInfo()
+    const addressBook = useAddressBook()
+
+    const {
+        nodeIdentities,
+        setHttpHost,
+        setRpcEndpoint,
+        httpHost,
+        rpcEndpoint,
+    } = useRedwood()
+
+    useEffect(() => {
+        if (isLoggedIn) {
+            setHttpHost('http://localhost:8080')
+            setRpcEndpoint('http://localhost:8081')
+        } else {
+            setHttpHost()
+            setRpcEndpoint()
+        }
+    }, [httpHost, rpcEndpoint, setHttpHost, setRpcEndpoint, isLoggedIn])
+
+    useEffect(() => {
+        if (nodeIdentities) {
+            setIsLoading(false)
+        }
+    }, [nodeIdentities])
 
     const roomKeys = useMemo(
         () =>
@@ -231,4 +256,4 @@ function NotificationMount({
     return <div style={{ display: 'none' }}></div>
 }
 
-export default Mounter
+export default LogicMounter

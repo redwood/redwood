@@ -283,6 +283,4 @@ function Image({
     )
 }
 
-Image.whyDidIRender = true
-
 export default Image

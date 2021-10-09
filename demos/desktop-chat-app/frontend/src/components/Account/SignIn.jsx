@@ -190,6 +190,5 @@ function Account({
         </SAccount>
     )
 }
-Account.whyDidIRender = true
 
 export default Account

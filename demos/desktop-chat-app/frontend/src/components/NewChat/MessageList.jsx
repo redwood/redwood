@@ -1,7 +1,8 @@
 import { useRef, useMemo, useState, useCallback, useEffect } from 'react'
 import styled from 'styled-components'
-import useModal from '../../hooks/useModal'
 import Message from './Message'
+import AttachmentPreviewModal from '../Modal/AttachmentPreviewModal'
+import useModal from '../../hooks/useModal'
 
 const MessageContainer = styled.div`
     display: flex;
@@ -52,17 +53,24 @@ const MessageList = ({ messages = [], nodeIdentities }) => {
     )
 
     return (
-        <MessageContainer ref={messageTextContainer}>
-            {messages.map((msg, i) => (
-                <Message
-                    msg={msg}
-                    ownAddress={ownAddress}
-                    onClickAttachment={onClickAttachment}
-                    messageIndex={i}
-                    key={msg.mapId}
-                />
-            ))}
-        </MessageContainer>
+        <>
+            <MessageContainer ref={messageTextContainer}>
+                {messages.map((msg, i) => (
+                    <Message
+                        msg={msg}
+                        ownAddress={ownAddress}
+                        onClickAttachment={onClickAttachment}
+                        messageIndex={i}
+                        key={msg.mapId}
+                    />
+                ))}
+            </MessageContainer>
+
+            <AttachmentPreviewModal
+                attachment={previewedAttachment.attachment}
+                url={previewedAttachment.url}
+            />
+        </>
     )
 }
 /* eslint-enable */

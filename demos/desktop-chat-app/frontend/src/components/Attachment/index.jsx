@@ -163,6 +163,4 @@ function Attachment(props) {
     )
 }
 
-Attachment.whyDidIRender = true
-
 export default Attachment

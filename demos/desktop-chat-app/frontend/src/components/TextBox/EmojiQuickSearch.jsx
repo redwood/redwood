@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import styled from 'styled-components'
 import { Twemoji } from 'react-emoji-render-redwood'
 
@@ -53,6 +53,36 @@ function EmojiQuickSearch(props) {
     const [selectedEmojiIdx, setSelectedEmojiIdx] = useState(0)
 
     let top = 68
+
+    const filteredEmojis = useMemo(() => {
+        if (messageText.replace(':', '').length >= 2) {
+            let count = 0
+            const fEmojis = Object.keys(emojiData.emojis).filter((emoji) => {
+                let emojiKeywords = emoji
+                if (emojiData.emojis[emoji].j) {
+                    emojiKeywords = `${emoji}|${emojiData.emojis[emoji].j.join(
+                        ',',
+                    )}`
+                }
+
+                const isMatch = emojiKeywords.includes(
+                    messageText.replace(':', ''),
+                )
+
+                if (isMatch) {
+                    count += 1
+                    if (count > 10) {
+                        return false
+                    }
+                    return isMatch
+                }
+                return false
+            })
+            setEmojisFound(!!fEmojis.length)
+            return fEmojis
+        }
+        return []
+    }, [messageText, setEmojisFound])
 
     useEffect(
         () => () => {
@@ -132,36 +162,6 @@ function EmojiQuickSearch(props) {
         onSelectEmoji,
         setEmojisFound,
     ])
-
-    const filteredEmojis = useMemo(() => {
-        if (messageText.replace(':', '').length >= 2) {
-            let count = 0
-            const fEmojis = Object.keys(emojiData.emojis).filter((emoji) => {
-                let emojiKeywords = emoji
-                if (emojiData.emojis[emoji].j) {
-                    emojiKeywords = `${emoji}|${emojiData.emojis[emoji].j.join(
-                        ',',
-                    )}`
-                }
-
-                const isMatch = emojiKeywords.includes(
-                    messageText.replace(':', ''),
-                )
-
-                if (isMatch) {
-                    count += 1
-                    if (count > 10) {
-                        return false
-                    }
-                    return isMatch
-                }
-                return false
-            })
-            setEmojisFound(!!fEmojis.length)
-            return fEmojis
-        }
-        return []
-    }, [messageText, setEmojisFound])
 
     // Handles spacing with different search result counts
     top = 68 + filteredEmojis.length * 30

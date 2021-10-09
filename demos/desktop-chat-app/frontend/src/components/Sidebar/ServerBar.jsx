@@ -219,5 +219,3 @@ function ImportServerModal({ onDismiss }) {
 }
 
 export default ServerBar
-
-ServerBar.whyDidIRender = true

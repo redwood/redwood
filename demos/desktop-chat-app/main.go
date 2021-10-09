@@ -7,7 +7,6 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"os/exec"
 	"runtime"
 	"sync"
 
@@ -116,18 +115,18 @@ func main() {
 
 		go func() {
 			defer masterProcess.Close()
-			defer func() {
-				gui.Process.Kill()
-			}()
-			// defer gui.Close()
+			// defer func() {
+			// 	gui.Process.Kill()
+			// }()
+			defer gui.Close()
 			select {
 			case <-cmdutils.AwaitInterrupt():
 			case <-api.Done():
-				// case <-gui.chDone:
+				case <-gui.chDone:
 			}
 		}()
-		gui.Run()
-		// gui.Start()
+		// gui.Run()
+		gui.Start()
 		return nil
 	}
 

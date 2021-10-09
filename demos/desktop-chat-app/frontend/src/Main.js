@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import styled from 'styled-components'
 import { Redirect } from 'react-router-dom'
-import { Code as CodeIcon } from '@material-ui/icons'
 import { ToastContainer } from 'react-toastify'
-import useRedwood from './hooks/useRedwood'
 import 'react-toastify/dist/ReactToastify.css'
 
 import ServerBar from './components/Sidebar/ServerBar'
@@ -11,13 +9,10 @@ import Loading from './components/Account/Loading'
 import Sidebar from './components/Sidebar'
 import HeaderBar from './components/Main/HeaderBar'
 import Chat from './components/Chat'
-import NotificationMounter from './components/Notifications/Mounter'
+import LogicMounter from './components/LogicMounter'
 import StateTreeDebugView from './components/StateTreeDebugView'
 import ContactsModal from './components/ContactsModal'
-import useNavigation from './hooks/useNavigation'
-import useServerAndRoomInfo from './hooks/useServerAndRoomInfo'
 import useModal from './hooks/useModal'
-import useAddressBook from './hooks/useAddressBook'
 
 const serverBarVerticalPadding = '12px'
 
@@ -77,36 +72,10 @@ function Main({
     const [isLoading, setIsLoading] = useState(true)
     const [shouldRedirect, setShouldRedirect] = useState(false)
     const [showDebugView, setShowDebugView] = useState(false)
-    const {
-        nodeIdentities,
-        setHttpHost,
-        setRpcEndpoint,
-        httpHost,
-        rpcEndpoint,
-    } = useRedwood()
-    const { selectedStateURI, navigate } = useNavigation()
-    const { rooms } = useServerAndRoomInfo()
-    const addressBook = useAddressBook()
-
-    useEffect(() => {
-        if (isLoggedIn) {
-            setHttpHost('http://localhost:8080')
-            setRpcEndpoint('http://localhost:8081')
-        } else {
-            setHttpHost()
-            setRpcEndpoint()
-        }
-    }, [httpHost, rpcEndpoint, setHttpHost, setRpcEndpoint, isLoggedIn])
 
     const onClickShowDebugView = useCallback(() => {
         setShowDebugView(!showDebugView)
     }, [showDebugView, setShowDebugView])
-
-    useEffect(() => {
-        if (nodeIdentities) {
-            setIsLoading(false)
-        }
-    }, [nodeIdentities])
 
     useEffect(() => {
         if (profilesFetched) {
@@ -140,12 +109,9 @@ function Main({
                     <SChat />
                     {showDebugView && <SStateTreeDebugView />}
                 </Content>
-                <NotificationMounter
-                    navigate={navigate}
-                    selectedStateURI={selectedStateURI}
-                    rooms={rooms}
-                    addressBook={addressBook}
-                    nodeIdentities={nodeIdentities}
+                <LogicMounter
+                    isLoggedIn={isLoggedIn}
+                    setIsLoading={setIsLoading}
                 />
             </HeaderAndContent>
 
@@ -155,38 +121,5 @@ function Main({
         </Layout>
     )
 }
-
-const HeaderBarContainer = styled.div`
-    display: flex;
-`
-
-const ServerTitle = styled.div`
-    font-size: 1.1rem;
-    font-weight: 500;
-    padding-top: 12px;
-    padding-left: 18px;
-    color: ${(props) => props.theme.color.white};
-    background-color: ${(props) => props.theme.color.grey[400]};
-    width: calc(${(props) => props.theme.chatSidebarWidth} - 18px);
-    height: calc(100% - 12px);
-`
-
-const ChatTitle = styled.div`
-    font-size: 1.1rem;
-    font-weight: 500;
-    padding-top: 12px;
-    padding-left: 18px;
-    color: ${(props) => props.theme.color.white};
-    white-space: nowrap;
-    text-overflow: none;
-    height: calc(100% - 12px);
-`
-
-const SCodeIcon = styled(CodeIcon)`
-    padding: 12px;
-    cursor: pointer;
-`
-
-Main.whyDidIRender = true
 
 export default Main

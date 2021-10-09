@@ -1,4 +1,11 @@
-import { createContext, useEffect, useCallback, useReducer } from 'react'
+import {
+    createContext,
+    useCallback,
+    useReducer,
+    useMemo,
+    useEffect,
+} from 'react'
+import { usePrevious } from 'react-use'
 import deepCompare from 'fast-deep-equal/es6/react'
 import useRedwood from '../hooks/useRedwood'
 import useAPI from '../hooks/useAPI'
@@ -57,12 +64,13 @@ function ServerAndRoomInfoProvider({ children }) {
     const { loadingTrees, setLoadingTree } = useLoading()
     const api = useAPI()
     const addressBook = useAddressBook()
+    const prevStateTrees = usePrevious(stateTrees)
+
+    const stateURIs = useMemo(() => Object.keys(stateTrees), [stateTrees])
 
     const getServerAndRoomInfo = useCallback(() => {
         const newServers = {}
         const newRooms = {}
-
-        const stateURIs = Object.keys(stateTrees)
 
         stateURIs.forEach((stateURI) => {
             if (stateURI === 'chat.local/servers') {
@@ -155,108 +163,10 @@ function ServerAndRoomInfoProvider({ children }) {
     ])
 
     useEffect(() => {
-        getServerAndRoomInfo()
-    }, [getServerAndRoomInfo, stateTrees, privateTreeMembers, addressBook])
-
-    // /* eslint-disable */
-    // const processSubscriptions = useCallback(async (array, fn) => {
-    //     const results = []
-    //     for (let i = 0; i < array.length - 1; i++) {
-    //         console.log('subscribing', array[i])
-    //         const r = await fn(array[i])
-    //         results.push(r)
-    //     }
-    //     return results // will be resolved value of promise
-    // }, [])
-    // /* eslint-disable */
-
-    // useEffect(() => {
-    //     if (!stateTrees) {
-    //         return
-    //     }
-
-    //     const uriSubscribeList = subscribeToStateURIs()
-    //     processSubscriptions(uriSubscribeList, (uri) => subscribe(uri))
-
-    //     // newServers['chat.p2p'] = {
-    //     //     name: 'Direct messages',
-    //     //     rawName: 'chat.p2p',
-    //     //     isDirectMessage: true,
-    //     //     registryStateURI: 'chat.local/dms',
-    //     // }
-
-    //     // setServers(newServers)
-    //     // setRooms(newRooms)
-
-    //     // for (const stateURI of Object.keys(stateTrees)) {
-    //     //     if (stateURI === 'chat.local/servers') {
-    //     //         for (const server of Object.keys(
-    //     //             stateTrees['chat.local/servers'].value || {},
-    //     //         )) {
-    //     //             const registry = `${server}/registry`
-    //     //             if (subscribedStateURIs.current[registry]) {
-    //     //                 continue
-    //     //             }
-    //     //             subscribe(registry)
-    //     //         }
-    //     //         continue
-    //     //     }
-
-    //     //     const [server, room] = stateURI.split('/')
-
-    //     //     const isDirectMessage = server === 'chat.p2p'
-    //     //     let registryStateURI
-    //     //     if (isDirectMessage) {
-    //     //         registryStateURI = 'chat.local/dms'
-    //     //     } else {
-    //     //         registryStateURI = server ? `${server}/registry` : null
-    //     //     }
-
-    //     //     newServers[server] = {
-    //     //         name: server,
-    //     //         rawName: server,
-    //     //         isDirectMessage,
-    //     //         registryStateURI,
-    //     //     }
-
-    //     //     if (room === 'registry' || stateURI === 'chat.local/dms') {
-    //     //         for (const lRoom of Object.keys(
-    //     //             (stateTrees[stateURI] || {}).rooms || {},
-    //     //         )) {
-    //     //             const roomStateURI = `${
-    //     //                 stateURI === 'chat.local/dms' ? 'chat.p2p' : server
-    //     //             }/${lRoom}`
-    //     //             if (subscribedStateURIs.current[roomStateURI]) {
-    //     //                 continue
-    //     //             }
-    //     //             subscribe(roomStateURI)
-    //     //             api.subscribe(roomStateURI)
-    //     //         }
-    //     //     } else {
-    //     //         newRooms[stateURI] = {
-    //     //             rawName: room,
-    //     //             members: privateTreeMembers[stateURI] || [],
-    //     //             isDirectMessage: stateURI.indexOf('chat.p2p/') === 0,
-    //     //         }
-    //     //     }
-    //     // }
-
-    //     // newServers['chat.p2p'] = {
-    //     //     name: 'Direct messages',
-    //     //     rawName: 'chat.p2p',
-    //     //     isDirectMessage: true,
-    //     //     registryStateURI: 'chat.local/dms',
-    //     // }
-
-    //     // setServers(newServers)
-    //     // setRooms(newRooms)
-    // }, [
-    //     stateTrees,
-    //     subscribedStateURIs,
-    //     subscribeToStateURIs,
-    //     privateTreeMembers,
-    //     dispatch,
-    // ])
+        if (!deepCompare(prevStateTrees, stateTrees)) {
+            getServerAndRoomInfo()
+        }
+    }, [getServerAndRoomInfo, privateTreeMembers, addressBook])
 
     return (
         <ServerAndRoomInfoContext.Provider

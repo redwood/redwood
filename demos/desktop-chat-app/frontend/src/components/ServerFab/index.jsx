@@ -87,6 +87,4 @@ function ServerFab({ serverName, navigateOnClick, className }) {
     )
 }
 
-ServerFab.whyDidIRender = true
-
 export { ServerFab }
