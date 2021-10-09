@@ -62,6 +62,7 @@ const downloadImage = async (url, fileName) => {
 function AttachmentPreviewModal({ attachment, url }) {
     const [loadFailed, setLoadFailed] = useState(false)
     const { onDismiss } = useModal('attachment preview')
+
     if (!attachment) {
         return null
     }
