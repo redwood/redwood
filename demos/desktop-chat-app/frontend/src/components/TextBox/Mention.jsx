@@ -49,7 +49,8 @@ const SMention = styled.span`
 const SInfoCard = styled.span`
     background: #212123;
     position: ${(props) => (props.absolute ? 'absolute' : 'fixed')};
-    z-index: 999;
+    top: -12px;
+    left: -12px;
     padding: 4px 8px;
     transform: translateY(-28px);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -165,6 +166,7 @@ function Mention({
         >
             <SMention ref={hoverRef} style={style}>
                 @{displayText}
+                <InfoCard user={user} absolute={absolute} />
                 {(selected && focused) || isHovered ? (
                     <InfoCard user={user} absolute={absolute} />
                 ) : null}

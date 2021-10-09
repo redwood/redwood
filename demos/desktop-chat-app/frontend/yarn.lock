@@ -6237,7 +6237,6 @@ is-plain-object@^2.0.3, is-plain-object@^2.0.4:
 is-plain-object@^5.0.0:
   version "5.0.0"
   resolved "https://registry.yarnpkg.com/is-plain-object/-/is-plain-object-5.0.0.tgz#4427f50ab3429e9025ea7d52e9043a9ef4159344"
-  integrity sha512-VRSzKkbMm5jMDoKLbltAkFQ5Qr7VDiTFGXxYFXXowVj387GeGNOCsOH6Msy00SGZ3Fp84b1Naa1psqgcCIEP5Q==
 
 is-potential-custom-element-name@^1.0.1:
   version "1.0.1"
@@ -7549,7 +7548,6 @@ nanoid@^3.1.25:
 nanoid@^3.1.29:
   version "3.1.29"
   resolved "https://registry.yarnpkg.com/nanoid/-/nanoid-3.1.29.tgz#214fb2d7a33e1a5bef4757b779dfaeb6a4e5aeb4"
-  integrity sha512-dW2pUSGZ8ZnCFIlBIA31SV8huOGCHb6OwzVCc7A69rb/a+SgPBwfmLvK5TKQ3INPbRkcI8a/Owo0XbiTNH19wg==
 
 nanomatch@^1.2.9:
   version "1.2.13"
@@ -9399,7 +9397,6 @@ redux@^4.0.0, redux@^4.1.0:
 redwood-client-test@^1.0.0:
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/redwood-client-test/-/redwood-client-test-1.0.0.tgz#7c7e1cc32059b785885ce04373c9ddb528ab00aa"
-  integrity sha512-VW9RN3aE2FWlzh08y/Cdktaosav9Ohqk1RCK+C7cTzuJEJt84sQceslcCmQV2cGJEFNZCTw6WGfACPZpmHPmhg==
   dependencies:
     "@reduxjs/toolkit" "^1.6.1"
     "@types/json-stable-stringify" "^1.0.32"
@@ -10014,14 +10011,12 @@ slash@^3.0.0:
 slate-history@^0.66.6:
   version "0.66.0"
   resolved "https://registry.yarnpkg.com/slate-history/-/slate-history-0.66.0.tgz#ac63fddb903098ceb4c944433e3f75fe63acf940"
-  integrity sha512-6MWpxGQZiMvSINlCbMW43E2YBSVMCMCIwQfBzGssjWw4kb0qfvj0pIdblWNRQZD0hR6WHP+dHHgGSeVdMWzfng==
   dependencies:
     is-plain-object "^5.0.0"
 
 slate-react@^0.66.6:
   version "0.66.6"
   resolved "https://registry.yarnpkg.com/slate-react/-/slate-react-0.66.6.tgz#375cfa36e5a2fe26d7c39555d219fb0aa2d87c88"
-  integrity sha512-RufGxSyI/V8rjCqO3NDJSb5+jd0ldwSTini4fWekZMzRl0OhnoNhHcTpIYzyCaN5E7U8q2x1uUpj+W/RXWG/ZQ==
   dependencies:
     "@types/is-hotkey" "^0.1.1"
     "@types/lodash" "^4.14.149"
@@ -10035,7 +10030,6 @@ slate-react@^0.66.6:
 slate@^0.66.6:
   version "0.66.5"
   resolved "https://registry.yarnpkg.com/slate/-/slate-0.66.5.tgz#bdd93a4422891341dd18a31ff7810f5cae60e40a"
-  integrity sha512-bG03uEKIm/gS6jQarKSNbHn2anemOON2vnSI3VGRd7MJJU5Yiwmutze0yHNO9uZwDLTB+LeDQYZeGu1ACWT0VA==
   dependencies:
     immer "^9.0.6"
     is-plain-object "^5.0.0"
@@ -10851,7 +10845,6 @@ typedarray@^0.0.6:
 typescript@^4.4.3:
   version "4.4.3"
   resolved "https://registry.yarnpkg.com/typescript/-/typescript-4.4.3.tgz#bdc5407caa2b109efd4f82fe130656f977a29324"
-  integrity sha512-4xfscpisVgqqDfPaJo5vkd+Qd/ItkoagnHpufr+i2QCHBsNYp+G7UAoyFl8aPtx879u38wPV65rZ8qbGZijalA==
 
 unbox-primitive@^1.0.1:
   version "1.0.1"

@@ -17,7 +17,8 @@ if (process.env.NODE_ENV === 'development') {
             // /^ServerAndRoomInfo/,
             // /^Sidebar/,
             // /^Redwood/,
-            /^Chat/,
+            // /^Chat/,
+            /^Main/,
         ],
     })
 }

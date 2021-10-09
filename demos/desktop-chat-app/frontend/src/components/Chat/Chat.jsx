@@ -1,13 +1,22 @@
 import 'emoji-mart/css/emoji-mart.css'
-import React, { useState, useCallback, useRef, useEffect, Fragment } from 'react'
+import React, {
+    useState,
+    useCallback,
+    useRef,
+    useEffect,
+    Fragment,
+} from 'react'
 import styled, { useTheme } from 'styled-components'
 import { IconButton, Tooltip } from '@material-ui/core'
-import { SendRounded as SendIcon, AddCircleRounded as AddIcon } from '@material-ui/icons'
+import {
+    SendRounded as SendIcon,
+    AddCircleRounded as AddIcon,
+} from '@material-ui/icons'
 import * as tinycolor from 'tinycolor2'
 import filesize from 'filesize.js'
 import moment from 'moment'
 import CloseIcon from '@material-ui/icons/Close'
-import EmojiEmotionsIcon from '@material-ui/icons/EmojiEmotions';
+import EmojiEmotionsIcon from '@material-ui/icons/EmojiEmotions'
 import { Picker, Emoji } from 'emoji-mart'
 import data from 'emoji-mart/data/all.json'
 import { Node, createEditor, Editor, Transforms, Range } from 'slate'
@@ -18,7 +27,6 @@ import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 import Button from '../Button'
 import Input from '../Input'
 import Embed from '../Embed'
-import EmojiQuickSearch from '../EmojiQuickSearch'
 import TextBox from '../TextBox'
 import Message from './Message'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
@@ -41,13 +49,12 @@ import fileIcon from '../Attachment/file.svg'
 
 import { getCurrentEmojiWord } from './utils'
 
-
 const Container = styled.div`
     display: flex;
     flex-direction: column;
     // height: 100%;
     flex-grow: 1;
-    background-color: ${props => props.theme.color.grey[200]};
+    background-color: ${(props) => props.theme.color.grey[200]};
 `
 
 const MessageContainer = styled.div`
@@ -61,10 +68,9 @@ const MessageContainer = styled.div`
     &::-webkit-scrollbar {
         display: none;
     }
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
 `
-
 
 const MessageInput = styled(Input)`
     padding-left: 34px;
@@ -73,7 +79,7 @@ const MessageInput = styled(Input)`
 `
 
 const SIconButton = styled(IconButton)`
-    color: ${props => props.theme.color.white} !important;
+    color: ${(props) => props.theme.color.white} !important;
     padding: 0 8px !important;
     height: 100%;
 `
@@ -115,9 +121,6 @@ const MessageDetails = styled.div`
     padding-bottom: 6px;
 `
 
-
-
-
 const EmptyChatContainer = styled(Container)`
     display: flex;
     align-items: center;
@@ -146,64 +149,76 @@ function Chat({ className }) {
 
     const { onPresent: onPresentPreviewModal } = useModal('attachment preview')
     const [previewedAttachment, setPreviewedAttachment] = useState({})
-    const onClickAttachment = useCallback((attachment, url) => {
-        setPreviewedAttachment({ attachment, url })
-        onPresentPreviewModal()
-    }, [setPreviewedAttachment, onPresentPreviewModal])
+    const onClickAttachment = useCallback(
+        (attachment, url) => {
+            setPreviewedAttachment({ attachment, url })
+            onPresentPreviewModal()
+        },
+        [setPreviewedAttachment, onPresentPreviewModal],
+    )
 
     const numMessages = ((roomState || {}).messages || []).length
     const [messages, setMessages] = useState([])
-
 
     const initFocusPoint = { path: [0, 0], offset: 0 }
     const [editorFocusPoint, setEditorFocusPoint] = useState(initFocusPoint)
 
     const onEditorBlur = useCallback(() => {
-      try {
-        setEditorFocusPoint(editor.selection.focus)
-      } catch (e) {
-        console.error(e)
-      }
+        try {
+            setEditorFocusPoint(editor.selection.focus)
+        } catch (e) {
+            console.error(e)
+        }
     }, [setEditorFocusPoint, editor])
 
     let mentionUsers = []
     const userAddresses = Object.keys(users || {})
     if (userAddresses.length) {
-      mentionUsers = userAddresses.map((address) => ({ ...users[address], address })).filter(user => {
-        if (!user.username && !user.nickname) {
-          return user.address.includes(searchMention.toLowerCase())
-        }
+        mentionUsers = userAddresses
+            .map((address) => ({ ...users[address], address }))
+            .filter((user) => {
+                if (!user.username && !user.nickname) {
+                    return user.address.includes(searchMention.toLowerCase())
+                }
 
-        if (user.username) {
-          return user.username.toLowerCase().includes(searchMention.toLowerCase())
-        }
+                if (user.username) {
+                    return user.username
+                        .toLowerCase()
+                        .includes(searchMention.toLowerCase())
+                }
 
-        if (user.nickname) {
-          return user.nickname.toLowerCase().includes(searchMention.toLowerCase())
-        }
-      }
-      ).slice(0, 10)
+                if (user.nickname) {
+                    return user.nickname
+                        .toLowerCase()
+                        .includes(searchMention.toLowerCase())
+                }
+            })
+            .slice(0, 10)
     }
 
     useEffect(async () => {
-      if (nodeIdentities) {
-        if (Object.keys(users || {}).length > 0) {
-          if (!users[nodeIdentities[0].address]) {
-            await api.updateProfile(nodeIdentities[0].address, `${selectedServer}/registry`, null, null, 'member')
-          }
+        if (nodeIdentities) {
+            if (Object.keys(users || {}).length > 0) {
+                if (!users[nodeIdentities[0].address]) {
+                    await api.updateProfile(
+                        nodeIdentities[0].address,
+                        `${selectedServer}/registry`,
+                        null,
+                        null,
+                        'member',
+                    )
+                }
+            }
         }
-      }
     }, [selectedStateURI, users, nodeIdentities])
-
-
 
     useEffect(() => {
         let previousSender
-        let messages = ((roomState || {}).messages || []).map(msg => {
+        const messages = ((roomState || {}).messages || []).map((msg) => {
             msg = {
                 ...msg,
                 firstByUser: previousSender !== msg.sender,
-                attachment: ((msg.attachment || {}).value || {}).value
+                attachment: ((msg.attachment || {}).value || {}).value,
             }
             previousSender = msg.sender
             return msg
@@ -211,29 +226,28 @@ function Chat({ className }) {
         setMessages(messages)
     }, [numMessages])
 
-
     useEffect(() => {
         // Scrolls on new messages
         if (messageTextContainer.current) {
-          setTimeout(() => {
-            if (messageTextContainer.current !== null) {
-                messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
-            }
-          }, 0)
+            setTimeout(() => {
+                if (messageTextContainer.current !== null) {
+                    messageTextContainer.current.scrollTop =
+                        messageTextContainer.current.scrollHeight
+                }
+            }, 0)
         }
     }, [numMessages])
 
-
-
-
-
     if (!selectedStateURI) {
-        return <EmptyChatContainer className={className}>
-          Please select a server and a chat to get started!
-        </EmptyChatContainer>
+        return (
+            <EmptyChatContainer className={className}>
+                Please select a server and a chat to get started!
+            </EmptyChatContainer>
+        )
     }
 
-    const ownAddress = nodeIdentities && nodeIdentities[0] ? nodeIdentities[0].address : null
+    const ownAddress =
+        nodeIdentities && nodeIdentities[0] ? nodeIdentities[0].address : null
 
     return (
         <Container className={className}>
@@ -249,7 +263,10 @@ function Chat({ className }) {
                 ))}
             </MessageContainer>
 
-            <AttachmentPreviewModal attachment={previewedAttachment.attachment} url={previewedAttachment.url} />
+            <AttachmentPreviewModal
+                attachment={previewedAttachment.attachment}
+                url={previewedAttachment.url}
+            />
 
             <ImgPreviewContainer
                 attachmentsInputRef={attachmentsInputRef}
@@ -259,13 +276,8 @@ function Chat({ className }) {
                 attachmentsInputRef={attachmentsInputRef}
                 attachmentFormRef={attachmentFormRef}
             />
-
         </Container>
     )
 }
-
-
-
-
 
 export default Chat

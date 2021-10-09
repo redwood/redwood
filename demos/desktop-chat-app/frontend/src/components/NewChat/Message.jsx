@@ -158,6 +158,4 @@ function Message({
     /* eslint-enable */
 }
 
-Message.whyDidIRender = true
-
 export default Message

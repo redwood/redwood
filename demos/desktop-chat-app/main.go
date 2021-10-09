@@ -7,7 +7,6 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"os/exec"
 	"runtime"
 	"sync"
 	"time"
@@ -102,21 +101,23 @@ func main() {
 		defer masterProcess.Close()
 
 		api := newAPI(c.Uint("port"), c.String("config"), profileRoot, masterProcess)
-		gui := &exec.Cmd{
-			Path:   "./frontend/dist/hush-chat/hush-chat-mac_x64",
-			Stdout: os.Stdout,
-			Stderr: os.Stderr,
-		}
-		if runtime.GOOS == "darwin" {
-			gui.Path = "./frontend/dist/hush-chat/hush-chat-mac_x64"
-		}
-		if runtime.GOOS == "windows" {
-			gui.Path = "./frontend/dist/hush-chat/hush-chat-win_x64.exe"
-		}
-		if runtime.GOOS == "linux" {
-			gui.Path = "./frontend/dist/hush-chat/hush-chat-linux_x64"
-		}
-		// gui := newGUI(api)
+		gui := newGUI(api)
+
+		// Config for Neutralino build
+		// gui := &exec.Cmd{
+		// 	Path:   "./frontend/dist/hush-chat/hush-chat-mac_x64",
+		// 	Stdout: os.Stdout,
+		// 	Stderr: os.Stderr,
+		// }
+		// if runtime.GOOS == "darwin" {
+		// 	gui.Path = "./frontend/dist/hush-chat/hush-chat-mac_x64"
+		// }
+		// if runtime.GOOS == "windows" {
+		// 	gui.Path = "./frontend/dist/hush-chat/hush-chat-win_x64.exe"
+		// }
+		// if runtime.GOOS == "linux" {
+		// 	gui.Path = "./frontend/dist/hush-chat/hush-chat-linux_x64"
+		// }
 
 		err = masterProcess.SpawnChild(context.TODO(), api)
 		if err != nil {
@@ -125,18 +126,18 @@ func main() {
 
 		go func() {
 			defer masterProcess.Close()
-			defer func() {
-				gui.Process.Kill()
-			}()
-			// defer gui.Close()
+			// defer func() {
+			// 	gui.Process.Kill()
+			// }()
+			defer gui.Close()
 			select {
 			case <-cmdutils.AwaitInterrupt():
 			case <-api.Done():
-				// case <-gui.chDone:
+				case <-gui.chDone:
 			}
 		}()
-		gui.Run()
-		// gui.Start()
+		// gui.Run()
+		gui.Start()
 		return nil
 	}
 
