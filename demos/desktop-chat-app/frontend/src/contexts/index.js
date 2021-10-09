@@ -1,5 +1,5 @@
 // import RedwoodProvider from './Redwood' // RedwoodProviderWrapper
-import { RedwoodProvider } from '../components/redwood.js/dist/main/react'
+import { RedwoodProvider } from 'redwood-client-test/react'
 import AddressBookProvider, { AddressBookContext } from './AddressBook'
 import APIProvider, { APIContext } from './API'
 import LoginStatusProvider, { LoginStatusContext } from './LoginStatus'
@@ -14,7 +14,7 @@ import LoadingProvider, { LoadingContext } from './Loading'
 import * as contextUtils from './utils'
 
 export const { ComposeComponents, combineProviders, withContextProvider } =
-    contextUtils
+contextUtils
 
 // *GUIDELINE: Contexts that need to be imported by hooks. Avoid using Context outside of hooks.
 export const Contexts = {

@@ -1,0 +1,1 @@
+{"version":3,"file":"state-tree.initial-state.js","sourceRoot":"","sources":["../../../../src/react/reducers/state-tree.initial-state.ts"],"names":[],"mappings":"AAEA,MAAM,CAAC,MAAM,gBAAgB,GAAc;IACvC,UAAU,EAAE,EAAE;IACd,MAAM,EAAE,EAAE;IACV,kBAAkB,EAAE,EAAE;IACtB,mBAAmB,EAAE,EAAE;IACvB,eAAe,EAAE,EAAE;CACtB,CAAC"}

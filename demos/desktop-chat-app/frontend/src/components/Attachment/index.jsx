@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, memo } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import styled from 'styled-components'
 import filesize from 'filesize.js'
 
@@ -165,4 +165,4 @@ function Attachment(props) {
 
 Attachment.whyDidIRender = true
 
-export default memo(Attachment)
+export default Attachment

@@ -30,6 +30,7 @@ import Input from './Input'
 import EmojiQuickSearch from './EmojiQuickSearch'
 import TextBox from './TextBox'
 import Message from './NewChat/Message'
+import MessageList from './NewChat/MessageList'
 import NormalizeMessage from './Chat/NormalizeMessage'
 import AttachmentPreviewModal from './Modal/AttachmentPreviewModal'
 import UserAvatar from './UserAvatar'
@@ -275,7 +276,7 @@ function Chat({ className }) {
     const attachmentsInput = useRef()
     const attachmentForm = useRef()
     const newAttachmentsInput = useRef()
-    const messageTextContainer = useRef()
+    // const messageTextContainer = useRef()
     const mentionRef = useRef()
     const controlsRef = useRef()
     const [attachments, setAttachments] = useState([])
@@ -286,26 +287,18 @@ function Chat({ className }) {
     const [indexMention, setIndexMention] = useState(0)
     const [searchMention, setSearchMention] = useState('')
 
-    const { onPresent: onPresentPreviewModal } = useModal('attachment preview')
-    const [previewedAttachment, setPreviewedAttachment] = useState({})
-    const onClickAttachment = useCallback(
-        (attachment, url) => {
-            setPreviewedAttachment({ attachment, url })
-            onPresentPreviewModal()
-        },
-        [setPreviewedAttachment, onPresentPreviewModal],
-    )
+    // const { onPresent: onPresentPreviewModal } = useModal('attachment preview')
+    // const [previewedAttachment, setPreviewedAttachment] = useState({})
+    // const onClickAttachment = useCallback(
+    //     (attachment, url) => {
+    //         setPreviewedAttachment({ attachment, url })
+    //         onPresentPreviewModal()
+    //     },
+    //     [setPreviewedAttachment, onPresentPreviewModal],
+    // )
 
     const numMessages = ((roomState || {}).messages || []).length
     const [messages, setMessages] = useState([])
-
-    const ownAddress = useMemo(
-        () =>
-            nodeIdentities && nodeIdentities[0]
-                ? nodeIdentities[0].address
-                : null,
-        [nodeIdentities],
-    )
 
     // Init Slate Editor
     // const editor = useMemo(() => withMentions(withHistory(withReact(createEditor()))), [])
@@ -559,17 +552,17 @@ function Chat({ className }) {
         previews,
     ])
 
-    useEffect(() => {
-        // Scrolls on new messages
-        if (messageTextContainer.current) {
-            setTimeout(() => {
-                if (messageTextContainer.current !== null) {
-                    messageTextContainer.current.scrollTop =
-                        messageTextContainer.current.scrollHeight
-                }
-            }, 0)
-        }
-    }, [numMessages])
+    // useEffect(() => {
+    //     // Scrolls on new messages
+    //     if (messageTextContainer.current) {
+    //         setTimeout(() => {
+    //             if (messageTextContainer.current !== null) {
+    //                 messageTextContainer.current.scrollTop =
+    //                     messageTextContainer.current.scrollHeight
+    //             }
+    //         }, 0)
+    //     }
+    // }, [numMessages])
 
     const serializeMessageText = useCallback(() => {
         let isEmpty = true
@@ -841,7 +834,8 @@ function Chat({ className }) {
     /* eslint-disable */
     return (
         <Container className={className}>
-            <MessageContainer ref={messageTextContainer}>
+            <MessageList messages={messages} nodeIdentities={nodeIdentities} />
+            {/* <MessageContainer ref={messageTextContainer}>
                 {messages.map((msg, i) => (
                     <Message
                         msg={msg}
@@ -851,7 +845,7 @@ function Chat({ className }) {
                         key={i}
                     />
                 ))}
-            </MessageContainer>
+            </MessageContainer> */}
 
             {/* <AttachmentPreviewModal
                 attachment={previewedAttachment.attachment}

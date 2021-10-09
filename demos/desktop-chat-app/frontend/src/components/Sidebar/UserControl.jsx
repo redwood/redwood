@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import styled from 'styled-components'
 import { toast } from 'react-toastify'
 

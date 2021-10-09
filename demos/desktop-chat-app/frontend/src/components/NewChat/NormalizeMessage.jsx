@@ -8,8 +8,8 @@ const SNormalizeMessage = styled.div`
     white-space: pre-wrap;
     padding-right: 8px;
     overflow: hidden;
-    font-size: 11;
-    max-height: 17;
+    font-size: 11px;
+    max-height: 17px;
     color: ${(props) =>
         props.selected ? 'rgba(255, 255, 255, .8)' : 'rgba(255, 255, 255, .5)'};
     span.emoji-mart-emoji {

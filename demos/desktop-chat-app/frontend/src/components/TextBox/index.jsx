@@ -78,82 +78,256 @@ const Leaf = ({ attributes, children: paramChildren, leaf }) => {
     return <span {...attributes}>{children}</span>
 }
 
+const renderElement = (elemProps) => {
+    const { element, attributes, children } = elemProps
+    switch (element.type) {
+        case 'link':
+            return (
+                <a href={element.url} {...attributes}>
+                    {children}
+                </a>
+            )
+        case 'mention':
+            return <Mention {...attributes} element={element} />
+        case 'emoji':
+            return <EmojiElem {...elemProps} />
+        default:
+            return <div {...attributes}>{children}</div>
+    }
+}
+
+const withMentions = (editor) => {
+    const { isInline, isVoid } = editor
+
+    editor.isInline = (element) =>
+        element.type === 'mention' ? true : isInline(element)
+
+    editor.isVoid = (element) =>
+        element.type === 'mention' ? true : isVoid(element)
+
+    return editor
+}
+
+const withEmojis = (editor) => {
+    const { isInline, isVoid } = editor
+
+    editor.isInline = (element) =>
+        element.type === 'emoji' ? true : isInline(element)
+
+    editor.isVoid = (element) =>
+        element.type === 'emoji' ? true : isVoid(element)
+
+    return editor
+}
+
 function TextBox(props) {
-    // const onKeyDown = useCallback(
-    //     (event) => {
-    //         if (targetMention && mentionUsers.length > 0) {
-    //             switch (event.key) {
-    //                 case 'ArrowDown':
-    //                     event.preventDefault()
-    //                     const prevIndex =
-    //                         indexMention >= mentionUsers.length - 1
-    //                             ? 0
-    //                             : indexMention + 1
-    //                     setIndexMention(prevIndex)
-    //                     break
-    //                 case 'ArrowUp':
-    //                     event.preventDefault()
-    //                     const nextIndex =
-    //                         indexMention <= 0
-    //                             ? mentionUsers.length - 1
-    //                             : indexMention - 1
-    //                     setIndexMention(nextIndex)
-    //                     break
-    //                 case 'Tab':
-    //                 case 'Enter':
-    //                     const selectedUser = mentionUsers[indexMention]
-    //                     if (selectedUser) {
-    //                         event.preventDefault()
+    /*
+    // Init Slate Editor
+    // const editor = useMemo(() => withMentions(withHistory(withReact(createEditor()))), [])
+    const editorRef = useRef()
+    if (!editorRef.current)
+        editorRef.current = withEmojis(
+            withMentions(withHistory(withReact(createEditor()))),
+        )
+    const editor = editorRef.current
 
-    //                         Transforms.select(editor, targetMention)
+    const initFocusPoint = { path: [0, 0], offset: 0 }
+    const [editorFocusPoint, setEditorFocusPoint] = useState(initFocusPoint)
 
-    //                         insertMention(editor, selectedUser)
-    //                         setTargetMention(null)
-    //                     }
-    //                     break
-    //                 case 'Escape':
-    //                     event.preventDefault()
-    //                     setTargetMention(null)
-    //                     break
-    //             }
-    //         } else {
-    //             // Emoji Handling
-    //             if (event.code === 'Enter' && !event.shiftKey) {
-    //                 if (!emojisFound || (!emojisFound && emojiSearchWord)) {
-    //                     event.preventDefault()
-    //                     event.stopPropagation()
-
-    //                     onClickSend()
-    //                 }
-    //             }
-    //         }
-
-    //         if (emojiSearchWord) {
-    //             if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
-    //                 event.preventDefault()
-    //             }
-    //         }
-    //     },
-    //     [messageText, emojisFound, indexMention, searchMention, targetMention],
-    // )
-
-    const renderElement = useCallback((elemProps) => {
-        const { element, attributes, children } = elemProps
-        switch (element.type) {
-            case 'link':
-                return (
-                    <a href={element.url} {...attributes}>
-                        {children}
-                    </a>
-                )
-            case 'mention':
-                return <Mention {...props} />
-            case 'emoji':
-                return <EmojiElem {...props} />
-            default:
-                return <div {...attributes}>{children}</div>
+    function onEditorBlur() {
+        try {
+            setEditorFocusPoint(editor.selection.focus)
+        } catch (e) {
+            console.error(e)
         }
-    }, [])
+    }
+
+
+    let mentionUsers = []
+    const userAddresses = Object.keys(users || {})
+    if (userAddresses.length) {
+        mentionUsers = userAddresses
+            .map((address) => ({ ...users[address], address }))
+            .filter((user) => {
+                if (!user.username && !user.nickname) {
+                    return user.address.includes(searchMention.toLowerCase())
+                }
+
+                if (user.username) {
+                    return user.username
+                        .toLowerCase()
+                        .includes(searchMention.toLowerCase())
+                }
+
+                if (user.nickname) {
+                    return user.nickname
+                        .toLowerCase()
+                        .includes(searchMention.toLowerCase())
+                }
+
+                return false
+            })
+            .slice(0, 10)
+    }
+
+
+    const onKeyDown = useCallback(
+        (event) => {
+            if (targetMention && mentionUsers.length > 0) {
+                switch (event.key) {
+                    case 'ArrowDown': {
+                        event.preventDefault()
+                        const prevIndex =
+                            indexMention >= mentionUsers.length - 1
+                                ? 0
+                                : indexMention + 1
+                        setIndexMention(prevIndex)
+                        break
+                    }
+                    case 'ArrowUp': {
+                        event.preventDefault()
+                        const nextIndex =
+                            indexMention <= 0
+                                ? mentionUsers.length - 1
+                                : indexMention - 1
+                        setIndexMention(nextIndex)
+                        break
+                    }
+                    case 'Tab':
+                    case 'Enter': {
+                        const selectedUser = mentionUsers[indexMention]
+                        if (selectedUser) {
+                            event.preventDefault()
+
+                            Transforms.select(editor, targetMention)
+
+                            insertMention(editor, selectedUser)
+                            setTargetMention(null)
+                        }
+                        break
+                    }
+                    case 'Escape': {
+                        event.preventDefault()
+                        setTargetMention(null)
+                        break
+                    }
+                    default:
+                        return
+                }
+            } else if (event.code === 'Enter' && !event.shiftKey) {
+                // Emoji Handling
+                if (!emojisFound || (!emojisFound && emojiSearchWord)) {
+                    event.preventDefault()
+                    event.stopPropagation()
+
+                    onClickSend()
+                }
+            }
+
+            if (emojiSearchWord) {
+                if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
+                    event.preventDefault()
+                }
+            }
+        },
+        [
+            messageText,
+            emojisFound,
+            indexMention,
+            searchMention,
+            targetMention,
+            attachments,
+            previews,
+        ],
+    )
+    */
+
+    /*
+    function onChangeMessageText(textValue) {
+        setMessageText(textValue)
+        const { selection } = editor
+
+        if (selection && Range.isCollapsed(selection)) {
+            const [start] = Range.edges(selection)
+            const wordBefore = Editor.before(editor, start, { unit: 'word' })
+            const before = wordBefore && Editor.before(editor, wordBefore)
+            const beforeRange = before && Editor.range(editor, before, start)
+            const beforeText = beforeRange && Editor.string(editor, beforeRange)
+            const beforeMatch = beforeText && beforeText.match(/^@(\w+)$/)
+            const after = Editor.after(editor, start)
+            const afterRange = Editor.range(editor, start, after)
+            const afterText = Editor.string(editor, afterRange)
+            const afterMatch = afterText.match(/^(\s|$)/)
+
+            if (beforeMatch && afterMatch) {
+                setTargetMention(beforeRange)
+                setSearchMention(beforeMatch[1])
+                setIndexMention(0)
+                return
+            }
+        }
+
+        setTargetMention(null)
+
+        if (selection) {
+            const { anchor, focus } = editor.selection
+
+            // Assure cursor isn't selecting text
+            if (
+                anchor.offset === focus.offset &&
+                JSON.stringify(anchor.path) === JSON.stringify(focus.path)
+            ) {
+                const parentNode = editor.children[focus.path[0]]
+                const childNode = parentNode.children[focus.path[1]]
+
+                if (childNode.text) {
+                    setTimeout(() => {
+                        getCurrentEmojiWord(focus.offset - 1, childNode.text)
+                    }, 0)
+                }
+            }
+        }
+    }
+    */
+
+    /*
+        const initialMessageText = [
+        {
+            type: 'paragraph',
+            children: [
+                {
+                    text: '',
+                },
+            ],
+        },
+    ]
+    const [messageText, setMessageText] = useState(initialMessageText)
+    */
+
+    const onDOMBeforeInput = useCallback(
+        (event) => {
+            switch (event.inputType) {
+                case 'formatBold':
+                    event.preventDefault()
+                    return toggleFormat(props.editor, 'bold')
+                case 'formatItalic':
+                    event.preventDefault()
+                    return toggleFormat(props.editor, 'italic')
+                case 'formatUnderline':
+                    event.preventDefault()
+                    return toggleFormat(props.editor, 'underlined')
+                case 'formatStrike':
+                    event.preventDefault()
+                    return toggleFormat(props.editor, 'strike')
+                case 'formatCode':
+                    event.preventDefault()
+                    return toggleFormat(props.editor, 'code')
+                default:
+                    return null
+            }
+        },
+        [props.editor],
+    )
 
     return (
         <Slate
@@ -167,31 +341,11 @@ function TextBox(props) {
             />
             <SEditable
                 placeholder="Type message here..."
-                renderLeaf={(leafProps) => <Leaf {...leafProps} />}
+                renderLeaf={Leaf}
                 renderElement={renderElement}
                 onKeyDown={props.onKeyDown}
                 onBlur={props.onBlur}
-                onDOMBeforeInput={(event) => {
-                    switch (event.inputType) {
-                        case 'formatBold':
-                            event.preventDefault()
-                            return toggleFormat(props.editor, 'bold')
-                        case 'formatItalic':
-                            event.preventDefault()
-                            return toggleFormat(props.editor, 'italic')
-                        case 'formatUnderline':
-                            event.preventDefault()
-                            return toggleFormat(props.editor, 'underlined')
-                        case 'formatStrike':
-                            event.preventDefault()
-                            return toggleFormat(props.editor, 'strike')
-                        case 'formatCode':
-                            event.preventDefault()
-                            return toggleFormat(props.editor, 'code')
-                        default:
-                            return null
-                    }
-                }}
+                onDOMBeforeInput={onDOMBeforeInput}
                 // NOTE: Implement spell check for Slate
             />
             {props.children}
@@ -199,6 +353,7 @@ function TextBox(props) {
                 <MentionSuggestion
                     mentionUsers={props.mentionUsers}
                     indexMention={props.indexMention}
+                    mentionRef={props.mentionRef}
                     controlsRef={props.controlsRef}
                 />
             )}

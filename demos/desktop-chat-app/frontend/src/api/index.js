@@ -1,4 +1,5 @@
-import Redwood from '../components/redwood.js/dist/main'
+import Redwood from '@redwood.dev/client'
+import { nanoid } from 'nanoid/non-secure'
 
 const sync9JSSha3 =
     'dd26e14e5768a5359561bbe22aa148f65c68b7cebb33c60905d5969dd97feb92'
@@ -239,6 +240,7 @@ const api = (redwoodClient) => {
                     messages.length
                 }] = ${Redwood.utils.JSON.stringify([
                     {
+                        mapId: nanoid(),
                         sender: nodeAddress.toLowerCase(),
                         text: messageText,
                         timestamp: Math.floor(new Date().getTime() / 1000),

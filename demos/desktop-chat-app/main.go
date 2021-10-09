@@ -7,13 +7,13 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/exec"
 	"runtime"
 	"sync"
 
 	"github.com/brynbellomy/klog"
 	"github.com/urfave/cli"
 	"github.com/webview/webview"
-
 	"redwood.dev/cmd/cmdutils"
 	"redwood.dev/process"
 )
@@ -116,14 +116,18 @@ func main() {
 
 		go func() {
 			defer masterProcess.Close()
-			defer gui.Close()
+			defer func() {
+				gui.Process.Kill()
+			}()
+			// defer gui.Close()
 			select {
 			case <-cmdutils.AwaitInterrupt():
 			case <-api.Done():
-			case <-gui.chDone:
+				// case <-gui.chDone:
 			}
 		}()
-		gui.Start()
+		gui.Run()
+		// gui.Start()
 		return nil
 	}
 

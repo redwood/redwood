@@ -10,13 +10,14 @@ const ComposeComponents = ({
 
     const composedComponents = components.reduceRight(
         (child, Component, idx) => {
-            const props = componentProps[Component.name]
+            const componentName = Component ? Component.name : ''
+            const props = componentProps[componentName]
             const renderPosition = idx + 1
 
             if (logComponentInfo) {
                 /* eslint-disable */
                 componentsInfo.push({
-                    name: Component.name,
+                    name: componentName,
                     props: props || 'No props passed.',
                     child: child.type.name,
                     renderPosition,

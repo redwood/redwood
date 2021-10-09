@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"embed"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 
@@ -17,7 +15,6 @@ import (
 	"time"
 
 	"github.com/tyler-smith/go-bip39"
-
 	"redwood.dev/crypto"
 	"redwood.dev/process"
 	"redwood.dev/utils"
@@ -38,8 +35,8 @@ type API struct {
 	masterProcess process.ProcessTreer
 }
 
-//go:embed frontend/build
-var staticAssets embed.FS
+// go:embed frontend/build
+// var staticAssets embed.FS
 
 func newAPI(port uint, configPath, profileRoot string, masterProcess process.ProcessTreer) *API {
 	api := &API{
@@ -285,17 +282,17 @@ func (api *API) serveHome(w http.ResponseWriter, r *http.Request) {
 		path = "index.html"
 	}
 
-	file, err := staticAssets.Open(filepath.Join("frontend", "build", path))
-	if err != nil {
-		http.Redirect(w, r, fmt.Sprintf("http://localhost:%v/index.html", api.port), http.StatusFound)
-		return
-	}
+	// file, err := staticAssets.Open(filepath.Join("frontend", "build", path))
+	// if err != nil {
+	// 	http.Redirect(w, r, fmt.Sprintf("http://localhost:%v/index.html", api.port), http.StatusFound)
+	// 	return
+	// }
 
-	_, err = io.Copy(w, file)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	// _, err = io.Copy(w, file)
+	// if err != nil {
+	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 	return
+	// }
 }
 
 func (api *API) processTree(w http.ResponseWriter, r *http.Request) {

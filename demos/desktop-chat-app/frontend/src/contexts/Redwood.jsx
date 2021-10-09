@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RedwoodProvider as RedwoodJSLibProvider } from '../components/redwood.js/dist/main/react'
+import { RedwoodProvider as RedwoodJSLibProvider } from 'redwood-client-test/react'
 // import { LoginStatusContext } from './LoginStatus'
 
 // *GUIDELINE: Any time you need to wrap a 3rd party Context Provider follow this approach

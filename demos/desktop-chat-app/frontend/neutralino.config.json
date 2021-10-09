@@ -1,0 +1,36 @@
+{
+  "applicationId": "react-sample",
+  "port": 0,
+  "defaultMode": "window",
+  "enableHTTPServer": true,
+  "enableNativeAPI": true,
+  "url": "/resources/",
+  "nativeBlockList": [],
+  "globalVariables": {
+    "TEST": "Test Value"
+  },
+  "modes": {
+    "window": {
+      "title": "Hush Chat Desktop",
+      "width": 1440,
+      "height": 900,
+      "minWidth": 400,
+      "minHeight": 250,
+      "fullScreen": false,
+      "alwaysOnTop": false,
+      "icon": "/resources/logo192.png",
+      "enableInspector": true,
+      "borderless": false,
+      "maximize": false
+    },
+    "browser": {},
+    "cloud": {}
+  },
+  "cli": {
+    "binaryName": "hush-chat",
+    "resourcesPath": "/resources/",
+    "clientLibrary": "/public/js/neutralino.js",
+    "binaryVersion": "2.8.0",
+    "clientVersion": "1.5.0"
+  }
+}
