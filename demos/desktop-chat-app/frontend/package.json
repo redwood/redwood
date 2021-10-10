@@ -89,6 +89,7 @@
         "@storybook/addon-links": "^6.3.10",
         "@storybook/node-logger": "^6.3.10",
         "@storybook/preset-create-react-app": "^3.2.0",
+        "@types/styled-components": "^5.1.15",
         "@welldone-software/why-did-you-render": "^6.2.1",
         "eslint": "^7.32.0",
         "eslint-config-airbnb": "^18.1.0",
@@ -100,7 +101,8 @@
         "eslint-plugin-react": "^7.26.0",
         "eslint-plugin-unicorn": "^36.0.0",
         "patch-package": "^6.4.7",
-        "prettier": "^2.4.1"
+        "prettier": "^2.4.1",
+        "storybook-addon-styled-component-theme": "^2.0.0"
     },
     "resolutions": {
         "babel-loader": "8.1.0",

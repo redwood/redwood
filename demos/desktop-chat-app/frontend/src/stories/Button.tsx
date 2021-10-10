@@ -1,4 +1,4 @@
-import React from 'react'
+import styled from 'styled-components'
 import './button.css'
 
 interface ButtonProps {
@@ -24,6 +24,10 @@ interface ButtonProps {
     onClick?: () => void
 }
 
+const SButton = styled.button`
+    background-color: ${({ theme }) => theme.color.secondary.main};
+`
+
 /**
  * Primary UI component for user interaction
  */
@@ -38,7 +42,7 @@ export const Button = ({
         ? 'storybook-button--primary'
         : 'storybook-button--secondary'
     return (
-        <button
+        <SButton
             type="button"
             className={[
                 'storybook-button',
@@ -49,6 +53,6 @@ export const Button = ({
             {...props}
         >
             {label}
-        </button>
+        </SButton>
     )
 }
