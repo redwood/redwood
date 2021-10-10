@@ -41,6 +41,7 @@ function UserAvatar({ address, className, ...props }) {
     const [username, setUsername] = useState(null)
     const [photoURL, setPhotoURL] = useState(null)
     const { selectedStateURI } = useNavigation()
+    const [loadFailed, setLoadFailed] = useState(false)
     const { users, usersStateURI } = useUsers(selectedStateURI)
     const addressBook = useAddressBook()
     const { httpHost } = useRedwood()
@@ -72,7 +73,15 @@ function UserAvatar({ address, className, ...props }) {
     )
 
     if (photoURL) {
-        return <Avatar className={className} src={photoURL} {...props} />
+        return (
+            <Avatar
+                loadFailed={loadFailed}
+                setLoadFailed={setLoadFailed}
+                className={className}
+                src={photoURL}
+                {...props}
+            />
+        )
     }
     const text = addressBook[address] || username || address || ''
     return (
