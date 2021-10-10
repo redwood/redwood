@@ -26,12 +26,38 @@
         "sourceType": "module"
     },
     "settings": {
+        "import/resolver": {
+            "node": {
+                "extensions": [".js", ".jsx", ".ts", ".tsx"]
+            }
+        },
         "react": {
             "version": "detect"
         }
     },
+    "overrides": [
+        {
+            "files": ["*.ts", "*.tsx"],
+            "extends": [
+                "plugin:@typescript-eslint/eslint-recommended",
+                "plugin:@typescript-eslint/recommended"
+            ],
+            "parser": "@typescript-eslint/parser",
+            "plugins": ["@typescript-eslint"]
+        }
+    ],
     "ignorePatterns": ["node_modules/", "src/components/redwood.js/**"],
     "rules": {
+        "import/extensions": [
+            "error",
+            "ignorePackages",
+            {
+                "js": "never",
+                "jsx": "never",
+                "ts": "never",
+                "tsx": "never"
+            }
+        ],
         "no-param-reassign": 0,
         "prettier/prettier": 1,
         "arrow-body-style": [2, "as-needed"],
