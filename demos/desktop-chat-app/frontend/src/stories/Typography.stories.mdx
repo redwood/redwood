@@ -1,26 +1,55 @@
 import { Meta, Typeset } from '@storybook/addon-docs/blocks'
 
-import { typography } from './../theme/ui'
+import { font } from './../theme/ui'
 
 <Meta title="Typography" />
 
 # Typography
+
+---
+
+### Used for chat messages and button text
 
 **Font:** CallingCode
 
 **Weights:** 400(regular), 700(bold)
 
 <Typeset
+    style={{ fontFamily: font.type.primary }}
     fontSizes={[
-        Number(typography.size.s1),
-        Number(typography.size.s2),
-        Number(typography.size.s3),
-        Number(typography.size.m1),
-        Number(typography.size.m2),
-        Number(typography.size.m3),
-        Number(typography.size.l1),
-        Number(typography.size.l2),
-        Number(typography.size.l3),
+        Number(font.size.s1),
+        Number(font.size.s2),
+        Number(font.size.s3),
+        Number(font.size.m1),
+        Number(font.size.m2),
+        Number(font.size.m3),
+        Number(font.size.l1),
+        Number(font.size.l2),
+        Number(font.size.l3),
     ]}
-    fontWeight={typography.weight.regular}
+    fontWeight={font.weight.bold}
+/>
+
+---
+
+### Used for headers and titles
+
+**Font:** Rogan
+
+**Weights:** 400(regular), 500(medium), 600(semi-bold), 700(bold), 900(extra-bold)
+
+<Typeset
+    style={{ fontFamily: font.type.secondary }}
+    fontSizes={[
+        Number(font.size.s1),
+        Number(font.size.s2),
+        Number(font.size.s3),
+        Number(font.size.m1),
+        Number(font.size.m2),
+        Number(font.size.m3),
+        Number(font.size.l1),
+        Number(font.size.l2),
+        Number(font.size.l3),
+    ]}
+    fontWeight={font.weight.bold}
 />

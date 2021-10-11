@@ -1,0 +1,47 @@
+import { Meta, ColorPalette, ColorItem } from '@storybook/addon-docs/blocks'
+
+import { color } from './../theme/ui'
+
+<Meta title="Colors" />
+
+# Colors
+
+<ColorPalette>
+    <ColorItem
+        title="theme.color.primary"
+        subtitle="Primary"
+        colors={[color.primary]}
+    />
+    <ColorItem
+        title="theme.color.secondary"
+        subtitle="Secondary"
+        colors={[color.secondary]}
+    />
+    <ColorItem
+        title="theme.color.background"
+        subtitle="Background"
+        colors={[color.background]}
+    />
+    <ColorItem
+        title="theme.color.elevation1"
+        subtitle="Elevation One"
+        colors={[color.elevation1]}
+    />
+    <ColorItem
+        title="theme.color.elevation2"
+        subtitle="Elevation Two"
+        colors={[color.elevation2]}
+    />
+    <ColorItem title="theme.color.text" subtitle="Text" colors={[color.text]} />
+    <ColorItem title="theme.color.icon" subtitle="Icon" colors={[color.icon]} />
+    <ColorItem
+        title="theme.color.accent1"
+        subtitle="Accent One"
+        colors={[color.accent1]}
+    />
+    <ColorItem
+        title="theme.color.accent2"
+        subtitle="Accent Two"
+        colors={[color.accent2]}
+    />
+</ColorPalette>

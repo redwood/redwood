@@ -1,19 +1,30 @@
-import React from 'react'
-import { ComponentStory, ComponentMeta } from '@storybook/react'
+import { FunctionComponent, ComponentProps } from 'react'
+import Header from '../components/UI/Text/Header'
 
-import { Header } from './Header'
+import { color } from '../theme/ui'
 
 export default {
-    title: 'Example/Header',
+    title: 'text/Header',
     component: Header,
-} as ComponentMeta<typeof Header>
-
-const Template: ComponentStory<typeof Header> = (args) => <Header {...args} />
-
-export const LoggedIn = Template.bind({})
-LoggedIn.args = {
-    user: {},
+    parameters: {
+        backgrounds: {
+            default: 'dark',
+            values: [
+                { name: 'dark', value: color.background },
+                { name: 'light', value: color.background },
+            ],
+        },
+    },
 }
 
-export const LoggedOut = Template.bind({})
-LoggedOut.args = {}
+export const Default: FunctionComponent<ComponentProps<typeof Header>> = (
+    args,
+) => <Header {...args}>Header Text Here</Header>
+
+export const SubHeader: FunctionComponent<ComponentProps<typeof Header>> = (
+    args,
+) => (
+    <Header {...args} isSmall>
+        SubHeader Text Here
+    </Header>
+)
