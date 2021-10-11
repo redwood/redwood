@@ -27,6 +27,12 @@ export const font = {
 
 export const color = {
     primary: '#76F595',
+    button: {
+        primaryHover: '#2ecd55',
+        primaryActive: '#16af3b',
+        disabledBg: '#53525B',
+        disabledColor: '#B4B3C3',
+    },
     secondary: '#E84652',
     background: '#0E0C2C',
     elevation1: '#19154B',
@@ -38,7 +44,7 @@ export const color = {
     textDark: '#15141B',
     ripple: {
         primary: '#FFFFFF',
-        secondary: '#000000',
+        secondary: '#303F9F',
     },
 }
 
@@ -48,6 +54,7 @@ export const icon = {
 
 export const transition = {
     primary: 'all ease-in-out .15s',
+    cubicBezier: 'transform 700ms cubic-bezier(0.175, 0.885, 0.335, 1.05) 0s',
 }
 
 const main = {

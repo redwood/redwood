@@ -24,4 +24,15 @@ export const Basic: Story<ComponentProps<typeof Button>> = (args) => (
 Basic.args = {
     label: 'Label',
     onClick: () => 'clicked',
+    sType: 'primary',
+}
+
+export const Disabled: Story<ComponentProps<typeof Button>> = (args) => (
+    <Button {...args} />
+)
+Disabled.args = {
+    label: 'Disabled',
+    onClick: () => 'clicked',
+    sType: 'primary',
+    disabled: true,
 }
