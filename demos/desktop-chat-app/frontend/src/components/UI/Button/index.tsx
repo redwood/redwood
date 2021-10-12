@@ -7,8 +7,9 @@ interface ButtonProps {
     style?: CSSProperties
     label?: string
     sType: string
-    disabled: boolean
-    icon: JSX.Element
+    disabled?: boolean
+    icon?: JSX.Element
+    flipIcon?: boolean
     onClick: () => unknown
 }
 
@@ -19,17 +20,27 @@ const disabledCss = css`
         background: ${({ theme }) => theme.color.button.disabledBg};
         color: ${({ theme }) => theme.color.button.disabledColor};
         transform: translate3d(0px, 0px, 0px);
+        box-shadow: none;
     }
 `
 
-const iconCss = css`
+const iconCss = css<{ hasLabel: boolean; flipIcon: boolean }>`
+    display: flex;
+    align-items: center;
+    flex-direction: ${({ flipIcon }) => (flipIcon ? 'row-reverse' : 'row')};
     border-radius: 8px;
     background: ${({ theme }) => theme.color.iconBg};
-    height: 48px;
-    width: 48px;
-    padding: 0px;
+    height: ${({ hasLabel }) => (hasLabel ? '36px' : '48px')};
+    width: ${({ hasLabel }) => (hasLabel ? 'auto' : '48px')};
+    padding: ${({ hasLabel }) => (hasLabel ? '0px 12px' : '0px')};
+    color: ${({ theme }) => theme.color.icon};
     > svg {
         color: ${({ theme }) => theme.color.icon};
+        padding-right: ${({ hasLabel, flipIcon }) =>
+            hasLabel && flipIcon ? '6px' : '0px'};
+        padding-left: ${({ hasLabel, flipIcon }) =>
+            hasLabel && !flipIcon ? '6px' : '0px'};
+        font-size: ${({ hasLabel }) => (hasLabel ? '20px' : '24px')};
     }
     .MuiTouchRipple-child {
         background-color: ${({ theme }) => theme.color.ripple.dark};
@@ -38,6 +49,7 @@ const iconCss = css`
         background: ${({ theme }) => theme.color.primary};
         transform: translate3d(0px, -2px, 0px);
         box-shadow: rgb(0 0 0 / 20%) 0px 2px 6px 0px;
+        color: ${({ theme }) => theme.color.iconBg};
         > svg {
             color: ${({ theme }) => theme.color.iconBg};
         }
@@ -46,8 +58,15 @@ const iconCss = css`
         background: ${({ theme }) => theme.color.button.primaryHover};
         box-shadow: rgb(0 0 0 / 10%) 0px 0px 0px 3em inset;
         transform: translate3d(0px, 0px, 0px);
+        color: ${({ theme }) => theme.color.iconBg};
         > svg {
             color: ${({ theme }) => theme.color.iconBg};
+        }
+    }
+    ${disabledCss}
+    &:disabled {
+        > svg {
+            color: ${({ theme }) => theme.color.button.disabledColor};
         }
     }
 `
@@ -89,12 +108,17 @@ const outlineCss = css`
         transform: translate3d(0px, 0px, 0px);
     }
     ${disabledCss}
+    &:disabled {
+        border-color: ${({ theme }) => theme.color.button.disabledBg};
+    }
 `
 
 interface SButtonProps {
     isPrimary: boolean
     isOutline: boolean
-    isIcon: boolean
+    hasIcon: boolean
+    hasLabel: boolean
+    flipIcon: boolean
 }
 
 const SButton = styled(ButtonBase)<SButtonProps>`
@@ -109,9 +133,9 @@ const SButton = styled(ButtonBase)<SButtonProps>`
         transition: ${({ theme }) => theme.transition.cubicBezier};
         transform: translate3d(0px, 0px, 0px);
 
-        ${({ isPrimary }) => isPrimary && primaryCss}
-        ${({ isOutline }) => isOutline && outlineCss}
-		${({ isIcon }) => isIcon && iconCss}
+        ${({ isPrimary, hasIcon }) => !hasIcon && isPrimary && primaryCss}
+        ${({ isOutline, hasIcon }) => !hasIcon && isOutline && outlineCss}
+		${({ hasIcon }) => hasIcon && iconCss}
     }
 `
 
@@ -121,26 +145,37 @@ function Button({
     label = '',
     disabled,
     icon,
+    flipIcon,
     onClick,
 }: ButtonProps): JSX.Element {
     const isPrimary = useMemo(() => sType === 'primary', [sType])
     const isOutline = useMemo(() => sType === 'outline', [sType])
-    const isIcon = useMemo(() => !!icon, [icon])
+    const hasIcon = useMemo(() => !!icon, [icon])
+    const hasLabel = useMemo(() => !!label, [label])
 
     const content = useMemo(() => {
-        if (isIcon && !label) {
+        if (hasIcon && !hasLabel) {
             return <>{icon}</>
+        }
+        if (hasIcon && hasLabel) {
+            return (
+                <>
+                    {label} {icon}
+                </>
+            )
         }
 
         return label
-    }, [label, isIcon, icon])
+    }, [hasLabel, hasIcon, icon, label])
 
     return (
         <SButton
             disabled={disabled}
             isPrimary={isPrimary}
             isOutline={isOutline}
-            isIcon={isIcon}
+            hasIcon={hasIcon}
+            flipIcon={!!flipIcon}
+            hasLabel={hasLabel}
             style={style}
             onClick={onClick}
         >

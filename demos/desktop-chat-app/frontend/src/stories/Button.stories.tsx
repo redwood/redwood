@@ -50,3 +50,27 @@ Icon.args = {
     sType: 'primary',
     icon: <Face />,
 }
+
+export const IconWithLabel: Story<ComponentProps<typeof Button>> = (args) => (
+    <div>
+        <div
+            style={{ flex: 'display', alignItems: 'center', marginBottom: 24 }}
+        >
+            <span style={{ color: 'white', fontSize: 12 }}>
+                Icon {args.flipIcon ? 'Left:' : 'Right:'}{' '}
+            </span>
+            <Button {...args} />
+        </div>
+        <div style={{ flex: 'display', alignItems: 'center' }}>
+            <span style={{ color: 'white', fontSize: 12 }}>
+                Icon {!args.flipIcon ? 'Left:' : 'Right:'}{' '}
+            </span>
+            <Button {...args} flipIcon={!args.flipIcon} />
+        </div>
+    </div>
+)
+IconWithLabel.args = {
+    sType: 'primary',
+    label: 'Icon with Label',
+    icon: <Face />,
+}
