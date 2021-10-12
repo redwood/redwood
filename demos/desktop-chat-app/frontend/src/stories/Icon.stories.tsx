@@ -1,6 +1,8 @@
 import { ComponentProps } from 'react'
 import { Story } from '@storybook/react'
-import { Settings, ExitToApp, Face } from '@material-ui/icons'
+import Settings from '@material-ui/icons/Settings'
+import ExitToApp from '@material-ui/icons/ExitToApp'
+import Face from '@material-ui/icons/Face'
 import IconWrapper from '../components/UI/Icon/Wrapper'
 
 import { color } from '../theme/ui'

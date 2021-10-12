@@ -38,13 +38,15 @@ export const color = {
     elevation1: '#19154B',
     elevation2: '#211D61',
     icon: '#C4C3D8',
+    iconBg: '#292832',
     accent1: '#53525B',
     accent2: '#B4B3C3',
-    text: '#FFFFFF',
+    text: 'rgb(255, 255, 255)',
     textDark: '#15141B',
     ripple: {
         primary: '#FFFFFF',
         secondary: '#303F9F',
+        dark: '#000000',
     },
 }
 

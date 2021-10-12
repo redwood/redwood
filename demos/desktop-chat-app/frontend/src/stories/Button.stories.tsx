@@ -1,5 +1,6 @@
 import { ComponentProps } from 'react'
 import { Story } from '@storybook/react'
+import Face from '@material-ui/icons/Face'
 
 import Button from '../components/UI/Button'
 import { color } from '../theme/ui'
@@ -18,21 +19,34 @@ export default {
     },
 }
 
-export const Basic: Story<ComponentProps<typeof Button>> = (args) => (
+const Template: Story<ComponentProps<typeof Button>> = (args) => (
     <Button {...args} />
 )
+Template.args = {
+    onClick: () => 'clicked',
+}
+
+export const Basic = Template.bind({})
 Basic.args = {
     label: 'Label',
-    onClick: () => 'clicked',
     sType: 'primary',
 }
 
-export const Disabled: Story<ComponentProps<typeof Button>> = (args) => (
-    <Button {...args} />
-)
+export const Outline = Template.bind({})
+Outline.args = {
+    label: 'Outline',
+    sType: 'outline',
+}
+
+export const Disabled = Template.bind({})
 Disabled.args = {
     label: 'Disabled',
-    onClick: () => 'clicked',
     sType: 'primary',
     disabled: true,
+}
+
+export const Icon = Template.bind({})
+Icon.args = {
+    sType: 'primary',
+    icon: <Face />,
 }
