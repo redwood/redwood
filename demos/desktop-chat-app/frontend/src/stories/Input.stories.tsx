@@ -24,9 +24,29 @@ const Template: Story<ComponentProps<typeof Input>> = (args) => (
 Template.args = {
     onChange: () => 'clicked',
     value: '',
+    type: 'text',
+    id: 'username',
+    placeholder: 'Enter a username...',
 }
 
 export const Basic = Template.bind({})
-Basic.args = {
-    placeholder: 'Enter a password...',
+Basic.args = { ...Template.args }
+
+export const Label = Template.bind({})
+Label.args = {
+    ...Template.args,
+    label: 'Username',
+}
+
+export const Disabled = Template.bind({})
+Disabled.args = {
+    ...Template.args,
+    disabled: true,
+}
+
+export const Error = Template.bind({})
+Error.args = {
+    ...Template.args,
+    label: 'Username',
+    errorText: 'Username is required.',
 }
