@@ -1,15 +1,9 @@
 import { CSSProperties, useMemo, InputHTMLAttributes } from 'react'
 import styled, { css } from 'styled-components'
 
-const SInputWrapper = styled.div<{ wrapperWidth: number }>`
-    color: white;
-    display: flex;
-    flex-direction: column;
-    width: ${({ wrapperWidth }) => `${wrapperWidth}px`};
-    > label {
-        font-size: ${({ theme }) => `${theme.font.size.s1}px`};
-        margin-bottom: 4px;
-    }
+const SInputLabel = styled.label`
+    font-size: ${({ theme }) => `${theme.font.size.s1}px`};
+    margin-bottom: 4px;
 `
 
 const SInput = styled.input<{ hasError: boolean }>`
@@ -31,6 +25,10 @@ const SInput = styled.input<{ hasError: boolean }>`
         outline: none;
         border-color: ${({ theme, hasError }) =>
             hasError ? theme.color.secondary : theme.color.text};
+        ${SInputLabel} {
+            background: yellow !important;
+            color: red !important;
+        }
     }
     &:disabled {
         cursor: not-allowed;
@@ -39,6 +37,16 @@ const SInput = styled.input<{ hasError: boolean }>`
         &::placeholder {
             color: ${({ theme }) => theme.color.accent1};
         }
+    }
+`
+
+const SInputWrapper = styled.div<{ wrapperWidth: number }>`
+    color: white;
+    display: flex;
+    flex-direction: column;
+    width: ${({ wrapperWidth }) => `${wrapperWidth}px`};
+    ${SInput}:focus ~ ${SInputLabel} {
+        color: green;
     }
 `
 
@@ -73,7 +81,7 @@ function Input({
 
     return (
         <SInputWrapper wrapperWidth={width}>
-            {label ? <label htmlFor={id}>{label}</label> : null}
+            {label ? <SInputLabel htmlFor={id}>{label}</SInputLabel> : null}
             <SInput
                 {...rest}
                 id={id}
