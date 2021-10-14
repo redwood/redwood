@@ -20,41 +20,48 @@ export default {
 }
 
 const Template: Story<ComponentProps<typeof CheckBox>> = (args) => {
-    const [isChecked, setIsChecked] = useState(false)
+    const [checked, setChecked] = useState(false)
     return (
         <CheckBox
             {...args}
-            isChecked={isChecked}
-            onValueChanged={(value) => setIsChecked(value)}
+            checked={checked}
+            onValueChanged={(value) => setChecked(value)}
         />
     )
 }
-Template.args = {}
+Template.args = {
+    disabled: false,
+}
 
 export const Primary = Template.bind({})
 Primary.args = {
+    ...Template.args,
     sType: 'primary',
 }
 
 export const Secondary = Template.bind({})
 Secondary.args = {
+    ...Template.args,
     sType: 'secondary',
 }
 
 export const Disabled = Template.bind({})
 Disabled.args = {
+    ...Template.args,
     sType: 'primary',
     disabled: true,
 }
 
 export const Label = Template.bind({})
 Label.args = {
+    ...Template.args,
     sType: 'primary',
     label: 'Add Peers',
 }
 
 export const LabelRight = Template.bind({})
 LabelRight.args = {
+    ...Template.args,
     sType: 'primary',
     label: 'Add Peers',
     labelPlacement: 'end',

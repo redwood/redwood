@@ -8,7 +8,7 @@ import {
 
 interface CheckBoxProps extends MUICheckboxProps {
     style?: CSSProperties
-    isChecked: boolean
+    checked: boolean
     sType: string
     label?: string
     labelPlacement?: 'start' | 'end' | 'bottom' | 'top' | undefined
@@ -39,6 +39,7 @@ const cssDisabled = css`
     .MuiTouchRipple-child {
         background-color: ${({ theme }) => theme.color.accent1};
     }
+    color: ${({ theme }) => theme.color.accent1};
     cursor: not-allowed;
     pointer-events: auto;
 `
@@ -51,19 +52,25 @@ const SCheckBox = styled(Checkbox)<CheckBoxProps>`
     }
 `
 
-const SFormControlLabel = styled(FormControlLabel)`
+const SFormControlLabel = styled(FormControlLabel)<{ disabled: boolean }>`
     &&& {
         color: ${({ theme }) => theme.color.accent2};
         .MuiFormControlLabel-label {
             font-size: ${({ theme }) => `${theme.font.size.s2}px`};
             font-family: ${({ theme }) => theme.font.type.primary};
         }
+
+        .Mui-disabled {
+            cursor: not-allowed;
+            pointer-events: auto;
+            color: ${({ theme }) => theme.color.accent1};
+        }
     }
 `
 
 function CheckBox({
     style = {},
-    isChecked = false,
+    checked = false,
     sType = 'primary',
     onValueChanged = () => true,
     label = '',
@@ -73,16 +80,17 @@ function CheckBox({
     const control = (
         <SCheckBox
             {...rest}
-            onChange={(event) => onValueChanged(!isChecked, event)}
+            onChange={(event) => onValueChanged(!checked, event)}
             style={style}
             sType={sType}
-            isChecked={isChecked}
+            checked={checked}
         />
     )
 
     if (label) {
         return (
             <SFormControlLabel
+                disabled={rest.disabled}
                 labelPlacement={labelPlacement || 'start'}
                 label={label}
                 control={control}
