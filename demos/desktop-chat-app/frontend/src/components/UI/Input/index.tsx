@@ -1,5 +1,5 @@
 import { CSSProperties, useMemo, InputHTMLAttributes } from 'react'
-import styled, { css } from 'styled-components'
+import styled from 'styled-components'
 
 const SInputLabel = styled.label`
     font-size: ${({ theme }) => `${theme.font.size.s1}px`};
@@ -25,10 +25,6 @@ const SInput = styled.input<{ hasError: boolean }>`
         outline: none;
         border-color: ${({ theme, hasError }) =>
             hasError ? theme.color.secondary : theme.color.text};
-        ${SInputLabel} {
-            background: yellow !important;
-            color: red !important;
-        }
     }
     &:disabled {
         cursor: not-allowed;
@@ -45,9 +41,6 @@ const SInputWrapper = styled.div<{ wrapperWidth: number }>`
     display: flex;
     flex-direction: column;
     width: ${({ wrapperWidth }) => `${wrapperWidth}px`};
-    ${SInput}:focus ~ ${SInputLabel} {
-        color: green;
-    }
 `
 
 const ErrorText = styled.span`

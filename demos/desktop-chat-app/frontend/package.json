@@ -11,6 +11,7 @@
         "@mikecousins/react-pdf": "^5.5.1",
         "@reduxjs/toolkit": "^1.6.1",
         "@redwood.dev/client": "0.2.2",
+        "@storybook/addons": "^6.3.11",
         "@storybook/react": "^6.3.10",
         "@testing-library/jest-dom": "^5.11.4",
         "@testing-library/react": "^11.1.0",
