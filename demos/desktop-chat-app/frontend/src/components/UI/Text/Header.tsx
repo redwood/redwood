@@ -15,8 +15,8 @@ const SSubHeader = styled.h1`
 
 interface HeaderProps {
     children: string
-    isSmall: boolean
-    style: CSSProperties
+    isSmall?: boolean
+    style?: CSSProperties
 }
 
 function Header({
