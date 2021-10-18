@@ -35,6 +35,7 @@ export const color = {
     },
     secondary: '#E84652',
     background: '#0E0C2C',
+    secondaryBackground: '#1F1E28',
     elevation1: '#19154B',
     elevation2: '#211D61',
     icon: '#C4C3D8',
@@ -43,6 +44,8 @@ export const color = {
     accent2: '#B4B3C3',
     text: 'rgb(255, 255, 255)',
     textDark: '#15141B',
+    chatSelected: '#454453',
+    chatHovered: '#353440',
     ripple: {
         primary: '#FFFFFF',
         secondary: '#303F9F',

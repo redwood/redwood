@@ -17,18 +17,28 @@ interface HeaderProps {
     children: string
     isSmall?: boolean
     style?: CSSProperties
+    className?: string
 }
 
 function Header({
+    className = '',
     children = '',
     isSmall = false,
     style = {},
 }: HeaderProps): JSX.Element {
     if (isSmall) {
-        return <SSubHeader style={style}>{children}</SSubHeader>
+        return (
+            <SSubHeader className={className} style={style}>
+                {children}
+            </SSubHeader>
+        )
     }
 
-    return <SHeader style={style}>{children}</SHeader>
+    return (
+        <SHeader className={className} style={style}>
+            {children}
+        </SHeader>
+    )
 }
 
 export default Header

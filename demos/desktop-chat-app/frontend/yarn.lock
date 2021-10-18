@@ -1219,6 +1219,18 @@
   version "4.9.1"
   resolved "https://registry.yarnpkg.com/@dicebear/avatars-bottts-sprites/-/avatars-bottts-sprites-4.9.1.tgz#c4857616e345cb7fe00a7e79d88da72e125612b6"
 
+"@dicebear/avatars-identicon-sprites@^4.9.1":
+  version "4.9.1"
+  resolved "https://registry.yarnpkg.com/@dicebear/avatars-identicon-sprites/-/avatars-identicon-sprites-4.9.1.tgz#e30ef60091bfbb76e8f8be650768d05f8f4e40b9"
+  integrity sha512-4dkKqBAN1KJNqd2Pi0Yblel8rfKYcfo3F5ufAeIPeIq+9BKuAeUPzO/aIfOmX0Uj2mP85eCnAP0z+d0GqDpQSA==
+
+"@dicebear/avatars-jdenticon-sprites@^4.9.1":
+  version "4.9.1"
+  resolved "https://registry.yarnpkg.com/@dicebear/avatars-jdenticon-sprites/-/avatars-jdenticon-sprites-4.9.1.tgz#b8dda15fa4d7c6ef21d5ef7c2c607951973fa1ba"
+  integrity sha512-alnNBtXNg5SCfLJO5VLf5eybUF2YeLU0fBr9tcUEkT0+4Y60oqw6O+ouSi8NAD1qfFq8iKRS4o3XkFeZ5kzq0A==
+  dependencies:
+    jdenticon "^2.1.1"
+
 "@dicebear/avatars@^4.9.1":
   version "4.9.1"
   resolved "https://registry.yarnpkg.com/@dicebear/avatars/-/avatars-4.9.1.tgz#3606f8ba9c681389bca9e31cc6396458466aaf92"
@@ -1899,6 +1911,17 @@
   resolved "https://registry.yarnpkg.com/@material-ui/icons/-/icons-4.11.2.tgz#b3a7353266519cd743b6461ae9fdfcb1b25eb4c5"
   dependencies:
     "@babel/runtime" "^7.4.4"
+
+"@material-ui/lab@^4.0.0-alpha.60":
+  version "4.0.0-alpha.60"
+  resolved "https://registry.yarnpkg.com/@material-ui/lab/-/lab-4.0.0-alpha.60.tgz#5ad203aed5a8569b0f1753945a21a05efa2234d2"
+  integrity sha512-fadlYsPJF+0fx2lRuyqAuJj7hAS1tLDdIEEdov5jlrpb5pp4b+mRDUqQTUxi4inRZHS1bEXpU8QWUhO6xX88aA==
+  dependencies:
+    "@babel/runtime" "^7.4.4"
+    "@material-ui/utils" "^4.11.2"
+    clsx "^1.0.4"
+    prop-types "^15.7.2"
+    react-is "^16.8.0 || ^17.0.0"
 
 "@material-ui/styles@^4.11.4":
   version "4.11.4"
@@ -4749,6 +4772,11 @@ caniuse-api@^3.0.0:
 caniuse-lite@^1.0.0, caniuse-lite@^1.0.30000981, caniuse-lite@^1.0.30001109, caniuse-lite@^1.0.30001125, caniuse-lite@^1.0.30001264:
   version "1.0.30001265"
   resolved "https://registry.yarnpkg.com/caniuse-lite/-/caniuse-lite-1.0.30001265.tgz#0613c9e6c922e422792e6fcefdf9a3afeee4f8c3"
+
+canvas-renderer@~2.1.1:
+  version "2.1.1"
+  resolved "https://registry.yarnpkg.com/canvas-renderer/-/canvas-renderer-2.1.1.tgz#d91fe9511ab48056ff9fa8a04514bede76535f55"
+  integrity sha512-/V0XetN7s1Mk3NO7x2wxPZYv0pLMQtGAhecuOuKR88beiYCUle1AbCcFZNLu+4NVzi9RVHS0rXtIgzPEaKidLw==
 
 capture-exit@^2.0.0:
   version "2.0.0"
@@ -8403,6 +8431,14 @@ iterate-value@^1.0.2:
   dependencies:
     es-get-iterator "^1.0.2"
     iterate-iterator "^1.0.1"
+
+jdenticon@^2.1.1:
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/jdenticon/-/jdenticon-2.2.0.tgz#6a9d9cb2134a7848ff21d59b3871148cbc6af87f"
+  integrity sha512-WGqwpjN9pab/Sah9pGnFH5tQc3HF3WbLV/tPVbykvk5nuAkxG/zhzQYWC2owvpnS+/A0HmlSx35rtY8kyN+x7Q==
+  dependencies:
+    "@types/node" "*"
+    canvas-renderer "~2.1.1"
 
 jest-changed-files@^26.6.2:
   version "26.6.2"

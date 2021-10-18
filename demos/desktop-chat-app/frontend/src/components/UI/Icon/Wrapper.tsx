@@ -5,6 +5,7 @@ export interface IconWrapperProps {
     style?: CSSProperties
     size?: number
     icon: JSX.Element
+    className?: string
 }
 
 const SIconWrapper = styled.div<{
@@ -21,9 +22,10 @@ function IconWrapper({
     style = {},
     size = 0,
     icon,
+    className = '',
 }: IconWrapperProps): JSX.Element {
     return (
-        <SIconWrapper style={style} size={size}>
+        <SIconWrapper className={className} style={style} size={size}>
             {icon}
         </SIconWrapper>
     )

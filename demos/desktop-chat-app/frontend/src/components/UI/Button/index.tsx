@@ -10,6 +10,7 @@ interface ButtonProps {
     disabled?: boolean
     icon?: JSX.Element
     flipIcon?: boolean
+    className?: string
     onClick: () => unknown
 }
 
@@ -146,6 +147,7 @@ function Button({
     disabled,
     icon,
     flipIcon,
+    className = '',
     onClick,
 }: ButtonProps): JSX.Element {
     const isPrimary = useMemo(() => sType === 'primary', [sType])
@@ -167,9 +169,9 @@ function Button({
 
         return label
     }, [hasLabel, hasIcon, icon, label])
-
     return (
         <SButton
+            className={className}
             disabled={disabled}
             isPrimary={isPrimary}
             isOutline={isOutline}

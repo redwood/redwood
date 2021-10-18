@@ -90,7 +90,7 @@ function CheckBox({
     if (label) {
         return (
             <SFormControlLabel
-                disabled={rest.disabled}
+                disabled={!!rest.disabled}
                 labelPlacement={labelPlacement || 'start'}
                 label={label}
                 control={control}
