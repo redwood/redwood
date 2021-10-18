@@ -8,7 +8,7 @@ import SignIn from './components/Account/SignIn'
 import SignUp from './components/Account/SignUp'
 import Profiles from './components/Account/Profiles'
 import Main from './Main'
-import theme from './theme'
+import theme from './theme/ui'
 
 // @NOTE: Need to add this ConnectionError component somewhere universal
 import FullLoading from './components/FullLoading'
@@ -90,7 +90,7 @@ function App() {
     return (
         <Router>
             <LoginStatusProvider apiEndpoint="http://localhost:54231">
-                <ThemeProvider theme={theme}>
+                <ThemeProvider theme={theme[0]}>
                     <LoginStatusContext.Consumer>
                         {(loginStatus) => (
                             <Switch>

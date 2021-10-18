@@ -1,40 +1,67 @@
 @font-face {
-    font-family: 'Noto Sans KR';
-    src: local('Noto Sans KR'),
-        url(./assets/NotoSansKR-Medium.otf) format('opentype');
-    font-weight: 500;
-}
-
-@font-face {
-    font-family: 'Noto Sans KR';
-    src: local('Noto Sans KR'),
-        url(./assets/NotoSansKR-Light.otf) format('opentype');
-    font-weight: 300;
-}
-
-@font-face {
-    font-family: 'Noto Sans KR';
-    src: local('Noto Sans KR'),
-        url(./assets/NotoSansKR-Thin.otf) format('opentype');
-    font-weight: 100;
-}
-
-@font-face {
-    font-family: 'Noto Sans KR';
-    src: local('Noto Sans KR'),
-        url(./assets/NotoSansKR-Regular.otf) format('opentype');
+    font-family: 'CallingCode';
+    src: local('CallingCode'),
+        url(./assets/fonts/CallingCode-Regular.ttf) format('opentype');
     font-weight: 400;
 }
 
 @font-face {
-    font-family: 'Noto Sans KR';
-    src: local('Noto Sans KR'),
-        url(./assets/NotoSansKR-Bold.otf) format('opentype');
+    font-family: 'CallingCode';
+    src: local('CallingCode'),
+        url(./assets/fonts/CallingCode-RegularItalics.ttf) format('opentype');
+    font-weight: 400;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: 'CallingCode';
+    src: local('CallingCode'),
+        url(./assets/fonts/CallingCode-Bold.ttf) format('opentype');
     font-weight: 700;
 }
 
+@font-face {
+    font-family: 'CallingCode';
+    src: local('CallingCode'),
+        url(./assets/fonts/CallingCode-BoldItalics.ttf) format('opentype');
+    font-weight: 700;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: 'Rogan';
+    src: local('Rogan'),
+        url(./assets/fonts/Rogan-Regular.otf) format('opentype');
+    font-weight: 400;
+}
+
+@font-face {
+    font-family: 'Rogan';
+    src: local('Rogan'), url(./assets/fonts/Rogan-Medium.otf) format('opentype');
+    font-weight: 500;
+}
+
+@font-face {
+    font-family: 'Rogan';
+    src: local('Rogan'),
+        url(./assets/fonts/Rogan-SemiBold.otf) format('opentype');
+    font-weight: 600;
+}
+
+@font-face {
+    font-family: 'Rogan';
+    src: local('Rogan'), url(./assets/fonts/Rogan-Bold.otf) format('opentype');
+    font-weight: 700;
+}
+
+@font-face {
+    font-family: 'Rogan';
+    src: local('Rogan'),
+        url(./assets/fonts/Rogan-ExtraBold.otf) format('opentype');
+    font-weight: 900;
+}
+
 body {
-    margin: 0;
-    font-family: 'Noto Sans KR';
-    font-size: 0.9rem;
+    margin: 0px;
+    font-family: 'CallingCode', sans-serif !important;
 }
