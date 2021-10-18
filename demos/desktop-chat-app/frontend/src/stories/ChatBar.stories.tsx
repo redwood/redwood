@@ -24,4 +24,8 @@ const Template: Story<ComponentProps<typeof ChatBar>> = (args) => (
 Template.args = {}
 
 export const Basic = Template.bind({})
-Basic.args = { stateURI: 'Developers' }
+Basic.args = {
+    stateURI: 'Developers',
+    nodeIdentity: '02286EE2295c08AAAb66872b9fCd615d7e46450D',
+    username: 'ItsTexMex',
+}
