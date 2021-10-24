@@ -1,5 +1,5 @@
 BootstrapPeers: []
-DataRoot: node1_data/tim
+DataRoot: node1_data/ray
 DNSOverHTTPSURL: ""
 Libp2pTransport:
     Enabled: true

@@ -12,6 +12,8 @@
         "build:main": "tsc -p tsconfig.json && browserify ./dist/main/browser.js > ./dist/browser.js && browserify --external react ./dist/main/react/index.js > ./dist/react.js && browserify ./dist/main/resolver.sync9.redwood.js > ./dist/resolver.sync9.redwood.js && cp dist/browser.js embed/redwoodjs/browser.js && cp dist/resolver.sync9.redwood.js embed/sync9/redwood.js",
         "build:test": "npm run build && rm -rf ./../demos/desktop-chat-app/frontend/src/components/redwood.js/dist && cp -R ./dist ./../demos/desktop-chat-app/frontend/src/components/redwood.js/",
         "build:module": "tsc -p tsconfig.module.json",
+        "lint": "eslint ./ --ignore-path .gitignore",
+        "lint:fix": "npm run lint -- --fix",
         "test": "./node_modules/.bin/jest",
         "test-watch": "./node_modules/.bin/jest --watch"
     },
@@ -38,6 +40,15 @@
         "babel-polyfill": "^6.26.0",
         "browserify": "^17.0.0",
         "cross-env": "7.0.3",
+        "eslint": "^7.32.0",
+        "eslint-config-airbnb": "^18.1.0",
+        "eslint-config-prettier": "^6.10.1",
+        "eslint-plugin-import": "^2.24.2",
+        "eslint-plugin-jsx-a11y": "^6.2.3",
+        "eslint-plugin-only-warn": "^1.0.3",
+        "eslint-plugin-prettier": "^4.0.0",
+        "eslint-plugin-react": "^7.26.0",
+        "eslint-plugin-unicorn": "^36.0.0",
         "esmify": "^2.1.1",
         "jest": "26.6.3",
         "mocha": "^4.0.1",
@@ -57,9 +68,13 @@
         "@reduxjs/toolkit": "^1.6.1",
         "@types/json-stable-stringify": "^1.0.32",
         "@types/react": "^17.0.2",
+        "@typescript-eslint/eslint-plugin": "^5.1.0",
+        "@typescript-eslint/parser": "^5.1.0",
+        "eslint-plugin-react-hooks": "^4.2.0",
         "ethers": "^5.0.31",
         "json-stable-stringify": "^1.0.1",
         "node-fetch": "^2.6.1",
+        "prettier": "^2.4.1",
         "react-use": "^17.3.1"
     }
 }

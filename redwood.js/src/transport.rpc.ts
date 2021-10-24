@@ -5,132 +5,132 @@ import {
     RPCIdentitiesResponse,
     RPCPeer,
     RPCPeerIdentity,
-} from "./types";
+} from './types'
 
-let theFetch: typeof fetch =
-    typeof window !== "undefined" ? fetch : require("node-fetch");
+const theFetch: typeof fetch =
+    typeof window !== 'undefined' ? fetch : require('node-fetch')
 
 async function rpcFetch(
     endpoint: string,
     method: string,
-    params?: { [key: string]: any }
+    params?: { [key: string]: any },
 ) {
-    let resp = await (
+    const resp = await (
         await theFetch(endpoint, {
-            method: "POST",
+            method: 'POST',
             headers: {
-                "Content-Type": "application/json",
+                'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                jsonrpc: "2.0",
+                jsonrpc: '2.0',
                 method,
                 params,
                 id: 0,
             }),
         })
-    ).json();
+    ).json()
 
     if (resp.error) {
-        throw new Error(resp.error.message);
+        throw new Error(resp.error.message)
     }
-    return resp.result;
+    return resp.result
 }
 
 export default function createRPCClient({
     endpoint,
 }: {
-    endpoint: string;
+    endpoint: string
 }): RPCClient {
     if (!endpoint) {
-        throw new Error("RPC client requires an endpoint");
+        throw new Error('RPC client requires an endpoint')
     }
     return {
         rpcFetch: (method: string, params?: { [key: string]: any }) =>
             rpcFetch(endpoint, method, params),
 
-        subscribe: async function ({
+        async subscribe({
             stateURI,
             keypath,
             txs,
             states,
         }: RPCSubscribeParams) {
-            await rpcFetch(endpoint, "RPC.Subscribe", {
+            await rpcFetch(endpoint, 'RPC.Subscribe', {
                 stateURI,
                 txs,
                 states,
                 keypath,
-            });
+            })
         },
 
-        identities: async function (): Promise<RPCIdentitiesResponse[]> {
+        async identities(): Promise<RPCIdentitiesResponse[]> {
             return (
-                (await rpcFetch(endpoint, "RPC.Identities")).Identities as {
-                    Address: string;
-                    Public: boolean;
+                (await rpcFetch(endpoint, 'RPC.Identities')).Identities as {
+                    Address: string
+                    Public: boolean
                 }[]
             ).map(({ Address, Public }) => ({
                 address: Address,
                 public: Public,
-            }));
+            }))
         },
 
-        newIdentity: async function () {
-            return (await rpcFetch(endpoint, "RPC.NewIdentity"))
-                .Address as string;
+        async newIdentity() {
+            return (await rpcFetch(endpoint, 'RPC.NewIdentity'))
+                .Address as string
         },
 
-        knownStateURIs: async function () {
-            return (await rpcFetch(endpoint, "RPC.KnownStateURIs"))
-                .StateURIs as string[];
+        async knownStateURIs() {
+            return (await rpcFetch(endpoint, 'RPC.KnownStateURIs'))
+                .StateURIs as string[]
         },
 
-        sendTx: async function (tx: Tx) {
-            await rpcFetch(endpoint, "RPC.SendTx", { Tx: tx });
+        async sendTx(tx: Tx) {
+            await rpcFetch(endpoint, 'RPC.SendTx', { Tx: tx })
         },
 
-        addPeer: async function ({
+        async addPeer({
             transportName,
             dialAddr,
         }: {
-            transportName: string;
-            dialAddr: string;
+            transportName: string
+            dialAddr: string
         }) {
-            await rpcFetch(endpoint, "RPC.AddPeer", {
+            await rpcFetch(endpoint, 'RPC.AddPeer', {
                 TransportName: transportName,
                 DialAddr: dialAddr,
-            });
+            })
         },
 
-        privateTreeMembers: async function (stateURI: string) {
+        async privateTreeMembers(stateURI: string) {
             try {
                 return (
-                    await rpcFetch(endpoint, "RPC.PrivateTreeMembers", {
+                    await rpcFetch(endpoint, 'RPC.PrivateTreeMembers', {
                         StateURI: stateURI,
                     })
-                ).Members as string[];
+                ).Members as string[]
             } catch (err: any) {
                 if (
-                    err.toString().indexOf("no controller for that stateURI") >
+                    err.toString().indexOf('no controller for that stateURI') >
                     -1
                 ) {
-                    return [];
+                    return []
                 }
-                throw err;
+                throw err
             }
         },
 
-        peers: async function (): Promise<RPCPeer[]> {
-            let peers = (await rpcFetch(endpoint, "RPC.Peers")).Peers as {
+        async peers(): Promise<RPCPeer[]> {
+            const peers = (await rpcFetch(endpoint, 'RPC.Peers')).Peers as {
                 Identities: {
-                    Address: string;
-                    SigningPublicKey: string;
-                    EncryptingPublicKey: string;
-                }[];
-                Transport: string;
-                DialAddr: string;
-                StateURIs: string[];
-                LastContact: number;
-            }[];
+                    Address: string
+                    SigningPublicKey: string
+                    EncryptingPublicKey: string
+                }[]
+                Transport: string
+                DialAddr: string
+                StateURIs: string[]
+                LastContact: number
+            }[]
             return peers.map((peer) => ({
                 identities: (peer.Identities || []).map((i) => ({
                     address: i.Address,
@@ -144,7 +144,7 @@ export default function createRPCClient({
                     peer.LastContact > 0
                         ? new Date(peer.LastContact * 1000)
                         : null,
-            }));
+            }))
         },
-    };
+    }
 }

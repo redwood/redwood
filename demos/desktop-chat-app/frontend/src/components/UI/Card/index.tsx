@@ -1,5 +1,9 @@
 import styled from 'styled-components'
-import Header from '../Text/Header'
+
+interface CardProps {
+    className?: string
+    children: JSX.Element
+}
 
 const SCard = styled.div`
     background: ${({ theme }) => theme.color.iconBg};
@@ -10,12 +14,8 @@ const SCard = styled.div`
     border-radius: 4px;
 `
 
-function Card(): JSX.Element {
-    return (
-        <SCard>
-            <Header>Node Connection Error</Header>
-        </SCard>
-    )
+function Card({ className = '', children }: CardProps): JSX.Element {
+    return <SCard className={className}>{children}</SCard>
 }
 
 export default Card

@@ -36,25 +36,24 @@ const SInput = styled.input<{ hasError: boolean }>`
     }
 `
 
-const SInputWrapper = styled.div<{ wrapperWidth: number }>`
+const SInputWrapper = styled.div<{ wrapperWidth: string }>`
     color: white;
     display: flex;
     flex-direction: column;
-    width: ${({ wrapperWidth }) => `${wrapperWidth}px`};
+    width: ${({ wrapperWidth }) => `${wrapperWidth}`};
 `
 
 const ErrorText = styled.span`
     color: ${({ theme }) => theme.color.secondary};
-    font-size: 8px;
+    font-size: 10px;
 `
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
-    onChange: () => void
     style?: CSSProperties
-    width?: number
+    width?: string
     id: string
-    errorText: string
-    placeholder: string
+    errorText?: string
+    placeholder?: string
     label?: string
     value: string
 }
@@ -66,7 +65,7 @@ function Input({
     placeholder = '',
     label = '',
     errorText = '',
-    width = 200,
+    width = '100%',
     value,
     ...rest
 }: InputProps): JSX.Element {

@@ -1,9 +1,10 @@
-import { CSSProperties, useMemo } from 'react'
+import { CSSProperties, useMemo, InputHTMLAttributes } from 'react'
 import styled, { css } from 'styled-components'
 import { ButtonBase } from '@material-ui/core'
 import { transparentize } from 'polished'
 
-interface ButtonProps {
+interface ButtonProps extends InputHTMLAttributes<HTMLButtonElement> {
+    type?: 'button' | 'reset' | 'submit' | undefined
     style?: CSSProperties
     label?: string
     sType: string
@@ -11,7 +12,7 @@ interface ButtonProps {
     icon?: JSX.Element
     flipIcon?: boolean
     className?: string
-    onClick: () => unknown
+    onClick?: () => unknown
 }
 
 const disabledCss = css`
@@ -149,6 +150,7 @@ function Button({
     flipIcon,
     className = '',
     onClick,
+    type,
 }: ButtonProps): JSX.Element {
     const isPrimary = useMemo(() => sType === 'primary', [sType])
     const isOutline = useMemo(() => sType === 'outline', [sType])
@@ -171,6 +173,7 @@ function Button({
     }, [hasLabel, hasIcon, icon, label])
     return (
         <SButton
+            type={type}
             className={className}
             disabled={disabled}
             isPrimary={isPrimary}

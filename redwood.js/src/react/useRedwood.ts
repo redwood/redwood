@@ -1,9 +1,9 @@
-import { useMemo, useContext } from "react";
-import { RedwoodContext } from "./RedwoodProvider";
+import { useMemo, useContext } from 'react'
+import { RedwoodContext } from './RedwoodProvider'
 
 function useRedwood() {
-    const redwood = useContext(RedwoodContext);
-    return useMemo(() => redwood, [redwood]);
+    const redwood = useContext(RedwoodContext)
+    return useMemo(() => redwood, [redwood])
 }
 
-export default useRedwood;
+export default useRedwood

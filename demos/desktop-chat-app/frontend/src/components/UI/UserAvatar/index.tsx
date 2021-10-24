@@ -12,6 +12,7 @@ const generateBgColor = (text: string): string =>
     desaturate(0.25, darken(0.1, strToColor(text)))
 
 interface UserAvatarProps {
+    className?: string
     style?: CSSProperties
     address: string
     username?: string
@@ -113,6 +114,7 @@ const SLoadingOverlay = styled.div<{ large: boolean; circle: boolean }>`
 `
 
 function UserAvatar({
+    className = '',
     style = {},
     address = '',
     username = '',
@@ -133,6 +135,7 @@ function UserAvatar({
                     circle={circle}
                     bgColor={bgColor}
                     style={style}
+                    className={className}
                 >
                     <SLoadingOverlay circle={circle} large={large}>
                         <img
@@ -180,6 +183,7 @@ function UserAvatar({
             circle={circle}
             bgColor={bgColor}
             style={style}
+            className={className}
         >
             <DefaultAvatar address={address} />
         </SUserAvatar>

@@ -217,10 +217,10 @@ function ChatBar({
                 <ChatBarHeader stateURI={stateURI} />
                 <SChatItemContainer>
                     <ChatItem
-                        chatName="General"
+                        chatName="Default"
                         preview="Testing something that is right here"
-                        onClick={() => setSelectedChat('General')}
-                        selected={selectedChat === 'General'}
+                        onClick={() => setSelectedChat('Default')}
+                        selected={selectedChat === 'Default'}
                     />
                     <ChatItem
                         chatName="Dank Memes"

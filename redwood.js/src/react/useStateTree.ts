@@ -4,8 +4,8 @@ import {
     useCallback,
     useContext,
     useDebugValue,
-} from "react";
-import useRedwood from "./useRedwood";
+} from 'react'
+import useRedwood from './useRedwood'
 
 function useStateTree(stateURI: string | null | undefined, keypath?: string) {
     const {
@@ -20,41 +20,41 @@ function useStateTree(stateURI: string | null | undefined, keypath?: string) {
         updatePrivateTreeMembers,
         updateStateTree,
         getStateTree,
-    } = useRedwood();
+    } = useRedwood()
 
-    const keypath_ = (keypath || "").length === 0 ? "/" : keypath;
+    const keypath_ = (keypath || '').length === 0 ? '/' : keypath
 
     useEffect(() => {
         (async function () {
             if (!redwoodClient || !stateURI || !updatePrivateTreeMembers) {
-                return;
+                return
             }
             // @@TODO: just read from the `.Members` keypath
-            if (!!redwoodClient.rpc) {
-                const rpc = redwoodClient.rpc;
-                getStateTree("privateTreeMembers", (currPTMembers: any) => {
+            if (redwoodClient.rpc) {
+                const { rpc } = redwoodClient
+                getStateTree('privateTreeMembers', (currPTMembers: any) => {
                     // If stateURI do not exist on privateTreeMembers fetch members and add to state
                     if (!currPTMembers.hasOwnProperty(stateURI)) {
                         rpc.privateTreeMembers(stateURI).then((members) => {
-                            updatePrivateTreeMembers(stateURI, members);
-                        });
+                            updatePrivateTreeMembers(stateURI, members)
+                        })
                     }
-                });
+                })
             }
-        })();
-    }, [redwoodClient, stateURI]);
+        })()
+    }, [redwoodClient, stateURI])
 
     useEffect(() => {
         if (!stateURI) {
-            return;
+            return
         }
 
         subscribe(stateURI, (err, data) => {
-            console.log(err, data);
-        });
-    }, [subscribe, stateURI, leaves, stateTrees]);
+            console.log(err, data)
+        })
+    }, [subscribe, stateURI, leaves, stateTrees])
 
-    return !!stateURI ? stateTrees[stateURI] : null;
+    return stateURI ? stateTrees[stateURI] : null
 }
 
-export default useStateTree;
+export default useStateTree

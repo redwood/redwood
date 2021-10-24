@@ -5,8 +5,8 @@ import { ComposeComponents, MainProviders, mainProviderProps } from './contexts'
 import LoginStatusProvider, { LoginStatusContext } from './contexts/LoginStatus'
 
 import SignIn from './components/Account/SignIn'
-import SignUp from './components/Account/SignUp'
-import Profiles from './components/Account/Profiles'
+import SignUp from './components/Account/NewSignUp'
+import Profiles from './components/Account/NewProfiles'
 import Main from './Main'
 import theme from './theme/ui'
 

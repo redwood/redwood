@@ -46,7 +46,7 @@
             "plugins": ["@typescript-eslint"]
         }
     ],
-    "ignorePatterns": ["node_modules/", "src/components/redwood.js/**"],
+    "ignorePatterns": ["node_modules/", "./dist/", "embeded/"],
     "rules": {
         "import/extensions": [
             "error",

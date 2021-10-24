@@ -4,7 +4,7 @@ export default function (opts) {
     let { onFoundPeers, onLostPeers } = opts
 
     onFoundPeers = onFoundPeers || function () {}
-    onLostPeers  = onLostPeers  || function () {}
+    onLostPeers = onLostPeers || function () {}
 
     let webrtcPeerID
     let onTxReceived
@@ -23,7 +23,7 @@ export default function (opts) {
 
     function initConnCallbacks(conn) {
         conn.on('open', () => {
-            console.log('webrtc: connected to ' + conn.peer)
+            console.log(`webrtc: connected to ${conn.peer}`)
             onFoundPeers({ webrtc: { [conn.peer]: true } })
         })
         conn.on('data', (data) => {
@@ -40,7 +40,7 @@ export default function (opts) {
 
     function subscribe({ stateURI, keypath, fromTxID, states, txs, callback }) {
         onTxReceived = _onTxReceived
-        for (let peerID of Object.keys(conns)) {
+        for (const peerID of Object.keys(conns)) {
             conns[peerID].on('data', (data) => {
                 const tx = JSON.parse(data)
                 console.log('webrtc: received from peer', peerID, '~>', tx)
@@ -56,13 +56,13 @@ export default function (opts) {
     }
 
     return {
-        transportName:   () => 'webrtc',
-        altSvcAddresses: () =>  webrtcPeerID ? [webrtcPeerID] : [],
+        transportName: () => 'webrtc',
+        altSvcAddresses: () => (webrtcPeerID ? [webrtcPeerID] : []),
         subscribe,
 
         foundPeers: (peers) => {
             knownPeers = peers
-            for (let reachableAt of Object.keys(peers.webrtc || {})) {
+            for (const reachableAt of Object.keys(peers.webrtc || {})) {
                 if (reachableAt !== webrtcPeerID && !conns[reachableAt]) {
                     connect(reachableAt)
                 }
@@ -70,7 +70,7 @@ export default function (opts) {
         },
 
         put: (tx) => {
-            Object.keys(conns).forEach(peerID => {
+            Object.keys(conns).forEach((peerID) => {
                 try {
                     console.log('webrtc: sending to peer', peerID, '~>', tx)
                     conns[peerID].send(JSON.stringify(tx))

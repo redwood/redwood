@@ -13,7 +13,7 @@ export interface RedwoodClient {
 }
 
 export interface RPCClient {
-    rpcFetch: (method: string, params?: {[key: string]: any}) => Promise<any>
+    rpcFetch: (method: string, params?: { [key: string]: any }) => Promise<any>
     subscribe: ({ stateURI, keypath, txs, states }: RPCSubscribeParams) => void
     identities: () => Promise<RPCIdentitiesResponse[]>
     newIdentity: () => Promise<string>
@@ -40,7 +40,12 @@ export interface Transport {
 export type UnsubscribeFunc = () => void
 
 export interface ResolverFunc {
-    (from: string, id: string, parents: string[] | null | undefined, patches: string[]): Object
+    (
+        from: string,
+        id: string,
+        parents: string[] | null | undefined,
+        patches: string[],
+    ): Object
 }
 
 export interface PeersMap {
@@ -126,15 +131,15 @@ export interface PeerDialInfo {
 }
 
 export interface RPCPeer {
-    identities:  RPCPeerIdentity[]
-    transport:   string
-    dialAddr:    string
-    stateURIs:   string[]
+    identities: RPCPeerIdentity[]
+    transport: string
+    dialAddr: string
+    stateURIs: string[]
     lastContact: Date | null
 }
 
 export interface RPCPeerIdentity {
-    address:             string
-    signingPublicKey:    string
+    address: string
+    signingPublicKey: string
     encryptingPublicKey: string
 }

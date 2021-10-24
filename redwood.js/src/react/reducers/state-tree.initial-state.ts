@@ -1,4 +1,4 @@
-import { TreeState } from "./state-tree.type";
+import { TreeState } from './state-tree.type'
 
 export const initialTreeState: TreeState = {
     stateTrees: {},
@@ -6,4 +6,4 @@ export const initialTreeState: TreeState = {
     privateTreeMembers: {},
     subscribedStateURIs: {},
     unsubscribeList: {},
-};
+}

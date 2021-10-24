@@ -1,5 +1,5 @@
-import { useReducer } from "react";
-import { createSlice, current } from "@reduxjs/toolkit";
+import { useReducer } from 'react'
+import { createSlice, current } from '@reduxjs/toolkit'
 
 import {
     StateTreeReducer,
@@ -11,34 +11,30 @@ import {
     SubscribedStateURIsReducer,
     UpdateUnsubscribeReducer,
     TreeState,
-} from "./state-tree.type";
-import { initialTreeState } from "./state-tree.initial-state";
+} from './state-tree.type'
+import { initialTreeState } from './state-tree.initial-state'
 
-const updateStateTree: StateTreeReducer = (state, action) => {
-    return {
-        ...state,
-        stateTrees: {
-            ...state.stateTrees,
-            ...action.payload.newStateTree,
-        },
-    };
-};
+const updateStateTree: StateTreeReducer = (state, action) => ({
+    ...state,
+    stateTrees: {
+        ...state.stateTrees,
+        ...action.payload.newStateTree,
+    },
+})
 
-const updateLeaves: LeavesReducer = (state, action) => {
-    return {
-        ...state,
-        leaves: {
-            ...state.leaves,
-            ...action.payload.newLeaves,
-        },
-    };
-};
+const updateLeaves: LeavesReducer = (state, action) => ({
+    ...state,
+    leaves: {
+        ...state.leaves,
+        ...action.payload.newLeaves,
+    },
+})
 
 const updateTreeAndLeaves: TreeAndLeavesReducer = (state, action) => {
-    const { newStateTree, newLeaves, stateURI } = action.payload;
+    const { newStateTree, newLeaves, stateURI } = action.payload
 
-    state.stateTrees[stateURI] = newStateTree;
-    state.leaves[stateURI] = newLeaves;
+    state.stateTrees[stateURI] = newStateTree
+    state.leaves[stateURI] = newLeaves
 
     // const compareStateTree = { ...state.stateTrees, [stateURI]: newStateTree };
     // const compareLeaves = { ...state.stateTrees, [stateURI]: newLeaves };
@@ -62,77 +58,75 @@ const updateTreeAndLeaves: TreeAndLeavesReducer = (state, action) => {
     //     console.log("not updating either");
     // }
 
-    return state;
-};
+    return state
+}
 
 const updatePrivateTreeMembers: PrivateTreeMembersReducer = (state, action) => {
-    const { stateURI, members } = action.payload;
+    const { stateURI, members } = action.payload
 
     const newPrivateTreeMembers = {
         ...state.privateTreeMembers,
         [stateURI]: members,
-    };
+    }
 
     if (
         JSON.stringify(newPrivateTreeMembers) !==
         JSON.stringify(state.privateTreeMembers)
     ) {
-        state.privateTreeMembers[stateURI] = members;
+        state.privateTreeMembers[stateURI] = members
     }
 
-    return state;
-};
+    return state
+}
 
 const updateSubscribedStateURIs: SubscribedStateURIsReducer = (
     state,
-    action
+    action,
 ) => {
-    const { stateURI, isSubscribed } = action.payload;
+    const { stateURI, isSubscribed } = action.payload
 
-    state.subscribedStateURIs[stateURI] = isSubscribed;
+    state.subscribedStateURIs[stateURI] = isSubscribed
 
-    return state;
-};
+    return state
+}
 
 const clearSubscribedStateURIs: any = (state: any, action: any) => {
-    state.subscribedStateURIs = {};
+    state.subscribedStateURIs = {}
 
-    return state;
-};
+    return state
+}
 
-const resetTreeState: ResetTreeReducer = () => {
-    return initialTreeState;
-};
+const resetTreeState: ResetTreeReducer = () => initialTreeState
 
 const getStateTree: GetStateTreeReducer = (state, action) => {
-    const { cb, key } = action.payload;
+    const { cb, key } = action.payload
 
-    if (key === "privateTreeMembers") {
-        const safeKey: keyof TreeState = key;
-        const safeState = current(state[safeKey]);
-        cb(safeState);
+    if (key === 'privateTreeMembers') {
+        const safeKey: keyof TreeState = key
+        const safeState = current(state[safeKey])
+        cb(safeState)
     } else {
-        cb(current(state));
+        cb(current(state))
     }
 
-    return state;
-};
+    return state
+}
 
 const updateUnsubscribeList: UpdateUnsubscribeReducer = (state, action) => {
-    const { unsub, stateURI } = action.payload;
+    const { unsub, stateURI } = action.payload
 
-    state.unsubscribeList[stateURI] = unsub;
+    state.unsubscribeList[stateURI] = unsub
 
-    return state;
-};
+    return state
+}
 
 const clearUnsubscribeList: any = (state: any, action: any) => {
-    state.unsubscribeList = {};
-};
+    state.unsubscribeList = {}
+}
 
 export const useTreeReducer = () => {
     const { name, reducer, actions, caseReducers } = createSlice({
-        name: "tree",
+        name: 'tree',
         initialState: initialTreeState,
         reducers: {
             updateStateTree,
@@ -146,9 +140,9 @@ export const useTreeReducer = () => {
             clearSubscribedStateURIs,
             clearUnsubscribeList,
         },
-    });
+    })
 
-    const [state, dispatch] = useReducer(reducer, initialTreeState);
+    const [state, dispatch] = useReducer(reducer, initialTreeState)
 
     return {
         name,
@@ -157,7 +151,7 @@ export const useTreeReducer = () => {
         state,
         dispatch,
         caseReducers,
-    };
-};
+    }
+}
 
-export default useTreeReducer;
+export default useTreeReducer

@@ -4,16 +4,16 @@ import React, {
     useState,
     useEffect,
     useRef,
-} from "react";
-import { useEvent } from "react-use";
+} from 'react'
+import { useEvent } from 'react-use'
 
-import { useTreeReducer } from "./reducers";
-import { initialTreeState } from "./reducers/state-tree.initial-state";
+import { useTreeReducer } from './reducers'
+import { initialTreeState } from './reducers/state-tree.initial-state'
 import {
     PrivateTreeMembersObj,
     SubscribedStateURIsObj,
     UnsubscribeListObj,
-} from "./reducers/state-tree.type";
+} from './reducers/state-tree.type'
 
 import Redwood, {
     RedwoodClient,
@@ -21,59 +21,57 @@ import Redwood, {
     RPCIdentitiesResponse,
     PeersMap,
     RPCPeer,
-} from "..";
+} from '..'
 
 export interface IContext {
-    identity: null | undefined | Identity;
-    nodeIdentities: null | RPCIdentitiesResponse[];
-    redwoodClient: null | RedwoodClient;
-    httpHost: string;
-    setHttpHost: (httpHost: string) => void;
-    rpcEndpoint: string;
-    setRpcEndpoint: (rpcEndpoint: string) => void;
-    useWebsocket: boolean;
+    identity: null | undefined | Identity
+    nodeIdentities: null | RPCIdentitiesResponse[]
+    redwoodClient: null | RedwoodClient
+    httpHost: string
+    setHttpHost: (httpHost: string) => void
+    rpcEndpoint: string
+    setRpcEndpoint: (rpcEndpoint: string) => void
+    useWebsocket: boolean
     subscribe: (
         stateURI: string,
-        subscribeCallback: (err: any, data: any) => void
-    ) => void;
-    subscribedStateURIs: SubscribedStateURIsObj;
+        subscribeCallback: (err: any, data: any) => void,
+    ) => void
+    subscribedStateURIs: SubscribedStateURIsObj
     updateStateTree: (
         stateURI: string,
         newTree: any,
-        newLeaves: string[]
-    ) => void;
-    updatePrivateTreeMembers: (stateURI: string, members: string[]) => void;
-    stateTrees: any;
-    leaves: Object;
-    privateTreeMembers: PrivateTreeMembersObj;
-    browserPeers: PeersMap;
-    nodePeers: RPCPeer[];
-    fetchIdentities: () => void;
-    fetchRedwoodClient: () => void;
-    getStateTree: any;
-    unsubscribeList: UnsubscribeListObj;
+        newLeaves: string[],
+    ) => void
+    updatePrivateTreeMembers: (stateURI: string, members: string[]) => void
+    stateTrees: any
+    leaves: Object
+    privateTreeMembers: PrivateTreeMembersObj
+    browserPeers: PeersMap
+    nodePeers: RPCPeer[]
+    fetchIdentities: () => void
+    fetchRedwoodClient: () => void
+    getStateTree: any
+    unsubscribeList: UnsubscribeListObj
 }
 
 export const RedwoodContext = createContext<IContext>({
     identity: null,
     nodeIdentities: null,
     redwoodClient: null,
-    httpHost: "",
+    httpHost: '',
     setHttpHost: () => {},
-    rpcEndpoint: "",
+    rpcEndpoint: '',
     setRpcEndpoint: () => {},
     useWebsocket: true,
     subscribe: (
         stateURI: string,
-        subscribeCallback: (err: any, data: any) => void
-    ) => {
-        return new Promise(() => {});
-    },
+        subscribeCallback: (err: any, data: any) => void,
+    ) => new Promise(() => {}),
     subscribedStateURIs: {},
     updateStateTree: (
         stateURI: string,
         newTree: any,
-        newLeaves: string[]
+        newLeaves: string[],
     ) => {},
     updatePrivateTreeMembers: (stateURI: string, members: string[]) => {},
     stateTrees: initialTreeState.stateTrees,
@@ -85,36 +83,36 @@ export const RedwoodContext = createContext<IContext>({
     fetchIdentities: () => {},
     fetchRedwoodClient: () => {},
     unsubscribeList: {},
-});
+})
 
 function RedwoodProvider(props: {
-    httpHost?: string;
-    rpcEndpoint?: string;
-    useWebsocket?: boolean;
-    webrtc?: boolean;
-    identity?: Identity;
-    children: React.ReactNode;
+    httpHost?: string
+    rpcEndpoint?: string
+    useWebsocket?: boolean
+    webrtc?: boolean
+    identity?: Identity
+    children: React.ReactNode
 }) {
-    let {
-        httpHost: httpHostProps = "",
-        rpcEndpoint: rpcEndpointProps = "",
+    const {
+        httpHost: httpHostProps = '',
+        rpcEndpoint: rpcEndpointProps = '',
         useWebsocket = true,
         identity,
         webrtc,
         children,
-    } = props;
+    } = props
 
     const [nodeIdentities, setNodeIdentities] = useState<
         null | RPCIdentitiesResponse[]
-    >(null);
+    >(null)
     const [redwoodClient, setRedwoodClient] = useState<null | RedwoodClient>(
-        null
-    );
-    const [browserPeers, setBrowserPeers] = useState({});
-    const [httpHost, setHttpHost] = useState(httpHostProps);
-    const [rpcEndpoint, setRpcEndpoint] = useState(rpcEndpointProps);
-    const [nodePeers, setNodePeers] = useState<RPCPeer[]>([]);
-    const [error, setError] = useState(null);
+        null,
+    )
+    const [browserPeers, setBrowserPeers] = useState({})
+    const [httpHost, setHttpHost] = useState(httpHostProps)
+    const [rpcEndpoint, setRpcEndpoint] = useState(rpcEndpointProps)
+    const [nodePeers, setNodePeers] = useState<RPCPeer[]>([])
+    const [error, setError] = useState(null)
     const {
         actions: {
             updateStateTree: updateStateTreeAction,
@@ -136,101 +134,101 @@ function RedwoodProvider(props: {
             unsubscribeList,
         },
         dispatch,
-    } = useTreeReducer();
+    } = useTreeReducer()
 
     const runBatchUnsubscribe = useCallback(async () => {
-        console.log(unsubscribeList, "un subbing");
+        console.log(unsubscribeList, 'un subbing')
 
         if (Object.values(unsubscribeList).length) {
-            const unsub = await Object.values(unsubscribeList)[0];
-            console.log("unsubbing");
-            unsub();
+            const unsub = await Object.values(unsubscribeList)[0]
+            console.log('unsubbing')
+            unsub()
         }
-    }, [unsubscribeList]);
+    }, [unsubscribeList])
 
     // If consumer changes httpHost or rpcEndpoint props override useState
     useEffect(() => {
         if (httpHostProps) {
-            setHttpHost(httpHostProps);
+            setHttpHost(httpHostProps)
         }
-    }, [httpHostProps]);
+    }, [httpHostProps])
 
     useEffect(() => {
         if (rpcEndpointProps) {
-            setRpcEndpoint(rpcEndpointProps);
+            setRpcEndpoint(rpcEndpointProps)
         }
-    }, [rpcEndpointProps]);
+    }, [rpcEndpointProps])
 
     // useEvent("beforeunload", runBatchUnsubscribe, window, { capture: true });
 
     const resetState = useCallback(() => {
-        setRedwoodClient(null);
-        setNodeIdentities(null);
-        setNodePeers([]);
-        setBrowserPeers({});
-        setError(null);
-        dispatch(resetTreeState());
-    }, []);
+        setRedwoodClient(null)
+        setNodeIdentities(null)
+        setNodePeers([])
+        setBrowserPeers({})
+        setError(null)
+        dispatch(resetTreeState())
+    }, [])
 
     useEffect(() => {
         (async function () {
-            resetState();
+            resetState()
 
             if (!httpHost) {
-                return;
+                return
             }
-            let client = Redwood.createPeer({
+            const client = Redwood.createPeer({
                 identity,
                 httpHost,
                 rpcEndpoint,
                 webrtc,
                 onFoundPeersCallback: (peers) => {
-                    setBrowserPeers(peers);
+                    setBrowserPeers(peers)
                 },
-            });
+            })
 
-            if (!!identity) {
-                await client.authorize();
+            if (identity) {
+                await client.authorize()
             }
 
-            setRedwoodClient(client);
-        })();
+            setRedwoodClient(client)
+        })()
 
         return () => {
             if (redwoodClient) {
-                console.log("closed");
-                redwoodClient.close();
+                console.log('closed')
+                redwoodClient.close()
             }
-        };
-    }, [identity, httpHost, rpcEndpoint, webrtc, setHttpHost, setRpcEndpoint]);
+        }
+    }, [identity, httpHost, rpcEndpoint, webrtc, setHttpHost, setRpcEndpoint])
 
     const fetchNodeIdentityPeers = useCallback(async () => {
         if (!redwoodClient) {
-            return;
+            return
         }
 
-        console.log("ran");
+        console.log('ran')
 
-        if (!!redwoodClient.rpc) {
+        if (redwoodClient.rpc) {
             try {
-                let newNodeIdentities =
-                    (await redwoodClient.rpc.identities()) || [];
+                const newNodeIdentities =
+                    (await redwoodClient.rpc.identities()) || []
                 if (
                     newNodeIdentities.length !== (nodeIdentities || []).length
                 ) {
-                    setNodeIdentities(newNodeIdentities);
+                    setNodeIdentities(newNodeIdentities)
                 }
             } catch (err: any) {
-                console.error(err);
+                console.error(err)
             }
 
             try {
-                let newNodePeers = (await redwoodClient.rpc.peers()) || [];
+                const newNodePeers = (await redwoodClient.rpc.peers()) || []
                 if (newNodePeers.length !== (nodePeers || []).length) {
-                    setNodePeers(newNodePeers);
+                    setNodePeers(newNodePeers)
                 }
             } catch (err: any) {
-                console.error(err);
+                console.error(err)
             }
         }
     }, [
@@ -239,86 +237,87 @@ function RedwoodProvider(props: {
         setNodeIdentities,
         nodeIdentities,
         nodePeers,
-    ]);
+    ])
 
     useEffect(() => {
-        let intervalId = window.setInterval(async () => {
-            await fetchNodeIdentityPeers();
-        }, 5000);
+        const intervalId = window.setInterval(async () => {
+            await fetchNodeIdentityPeers()
+        }, 5000)
 
         return () => {
-            clearInterval(intervalId);
-        };
-    }, [redwoodClient, nodePeers, httpHost, rpcEndpoint, nodeIdentities]);
+            clearInterval(intervalId)
+        }
+    }, [redwoodClient, nodePeers, httpHost, rpcEndpoint, nodeIdentities])
 
-    let getStateTree = useCallback((key, cb) => {
-        dispatch(getStateTreeReducer({ key, cb }));
-    }, []);
+    const getStateTree = useCallback((key, cb) => {
+        dispatch(getStateTreeReducer({ key, cb }))
+    }, [])
 
-    let updatePrivateTreeMembers = useCallback(
+    const updatePrivateTreeMembers = useCallback(
         (stateURI: string, members: string[]) =>
             dispatch(
                 updatePrivateTreeMembersAction({
                     stateURI,
                     members,
-                })
+                }),
             ),
-        []
-    );
+        [],
+    )
 
-    let updateStateTree = useCallback(
+    const updateStateTree = useCallback(
         (stateURI: string, newTree: any, newLeaves: string[]) => {
             dispatch(
                 updateTreeAndLeaves({
                     stateURI,
                     newStateTree: newTree,
-                    newLeaves: newLeaves,
-                })
-            );
+                    newLeaves,
+                }),
+            )
         },
-        [updateTreeAndLeaves]
-    );
+        [updateTreeAndLeaves],
+    )
 
-    let subscribe = useCallback(
+    const subscribe = useCallback(
         async (
             stateURI: string,
-            subscribeCallback: (err: any, data: any) => void
+            subscribeCallback: (err: any, data: any) => void,
         ) => {
             if (!redwoodClient) {
-                return () => {};
-            } else if (subscribedStateURIs[stateURI]) {
-                return () => {};
+                return () => {}
+            }
+            if (subscribedStateURIs[stateURI]) {
+                return () => {}
             }
             const unsubscribePromise = redwoodClient.subscribe({
                 stateURI,
-                keypath: "/",
+                keypath: '/',
                 states: true,
                 useWebsocket,
                 callback: async (err, next) => {
                     if (err) {
-                        console.error(err);
-                        subscribeCallback(err, null);
-                        return;
+                        console.error(err)
+                        subscribeCallback(err, null)
+                        return
                     }
-                    let { stateURI: nextStateURI, state, leaves } = next;
-                    updateStateTree(nextStateURI, state, leaves);
-                    subscribeCallback(false, next);
+                    const { stateURI: nextStateURI, state, leaves } = next
+                    updateStateTree(nextStateURI, state, leaves)
+                    subscribeCallback(false, next)
                 },
-            });
+            })
 
             dispatch(
-                updateSubscribedStateURIs({ stateURI, isSubscribed: true })
-            );
+                updateSubscribedStateURIs({ stateURI, isSubscribed: true }),
+            )
 
             dispatch(
                 updateUnsubscribeList({
                     stateURI,
                     unsub: unsubscribePromise,
-                })
-            );
+                }),
+            )
         },
-        [redwoodClient, useWebsocket, updateStateTree, subscribedStateURIs]
-    );
+        [redwoodClient, useWebsocket, updateStateTree, subscribedStateURIs],
+    )
 
     return (
         <RedwoodContext.Provider
@@ -348,7 +347,7 @@ function RedwoodProvider(props: {
         >
             {children}
         </RedwoodContext.Provider>
-    );
+    )
 }
 
-export default RedwoodProvider;
+export default RedwoodProvider
