@@ -171,7 +171,7 @@ function RedwoodProvider(props: {
     }, [])
 
     useEffect(() => {
-        (async function () {
+        ;(async function () {
             resetState()
 
             if (!httpHost) {
@@ -187,8 +187,17 @@ function RedwoodProvider(props: {
                 },
             })
 
+            console.log({ one: true, rpcEndpoint, rpc: client.rpc })
+
             if (identity) {
                 await client.authorize()
+            }
+
+            if (!!rpcEndpoint && !!client.rpc) {
+                console.log({ two: true })
+                let ucan = await client.rpc.ucan()
+                console.log({ three: true })
+                client.setUcan(ucan)
             }
 
             setRedwoodClient(client)

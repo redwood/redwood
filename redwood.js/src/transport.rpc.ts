@@ -47,6 +47,9 @@ export default function createRPCClient({
     return {
         rpcFetch: (method: string, params?: { [key: string]: any }) =>
             rpcFetch(endpoint, method, params),
+        ucan: async function () {
+            return (await rpcFetch(endpoint, 'RPC.Ucan')).JWT
+        },
 
         async subscribe({
             stateURI,

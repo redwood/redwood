@@ -51,7 +51,12 @@ export default function (opts: {
         }
     }
 
-    async function subscribe(opts: SubscribeParams) {
+    let ucan: string | undefined
+    function setUcan(newUcan: string) {
+        ucan = newUcan
+    }
+
+    async function subscribe(opts: SubscribeParams, onOpen: () => void) {
         const { stateURI, keypath, fromTxID, states, txs, callback } = opts
         try {
             let subscriptionType: SubscribeType
@@ -78,8 +83,18 @@ export default function (opts: {
                     if (fromTxID) {
                         url.searchParams.set('from_tx', fromTxID)
                     }
-                    url.protocol = 'ws'
+                    if (url.protocol === 'https:') {
+                        url.protocol = 'wss'
+                    } else if (url.protocol === 'http:') {
+                        url.protocol = 'ws'
+                    } else {
+                        throw new Error('bad http host: ' + httpHost)
+                    }
                     url.pathname = '/ws'
+
+                    if (!!ucan) {
+                        url.searchParams.set('ucan', `Bearer ${ucan}`)
+                    }
 
                     websocketConn = new WebSocket(url.toString())
                     websocketConn.onopen = function (evt) {
@@ -190,6 +205,9 @@ export default function (opts: {
                 )
             }
             unsubscribes.push(unsubscribe)
+
+            onOpen()
+
             return unsubscribe
         } catch (err) {
             callback(`http transport: ${err}`, undefined as any)
@@ -431,6 +449,9 @@ export default function (opts: {
 
     function makeRequestHeaders() {
         const headers: { [header: string]: string } = {}
+        if (ucan) {
+            headers['Authorization'] = `Bearer ${ucan}`
+        }
         const altSvc = []
         for (const tptName of Object.keys(knownPeers)) {
             for (const reachableAt of Object.keys(knownPeers[tptName])) {
@@ -450,6 +471,7 @@ export default function (opts: {
     return {
         transportName: () => 'http',
         altSvcAddresses: () => [],
+        setUcan,
         subscribe,
         get,
         put,
