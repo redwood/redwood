@@ -98,37 +98,41 @@ function createPeer(opts: CreatePeerOptions) {
         }
     }, 1000)
 
-
-    async function subscribe(params: SubscribeParams) {
-        if (subscriptions[params.stateURI] && subscriptions[params.stateURI].subscribed) {
-            return subscriptions[params.stateURI].innerUnsubscribe
-        }
-        subscriptions[params.stateURI] = { params, subscribed: false, innerUnsubscribe: () => {} }
-        return () => {
-            subscriptions[params.stateURI].innerUnsubscribe()
-            delete subscriptions[params.stateURI]
-        }
-    }
-
     async function initSubscription(params: SubscribeParams) {
         let callback = params.callback
         params.callback = (err, update) => {
             if (err) {
                 console.error('subscription error:', err)
-                transports.map(tpt => tpt.subscribe(params, () => { subscriptions[params.stateURI].subscribed = true }))
+                subscriptions[params.stateURI].subscribed = false
             }
             callback(err, update)
         }
 
+        let unsubscribers = (
+            await Promise.all(
+                transports.map((tpt) =>
+                    tpt.subscribe(params, () => {
+                        subscriptions[params.stateURI].subscribed = true
+                    }),
+                ),
+            )
+        ).filter((unsub) => !!unsub)
+        return () => {
+            for (let unsub of unsubscribers) {
+                if (unsub) {
+                    unsub()
+                }
+            }
+        }
+    }
 
     async function get({ stateURI, keypath, raw }: GetParams) {
-        for (const tpt of transports) {
+        for (let tpt of transports) {
             if (tpt.get) {
                 return tpt.get({ stateURI, keypath, raw })
             }
         }
     }
-
     async function put(tx: Tx) {
         if (!identity) {
             throw new Error('cannot .put() without an identity')

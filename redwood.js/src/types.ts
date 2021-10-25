@@ -65,10 +65,10 @@ export interface PeersCallback {
 
 export interface Tx {
     stateURI: string
-    id: string
+    id?: string
     parents: string[]
     patches: string[]
-    from: string
+    from?: string
     recipients?: string[]
     attachment?: string | Blob
     sig?: string

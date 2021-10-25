@@ -1,6 +1,6 @@
 {
-    "name": "redwood-client-test",
-    "version": "1.0.0",
+    "name": "@redwood.dev/client",
+    "version": "0.2.14",
     "description": "Client for interacting with Redwood nodes",
     "main": "dist/main/index.js",
     "module": "dist/module/index.js",
@@ -26,6 +26,10 @@
     ],
     "author": "Bryn Bellomy",
     "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/redwood/redwood/issues"
+    },
+    "homepage": "https://github.com/redwood/redwood",
     "devDependencies": {
         "@babel/cli": "7.12.10",
         "@babel/core": "7.12.10",
