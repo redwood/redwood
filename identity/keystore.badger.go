@@ -9,10 +9,10 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/pkg/errors"
 	"github.com/status-im/doubleratchet"
 
 	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
@@ -55,7 +55,7 @@ func NewBadgerKeyStore(dbFilename string, scryptParams ScryptParams) *BadgerKeyS
 
 // Loads the user's keys from the DB and decrypts them.
 func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
@@ -152,7 +152,7 @@ func (ks *BadgerKeyStore) Mnemonic() (string, error) {
 }
 
 func (ks *BadgerKeyStore) Identities() (_ []Identity, err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	ks.mu.RLock()
 	defer ks.mu.RUnlock()
@@ -166,7 +166,7 @@ func (ks *BadgerKeyStore) Identities() (_ []Identity, err error) {
 }
 
 func (ks *BadgerKeyStore) PublicIdentities() (_ []Identity, err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	ks.mu.RLock()
 	defer ks.mu.RUnlock()
@@ -189,7 +189,7 @@ func (ks *BadgerKeyStore) PublicIdentities() (_ []Identity, err error) {
 }
 
 func (ks *BadgerKeyStore) DefaultPublicIdentity() (_ Identity, err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	publicIdentities, err := ks.PublicIdentities()
 	if err != nil {
@@ -201,7 +201,7 @@ func (ks *BadgerKeyStore) DefaultPublicIdentity() (_ Identity, err error) {
 }
 
 func (ks *BadgerKeyStore) IdentityWithAddress(address types.Address) (_ Identity, err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	ks.mu.RLock()
 	defer ks.mu.RUnlock()
@@ -228,7 +228,7 @@ func (ks *BadgerKeyStore) IdentityExists(address types.Address) (_ bool, err err
 }
 
 func (ks *BadgerKeyStore) NewIdentity(public bool) (_ Identity, err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	ks.mu.RLock()
 	defer ks.mu.RUnlock()
@@ -265,7 +265,7 @@ func (ks *BadgerKeyStore) NewIdentity(public bool) (_ Identity, err error) {
 }
 
 func (ks *BadgerKeyStore) SignHash(usingIdentity types.Address, data types.Hash) (_ []byte, err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	identity, err := ks.IdentityWithAddress(usingIdentity)
 	if err != nil {
@@ -275,7 +275,7 @@ func (ks *BadgerKeyStore) SignHash(usingIdentity types.Address, data types.Hash)
 }
 
 func (ks *BadgerKeyStore) VerifySignature(usingIdentity types.Address, hash types.Hash, signature []byte) (_ bool, err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	identity, err := ks.IdentityWithAddress(usingIdentity)
 	if err != nil {
@@ -284,8 +284,8 @@ func (ks *BadgerKeyStore) VerifySignature(usingIdentity types.Address, hash type
 	return identity.SigKeypair.VerifySignature(hash, signature), nil
 }
 
-func (ks *BadgerKeyStore) SealMessageFor(usingIdentity types.Address, recipientPubKey crypto.AsymEncPubkey, msg []byte) (_ []byte, err error) {
-	defer utils.WithStack(&err)
+func (ks *BadgerKeyStore) SealMessageFor(usingIdentity types.Address, recipientPubKey *crypto.AsymEncPubkey, msg []byte) (_ []byte, err error) {
+	defer errors.AddStack(&err)
 
 	identity, err := ks.IdentityWithAddress(usingIdentity)
 	if err != nil {
@@ -294,8 +294,8 @@ func (ks *BadgerKeyStore) SealMessageFor(usingIdentity types.Address, recipientP
 	return identity.AsymEncKeypair.SealMessageFor(recipientPubKey, msg)
 }
 
-func (ks *BadgerKeyStore) OpenMessageFrom(usingIdentity types.Address, senderPublicKey crypto.AsymEncPubkey, msgEncrypted []byte) (_ []byte, err error) {
-	defer utils.WithStack(&err)
+func (ks *BadgerKeyStore) OpenMessageFrom(usingIdentity types.Address, senderPublicKey *crypto.AsymEncPubkey, msgEncrypted []byte) (_ []byte, err error) {
+	defer errors.AddStack(&err)
 
 	identity, err := ks.IdentityWithAddress(usingIdentity)
 	if err != nil {
@@ -402,7 +402,7 @@ func (ks *BadgerKeyStore) saveUser(user *badgerUser, password string) error {
 }
 
 func (ks *BadgerKeyStore) loadUser(password string) (_ *badgerUser, err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	node := ks.db.State(false)
 	defer node.Close()

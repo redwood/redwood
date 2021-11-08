@@ -7,13 +7,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
-
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/state"
-	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 

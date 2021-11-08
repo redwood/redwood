@@ -15,9 +15,8 @@ import (
 	"github.com/brynbellomy/go-structomancer"
 	"github.com/dgraph-io/badger/v2"
 	badgerpb "github.com/dgraph-io/badger/v2/pb"
-	"github.com/pkg/errors"
 
-	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -294,7 +293,7 @@ func (n *DBNode) Exists(keypath Keypath) (bool, error) {
 }
 
 func (tx *DBNode) Value(relKeypath Keypath, rng *Range) (_ interface{}, _ bool, err error) {
-	defer utils.Annotate(&err, "Value (keypath: %v, range: %v)", relKeypath, rng)
+	defer errors.Annotate(&err, "Value (keypath: %v, range: %v)", relKeypath, rng)
 
 	if rng == nil {
 		rng = tx.rng
@@ -324,7 +323,7 @@ func (tx *DBNode) Value(relKeypath Keypath, rng *Range) (_ interface{}, _ bool, 
 	if err != nil {
 		return nil, false, err
 	}
-	defer utils.Annotate(&err, "(root nodeType: %v, root valueType: %v, root length: %v, root data: %v)", rootNodeType, valueType, length, string(data))
+	defer errors.Annotate(&err, "(root nodeType: %v, root valueType: %v, root length: %v, root data: %v)", rootNodeType, valueType, length, string(data))
 
 	if rootNodeType == NodeTypeValue {
 		v, err := decodeGoValue(rootNodeType, valueType, length, rng, data)

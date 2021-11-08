@@ -5,14 +5,13 @@ import (
 	"reflect"
 
 	"github.com/brynbellomy/go-luaconv"
-	"github.com/pkg/errors"
 	lua "github.com/yuin/gopher-lua"
 
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/tree/nelson"
 	"redwood.dev/types"
-	"redwood.dev/utils"
 )
 
 type luaResolver struct {
@@ -50,8 +49,8 @@ func (r *luaResolver) InternalState() map[string]interface{} {
 	return nil
 }
 
-func (r *luaResolver) ResolveState(node state.Node, blobStore blob.Store, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) (err error) {
-	defer utils.Annotate(&err, "luaResolver.ResolveState")
+func (r *luaResolver) ResolveState(node state.Node, blobStore blob.Store, sender types.Address, txID state.Version, parents []state.Version, patches []Patch) (err error) {
+	defer errors.Annotate(&err, "luaResolver.ResolveState")
 
 	luaPatches, err := luaconv.Wrap(r.L, reflect.ValueOf(patches))
 	if err != nil {

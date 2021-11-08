@@ -10,9 +10,9 @@ import (
 	netp2p "github.com/libp2p/go-libp2p-core/network"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	protocol "github.com/libp2p/go-libp2p-protocol"
-	"github.com/pkg/errors"
 
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/libp2p/pb"

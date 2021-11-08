@@ -7,15 +7,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
-
 	"redwood.dev/blob"
 	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/state"
 	"redwood.dev/tree/nelson"
-	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
@@ -278,7 +276,7 @@ func (c *controller) processMempoolTx(tx *Tx) processTxOutcome {
 }
 
 func (c *controller) tryApplyTx(tx *Tx) (err error) {
-	defer utils.Annotate(&err, "stateURI=%v tx=%v", tx.StateURI, tx.ID.Pretty())
+	defer errors.Annotate(&err, "stateURI=%v tx=%v", tx.StateURI, tx.ID.Pretty())
 
 	//
 	// Validate the tx's intrinsics
@@ -289,7 +287,7 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 
 	for _, parentID := range tx.Parents {
 		parentTx, err := c.txStore.FetchTx(tx.StateURI, parentID)
-		if errors.Cause(err) == types.Err404 {
+		if errors.Cause(err) == errors.Err404 {
 			return errors.Wrapf(ErrNoParentYet, "parent=%v", parentID.Pretty())
 		} else if err != nil {
 			return errors.Wrapf(err, "parent=%v", parentID.Pretty())
@@ -386,11 +384,11 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 			}
 
 			resolverState, err := root.CopyToMemory(resolverKeypath.Push(MergeTypeKeypath), nil)
-			if err != nil && errors.Cause(err) != types.Err404 {
+			if err != nil && errors.Cause(err) != errors.Err404 {
 				return err
 			}
 			validatorState, err := root.CopyToMemory(resolverKeypath.Push(ValidatorKeypath), nil)
-			if err != nil && errors.Cause(err) != types.Err404 {
+			if err != nil && errors.Cause(err) != errors.Err404 {
 				return err
 			}
 
@@ -398,11 +396,11 @@ func (c *controller) tryApplyTx(tx *Tx) (err error) {
 
 			stateToResolve.Diff().SetEnabled(false)
 			err = root.Delete(resolverKeypath.Push(MergeTypeKeypath), nil)
-			if err != nil && errors.Cause(err) != types.Err404 {
+			if err != nil && errors.Cause(err) != errors.Err404 {
 				return err
 			}
 			err = root.Delete(resolverKeypath.Push(ValidatorKeypath), nil)
-			if err != nil && errors.Cause(err) != types.Err404 {
+			if err != nil && errors.Cause(err) != errors.Err404 {
 				return err
 			}
 			stateToResolve.Diff().SetEnabled(true)
@@ -506,7 +504,7 @@ func (c *controller) handleNewBlobs(root state.Node) {
 		switch {
 		case key.Equals(nelson.ValueKey):
 			contentType, err := nelson.GetContentType(root.NodeAt(parentKeypath, nil))
-			if err != nil && errors.Cause(err) != types.Err404 {
+			if err != nil && errors.Cause(err) != errors.Err404 {
 				c.Errorf("error getting ref content type: %v", err)
 				continue
 			} else if contentType != "link" {
@@ -814,11 +812,11 @@ func (c *controller) QueryIndex(version *types.ID, keypath state.Keypath, indexN
 
 		indices, exists := c.behaviorTree.indexers[string(keypath)]
 		if !exists {
-			return nil, types.Err404
+			return nil, errors.Err404
 		}
 		indexer, exists := indices[string(indexName)]
 		if !exists {
-			return nil, types.Err404
+			return nil, errors.Err404
 		}
 
 		if version == nil {
@@ -846,7 +844,7 @@ func (c *controller) QueryIndex(version *types.ID, keypath state.Keypath, indexN
 		if err != nil {
 			return nil, err
 		} else if !exists {
-			return nil, types.Err404
+			return nil, errors.Err404
 		}
 	}
 

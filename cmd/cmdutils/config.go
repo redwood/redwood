@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 
+	"redwood.dev/errors"
 	"redwood.dev/rpc"
 )
 

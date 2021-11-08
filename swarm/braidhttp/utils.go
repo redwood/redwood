@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
+	"redwood.dev/errors"
 
 	"redwood.dev/crypto"
 	"redwood.dev/swarm"

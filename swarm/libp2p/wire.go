@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/pkg/errors"
+	"redwood.dev/errors"
 
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/protoauth"

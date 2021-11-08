@@ -5,8 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/process"

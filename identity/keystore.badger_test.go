@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/pkg/errors"
 	"github.com/status-im/doubleratchet"
 	"github.com/stretchr/testify/require"
 
+	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/internal/testutils"
 	"redwood.dev/state"

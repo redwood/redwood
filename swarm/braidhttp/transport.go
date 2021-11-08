@@ -22,12 +22,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 	"golang.org/x/net/publicsuffix"
 
 	"redwood.dev/blob"
 	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/process"
@@ -987,7 +987,7 @@ func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Pee
 }
 
 func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_ <-chan prototree.TreePeerConn, err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	providers, err := t.tryFetchProvidersFromAuthoritativeHost(stateURI)
 	if err != nil {
@@ -1058,15 +1058,11 @@ func (t *transport) tryFetchProvidersFromAuthoritativeHost(stateURI string) ([]s
 }
 
 func (t *transport) ProvidersOfBlob(ctx context.Context, blobID blob.ID) (<-chan protoblob.BlobPeerConn, error) {
-	return nil, types.ErrUnimplemented
-}
-
-func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan protoauth.AuthPeerConn, error) {
-	return nil, types.ErrUnimplemented
+	return nil, errors.ErrUnimplemented
 }
 
 func (t *transport) AnnounceBlob(ctx context.Context, blobID blob.ID) error {
-	return types.ErrUnimplemented
+	return errors.ErrUnimplemented
 }
 
 var (
@@ -1112,7 +1108,9 @@ func (t *transport) setSignedCookie(w http.ResponseWriter, name string, value []
 
 func (t *transport) signedCookie(r *http.Request, name string) ([]byte, error) {
 	cookie, err := r.Cookie(name)
-	if err != nil {
+	if errors.Cause(err) == http.ErrNoCookie {
+		return nil, errors.Err404
+	} else if err != nil {
 		return nil, err
 	}
 	parts := strings.Split(cookie.Value, ":")

@@ -5,10 +5,10 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/swarm"
@@ -116,7 +116,7 @@ func (f *fetcher) startPeerPool() error {
 
 func (f *fetcher) fetchManifest(ctx context.Context) (_ blob.Manifest, err error) {
 	manifest, err := f.blobStore.Manifest(f.blobID)
-	if err != nil && errors.Cause(err) != types.Err404 {
+	if err != nil && errors.Cause(err) != errors.Err404 {
 		return blob.Manifest{}, err
 	} else if err == nil {
 		return manifest, nil
@@ -242,7 +242,7 @@ func (f *fetcher) readUntilErrorOrShutdown(ctx context.Context, peer BlobPeerCon
 	for {
 		select {
 		case <-ctx.Done():
-			return types.ErrClosed
+			return errors.ErrClosed
 		case <-f.workPool.Done():
 			return nil
 		default:

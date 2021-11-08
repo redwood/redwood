@@ -1,10 +1,10 @@
 package identity
 
 import (
-	"github.com/pkg/errors"
 	"github.com/status-im/doubleratchet"
 
 	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/types"
 )
 

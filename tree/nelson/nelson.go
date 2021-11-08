@@ -7,11 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pkg/errors"
 
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/state"
-	"redwood.dev/types"
 )
 
 type Frame struct {
@@ -151,7 +150,7 @@ func Seek(node state.Node, keypath state.Keypath, stateResolver StateResolver, b
 		}
 
 		contentType, _, err := node.StringValue(ContentTypeKey)
-		if err != nil && errors.Cause(err) != types.Err404 {
+		if err != nil && errors.Cause(err) != errors.Err404 {
 			return nil, false, err
 		}
 
@@ -163,7 +162,7 @@ func Seek(node state.Node, keypath state.Keypath, stateResolver StateResolver, b
 
 		// Link
 		linkStr, isString, err := node.StringValue(ValueKey)
-		if err != nil && errors.Cause(err) != types.Err404 {
+		if err != nil && errors.Cause(err) != errors.Err404 {
 			return nil, false, err
 		} else if !isString {
 			return nil, false, nil
@@ -183,7 +182,7 @@ func Seek(node state.Node, keypath state.Keypath, stateResolver StateResolver, b
 				return nil, false, err
 			}
 			reader, contentLength, err := blobResolver.BlobReader(blobID)
-			if errors.Cause(err) == types.Err404 {
+			if errors.Cause(err) == errors.Err404 {
 				return nil, false, nil
 			} else if err != nil {
 				return nil, false, err
@@ -249,7 +248,7 @@ func Resolve(outerNode state.Node, stateResolver StateResolver, blobResolver Blo
 			// don't set the Content-Type, just resolve the link.
 			{
 				contentType, _, err := outerNode.StringValue(parentKeypath.Push(ContentTypeKey))
-				if err != nil && errors.Cause(err) != types.Err404 {
+				if err != nil && errors.Cause(err) != errors.Err404 {
 					return nil, false, errors.Wrapf(err, "parentKeypath: %v", parentKeypath)
 				}
 				if contentType == "link" {
@@ -274,7 +273,7 @@ func Resolve(outerNode state.Node, stateResolver StateResolver, blobResolver Blo
 				// Innermost Content-Length wins
 				if frame.contentLength == 0 {
 					contentLength, exists, err := outerNode.IntValue(parentKeypath.Push(ContentLengthKey))
-					if err != nil && errors.Cause(err) != types.Err404 {
+					if err != nil && errors.Cause(err) != errors.Err404 {
 						return nil, false, err
 					}
 					if exists {
@@ -285,7 +284,7 @@ func Resolve(outerNode state.Node, stateResolver StateResolver, blobResolver Blo
 				// Innermost Content-Type wins
 				if frame.contentType == "" {
 					contentType, _, err := outerNode.StringValue(parentKeypath.Push(ContentTypeKey))
-					if err != nil && errors.Cause(err) != types.Err404 {
+					if err != nil && errors.Cause(err) != errors.Err404 {
 						return nil, false, err
 					}
 					// Enclosing (matryoshka-style) NelSON frames can't have a Content-Type of "link".  Only the innermost.
@@ -336,7 +335,7 @@ func resolveLink(frame *Frame, linkStr string, stateResolver StateResolver, blob
 		}
 		reader, contentLength, err := blobResolver.BlobReader(blobID)
 		if goerrors.Is(err, os.ErrNotExist) {
-			frame.err = types.Err404
+			frame.err = errors.Err404
 			return true
 		} else if err != nil {
 			frame.err = err

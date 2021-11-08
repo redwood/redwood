@@ -3,6 +3,7 @@ package prototree
 import (
 	"sync"
 
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"

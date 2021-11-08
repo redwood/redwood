@@ -3,11 +3,9 @@ package prototree
 import (
 	"strings"
 
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/tree"
-	"redwood.dev/types"
 )
 
 type SubscriptionMsg struct {

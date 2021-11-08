@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/pkg/errors"
 
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/prototree"

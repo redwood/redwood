@@ -2,12 +2,10 @@ package tree
 
 import (
 	"github.com/dgraph-io/badger/v2"
-	"github.com/pkg/errors"
 
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/state"
-	"redwood.dev/types"
-	"redwood.dev/utils"
 )
 
 type badgerTxStore struct {
@@ -55,14 +53,14 @@ func (s *badgerTxStore) Close() {
 	}
 }
 
-func makeTxKey(stateURI string, txID types.ID) []byte {
+func makeTxKey(stateURI string, txID state.Version) []byte {
 	return append([]byte("tx:"+stateURI+":"), txID[:]...)
 }
 
-func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
-	defer utils.Annotate(&err, "badgerTxStore#AddTx")
+func (p *badgerTxStore) AddTx(tx Tx) (err error) {
+	defer errors.Annotate(&err, "badgerTxStore#AddTx")
 
-	bs, err := tx.MarshalProto()
+	bs, err := tx.Marshal()
 	if err != nil {
 		return err
 	}
@@ -84,15 +82,15 @@ func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
 				}
 				var parentTx Tx
 				err = item.Value(func(val []byte) error {
-					return parentTx.UnmarshalProto(val)
+					return parentTx.Unmarshal(val)
 				})
 				if err != nil {
 					return err
 				}
 
-				parentTx.Children = utils.NewIDSet(parentTx.Children).Add(tx.ID).Slice()
+				parentTx.Children = state.NewVersionSet(parentTx.Children).Add(tx.ID).Slice()
 
-				parentBytes, err := parentTx.MarshalProto()
+				parentBytes, err := parentTx.Marshal()
 				if err != nil {
 					return err
 				}
@@ -115,18 +113,18 @@ func (p *badgerTxStore) AddTx(tx *Tx) (err error) {
 		p.Errorf("failed to write tx %v: %v", tx.ID.Pretty(), err)
 		return err
 	}
-	p.Infof(0, "wrote tx %v (status: %v)", tx.ID.Pretty(), tx.Status)
+	p.Infof(0, "wrote tx %v %v (status: %v)", tx.StateURI, tx.ID.Pretty(), tx.Status)
 	return nil
 }
 
-func (p *badgerTxStore) RemoveTx(stateURI string, txID types.ID) error {
+func (p *badgerTxStore) RemoveTx(stateURI string, txID state.Version) error {
 	key := makeTxKey(stateURI, txID)
 	return p.db.Update(func(txn *badger.Txn) error {
 		return txn.Delete(key)
 	})
 }
 
-func (p *badgerTxStore) TxExists(stateURI string, txID types.ID) (bool, error) {
+func (p *badgerTxStore) TxExists(stateURI string, txID state.Version) (bool, error) {
 	key := makeTxKey(stateURI, txID)
 
 	var exists bool
@@ -145,12 +143,12 @@ func (p *badgerTxStore) TxExists(stateURI string, txID types.ID) (bool, error) {
 	return exists, err
 }
 
-func (p *badgerTxStore) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
+func (p *badgerTxStore) FetchTx(stateURI string, txID state.Version) (Tx, error) {
 	var bs []byte
 	err := p.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(makeTxKey(stateURI, txID))
 		if err == badger.ErrKeyNotFound {
-			return errors.WithStack(types.Err404)
+			return errors.WithStack(errors.Err404)
 		} else if err != nil {
 			return err
 		}
@@ -169,8 +167,8 @@ func (p *badgerTxStore) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
 	return &tx, err
 }
 
-func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID types.ID) TxIterator {
-	if fromTxID == (types.ID{}) {
+func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID state.Version) TxIterator {
+	if fromTxID == (state.Version{}) {
 		fromTxID = GenesisTxID
 	}
 
@@ -248,20 +246,20 @@ func (s *badgerTxStore) KnownStateURIs() ([]string, error) {
 	return stateURIs, err
 }
 
-func (s *badgerTxStore) MarkLeaf(stateURI string, txID types.ID) error {
+func (s *badgerTxStore) MarkLeaf(stateURI string, txID state.Version) error {
 	return s.db.Update(func(txn *badger.Txn) error {
 		return txn.Set(append([]byte("leaf:"+stateURI+":"), txID[:]...), nil)
 	})
 }
 
-func (s *badgerTxStore) UnmarkLeaf(stateURI string, txID types.ID) error {
+func (s *badgerTxStore) UnmarkLeaf(stateURI string, txID state.Version) error {
 	return s.db.Update(func(txn *badger.Txn) error {
 		return txn.Delete(append([]byte("leaf:"+stateURI+":"), txID[:]...))
 	})
 }
 
-func (s *badgerTxStore) Leaves(stateURI string) ([]types.ID, error) {
-	var leaves []types.ID
+func (s *badgerTxStore) Leaves(stateURI string) ([]state.Version, error) {
+	var leaves []state.Version
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
@@ -271,7 +269,7 @@ func (s *badgerTxStore) Leaves(stateURI string) ([]types.ID, error) {
 		prefix := []byte("leaf:" + stateURI + ":")
 
 		for iter.Seek(prefix); iter.ValidForPrefix(prefix); iter.Next() {
-			txID := types.IDFromBytes(iter.Item().Key()[len("leaf:"+stateURI+":"):])
+			txID := state.VersionFromBytes(iter.Item().Key()[len("leaf:"+stateURI+":"):])
 			leaves = append(leaves, txID)
 		}
 		return nil

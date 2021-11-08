@@ -9,10 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"redwood.dev/blob"
-	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/protoauth"
@@ -220,19 +218,19 @@ func (p *peerConn) RespondChallengeIdentity(verifyAddressResponse []protoauth.Ch
 }
 
 func (p *peerConn) FetchBlobManifest(blobID blob.ID) (blob.Manifest, error) {
-	return blob.Manifest{}, types.ErrUnimplemented
+	return blob.Manifest{}, errors.ErrUnimplemented
 }
 
 func (p *peerConn) SendBlobManifest(m blob.Manifest, exists bool) error {
-	return types.ErrUnimplemented
+	return errors.ErrUnimplemented
 }
 
 func (p *peerConn) FetchBlobChunk(sha3 types.Hash) ([]byte, error) {
-	return nil, types.ErrUnimplemented
+	return nil, errors.ErrUnimplemented
 }
 
 func (p *peerConn) SendBlobChunk(chunk []byte, exists bool) error {
-	return types.ErrUnimplemented
+	return errors.ErrUnimplemented
 }
 
 func (p *peerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.PeerDialInfo) (err error) {

@@ -7,10 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
 	"redwood.dev/log"
-	"redwood.dev/types"
 )
 
 var logger = log.NewLogger("memory node")
@@ -228,7 +226,7 @@ func (n *MemoryNode) NodeInfo(relKeypath Keypath) (NodeType, ValueType, uint64, 
 
 	switch n.nodeTypes[string(absKeypath)] {
 	case NodeTypeInvalid:
-		return 0, 0, 0, errors.WithStack(types.Err404)
+		return 0, 0, 0, errors.WithStack(errors.Err404)
 
 	case NodeTypeMap:
 		return NodeTypeMap, 0, uint64(n.contentLengths[string(absKeypath)]), nil
@@ -239,7 +237,7 @@ func (n *MemoryNode) NodeInfo(relKeypath Keypath) (NodeType, ValueType, uint64, 
 	case NodeTypeValue:
 		val, exists := n.values[string(absKeypath)]
 		if !exists {
-			return 0, 0, 0, errors.WithStack(types.Err404)
+			return 0, 0, 0, errors.WithStack(errors.Err404)
 		}
 		switch v := val.(type) {
 		case string:

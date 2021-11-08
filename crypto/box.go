@@ -5,8 +5,9 @@ import (
 	"encoding/hex"
 	"io"
 
-	"github.com/pkg/errors"
 	"golang.org/x/crypto/nacl/box"
+
+	"redwood.dev/errors"
 )
 
 type (

@@ -10,9 +10,9 @@ import (
 	"github.com/btcsuite/btcutil/hdkeychain"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/pkg/errors"
 	"github.com/tyler-smith/go-bip39"
 
+	"redwood.dev/errors"
 	"redwood.dev/types"
 )
 

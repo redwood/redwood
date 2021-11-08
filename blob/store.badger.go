@@ -6,9 +6,9 @@ import (
 	"io/ioutil"
 	"sync"
 
-	"github.com/pkg/errors"
 	"golang.org/x/crypto/sha3"
 
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
@@ -64,7 +64,7 @@ func (s *badgerStore) BlobReader(blobID ID) (io.ReadCloser, int64, error) {
 	if err != nil {
 		return nil, 0, err
 	} else if !have {
-		return nil, 0, errors.WithStack(types.Err404)
+		return nil, 0, errors.WithStack(errors.Err404)
 	}
 
 	sha3, err := s.sha3ForBlobID(blobID)
@@ -81,7 +81,7 @@ func (s *badgerStore) BlobReader(blobID ID) (io.ReadCloser, int64, error) {
 	if err != nil {
 		return nil, 0, err
 	} else if !exists {
-		return nil, 0, errors.WithStack(types.Err404)
+		return nil, 0, errors.WithStack(errors.Err404)
 	}
 
 	var manifest Manifest
@@ -152,7 +152,7 @@ func (s *badgerStore) markBlobPresentAndValid(sha1, sha3 types.Hash) error {
 
 func (s *badgerStore) HaveBlob(blobID ID) (bool, error) {
 	sha3, err := s.sha3ForBlobID(blobID)
-	if errors.Cause(err) == types.Err404 {
+	if errors.Cause(err) == errors.Err404 {
 		return false, nil
 	} else if err != nil {
 		return false, err
@@ -172,7 +172,7 @@ func (s *badgerStore) HaveBlob(blobID ID) (bool, error) {
 
 	var manifest Manifest
 	err = rootNode.NodeAt(keypath, nil).Scan(&manifest)
-	if errors.Cause(err) == types.Err404 {
+	if errors.Cause(err) == errors.Err404 {
 		return false, nil
 	} else if err != nil {
 		return false, err
@@ -189,7 +189,7 @@ func (s *badgerStore) VerifyBlobOrPrune(blobID ID) error {
 	if !valid {
 		// @@TODO
 		// s.DeleteBlob()
-		return types.Err404
+		return errors.Err404
 	}
 
 	err = s.markBlobPresentAndValid(sha1, sha3)
@@ -246,7 +246,7 @@ func (s *badgerStore) Manifest(blobID ID) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	} else if !exists {
-		return Manifest{}, types.Err404
+		return Manifest{}, errors.Err404
 	}
 
 	var manifest Manifest
@@ -294,7 +294,7 @@ func (s *badgerStore) Chunk(sha3 types.Hash) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	} else if !exists {
-		return nil, types.Err404
+		return nil, errors.Err404
 	}
 
 	bytesVal, is, err := node.BytesValue(keypath)
@@ -478,14 +478,14 @@ func (s *badgerStore) sha3ForSHA1(sha1 types.Hash) (types.Hash, error) {
 	if err != nil {
 		return types.Hash{}, err
 	} else if !exists {
-		return types.Hash{}, types.Err404
+		return types.Hash{}, errors.Err404
 	}
 
 	sha3Bytes, exists, err := shaNode.BytesValue(nil)
 	if err != nil {
 		return types.Hash{}, err
 	} else if !exists {
-		return types.Hash{}, errors.WithStack(types.Err404)
+		return types.Hash{}, errors.WithStack(errors.Err404)
 	}
 	return types.HashFromBytes(sha3Bytes)
 }
@@ -501,7 +501,7 @@ func sha1ForSHA3(sha3 types.Hash, node state.Node) (types.Hash, error) {
 	if err != nil {
 		return types.Hash{}, err
 	} else if !exists {
-		return types.Hash{}, errors.WithStack(types.Err404)
+		return types.Hash{}, errors.WithStack(errors.Err404)
 	}
 	var sha1 types.Hash
 	copy(sha1[:], sha1Bytes)

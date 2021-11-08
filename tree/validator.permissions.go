@@ -5,8 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/tree/nelson"
 	"redwood.dev/types"
@@ -43,12 +42,12 @@ func (v *permissionsValidator) ValidateTx(node state.Node, tx *Tx) error {
 	if !exists {
 		perms, exists = v.permissions["*"]
 		if !exists {
-			return errors.WithStack(errors.Wrapf(types.Err403, "permissions key for user '%v' does not exist", tx.From.Hex()))
+			return errors.WithStack(errors.Wrapf(errors.Err403, "permissions key for user '%v' does not exist", tx.From.Hex()))
 		}
 	}
 	permsMap, isMap := perms.(map[string]interface{})
 	if !isMap {
-		return errors.WithStack(errors.Wrapf(types.Err403, "permissions key for user '%v' does not contain a map", tx.From.Hex()))
+		return errors.WithStack(errors.Wrapf(errors.Err403, "permissions key for user '%v' does not contain a map", tx.From.Hex()))
 	}
 
 	for _, patch := range tx.Patches {
@@ -60,7 +59,7 @@ func (v *permissionsValidator) ValidateTx(node state.Node, tx *Tx) error {
 			expandedPattern := string(senderRegexp.ReplaceAll([]byte(pattern), []byte(tx.From.Hex())))
 			matched, err := regexp.MatchString(expandedPattern, keypath)
 			if err != nil {
-				return errors.Wrapf(types.Err403, "error executing regex")
+				return errors.Wrapf(errors.Err403, "error executing regex")
 			}
 
 			if matched {
@@ -72,7 +71,7 @@ func (v *permissionsValidator) ValidateTx(node state.Node, tx *Tx) error {
 			}
 		}
 		if !valid {
-			return errors.Wrapf(types.Err403, "could not find a matching rule (user: %v, patch: %v)", tx.From.String(), patch.String())
+			return errors.Wrapf(errors.Err403, "could not find a matching rule (user: %v, patch: %v)", tx.From.String(), patch.String())
 		}
 	}
 

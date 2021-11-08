@@ -11,9 +11,9 @@ import (
 	peerstoreaddr "github.com/libp2p/go-libp2p-peerstore/addr"
 	ma "github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
-	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
+	"redwood.dev/errors"
 	"redwood.dev/swarm"
 )
 

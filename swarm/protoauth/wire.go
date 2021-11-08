@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 
-	"github.com/pkg/errors"
+	"redwood.dev/errors"
 )
 
 type ChallengeMsg []byte

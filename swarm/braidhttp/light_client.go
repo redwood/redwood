@@ -17,10 +17,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
 	"golang.org/x/net/publicsuffix"
 
 	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -176,7 +176,7 @@ func (c *LightClient) FetchTx(stateURI string, txID types.ID) (*tree.Tx, error) 
 	if err != nil {
 		return nil, errors.WithStack(err)
 	} else if resp.StatusCode == 404 {
-		return nil, types.Err404
+		return nil, errors.Err404
 	} else if resp.StatusCode != 200 {
 		return nil, errors.Errorf("error fetching tx: (%v) %v", resp.StatusCode, resp.Status)
 	}

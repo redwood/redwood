@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"redwood.dev/errors"
 	identitymocks "redwood.dev/identity/mocks"
 	"redwood.dev/internal/testutils"
 	"redwood.dev/swarm"

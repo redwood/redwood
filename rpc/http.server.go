@@ -13,9 +13,9 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
-	"github.com/pkg/errors"
 
 	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/state"
@@ -108,7 +108,7 @@ type (
 
 func (s *HTTPServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *SubscribeResponse) (err error) {
 	if s.treeProto == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	} else if args.StateURI == "" {
 		return errors.New("missing StateURI")
 	}
@@ -144,7 +144,7 @@ type (
 
 func (s *HTTPServer) Identities(r *http.Request, args *IdentitiesArgs, resp *IdentitiesResponse) error {
 	if s.keyStore == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 
 	identities, err := s.keyStore.Identities()
@@ -168,7 +168,7 @@ type (
 
 func (s *HTTPServer) NewIdentity(r *http.Request, args *NewIdentityArgs, resp *NewIdentityResponse) error {
 	if s.keyStore == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 	identity, err := s.keyStore.NewIdentity(args.Public)
 	if err != nil {
@@ -188,7 +188,7 @@ type (
 
 func (s *HTTPServer) AddPeer(r *http.Request, args *AddPeerArgs, resp *AddPeerResponse) error {
 	if s.peerStore == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 	s.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: args.TransportName, DialAddr: args.DialAddr}, "")
 	return nil
@@ -203,7 +203,7 @@ type (
 
 func (s *HTTPServer) KnownStateURIs(r *http.Request, args *KnownStateURIsArgs, resp *KnownStateURIsResponse) error {
 	if s.controllerHub == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 	stateURIs, err := s.controllerHub.KnownStateURIs()
 	if err != nil {
@@ -222,7 +222,7 @@ type (
 
 func (s *HTTPServer) SendTx(r *http.Request, args *SendTxArgs, resp *SendTxResponse) error {
 	if s.treeProto == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 	return s.treeProto.SendTx(context.Background(), args.Tx)
 }
@@ -238,7 +238,7 @@ type (
 
 func (s *HTTPServer) PrivateTreeMembers(r *http.Request, args *PrivateTreeMembersArgs, resp *PrivateTreeMembersResponse) error {
 	if s.controllerHub == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 	members, err := s.controllerHub.Members(args.StateURI)
 	if err != nil {

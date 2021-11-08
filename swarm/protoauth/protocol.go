@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/process"
@@ -123,7 +122,7 @@ func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.
 }
 
 func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn AuthPeerConn) (err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	if !peerConn.Ready() || !peerConn.Dialable() {
 		return errors.Wrapf(swarm.ErrUnreachable, "peer: %v", peerConn.DialInfo())
@@ -237,7 +236,7 @@ func (t *processPeersTask) processPeers(ctx context.Context) {
 					defer peerConn.Close()
 
 					err = peerConn.EnsureConnected(ctx)
-					if errors.Cause(err) == types.ErrConnection {
+					if errors.Cause(err) == errors.ErrConnection {
 						return
 					} else if err != nil {
 						t.Warnf("error connecting to %v peerConn (%v): %v", tpt.Name(), peerDetails.DialInfo().DialAddr, err)

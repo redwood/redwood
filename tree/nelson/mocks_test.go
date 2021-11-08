@@ -4,8 +4,8 @@ import (
 	"io"
 
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/state"
-	"redwood.dev/types"
 )
 
 type resolverMock struct {
@@ -14,10 +14,10 @@ type resolverMock struct {
 	blobLength int64
 }
 
-func (m *resolverMock) StateAtVersion(stateURI string, version *types.ID) (state.Node, error) {
+func (m *resolverMock) StateAtVersion(stateURI string, version *state.Version) (state.Node, error) {
 	state, exists := m.stateURIs[stateURI]
 	if !exists {
-		return nil, types.Err404
+		return nil, errors.Err404
 	}
 	return state, nil
 }

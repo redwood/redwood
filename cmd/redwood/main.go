@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"github.com/urfave/cli"
 
 	"redwood.dev/cmd/cmdutils"
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/utils"
@@ -83,7 +83,7 @@ func main() {
 const AppName = "redwood"
 
 func run(configPath, passwordFile string, gui, dev bool, stateURIs []string) (err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	if passwordFile == "" {
 		return errors.New("must specify --password-file flag")

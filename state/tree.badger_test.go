@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/dgraph-io/badger/v2"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
+	"redwood.dev/errors"
 	"redwood.dev/internal/testutils"
 	"redwood.dev/state"
 	"redwood.dev/types"

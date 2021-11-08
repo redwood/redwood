@@ -7,8 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/state"
@@ -98,7 +97,7 @@ func (sub *writableSubscription) Start() error {
 				err := sub.writeMessages(ctx)
 				if errors.Cause(err) == context.Canceled {
 					return
-				} else if errors.Cause(err) == types.ErrClosed {
+				} else if errors.Cause(err) == errors.ErrClosed {
 					return
 				} else if err != nil {
 					sub.subImpl.Close()
@@ -116,7 +115,7 @@ func (sub *writableSubscription) writeMessages(ctx context.Context) (err error) 
 		case <-ctx.Done():
 			return context.Canceled
 		case <-sub.subImpl.Done():
-			return types.ErrClosed
+			return errors.ErrClosed
 		default:
 		}
 
@@ -287,7 +286,7 @@ func (s *multiReaderSubscription) getPeer(ctx context.Context) (TreePeerConn, er
 
 func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, peer TreePeerConn) {
 	err := peer.EnsureConnected(ctx)
-	if errors.Cause(err) == types.ErrConnection {
+	if errors.Cause(err) == errors.ErrConnection {
 		return
 	} else if err != nil {
 		s.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
@@ -382,7 +381,7 @@ func (sub *inProcessSubscription) Put(ctx context.Context, stateURI string, tx *
 func (sub *inProcessSubscription) Read() (*SubscriptionMsg, error) {
 	select {
 	case <-sub.Process.Done():
-		return nil, types.ErrClosed
+		return SubscriptionMsg{}, errors.ErrClosed
 	case msg := <-sub.chMessages:
 		return &msg, nil
 	}
@@ -455,7 +454,7 @@ func (sub *stateURISubscription) Read(ctx context.Context) (string, error) {
 	case <-ctx.Done():
 		return "", ctx.Err()
 	case <-sub.Process.Done():
-		return "", types.ErrClosed
+		return "", errors.ErrClosed
 	case s := <-sub.ch:
 		return s, nil
 	}

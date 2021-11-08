@@ -9,6 +9,7 @@ ADD ./blob /build/blob/
 ADD ./config /build/config/
 ADD ./cmd/redwood /build/cmd/redwood/
 ADD ./crypto /build/crypto/
+ADD ./errors /build/errors/
 ADD ./identity /build/identity/
 ADD ./internal /build/internal/
 ADD ./log /build/log/

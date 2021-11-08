@@ -5,9 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/swarm"
@@ -85,6 +84,7 @@ func (bp *blobProtocol) Start() error {
 	bp.periodicallyFetchMissingBlobs()
 
 	for _, tpt := range bp.transports {
+		bp.Infof(0, "registering %v", tpt.Name())
 		tpt.OnBlobManifestRequest(bp.handleBlobManifestRequest)
 		tpt.OnBlobChunkRequest(bp.handleBlobChunkRequest)
 	}
@@ -217,7 +217,7 @@ func (bp *blobProtocol) announceBlobs(blobIDs []blob.ID) {
 
 			child.Go(nil, blobID.String(), func(ctx context.Context) {
 				err := transport.AnnounceBlob(ctx, blobID)
-				if errors.Cause(err) == types.ErrUnimplemented {
+				if errors.Cause(err) == errors.ErrUnimplemented {
 					return
 				} else if err != nil {
 					bp.Warnf("error announcing blob %v over transport %v: %v", blobID, transport.Name(), err)
@@ -234,7 +234,7 @@ func (bp *blobProtocol) handleBlobManifestRequest(blobID blob.ID, peer BlobPeerC
 	bp.Debugf("incoming blob manifest request for %v from %v", blobID, peer.DialInfo())
 
 	manifest, err := bp.blobStore.Manifest(blobID)
-	if errors.Cause(err) == types.Err404 {
+	if errors.Cause(err) == errors.Err404 {
 		err := peer.SendBlobManifest(blob.Manifest{}, false)
 		if err != nil {
 			bp.Errorf("while responding to manifest request (blobID: %v, peer: %v): %v", blobID, peer.DialInfo(), err)
@@ -260,7 +260,7 @@ func (bp *blobProtocol) handleBlobChunkRequest(sha3 types.Hash, peer BlobPeerCon
 	bp.Debugf("incoming blob chunk request for %v from %v", sha3.Hex(), peer.DialInfo())
 
 	chunkBytes, err := bp.blobStore.Chunk(sha3)
-	if errors.Cause(err) == types.Err404 {
+	if errors.Cause(err) == errors.Err404 {
 		err := peer.SendBlobChunk(nil, false)
 		if err != nil {
 			bp.Errorf("while sending blob chunk response: %v", err)

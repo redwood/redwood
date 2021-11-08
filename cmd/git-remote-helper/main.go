@@ -18,9 +18,9 @@ import (
 	"time"
 
 	git "github.com/brynbellomy/git2go"
-	"github.com/pkg/errors"
 
 	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/swarm/braidhttp"
 	"redwood.dev/tree"
@@ -257,7 +257,7 @@ func fetch(client *braidhttp.LightClient, headCommitHash string) error {
 }
 
 func fetchCommit(commitHash string, commit Commit, client *braidhttp.LightClient, odb *git.Odb, refs *sync.Map) (err error) {
-	defer utils.Annotate(&err, "fetchCommit")
+	defer errors.Annotate(&err, "fetchCommit")
 
 	logf("commit: %v", commitHash)
 
@@ -440,7 +440,7 @@ func push(srcRefName string, destRefName string, client *braidhttp.LightClient) 
 
 		txID := types.IDFromBytes(commitId[:])
 		_, err := client.FetchTx(StateURI, txID)
-		if err == types.Err404 {
+		if err == errors.Err404 {
 			err = pushCommit(commitId, destRefName, client)
 			if err != nil {
 				return err
@@ -747,7 +747,7 @@ func walkLinks(n state.Node, fn func(linkType nelson.LinkType, linkStr string, k
 			parentNode := n.NodeAt(parentKeypath, nil)
 
 			contentType, err := nelson.GetContentType(parentNode)
-			if err != nil && errors.Cause(err) != types.Err404 {
+			if err != nil && errors.Cause(err) != errors.Err404 {
 				return err
 			} else if contentType != "link" {
 				continue

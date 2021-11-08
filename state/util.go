@@ -9,7 +9,8 @@ import (
 	"strconv"
 
 	"github.com/brynbellomy/go-structomancer"
-	"github.com/pkg/errors"
+
+	"redwood.dev/errors"
 )
 
 const StructTag = "tree"

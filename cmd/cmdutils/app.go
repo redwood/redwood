@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/brynbellomy/klog"
-	"github.com/pkg/errors"
 
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/process"

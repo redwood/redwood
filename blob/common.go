@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/pkg/errors"
-
 	"redwood.dev/blob/pb"
+	"redwood.dev/errors"
 	"redwood.dev/types"
 )
 
