@@ -1,8 +1,6 @@
 package testutils
 
 import (
-	"fmt"
-	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,8 +11,7 @@ import (
 func SetupDBTree(t *testing.T) *state.DBTree {
 	t.Helper()
 
-	i := rand.Int()
-	db, err := state.NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i), nil)
+	db, err := state.NewDBTree(t.TempDir(), nil)
 	require.NoError(t, err)
 	return db
 }
@@ -22,9 +19,7 @@ func SetupDBTree(t *testing.T) *state.DBTree {
 func SetupDBTreeWithValue(t *testing.T, keypath state.Keypath, val interface{}) *state.DBTree {
 	t.Helper()
 
-	i := rand.Int()
-
-	db, err := state.NewDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i), nil)
+	db, err := state.NewDBTree(t.TempDir(), nil)
 	require.NoError(t, err)
 
 	state := db.State(true)
@@ -39,8 +34,7 @@ func SetupDBTreeWithValue(t *testing.T, keypath state.Keypath, val interface{}) 
 func SetupVersionedDBTree(t *testing.T) *state.VersionedDBTree {
 	t.Helper()
 
-	i := rand.Int()
-	db, err := state.NewVersionedDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i), nil)
+	db, err := state.NewVersionedDBTree(t.TempDir(), nil)
 	require.NoError(t, err)
 	return db
 }
@@ -48,9 +42,7 @@ func SetupVersionedDBTree(t *testing.T) *state.VersionedDBTree {
 func SetupVersionedDBTreeWithValue(t *testing.T, keypath state.Keypath, val interface{}) *state.VersionedDBTree {
 	t.Helper()
 
-	i := rand.Int()
-
-	db, err := state.NewVersionedDBTree(fmt.Sprintf("/tmp/tree-badger-test-%v", i), nil)
+	db, err := state.NewVersionedDBTree(t.TempDir(), nil)
 	require.NoError(t, err)
 
 	state := db.StateAtVersion(nil, true)
