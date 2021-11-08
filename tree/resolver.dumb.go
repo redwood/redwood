@@ -16,7 +16,7 @@ func (r *dumbResolver) InternalState() map[string]interface{} {
 	return map[string]interface{}{}
 }
 
-func (r *dumbResolver) ResolveState(node state.Node, blobStore blob.Store, sender types.Address, txID types.ID, parents []types.ID, ps []Patch) (err error) {
+func (r *dumbResolver) ResolveState(node state.Node, blobStore blob.Store, sender types.Address, txID state.Version, parents []state.Version, ps []Patch) (err error) {
 	for _, p := range ps {
 		if p.Val != nil {
 			err = node.Set(p.Keypath, p.Range, p.Val)

@@ -3,13 +3,12 @@ package nelson_test
 import (
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
+	"redwood.dev/errors"
 	"redwood.dev/internal/testutils"
 	"redwood.dev/state"
 	"redwood.dev/tree/nelson"
-	"redwood.dev/types"
 )
 
 func TestFirstNonFrameNode(t *testing.T) {
@@ -126,7 +125,7 @@ func TestFirstNonFrameNode(t *testing.T) {
 			keypath:            state.Keypath("asdf"),
 			maxDepth:           2,
 			expected:           nil,
-			expectedErrorCause: types.Err404,
+			expectedErrorCause: errors.Err404,
 		},
 	}
 

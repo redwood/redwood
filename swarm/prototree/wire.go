@@ -9,12 +9,12 @@ import (
 )
 
 type SubscriptionMsg struct {
-	StateURI    string       `json:"stateURI"`
-	Tx          *tree.Tx     `json:"tx,omitempty"`
-	EncryptedTx *EncryptedTx `json:"encryptedTx,omitempty"`
-	State       state.Node   `json:"state,omitempty"`
-	Leaves      []types.ID   `json:"leaves,omitempty"`
-	Error       error        `json:"error,omitempty"`
+	StateURI    string          `json:"stateURI"`
+	Tx          *tree.Tx        `json:"tx,omitempty"`
+	EncryptedTx *EncryptedTx    `json:"encryptedTx,omitempty"`
+	State       state.Node      `json:"state,omitempty"`
+	Leaves      []state.Version `json:"leaves,omitempty"`
+	Error       error           `json:"error,omitempty"`
 }
 
 type SubscriptionType uint8

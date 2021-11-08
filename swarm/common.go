@@ -17,7 +17,6 @@ type Transport interface {
 type PeerConn interface {
 	PeerDetails
 
-	DeviceSpecificID() string
 	Transport() Transport
 	EnsureConnected(ctx context.Context) error
 	Close() error

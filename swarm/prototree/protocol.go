@@ -40,7 +40,7 @@ type TreeTransport interface {
 type TreePeerConn interface {
 	swarm.PeerConn
 	Subscribe(ctx context.Context, stateURI string) (ReadableSubscription, error)
-	Put(ctx context.Context, tx *tree.Tx, state state.Node, leaves []types.ID) error
+	SendTx(ctx context.Context, tx tree.Tx) error
 	Ack(stateURI string, txID types.ID) error
 	AnnounceP2PStateURI(ctx context.Context, stateURI string) error
 }
@@ -86,8 +86,8 @@ func NewTreeProtocol(
 		}
 	}
 	tp := &treeProtocol{
-		Process:               *process.New("TreeProtocol"),
-		Logger:                log.NewLogger("tree proto"),
+		Process:       *process.New(ProtocolName),
+		Logger:        log.NewLogger(ProtocolName),
 		store:                 store,
 		transports:            transportsMap,
 		controllerHub:         controllerHub,
@@ -174,7 +174,7 @@ func (tp *treeProtocol) SendTx(ctx context.Context, tx tree.Tx) (err error) {
 	}
 
 	if len(tx.Parents) == 0 && tx.ID != tree.GenesisTxID {
-		var parents []types.ID
+		var parents []state.Version
 		parents, err = tp.controllerHub.Leaves(tx.StateURI)
 		if err != nil {
 			return err
@@ -316,7 +316,7 @@ func (tp *treeProtocol) handleAckReceived(stateURI string, txID types.ID, peerCo
 }
 
 func (tp *treeProtocol) handleP2PStateURIReceived(stateURI string, peerConn TreePeerConn) {
-	tp.Infof(0, "p2p state URI received: stateURI=%v peer=%v", stateURI, peerConn.DialInfo().DialAddr)
+	peerConn.AddStateURI(stateURI)
 
 	err := tp.subscribe(context.TODO(), stateURI)
 	if err != nil {

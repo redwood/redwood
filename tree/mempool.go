@@ -12,7 +12,7 @@ import (
 
 type Mempool interface {
 	process.Interface
-	Add(tx *Tx)
+	Add(tx Tx)
 	Get() *txSortedSet
 	ForceReprocess()
 }
@@ -25,20 +25,20 @@ type mempool struct {
 
 	sync.RWMutex
 	txs   *txSortedSet
-	chAdd chan *Tx
+	chAdd chan Tx
 
 	processMempoolWorkQueue *utils.Mailbox
-	processCallback         func(tx *Tx) processTxOutcome
+	processCallback         func(tx Tx) processTxOutcome
 }
 
-func NewMempool(processCallback func(tx *Tx) processTxOutcome) *mempool {
+func NewMempool(processCallback func(tx Tx) processTxOutcome) *mempool {
 	return &mempool{
 		Process:                 *process.New("Mempool"),
 		Logger:                  log.NewLogger("mempool"),
 		chStop:                  make(chan struct{}),
 		chDone:                  make(chan struct{}),
 		txs:                     newTxSortedSet(),
-		chAdd:                   make(chan *Tx, 100),
+		chAdd:                   make(chan Tx, 100),
 		processMempoolWorkQueue: utils.NewMailbox(0),
 		processCallback:         processCallback,
 	}
@@ -62,7 +62,7 @@ func (m *mempool) Start() error {
 						break
 					}
 					switch tx := x.(type) {
-					case *Tx:
+					case Tx:
 						m.txs.add(tx)
 					case struct{}:
 					}
@@ -79,7 +79,7 @@ func (m *mempool) Get() *txSortedSet {
 	return m.txs.copy()
 }
 
-func (m *mempool) Add(tx *Tx) {
+func (m *mempool) Add(tx Tx) {
 	m.processMempoolWorkQueue.Deliver(tx)
 }
 
@@ -98,7 +98,7 @@ const (
 func (m *mempool) processMempool(ctx context.Context) {
 	txs := m.txs.takeAll()
 
-	var retry []*Tx
+	var retry []Tx
 	for {
 		select {
 		case <-ctx.Done():
@@ -145,27 +145,27 @@ func (m *mempool) processMempool(ctx context.Context) {
 
 type txSortedSet struct {
 	sync.RWMutex
-	txs   map[types.Hash]*Tx
+	txs   map[types.Hash]Tx
 	order []types.Hash
 }
 
 func newTxSortedSet() *txSortedSet {
 	return &txSortedSet{
-		txs:   make(map[types.Hash]*Tx, 0),
+		txs:   make(map[types.Hash]Tx, 0),
 		order: make([]types.Hash, 0),
 	}
 }
 
-func (s *txSortedSet) takeAll() []*Tx {
+func (s *txSortedSet) takeAll() []Tx {
 	s.Lock()
 	defer s.Unlock()
 
-	cp := make([]*Tx, len(s.order))
+	cp := make([]Tx, len(s.order))
 	for i, hash := range s.order {
 		cp[i] = s.txs[hash].Copy()
 	}
 
-	s.txs = make(map[types.Hash]*Tx, 0)
+	s.txs = make(map[types.Hash]Tx, 0)
 	s.order = make([]types.Hash, 0)
 
 	return cp
@@ -179,14 +179,14 @@ func (s *txSortedSet) copy() *txSortedSet {
 	for i, hash := range s.order {
 		order[i] = hash
 	}
-	txs := make(map[types.Hash]*Tx, len(s.txs))
+	txs := make(map[types.Hash]Tx, len(s.txs))
 	for hash, tx := range s.txs {
 		txs[hash] = tx.Copy()
 	}
 	return &txSortedSet{txs: txs, order: order}
 }
 
-func (s *txSortedSet) add(tx *Tx) {
+func (s *txSortedSet) add(tx Tx) {
 	s.Lock()
 	defer s.Unlock()
 	if _, exists := s.txs[tx.Hash()]; !exists {
@@ -195,7 +195,7 @@ func (s *txSortedSet) add(tx *Tx) {
 	}
 }
 
-func (s *txSortedSet) addMany(txs []*Tx) {
+func (s *txSortedSet) addMany(txs []Tx) {
 	s.Lock()
 	defer s.Unlock()
 	for _, tx := range txs {

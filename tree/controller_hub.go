@@ -126,11 +126,7 @@ func (m *controllerHub) KnownStateURIs() ([]string, error) {
 	return m.txStore.KnownStateURIs()
 }
 
-var (
-	ErrInvalidPrivateRootKey = errors.New("invalid private root key")
-)
-
-func (m *controllerHub) AddTx(tx *Tx) error {
+func (m *controllerHub) AddTx(tx Tx) error {
 	if tx.IsPrivate() {
 		parts := strings.Split(tx.StateURI, "/")
 		if parts[len(parts)-1] != tx.PrivateRootKey() {

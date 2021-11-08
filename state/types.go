@@ -2,8 +2,11 @@ package state
 
 import (
 	"bytes"
+	"encoding/hex"
 
 	"redwood.dev/errors"
+	"redwood.dev/state/pb"
+	"redwood.dev/utils"
 )
 
 var (
@@ -11,10 +14,7 @@ var (
 	ErrNodeEncoding      = errors.New("corrupted encoding for node")
 	ErrInvalidRange      = errors.New("invalid range")
 	ErrRangeOverNonSlice = errors.New("range over non-slice")
-)
-
-var (
-	CurrentVersion = types.EmptyID
+	ErrNilKeypath        = errors.New("nil keypath")
 )
 
 // A Node is a view over the database at a particular keypath

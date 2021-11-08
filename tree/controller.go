@@ -252,7 +252,7 @@ var (
 	ErrSenderIsNotAMember   = errors.New("tx sender is not a member of state URI")
 )
 
-func (c *controller) processMempoolTx(tx *Tx) processTxOutcome {
+func (c *controller) processMempoolTx(tx Tx) processTxOutcome {
 	err := c.tryApplyTx(tx)
 
 	if err == nil {
@@ -275,7 +275,7 @@ func (c *controller) processMempoolTx(tx *Tx) processTxOutcome {
 	}
 }
 
-func (c *controller) tryApplyTx(tx *Tx) (err error) {
+func (c *controller) tryApplyTx(tx Tx) (err error) {
 	defer errors.Annotate(&err, "stateURI=%v tx=%v", tx.StateURI, tx.ID.Pretty())
 
 	//

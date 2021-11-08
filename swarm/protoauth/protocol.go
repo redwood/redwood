@@ -54,7 +54,7 @@ func NewAuthProtocol(transports []swarm.Transport, keyStore identity.KeyStore, p
 	}
 	return &authProtocol{
 		Process:    *process.New("AuthProtocol"),
-		Logger:     log.NewLogger("auth proto"),
+		Logger:     log.NewLogger(ProtocolName),
 		transports: transportsMap,
 		keyStore:   keyStore,
 		peerStore:  peerStore,

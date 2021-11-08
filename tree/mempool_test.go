@@ -7,8 +7,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
 
+	"redwood.dev/state"
 	"redwood.dev/tree"
-	"redwood.dev/types"
 )
 
 func TestMempool(t *testing.T) {
@@ -16,7 +16,7 @@ func TestMempool(t *testing.T) {
 
 	t.Run("it does not re-process successful transactions", func(t *testing.T) {
 		var count uint32
-		mempool := tree.NewMempool(func(tx *tree.Tx) tree.ProcessTxOutcome {
+		mempool := tree.NewMempool(func(tx tree.Tx) tree.ProcessTxOutcome {
 			atomic.AddUint32(&count, 1)
 			return tree.ProcessTxOutcome_Succeeded
 		})
@@ -25,13 +25,13 @@ func TestMempool(t *testing.T) {
 		require.NoError(t, err)
 		defer mempool.Close()
 
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
 
 		g.Eventually(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(2)))
 		g.Consistently(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(2)))
 
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
 
 		g.Eventually(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(3)))
 		g.Consistently(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(3)))
@@ -39,7 +39,7 @@ func TestMempool(t *testing.T) {
 
 	t.Run("does not re-process pending transactions if none of the current batch succeeded", func(t *testing.T) {
 		var count uint32
-		mempool := tree.NewMempool(func(tx *tree.Tx) tree.ProcessTxOutcome {
+		mempool := tree.NewMempool(func(tx tree.Tx) tree.ProcessTxOutcome {
 			atomic.AddUint32(&count, 1)
 			return tree.ProcessTxOutcome_Retry
 		})
@@ -48,9 +48,9 @@ func TestMempool(t *testing.T) {
 		require.NoError(t, err)
 		defer mempool.Close()
 
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
 
 		g.Eventually(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(3)))
 		g.Consistently(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(3)))
@@ -58,7 +58,7 @@ func TestMempool(t *testing.T) {
 
 	t.Run("re-processes pending transactions if some of the current batch succeeded", func(t *testing.T) {
 		var count uint32
-		mempool := tree.NewMempool(func(tx *tree.Tx) tree.ProcessTxOutcome {
+		mempool := tree.NewMempool(func(tx tree.Tx) tree.ProcessTxOutcome {
 			if atomic.AddUint32(&count, 1) == 2 {
 				return tree.ProcessTxOutcome_Succeeded
 			}
@@ -69,9 +69,9 @@ func TestMempool(t *testing.T) {
 		require.NoError(t, err)
 		defer mempool.Close()
 
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
 
 		g.Eventually(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(5)))
 		g.Consistently(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(5)))
@@ -79,7 +79,7 @@ func TestMempool(t *testing.T) {
 
 	t.Run("never re-processes failed transactions", func(t *testing.T) {
 		var count uint32
-		mempool := tree.NewMempool(func(tx *tree.Tx) tree.ProcessTxOutcome {
+		mempool := tree.NewMempool(func(tx tree.Tx) tree.ProcessTxOutcome {
 			if atomic.AddUint32(&count, 1) == 1 {
 				return tree.ProcessTxOutcome_Failed
 			}
@@ -90,13 +90,13 @@ func TestMempool(t *testing.T) {
 		require.NoError(t, err)
 		defer mempool.Close()
 
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
 
 		g.Eventually(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(2)))
 		g.Consistently(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(2)))
 
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
 
 		g.Eventually(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(3)))
 		g.Consistently(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(3)))
@@ -104,7 +104,7 @@ func TestMempool(t *testing.T) {
 
 	t.Run("ignores duplicate transactions", func(t *testing.T) {
 		var count uint32
-		mempool := tree.NewMempool(func(tx *tree.Tx) tree.ProcessTxOutcome {
+		mempool := tree.NewMempool(func(tx tree.Tx) tree.ProcessTxOutcome {
 			atomic.AddUint32(&count, 1)
 			return tree.ProcessTxOutcome_Succeeded
 		})
@@ -113,10 +113,10 @@ func TestMempool(t *testing.T) {
 		require.NoError(t, err)
 		defer mempool.Close()
 
-		id := types.RandomID()
+		id := state.RandomVersion()
 
-		mempool.Add(&tree.Tx{ID: id})
-		mempool.Add(&tree.Tx{ID: id})
+		mempool.Add(tree.Tx{ID: id})
+		mempool.Add(tree.Tx{ID: id})
 
 		g.Eventually(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(1)))
 		g.Consistently(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(1)))
@@ -124,7 +124,7 @@ func TestMempool(t *testing.T) {
 
 	t.Run("does not process transactions after .Close() is called", func(t *testing.T) {
 		var count uint32
-		mempool := tree.NewMempool(func(tx *tree.Tx) tree.ProcessTxOutcome {
+		mempool := tree.NewMempool(func(tx tree.Tx) tree.ProcessTxOutcome {
 			atomic.AddUint32(&count, 1)
 			return tree.ProcessTxOutcome_Succeeded
 		})
@@ -132,13 +132,13 @@ func TestMempool(t *testing.T) {
 		err := mempool.Start()
 		require.NoError(t, err)
 
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
 
 		g.Eventually(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(1)))
 		g.Consistently(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(1)))
 
 		mempool.Close()
-		mempool.Add(&tree.Tx{ID: types.RandomID()})
+		mempool.Add(tree.Tx{ID: state.RandomVersion()})
 
 		g.Eventually(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(1)))
 		g.Consistently(func() uint32 { return atomic.LoadUint32(&count) }).Should(Equal(uint32(1)))

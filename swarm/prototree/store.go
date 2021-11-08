@@ -12,14 +12,15 @@ import (
 
 //go:generate mockery --name Store --output ./mocks/ --case=underscore
 type Store interface {
-	SubscribedStateURIs() utils.StringSet
+	SubscribedStateURIs() types.StringSet
 	AddSubscribedStateURI(stateURI string) error
 	RemoveSubscribedStateURI(stateURI string) error
 	OnNewSubscribedStateURI(handler func(stateURI string)) (unsubscribe func())
 	MaxPeersPerSubscription() uint64
 	SetMaxPeersPerSubscription(max uint64) error
-	TxSeenByPeer(deviceSpecificID, stateURI string, txID types.ID) bool
-	MarkTxSeenByPeer(deviceSpecificID, stateURI string, txID types.ID) error
+
+	TxSeenByPeer(deviceUniqueID, stateURI string, txID state.Version) bool
+	MarkTxSeenByPeer(deviceUniqueID, stateURI string, txID state.Version) error
 }
 
 type store struct {
@@ -123,7 +124,7 @@ func (s *store) saveData() error {
 	return node.Save()
 }
 
-func (s *store) SubscribedStateURIs() utils.StringSet {
+func (s *store) SubscribedStateURIs() types.StringSet {
 	s.dataMu.RLock()
 	defer s.dataMu.RUnlock()
 	return s.data.SubscribedStateURIs.Copy()

@@ -372,7 +372,7 @@ func (sub *inProcessSubscription) Put(ctx context.Context, stateURI string, tx *
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-sub.Process.Done():
-		return types.ErrClosed
+		return errors.ErrClosed
 	case sub.chMessages <- SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves}:
 		return nil
 	}
