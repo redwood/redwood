@@ -95,20 +95,23 @@ type SymEncMsg struct {
 	Ciphertext []byte
 }
 
-func (msg SymEncMsg) MarshalBinary() ([]byte, error) {
+func SymEncMsgFromBytes(bs []byte) SymEncMsg {
+	var msg SymEncMsg
+	nonceLen := binary.LittleEndian.Uint64(bs[0:8])
+	msg.Nonce = make([]byte, nonceLen)
+	copy(msg.Nonce, bs[8:8+nonceLen])
+	ciphertextLen := binary.LittleEndian.Uint64(bs[8+nonceLen : 16+nonceLen])
+	msg.Ciphertext = make([]byte, ciphertextLen)
+	copy(msg.Ciphertext, bs[16+nonceLen:16+nonceLen+ciphertextLen])
+	return msg
+}
+
+func (msg SymEncMsg) Bytes() []byte {
 	bytes := make([]byte, 8+len(msg.Nonce)+8+len(msg.Ciphertext))
 	binary.LittleEndian.PutUint64(bytes[0:8], uint64(len(msg.Nonce)))
 	copy(bytes[8:], msg.Nonce)
 	offset := 8 + len(msg.Nonce)
 	binary.LittleEndian.PutUint64(bytes[offset:offset+8], uint64(len(msg.Ciphertext)))
 	copy(bytes[offset+8:], msg.Ciphertext)
-	return bytes, nil
-}
-
-func (msg *SymEncMsg) UnmarshalBinary(bs []byte) error {
-	nonceLen := binary.LittleEndian.Uint64(bs[0:8])
-	copy(msg.Nonce, bs[8:8+nonceLen])
-	ciphertextLen := binary.LittleEndian.Uint64(bs[8+nonceLen : 16+nonceLen])
-	copy(msg.Ciphertext, bs[16+nonceLen:16+nonceLen+ciphertextLen])
-	return nil
+	return bytes
 }

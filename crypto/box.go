@@ -11,22 +11,12 @@ import (
 )
 
 type (
-	encPrivKey [NACL_BOX_KEY_LENGTH]byte
-	encPubKey  [NACL_BOX_KEY_LENGTH]byte
-
-	AsymEncPrivkey interface {
-		SealMessageFor(recipientPubKey AsymEncPubkey, msg []byte) ([]byte, error)
-		OpenMessageFrom(senderPublicKey AsymEncPubkey, msgEncrypted []byte) ([]byte, error)
-		Bytes() []byte
-	}
-
-	AsymEncPubkey interface {
-		Bytes() []byte
-	}
+	AsymEncPrivkey [NACL_BOX_KEY_LENGTH]byte
+	AsymEncPubkey  [NACL_BOX_KEY_LENGTH]byte
 
 	AsymEncKeypair struct {
-		AsymEncPrivkey
-		AsymEncPubkey
+		*AsymEncPrivkey
+		*AsymEncPubkey
 	}
 )
 
@@ -45,74 +35,84 @@ func GenerateAsymEncKeypair() (*AsymEncKeypair, error) {
 		return nil, err
 	}
 	return &AsymEncKeypair{
-		AsymEncPrivkey: (*encPrivKey)(privateKey),
-		AsymEncPubkey:  (*encPubKey)(publicKey),
+		AsymEncPrivkey: (*AsymEncPrivkey)(privateKey),
+		AsymEncPubkey:  (*AsymEncPubkey)(publicKey),
 	}, nil
 }
 
-func AsymEncPubkeyFromBytes(bs []byte) AsymEncPubkey {
-	var pk encPubKey
+func AsymEncPubkeyFromBytes(bs []byte) *AsymEncPubkey {
+	var pk AsymEncPubkey
 	copy(pk[:], bs)
 	return &pk
 }
 
-func AsymEncPubkeyFromHex(s string) (AsymEncPubkey, error) {
+func AsymEncPubkeyFromHex(s string) (*AsymEncPubkey, error) {
 	bs, err := hex.DecodeString(s)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	var pk encPubKey
+	var pk AsymEncPubkey
 	copy(pk[:], bs)
 	return &pk, nil
 }
 
-func (pubkey *encPubKey) Bytes() []byte {
+func (pubkey *AsymEncPubkey) Bytes() []byte {
 	bs := make([]byte, NACL_BOX_KEY_LENGTH)
 	copy(bs, (*pubkey)[:])
 	return bs
 }
 
-func (pubkey *encPubKey) Hex() string {
+func (pubkey *AsymEncPubkey) Hex() string {
 	return hex.EncodeToString(pubkey.Bytes())
 }
 
-func (pubkey *encPubKey) String() string {
+func (pubkey *AsymEncPubkey) String() string {
 	return pubkey.Hex()
 }
 
-func (pubkey *encPubKey) MarshalJSON() ([]byte, error) {
+func (pubkey *AsymEncPubkey) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + pubkey.Hex() + `"`), nil
 }
 
-func AsymEncPrivkeyFromBytes(bs []byte) AsymEncPrivkey {
-	var pk encPrivKey
+func (pubkey *AsymEncPubkey) UnmarshalStateBytes(bs []byte) error {
+	k := AsymEncPubkeyFromBytes(bs)
+	*pubkey = *k
+	return nil
+}
+
+func (pubkey AsymEncPubkey) MarshalStateBytes() ([]byte, error) {
+	return pubkey.Bytes(), nil
+}
+
+func AsymEncPrivkeyFromBytes(bs []byte) *AsymEncPrivkey {
+	var pk AsymEncPrivkey
 	copy(pk[:], bs)
 	return &pk
 }
 
-func AsymEncPrivkeyFromHex(s string) (AsymEncPrivkey, error) {
+func AsymEncPrivkeyFromHex(s string) (*AsymEncPrivkey, error) {
 	bs, err := hex.DecodeString(s)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	var pk encPrivKey
+	var pk AsymEncPrivkey
 	copy(pk[:], bs)
 	return &pk, nil
 }
 
-func (privkey *encPrivKey) Bytes() []byte {
+func (privkey *AsymEncPrivkey) Bytes() []byte {
 	bs := make([]byte, NACL_BOX_KEY_LENGTH)
 	copy(bs, (*privkey)[:])
 	return bs
 }
 
-func (privkey *encPrivKey) SealMessageFor(recipientPubKey AsymEncPubkey, msg []byte) ([]byte, error) {
+func (privkey *AsymEncPrivkey) SealMessageFor(recipientPubKey *AsymEncPubkey, msg []byte) ([]byte, error) {
 	// The shared key can be used to speed up processing when using the same
 	// pair of keys repeatedly.
 	var sharedEncryptKey [NACL_BOX_KEY_LENGTH]byte
-	box.Precompute(&sharedEncryptKey, (*[NACL_BOX_KEY_LENGTH]byte)(recipientPubKey.(*encPubKey)), (*[NACL_BOX_KEY_LENGTH]byte)(privkey))
+	box.Precompute(&sharedEncryptKey, (*[NACL_BOX_KEY_LENGTH]byte)(recipientPubKey), (*[NACL_BOX_KEY_LENGTH]byte)(privkey))
 
 	// You must use a different nonce for each message you encrypt with the
 	// same key. Since the nonce here is 192 bits long, a random value
@@ -128,11 +128,11 @@ func (privkey *encPrivKey) SealMessageFor(recipientPubKey AsymEncPubkey, msg []b
 	return encrypted, nil
 }
 
-func (privkey *encPrivKey) OpenMessageFrom(senderPublicKey AsymEncPubkey, msgEncrypted []byte) ([]byte, error) {
+func (privkey *AsymEncPrivkey) OpenMessageFrom(senderPublicKey *AsymEncPubkey, msgEncrypted []byte) ([]byte, error) {
 	// The shared key can be used to speed up processing when using the same
 	// pair of keys repeatedly.
 	var sharedDecryptKey [NACL_BOX_KEY_LENGTH]byte
-	box.Precompute(&sharedDecryptKey, (*[NACL_BOX_KEY_LENGTH]byte)(senderPublicKey.(*encPubKey)), (*[NACL_BOX_KEY_LENGTH]byte)(privkey))
+	box.Precompute(&sharedDecryptKey, (*[NACL_BOX_KEY_LENGTH]byte)(senderPublicKey), (*[NACL_BOX_KEY_LENGTH]byte)(privkey))
 
 	// The recipient can decrypt the message using the shared key. When you
 	// decrypt, you must use the same nonce you used to encrypt the message.
