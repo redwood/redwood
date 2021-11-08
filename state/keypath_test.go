@@ -74,6 +74,9 @@ func TestKeypathPush(T *testing.T) {
 		{state.Keypath("foo/bar"), state.Keypath("baz"), state.Keypath("foo/bar/baz")},
 		{state.Keypath(""), state.Keypath("foo"), state.Keypath("foo")},
 		{nil, state.Keypath("foo"), state.Keypath("foo")},
+		{state.Keypath("foo"), state.Keypath(""), state.Keypath("foo")},
+		{state.Keypath("foo"), nil, state.Keypath("foo")},
+		{state.Keypath(""), state.Keypath(""), state.Keypath("")},
 		{nil, nil, nil},
 	}
 

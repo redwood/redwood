@@ -2,6 +2,7 @@ package state
 
 import (
 	"bytes"
+	"crypto/rand"
 )
 
 type Keypath []byte
@@ -286,6 +287,54 @@ func (k Keypath) CommonAncestor(other Keypath) Keypath {
 	return short
 }
 
+func (k Keypath) Normalized() Keypath {
+	if len(k) == 0 {
+		return k
+	}
+	if k[0] == KeypathSeparator[0] {
+		k = k[1:]
+	}
+	if len(k) == 0 {
+		return k
+	}
+	if k[len(k)-1] == KeypathSeparator[0] {
+		k = k[:len(k)-1]
+	}
+	return k
+}
+
+func (k Keypath) Marshal() ([]byte, error) {
+	k2 := make(Keypath, len(k))
+	copy(k2, k)
+	return k2, nil
+}
+
+func (k *Keypath) MarshalTo(data []byte) (n int, err error) {
+	copy(data, *k)
+	return len(data), nil
+}
+
+func (k *Keypath) Unmarshal(data []byte) error {
+	*k = make(Keypath, len(data))
+	copy(*k, Keypath(data).Normalized())
+	return nil
+}
+
+func (k *Keypath) Size() int { return len(*k) }
+func (k Keypath) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + string(k) + `"`), nil
+}
+func (k *Keypath) UnmarshalJSON(data []byte) error {
+	if len(data) < 3 {
+		*k = Keypath{}
+		return nil
+	}
+	*k = Keypath(data[1 : len(data)-1]).Normalized()
+	return nil
+}
+func (k Keypath) Compare(other Keypath) int { return bytes.Compare(k[:], other[:]) }
+func (k Keypath) Equal(other Keypath) bool  { return bytes.Equal(k[:], other[:]) }
+
 func JoinKeypaths(s []Keypath, sep []byte) Keypath {
 	if len(s) == 0 {
 		return nil
@@ -306,4 +355,24 @@ func JoinKeypaths(s []Keypath, sep []byte) Keypath {
 		bp += copy(b[bp:], v)
 	}
 	return b
+}
+
+func randomBytes(length int) []byte {
+	bs := make([]byte, length)
+	rand.Read(bs)
+	return bs
+}
+
+type gogoprotobufTest interface {
+	Float32() float32
+	Float64() float64
+	Int63() int64
+	Int31() int32
+	Uint32() uint32
+	Intn(n int) int
+}
+
+func NewPopulatedKeypath(_ gogoprotobufTest) *Keypath {
+	k := Keypath(randomBytes(32))
+	return &k
 }
