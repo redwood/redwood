@@ -19,3 +19,10 @@ func FilterEmptyStrings(s []string) []string {
 func RandomNumberString() string {
 	return strconv.Itoa(rand.Intn(8999) + 1000)
 }
+
+func TrimStringToLen(s string, length int) string {
+	if len(s) <= length {
+		return s
+	}
+	return s[:length] + "..."
+}
