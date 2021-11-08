@@ -20,16 +20,14 @@ import (
 type Controller interface {
 	process.Interface
 
-	AddTx(tx *Tx) error
-	StateAtVersion(version *types.ID) state.Node
-	QueryIndex(version *types.ID, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
-	Leaves() ([]types.ID, error)
-
+	AddTx(tx Tx) error
+	StateAtVersion(version *state.Version) state.Node
+	QueryIndex(version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
+	Leaves() ([]state.Version, error)
+	OnNewState(fn NewStateCallback)
 	IsPrivate() (bool, error)
 	IsMember(addr types.Address) (bool, error)
 	Members() (utils.AddressSet, error)
-
-	OnNewState(fn func(tx *Tx, state state.Node, leaves []types.ID))
 }
 
 type controller struct {
@@ -49,7 +47,7 @@ type controller struct {
 	states  *state.VersionedDBTree
 	indices *state.VersionedDBTree
 
-	newStateListeners   []func(tx *Tx, state state.Node, leaves []types.ID)
+	newStateListeners   []NewStateCallback
 	newStateListenersMu sync.RWMutex
 
 	mempool Mempool
@@ -58,6 +56,8 @@ type controller struct {
 	members   utils.AddressSet
 	isPrivate bool
 }
+
+type NewStateCallback func(tx Tx, state state.Node, leaves []state.Version)
 
 var (
 	MergeTypeKeypath = state.Keypath("Merge-Type")
@@ -156,11 +156,11 @@ func (c *controller) Close() error {
 	return c.Process.Close()
 }
 
-func (c *controller) StateAtVersion(version *types.ID) state.Node {
+func (c *controller) StateAtVersion(version *state.Version) state.Node {
 	return c.states.StateAtVersion(version, false)
 }
 
-func (c *controller) Leaves() ([]types.ID, error) {
+func (c *controller) Leaves() ([]state.Version, error) {
 	return c.txStore.Leaves(c.stateURI)
 }
 
@@ -774,13 +774,13 @@ func (c *controller) initializeIndexer(behaviorTree *behaviorTree, root state.No
 	return nil
 }
 
-func (c *controller) OnNewState(fn func(tx *Tx, state state.Node, leaves []types.ID)) {
+func (c *controller) OnNewState(fn NewStateCallback) {
 	c.newStateListenersMu.Lock()
 	defer c.newStateListenersMu.Unlock()
 	c.newStateListeners = append(c.newStateListeners, fn)
 }
 
-func (c *controller) notifyNewStateListeners(tx *Tx, root state.Node, leaves []types.ID) {
+func (c *controller) notifyNewStateListeners(tx Tx, root state.Node, leaves []state.Version) {
 	c.newStateListenersMu.RLock()
 	defer c.newStateListenersMu.RUnlock()
 
@@ -797,8 +797,8 @@ func (c *controller) notifyNewStateListeners(tx *Tx, root state.Node, leaves []t
 	wg.Wait()
 }
 
-func (c *controller) QueryIndex(version *types.ID, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (node state.Node, err error) {
-	defer utils.Annotate(&err, "keypath=%v index=%v index_arg=%v rng=%v", keypath, indexName, queryParam, rng)
+func (c *controller) QueryIndex(version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (node state.Node, err error) {
+	defer errors.Annotate(&err, "keypath=%v index=%v index_arg=%v rng=%v", keypath, indexName, queryParam, rng)
 
 	indexNode := c.indices.IndexAtVersion(version, keypath, indexName, false)
 

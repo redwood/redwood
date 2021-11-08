@@ -29,7 +29,7 @@ func (p *badgerTxStore) Start() error {
 	opts := badger.DefaultOptions(p.dbFilename)
 	opts.Logger = nil
 	if p.encryptionConfig != nil {
-		opts.EncryptionKey = p.encryptionConfig.Key.Bytes()
+		opts.EncryptionKey = p.encryptionConfig.Key
 		opts.EncryptionKeyRotationDuration = p.encryptionConfig.KeyRotationInterval
 		opts.IndexCacheSize = 100 << 20 // @@TODO: make configurable
 	}
@@ -159,12 +159,12 @@ func (p *badgerTxStore) FetchTx(stateURI string, txID state.Version) (Tx, error)
 		})
 	})
 	if err != nil {
-		return nil, err
+		return Tx{}, err
 	}
 
 	var tx Tx
-	err = tx.UnmarshalProto(bs)
-	return &tx, err
+	err = tx.Unmarshal(bs)
+	return tx, err
 }
 
 func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID state.Version) TxIterator {
@@ -172,16 +172,13 @@ func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID state.Versio
 		fromTxID = GenesisTxID
 	}
 
-	txIter := &txIterator{
-		ch:       make(chan *Tx),
-		chCancel: make(chan struct{}),
-	}
+	txIter := NewTxIterator()
 
 	go func() {
 		defer close(txIter.ch)
 
-		stack := []types.ID{fromTxID}
-		sent := make(map[types.ID]struct{})
+		stack := []state.Version{fromTxID}
+		sent := make(map[state.Version]struct{})
 
 		txIter.err = p.db.View(func(txn *badger.Txn) error {
 			for len(stack) > 0 {
@@ -199,7 +196,7 @@ func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID state.Versio
 
 				var tx Tx
 				err = item.Value(func(val []byte) error {
-					return tx.UnmarshalProto(val)
+					return tx.Unmarshal(val)
 				})
 				if err != nil {
 					return err
@@ -213,7 +210,7 @@ func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID state.Versio
 				// }
 
 				select {
-				case <-txIter.chCancel:
+				case <-txIter.chClose:
 					return nil
 				case txIter.ch <- &tx:
 				}

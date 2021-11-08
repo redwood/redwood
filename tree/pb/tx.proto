@@ -1,10 +1,10 @@
 syntax = "proto3";
 
 package Redwood.tree;
-option go_package = "redwood.dev/internal/pb";
+option go_package = "redwood.dev/tree/pb";
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-import "google/protobuf/any.proto";
+import "state/pb/state.proto";
 
 option (gogoproto.gostring_all) = true;
 option (gogoproto.equal_all) = true;
@@ -23,30 +23,33 @@ message Tx {
     // See note on the Patch message
     option (gogoproto.testgen) = false;
 
-    bytes id = 1;
-    repeated bytes parents = 2;
-    repeated bytes children = 3;
-    bytes from = 4;
-    bytes sig = 5;
+    bytes id = 1                  [(gogoproto.customtype) = "redwood.dev/state.Version",   (gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+    repeated bytes parents = 2    [(gogoproto.customtype) = "redwood.dev/state.Version",   (gogoproto.nullable) = false];
+    repeated bytes children = 3   [(gogoproto.customtype) = "redwood.dev/state.Version",   (gogoproto.nullable) = false];
+    bytes from = 4                [(gogoproto.customtype) = "redwood.dev/types.Address",   (gogoproto.nullable) = false];
+    bytes sig = 5                 [(gogoproto.customtype) = "redwood.dev/types.Signature", (gogoproto.nullable) = false];
     string stateURI = 6;
-    repeated Patch patches = 7;
-    repeated bytes recipients = 8;
-    bool checkpoint = 9;
-    bytes attachment = 10;
-    string status = 11;
-    uint64 confidence = 12;
+    repeated Patch patches = 7    [(gogoproto.nullable) = false];
+    bool checkpoint = 8;
+    bytes attachment = 9;
+    TxStatus status = 10;
+
+    // repeated bytes recipients = 8 [(gogoproto.customtype) = "redwood.dev/types.Address",   (gogoproto.nullable) = false];
+}
+
+enum TxStatus {
+    Unknown = 0   [(gogoproto.enumvalue_customname) = "TxStatusUnknown"];
+    InMempool = 1 [(gogoproto.enumvalue_customname) = "TxStatusInMempool"];
+    Invalid = 2   [(gogoproto.enumvalue_customname) = "TxStatusInvalid"];
+    Valid = 3     [(gogoproto.enumvalue_customname) = "TxStatusValid"];
 }
 
 message Patch {
-    // For some reason, the generated JSON marshaler test fails due to the Any field
+    option (gogoproto.stringer) = false;
     option (gogoproto.testgen) = false;
 
-    bytes keypath = 1;
-    Range range = 2;
-    google.protobuf.Any value = 3;
+    bytes keypath = 1 [(gogoproto.customtype) = "redwood.dev/state.Keypath", (gogoproto.nullable) = false];
+    Redwood.state.Range range = 2;
+    bytes valueJSON = 3;
 }
 
-message Range {
-    int64 start = 1;
-    int64 end = 2;
-}

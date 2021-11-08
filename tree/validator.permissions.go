@@ -8,7 +8,7 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/tree/nelson"
-	"redwood.dev/types"
+	"redwood.dev/tree/pb"
 	"redwood.dev/utils"
 )
 
@@ -54,7 +54,7 @@ func (v *permissionsValidator) ValidateTx(node state.Node, tx *Tx) error {
 		var valid bool
 
 		// @@TODO: hacky
-		keypath := KeypathSeparator + string(bytes.ReplaceAll(patch.Keypath, state.KeypathSeparator, []byte(KeypathSeparator)))
+		keypath := pb.KeypathSeparator + string(bytes.ReplaceAll(patch.Keypath, state.KeypathSeparator, []byte(pb.KeypathSeparator)))
 		for pattern := range permsMap {
 			expandedPattern := string(senderRegexp.ReplaceAll([]byte(pattern), []byte(tx.From.Hex())))
 			matched, err := regexp.MatchString(expandedPattern, keypath)

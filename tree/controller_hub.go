@@ -18,15 +18,15 @@ import (
 type ControllerHub interface {
 	process.Interface
 
-	AddTx(tx *Tx) error
-	FetchTx(stateURI string, txID types.ID) (*Tx, error)
-	FetchTxs(stateURI string, fromTxID types.ID) TxIterator
+	AddTx(tx Tx) error
+	FetchTx(stateURI string, txID state.Version) (Tx, error)
+	FetchTxs(stateURI string, fromTxID state.Version) TxIterator
 
 	EnsureController(stateURI string) (Controller, error)
 	KnownStateURIs() ([]string, error)
-	StateAtVersion(stateURI string, version *types.ID) (state.Node, error)
-	QueryIndex(stateURI string, version *types.ID, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
-	Leaves(stateURI string) ([]types.ID, error)
+	StateAtVersion(stateURI string, version *state.Version) (state.Node, error)
+	QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
+	Leaves(stateURI string) ([]state.Version, error)
 
 	IsPrivate(stateURI string) (bool, error)
 	IsMember(stateURI string, addr types.Address) (bool, error)
@@ -34,7 +34,7 @@ type ControllerHub interface {
 
 	BlobReader(refID blob.ID) (io.ReadCloser, int64, error)
 
-	OnNewState(fn func(tx *Tx, root state.Node, leaves []types.ID))
+	OnNewState(fn NewStateCallback)
 }
 
 type controllerHub struct {
@@ -49,7 +49,7 @@ type controllerHub struct {
 	dbRootPath       string
 	encryptionConfig *state.EncryptionConfig
 
-	newStateListeners   []func(tx *Tx, root state.Node, leaves []types.ID)
+	newStateListeners   []NewStateCallback
 	newStateListenersMu sync.RWMutex
 }
 
@@ -145,15 +145,15 @@ func (m *controllerHub) AddTx(tx *Tx) error {
 	return ctrl.AddTx(tx)
 }
 
-func (m *controllerHub) FetchTxs(stateURI string, fromTxID types.ID) TxIterator {
+func (m *controllerHub) FetchTxs(stateURI string, fromTxID state.Version) TxIterator {
 	return m.txStore.AllTxsForStateURI(stateURI, fromTxID)
 }
 
-func (m *controllerHub) FetchTx(stateURI string, txID types.ID) (*Tx, error) {
+func (m *controllerHub) FetchTx(stateURI string, txID state.Version) (Tx, error) {
 	return m.txStore.FetchTx(stateURI, txID)
 }
 
-func (m *controllerHub) StateAtVersion(stateURI string, version *types.ID) (state.Node, error) {
+func (m *controllerHub) StateAtVersion(stateURI string, version *state.Version) (state.Node, error) {
 	m.controllersMu.RLock()
 	defer m.controllersMu.RUnlock()
 
@@ -164,7 +164,7 @@ func (m *controllerHub) StateAtVersion(stateURI string, version *types.ID) (stat
 	return ctrl.StateAtVersion(version), nil
 }
 
-func (m *controllerHub) QueryIndex(stateURI string, version *types.ID, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error) {
+func (m *controllerHub) QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error) {
 	m.controllersMu.RLock()
 	defer m.controllersMu.RUnlock()
 
@@ -179,7 +179,7 @@ func (m *controllerHub) BlobReader(refID blob.ID) (io.ReadCloser, int64, error) 
 	return m.blobStore.BlobReader(refID)
 }
 
-func (m *controllerHub) Leaves(stateURI string) ([]types.ID, error) {
+func (m *controllerHub) Leaves(stateURI string) ([]state.Version, error) {
 	return m.txStore.Leaves(stateURI)
 }
 
@@ -216,13 +216,13 @@ func (m *controllerHub) Members(stateURI string) (utils.AddressSet, error) {
 	return ctrl.Members()
 }
 
-func (m *controllerHub) OnNewState(fn func(tx *Tx, root state.Node, leaves []types.ID)) {
+func (m *controllerHub) OnNewState(fn NewStateCallback) {
 	m.newStateListenersMu.Lock()
 	defer m.newStateListenersMu.Unlock()
 	m.newStateListeners = append(m.newStateListeners, fn)
 }
 
-func (m *controllerHub) notifyNewStateListeners(tx *Tx, root state.Node, leaves []types.ID) {
+func (m *controllerHub) notifyNewStateListeners(tx Tx, root state.Node, leaves []state.Version) {
 	m.newStateListenersMu.RLock()
 	defer m.newStateListenersMu.RUnlock()
 

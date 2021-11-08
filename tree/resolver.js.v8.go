@@ -74,14 +74,14 @@ func (r *jsResolver) InternalState() map[string]interface{} {
 	return r.internalState
 }
 
-func (r *jsResolver) ResolveState(node state.Node, blobStore blob.Store, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) (err error) {
+func (r *jsResolver) ResolveState(node state.Node, blobStore blob.Store, sender types.Address, txID state.Version, parents []state.Version, patches []Patch) (err error) {
 	defer errors.Annotate(&err, "jsResolver.ResolveState")
 
 	convertedPatches := make([]interface{}, len(patches))
 	for i, patch := range patches {
 		convertedPatch := map[string]interface{}{
 			"keys": patch.Keypath.PartStrings(),
-			"val":  patch.Val,
+			"val":  val,
 		}
 
 		if patch.Range != nil {
