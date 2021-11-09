@@ -62,8 +62,8 @@ type treeProtocol struct {
 	writableSubscriptions   map[string]map[WritableSubscription]struct{} // map[stateURI]
 	writableSubscriptionsMu sync.RWMutex
 
-	broadcastTxsToStateURIProvidersTask *broadcastTxsToStateURIProvidersTask
-	announceP2PStateURIsTask            *announceP2PStateURIsTask
+	announceP2PStateURIsTask *announceP2PStateURIsTask
+	poolWorker               process.PoolWorker
 }
 
 var (
@@ -136,14 +136,18 @@ func (tp *treeProtocol) Start() error {
 		}
 	})
 
-	err = tp.Process.SpawnChild(nil, tp.broadcastTxsToStateURIProvidersTask)
-	if err != nil {
-		return err
-	}
+	tp.announceP2PStateURIsTask = NewAnnounceP2PStateURIsTask(10*time.Second, tp)
 	err = tp.Process.SpawnChild(nil, tp.announceP2PStateURIsTask)
 	if err != nil {
 		return err
 	}
+
+	tp.poolWorker = process.NewPoolWorker("pool worker", 8, process.NewStaticScheduler(5*time.Second, 10*time.Second))
+	err = tp.Process.SpawnChild(nil, tp.poolWorker)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -282,7 +286,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 
 func (tp *treeProtocol) handleTxReceived(tx tree.Tx, peerConn TreePeerConn) {
 	tp.Infof(0, "tx received: tx=%v peer=%v", tx.ID.Pretty(), peerConn.DialInfo())
-	tp.store.MarkTxSeenByPeer(peerConn.DeviceSpecificID(), tx.StateURI, tx.ID)
+	tp.store.MarkTxSeenByPeer(peerConn.DeviceUniqueID(), tx.StateURI, tx.ID)
 
 	exists, err := tp.txStore.TxExists(tx.StateURI, tx.ID)
 	if err != nil {
@@ -292,7 +296,7 @@ func (tp *treeProtocol) handleTxReceived(tx tree.Tx, peerConn TreePeerConn) {
 	}
 
 	if !exists {
-		err := tp.controllerHub.AddTx(&tx)
+		err := tp.controllerHub.AddTx(tx)
 		if err != nil {
 			tp.Errorf("error adding tx to controllerHub: %v", err)
 		}
@@ -325,8 +329,8 @@ func (tp *treeProtocol) handleP2PStateURIReceived(stateURI string, peerConn Tree
 }
 
 type FetchHistoryOpts struct {
-	FromTxID types.ID
-	ToTxID   types.ID
+	FromTxID state.Version
+	ToTxID   state.Version
 }
 
 func (tp *treeProtocol) handleFetchHistoryRequest(stateURI string, opts FetchHistoryOpts, writeSub WritableSubscription) error {
@@ -334,14 +338,14 @@ func (tp *treeProtocol) handleFetchHistoryRequest(stateURI string, opts FetchHis
 	// @@TODO: if .FromTxID == 0, set it to GenesisTxID
 
 	iter := tp.controllerHub.FetchTxs(stateURI, opts.FromTxID)
-	defer iter.Cancel()
+	defer iter.Close()
 
 	for {
 		tx := iter.Next()
 		if iter.Error() != nil {
 			return iter.Error()
 		} else if tx == nil {
-			return nil
+			break
 		}
 
 		leaves, err := tp.controllerHub.Leaves(stateURI)
@@ -499,6 +503,14 @@ func (tp *treeProtocol) Subscribe(
 	fetchHistoryOpts *FetchHistoryOpts,
 ) (ReadableSubscription, error) {
 	err := tp.subscribe(ctx, stateURI)
+	if err != nil {
+		return nil, err
+	}
+
+	keypath = keypath.Normalized()
+
+	// Open the subscription with the node's own credentials
+	myAddrs, err := tp.keyStore.Addresses()
 	if err != nil {
 		return nil, err
 	}

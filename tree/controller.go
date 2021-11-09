@@ -327,9 +327,9 @@ func (c *controller) tryApplyTx(tx Tx) (err error) {
 			for _, patch := range patches {
 				if patch.Keypath.StartsWith(validatorKeypath) {
 					patchesTrimmed = append(patchesTrimmed, Patch{
-						Keypath: patch.Keypath.RelativeTo(validatorKeypath),
-						Range:   patch.Range,
-						Val:     patch.Val,
+						Keypath:   patch.Keypath.RelativeTo(validatorKeypath),
+						Range:     patch.Range,
+						ValueJSON: patch.ValueJSON,
 					})
 				} else {
 					unprocessedPatches = append(unprocessedPatches, patch)
@@ -370,9 +370,9 @@ func (c *controller) tryApplyTx(tx Tx) (err error) {
 			for _, patch := range patches {
 				if patch.Keypath.StartsWith(resolverKeypath) {
 					patchesTrimmed = append(patchesTrimmed, Patch{
-						Keypath: patch.Keypath.RelativeTo(resolverKeypath),
-						Range:   patch.Range,
-						Val:     patch.Val,
+						Keypath:   patch.Keypath.RelativeTo(resolverKeypath),
+						Range:     patch.Range,
+						ValueJSON: patch.ValueJSON,
 					})
 				} else {
 					unprocessedPatches = append(unprocessedPatches, patch)
