@@ -2,7 +2,8 @@ package libp2p
 
 import (
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/pkg/errors"
+
+	"redwood.dev/errors"
 )
 
 var (

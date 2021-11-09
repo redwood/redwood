@@ -6,14 +6,12 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
 	"redwood.dev/state"
-	"redwood.dev/types"
 )
 
 // Recurses down through a series of Frame nodes until it finds a non-Frame node
-// and returns it. If maxDepth is exceeded, types.Err404 is returned.
+// and returns it. If maxDepth is exceeded, errors.Err404 is returned.
 func FirstNonFrameNode(node state.Node, maxDepth uint64) (state.Node, error) {
 	current := node
 	for i := uint64(0); i < maxDepth; i++ {
@@ -31,7 +29,7 @@ func FirstNonFrameNode(node state.Node, maxDepth uint64) (state.Node, error) {
 			current = n.NodeAt(ValueKey, nil)
 		}
 	}
-	return nil, types.Err404
+	return nil, errors.Err404
 }
 
 func GetValueRecursive(val interface{}, keypath state.Keypath, rng *state.Range) (interface{}, bool, error) {
@@ -100,7 +98,7 @@ func GetContentType(val interface{}) (string, error) {
 
 	case state.Node:
 		contentType, exists, err := GetValueRecursive(v, ContentTypeKey, nil)
-		if err != nil && errors.Cause(err) == types.Err404 {
+		if err != nil && errors.Cause(err) == errors.Err404 {
 			return "application/json", nil
 		} else if err != nil {
 			return "", err

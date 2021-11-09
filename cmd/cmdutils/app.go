@@ -3,6 +3,8 @@ package cmdutils
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
@@ -14,9 +16,9 @@ import (
 	"time"
 
 	"github.com/brynbellomy/klog"
-	"github.com/pkg/errors"
 
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/process"
@@ -27,8 +29,10 @@ import (
 	"redwood.dev/swarm/libp2p"
 	"redwood.dev/swarm/protoauth"
 	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/protohush"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
+	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
@@ -46,13 +50,15 @@ type App struct {
 	BlobStore           blob.Store
 	AuthProto           protoauth.AuthProtocol
 	BlobProto           protoblob.BlobProtocol
+	HushProto           protohush.HushProtocol
+	HushProtoStore      protohush.Store
 	TreeProto           prototree.TreeProtocol
 	TreeProtoStore      prototree.Store
 	HTTPTransport       braidhttp.Transport
 	Libp2pTransport     libp2p.Transport
 	HTTPRPCServer       *http.Server
 	HTTPRPCServerConfig rpc.HTTPConfig
-	SharedBadgerDB      *state.DBTree
+	SharedStateDB       *state.DBTree
 }
 
 func NewApp(name string, config Config) *App {
@@ -112,28 +118,31 @@ func (app *App) Start() error {
 		app.KeyStore = identity.NewBadgerKeyStore(cfg.KeyStoreRoot(), scryptParams)
 		err = app.KeyStore.Unlock(cfg.KeyStore.Password, cfg.KeyStore.Mnemonic)
 		if err != nil {
+			app.Errorf("while unlocking keystore: %+v", err)
 			return err
 		}
 		defer closeIfError(&err, app.KeyStore)
 	}
 
 	encryptionConfig := &state.EncryptionConfig{
-		Key:                 app.KeyStore.LocalSymEncKey(),
+		Key:                 app.KeyStore.LocalSymEncKey().Bytes(),
 		KeyRotationInterval: 24 * time.Hour, // @@TODO: make configurable
 	}
 
 	db, err := state.NewDBTree(filepath.Join(cfg.DataRoot, "shared"), encryptionConfig)
 	if err != nil {
+		app.Errorf("while opening shared db: %+v", err)
 		return err
 	}
 	defer closeIfError(&err, db)
-	app.SharedBadgerDB = db
+	app.SharedStateDB = db
 
-	app.PeerStore = swarm.NewPeerStore(app.SharedBadgerDB)
+	app.PeerStore = swarm.NewPeerStore(app.SharedStateDB)
 
 	app.BlobStore = blob.NewBadgerStore(cfg.BlobDataRoot(), encryptionConfig)
 	err = app.BlobStore.Start()
 	if err != nil {
+		app.Errorf("while opening blob store: %+v", err)
 		return err
 	}
 
@@ -141,15 +150,24 @@ func (app *App) Start() error {
 		app.TxStore = tree.NewBadgerTxStore(cfg.TxDBRoot(), encryptionConfig)
 		err = app.TxStore.Start()
 		if err != nil {
+			app.Errorf("while opening tx store: %+v", err)
 			return err
 		}
 
 		app.ControllerHub = tree.NewControllerHub(cfg.StateDBRoot(), app.TxStore, app.BlobStore, encryptionConfig)
 		err = app.Process.SpawnChild(context.TODO(), app.ControllerHub)
 		if err != nil {
+			app.Errorf("while starting controller hub: %+v", err)
 			return err
 		}
 	}
+
+	// Make self-signed TLS certs as a backup
+	tlsCert, err := utils.MakeSelfSignedX509Certificate()
+	if err != nil {
+		return err
+	}
+	tlsCerts := []tls.Certificate{*tlsCert}
 
 	var transports []swarm.Transport
 	{
@@ -175,6 +193,7 @@ func (app *App) Start() error {
 				app.PeerStore,
 			)
 			if err != nil {
+				app.Errorf("while creating libp2p transport: %+v", err)
 				return err
 			}
 			defer closeIfError(&err, libp2pTransport)
@@ -184,12 +203,13 @@ func (app *App) Start() error {
 		}
 
 		if cfg.BraidHTTPTransport.Enabled {
-			tlsCertFilename := filepath.Join(cfg.DataRoot, "..", "server.crt")
-			tlsKeyFilename := filepath.Join(cfg.DataRoot, "..", "server.key")
+			tlsCertFilename := filepath.Join(cfg.BraidHTTPTransport.TLSCertFile)
+			tlsKeyFilename := filepath.Join(cfg.BraidHTTPTransport.TLSKeyFile)
 
 			httpTransport, err := braidhttp.NewTransport(
 				cfg.BraidHTTPTransport.ListenHost,
-				cfg.BraidHTTPTransport.ReachableAt,
+				cfg.BraidHTTPTransport.ListenHostSSL,
+				types.NewStringSet(nil), // @@TODO
 				cfg.BraidHTTPTransport.DefaultStateURI,
 				app.ControllerHub,
 				app.KeyStore,
@@ -197,9 +217,12 @@ func (app *App) Start() error {
 				app.PeerStore,
 				tlsCertFilename,
 				tlsKeyFilename,
+				tlsCerts,
+				[]byte(cfg.JWTSecret),
 				cfg.DevMode,
 			)
 			if err != nil {
+				app.Errorf("while creating braid-http transport: %+v", err)
 				return err
 			}
 			defer closeIfError(&err, httpTransport)
@@ -221,24 +244,33 @@ func (app *App) Start() error {
 		protocols = append(protocols, app.BlobProto)
 	}
 
+	if cfg.HushProtocol.Enabled {
+		app.HushProtoStore = protohush.NewStore(app.SharedStateDB)
+		app.HushProto = protohush.NewHushProtocol(transports, app.HushProtoStore, app.KeyStore, app.PeerStore)
+		protocols = append(protocols, app.HushProto)
+	}
+
 	if cfg.TreeProtocol.Enabled {
-		prototreeStore, err := prototree.NewStore(app.SharedBadgerDB)
+		app.TreeProtoStore, err = prototree.NewStore(app.SharedStateDB)
 		if err != nil {
+			app.Errorf("while opening prototree store: %+v", err)
 			return err
 		}
 
-		err = prototreeStore.SetMaxPeersPerSubscription(cfg.TreeProtocol.MaxPeersPerSubscription)
+		err = app.TreeProtoStore.SetMaxPeersPerSubscription(cfg.TreeProtocol.MaxPeersPerSubscription)
 		if err != nil {
+			app.Errorf("while setting max peers per subscription: %+v", err)
 			return err
 		}
 
 		app.TreeProto = prototree.NewTreeProtocol(
 			transports,
+			app.HushProto,
 			app.ControllerHub,
 			app.TxStore,
 			app.KeyStore,
 			app.PeerStore,
-			prototreeStore,
+			app.TreeProtoStore,
 		)
 		protocols = append(protocols, app.TreeProto)
 	}
@@ -247,6 +279,7 @@ func (app *App) Start() error {
 		app.Infof(0, "starting %v", transport.Name())
 		err = app.Process.SpawnChild(nil, transport)
 		if err != nil {
+			app.Errorf("while starting %v transport: %+v", transport.Name(), err)
 			return err
 		}
 	}
@@ -260,14 +293,14 @@ func (app *App) Start() error {
 	}
 
 	if cfg.HTTPRPC.Enabled {
-		rwRPC := rpc.NewHTTPServer(app.AuthProto, app.BlobProto, app.TreeProto, app.PeerStore, app.KeyStore, app.ControllerHub)
+		rwRPC := rpc.NewHTTPServer([]byte(cfg.JWTSecret), app.AuthProto, app.BlobProto, app.TreeProto, app.PeerStore, app.KeyStore, app.BlobStore, app.ControllerHub)
 		var server interface{}
 		if cfg.HTTPRPC.Server != nil {
 			server = cfg.HTTPRPC.Server(rwRPC)
 		} else {
 			server = rwRPC
 		}
-		app.HTTPRPCServer, err = rpc.StartHTTPRPC(server, cfg.HTTPRPC)
+		app.HTTPRPCServer, err = rpc.StartHTTPRPC(server, cfg.HTTPRPC, []byte(cfg.JWTSecret))
 		if err != nil {
 			return err
 		}
@@ -384,9 +417,9 @@ func (app *App) Close() error {
 		app.TxStore = nil
 	}
 
-	if app.SharedBadgerDB != nil {
-		app.SharedBadgerDB.Close()
-		app.SharedBadgerDB = nil
+	if app.SharedStateDB != nil {
+		app.SharedStateDB.Close()
+		app.SharedStateDB = nil
 	}
 
 	return app.Process.Close()
@@ -409,10 +442,15 @@ func (app *App) EnsureInitialState(stateURI string, checkKeypath string, value i
 		node.Close()
 	}
 
+	valueBytes, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+
 	err = app.TreeProto.SendTx(context.Background(), tree.Tx{
 		StateURI: stateURI,
 		ID:       tree.GenesisTxID,
-		Patches:  []tree.Patch{{Val: value}},
+		Patches:  []tree.Patch{{ValueJSON: valueBytes}},
 	})
 	if err != nil {
 		panic(err)
@@ -489,7 +527,7 @@ func (app *App) startREPL(prompt string, replCommands []REPLCommand) {
 
 		err := cmd.Handler(parts[1:], app)
 		if err != nil {
-			app.Error(err)
+			app.Errorf("%+v", err)
 		}
 	}
 }

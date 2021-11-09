@@ -82,7 +82,11 @@ func main() {
 		}()
 		runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
 
-		profileRoot := c.String("root")
+		var (
+			profileRoot = c.String("root")
+			configFile  = c.String("config")
+			port        = c.Uint("port")
+		)
 
 		// Create the profileRoot if it doesn't exist
 		if _, err := os.Stat(profileRoot); os.IsNotExist(err) {
@@ -91,7 +95,9 @@ func main() {
 				return err
 			}
 		}
+		fmt.Println("config file:", configFile)
 		fmt.Println("profile root:", profileRoot)
+		fmt.Println("port:", port)
 
 		masterProcess := process.New("root")
 
@@ -101,7 +107,7 @@ func main() {
 		}
 		defer masterProcess.Close()
 
-		api := newAPI(c.Uint("port"), c.String("config"), profileRoot, masterProcess)
+		api := newAPI(port, configFile, profileRoot, masterProcess)
 		gui := newGUI(api)
 
 		err = masterProcess.SpawnChild(context.TODO(), api)

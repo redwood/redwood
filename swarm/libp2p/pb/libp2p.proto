@@ -5,6 +5,7 @@ option go_package = "redwood.dev/swarm/libp2p/pb";
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "blob/pb/blob.proto";
+import "swarm/protohush/pb/hush.proto";
 
 option (gogoproto.gostring_all) = true;
 option (gogoproto.equal_all) = true;
@@ -18,29 +19,61 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.sizer_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-message Msg {
-    oneof msg {
-        FetchBlobManifest fetchBlobManifest = 1;
-        SendBlobManifest sendBlobManifest = 2;
-        FetchBlobChunk fetchBlobChunk = 3;
-        SendBlobChunk sendBlobChunk = 4;
+message BlobMessage {
+    oneof payload {
+        FetchManifest fetchManifest = 1;
+        SendManifest sendManifest = 2;
+        FetchChunk fetchChunk = 3;
+        SendChunk sendChunk = 4;
+    }
+
+    message FetchManifest {
+        Redwood.blob.BlobID id = 1;
+    }
+
+    message SendManifest {
+        Redwood.blob.Manifest manifest = 1;
+        bool exists = 2;
+    }
+
+    message FetchChunk {
+        bytes sha3 = 1;
+    }
+
+    message SendChunk {
+        bytes chunk = 1;
+        bool exists = 2;
     }
 }
 
-message FetchBlobManifest {
-    Redwood.blob.BlobID id = 1;
+message HushMessage {
+    oneof payload {
+        DHPubkeyAttestations dhPubkeyAttestations = 1;
+        ProposeIndividualSession proposeIndividualSession = 2;
+        ApproveIndividualSession approveIndividualSession = 3;
+        SendIndividualMessage sendIndividualMessage = 4;
+        SendGroupMessage sendGroupMessage = 5;
+    }
+
+    message DHPubkeyAttestations {
+        repeated Redwood.swarm.protohush.DHPubkeyAttestation attestations = 1 [(gogoproto.nullable) = false];
+    }
+
+    message ProposeIndividualSession {
+        bytes encryptedProposal = 1;
+    }
+
+    message ApproveIndividualSession {
+        Redwood.swarm.protohush.IndividualSessionApproval approval = 1;
+    }
+
+    message SendIndividualMessage {
+        Redwood.swarm.protohush.IndividualMessage message = 1;
+    }
+
+    message SendGroupMessage {
+        Redwood.swarm.protohush.GroupMessage message = 1;
+    }
 }
 
-message SendBlobManifest {
-    Redwood.blob.Manifest manifest = 1;
-    bool exists = 2;
-}
 
-message FetchBlobChunk {
-    bytes sha3 = 1;
-}
-
-message SendBlobChunk {
-    bytes chunk = 1;
-    bool exists = 2;
-}

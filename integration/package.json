@@ -1,0 +1,17 @@
+{
+  "dependencies": {
+    "@redwood.dev/client": "0.2.15",
+    "isomorphic-ws": "^4.0.1",
+    "ws": "^8.2.3"
+  },
+  "name": "integration",
+  "version": "1.0.0",
+  "main": "test.js",
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}

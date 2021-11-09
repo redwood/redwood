@@ -10,21 +10,22 @@ import (
 	netp2p "github.com/libp2p/go-libp2p-core/network"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	protocol "github.com/libp2p/go-libp2p-protocol"
-	"github.com/pkg/errors"
 
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/libp2p/pb"
 	"redwood.dev/swarm/protoauth"
 	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/protohush"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 )
 
 type peerConn struct {
-	swarm.PeerDetails
+	swarm.PeerEndpoint
 	t      *transport
 	pinfo  peerstore.PeerInfo
 	stream netp2p.Stream
@@ -35,9 +36,10 @@ var (
 	_ protoauth.AuthPeerConn = (*peerConn)(nil)
 	_ protoblob.BlobPeerConn = (*peerConn)(nil)
 	_ prototree.TreePeerConn = (*peerConn)(nil)
+	_ protohush.HushPeerConn = (*peerConn)(nil)
 )
 
-func (peer *peerConn) DeviceSpecificID() string {
+func (peer *peerConn) DeviceUniqueID() string {
 	return peer.pinfo.ID.Pretty()
 }
 
@@ -50,7 +52,7 @@ func (peer *peerConn) EnsureConnected(ctx context.Context) (err error) {
 
 	err = peer.t.libp2pHost.Connect(ctx, peer.pinfo)
 	if err != nil {
-		return errors.Wrapf(types.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
+		return errors.Wrapf(errors.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 	}
 	return nil
 }
@@ -63,9 +65,11 @@ func (peer *peerConn) ensureStreamWithProtocol(ctx context.Context, p protocol.I
 		return nil
 	}
 
+	defer func() { peer.UpdateConnStats(err == nil) }()
+
 	peer.stream, err = peer.t.libp2pHost.NewStream(ctx, peer.pinfo.ID, p)
 	if err != nil {
-		return errors.Wrapf(types.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
+		return errors.Wrapf(errors.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 	}
 	return nil
 }
@@ -89,47 +93,25 @@ func (peer *peerConn) Subscribe(ctx context.Context, stateURI string) (prototree
 	return &readableSubscription{peer}, nil
 }
 
-func (peer *peerConn) Put(ctx context.Context, tx *tree.Tx, state state.Node, leaves []types.ID) error {
+func (peer *peerConn) SendTx(ctx context.Context, tx tree.Tx) error {
 	err := peer.ensureStreamWithProtocol(ctx, PROTO_MAIN)
 	if err != nil {
 		return err
 	}
-
 	// Note: libp2p peers ignore `state` and `leaves`
-	if tx.IsPrivate() {
-		marshalledTx, err := json.Marshal(tx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		peerAddrs := types.OverlappingAddresses(tx.Recipients, peer.Addresses())
-		if len(peerAddrs) == 0 {
-			return errors.New("tx not intended for this peer")
-		}
-		peerSigPubkey, peerEncPubkey := peer.PublicKeys(peerAddrs[0])
-
-		identity, err := peer.t.keyStore.DefaultPublicIdentity()
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		encryptedTxBytes, err := peer.t.keyStore.SealMessageFor(identity.Address(), peerEncPubkey, marshalledTx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		etx := prototree.EncryptedTx{
-			TxID:             tx.ID,
-			EncryptedPayload: encryptedTxBytes,
-			SenderPublicKey:  identity.AsymEncKeypair.AsymEncPubkey.Bytes(),
-			RecipientAddress: peerSigPubkey.Address(),
-		}
-		return peer.writeMsg(Msg{Type: msgType_EncryptedTx, Payload: etx})
-	}
 	return peer.writeMsg(Msg{Type: msgType_Tx, Payload: tx})
 }
 
-func (peer *peerConn) Ack(stateURI string, txID types.ID) (err error) {
+func (peer *peerConn) SendPrivateTx(ctx context.Context, encryptedTx prototree.EncryptedTx) error {
+	err := peer.ensureStreamWithProtocol(ctx, PROTO_MAIN)
+	if err != nil {
+		return err
+	}
+	// Note: libp2p peers ignore `state` and `leaves`
+	return peer.writeMsg(Msg{Type: msgType_EncryptedTx, Payload: encryptedTx})
+}
+
+func (peer *peerConn) Ack(stateURI string, txID state.Version) (err error) {
 	err = peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_MAIN)
 	if err != nil {
 		return err
@@ -170,98 +152,121 @@ func (peer *peerConn) RespondChallengeIdentity(challengeIdentityResponse []proto
 }
 
 func (peer *peerConn) FetchBlobManifest(blobID blob.ID) (blob.Manifest, error) {
-	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_BLOB_MANIFEST)
+	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_BLOB)
 	if err != nil {
 		return blob.Manifest{}, err
 	}
 	defer peer.Close()
 
-	err = peer.writeProtobuf(pb.FetchBlobManifest{Id: blobID.ToProtobuf()})
+	err = peer.writeProtobuf(pb.MakeBlobProtobuf_FetchManifest(blobID))
 	if err != nil {
 		return blob.Manifest{}, err
 	}
 
-	proto, err := peer.readProtobuf()
+	var msg pb.BlobMessage
+	err = peer.readProtobuf(&msg)
 	if err != nil {
 		return blob.Manifest{}, err
 	}
 
-	msg, is := proto.(*pb.SendBlobManifest)
-	if !is {
+	payload := msg.GetSendManifest()
+	if payload == nil {
 		return blob.Manifest{}, swarm.ErrProtocol
-	} else if !msg.Exists {
-		return blob.Manifest{}, types.Err404
 	}
-	m, err := blob.ManifestFromProtobuf(msg.Manifest)
+
+	m, err := blob.ManifestFromProtobuf(payload.Manifest)
 	if err != nil {
 		return blob.Manifest{}, err
 	}
 	return m, nil
 }
 
-func (p *peerConn) ReadBlobManifestRequest() (blob.ID, error) {
-	proto, err := p.readProtobuf()
-	if err != nil {
-		return blob.ID{}, err
-	}
-	msg, is := proto.(*pb.FetchBlobManifest)
-	if !is {
-		return blob.ID{}, swarm.ErrProtocol
-	}
-	return blob.IDFromProtobuf(msg.Id)
-}
-
 func (peer *peerConn) SendBlobManifest(manifest blob.Manifest, exists bool) error {
-	defer peer.Close()
-	if exists {
-		return peer.writeProtobuf(pb.SendBlobManifest{Manifest: manifest.ToProtobuf(), Exists: true})
+	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_BLOB)
+	if err != nil {
+		return err
 	}
-	return peer.writeProtobuf(pb.SendBlobManifest{Exists: false})
+	defer peer.Close()
+	return peer.writeProtobuf(pb.MakeBlobProtobuf_SendManifest(manifest, exists))
 }
 
 func (peer *peerConn) FetchBlobChunk(sha3 types.Hash) ([]byte, error) {
-	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_BLOB_CHUNK)
+	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_BLOB)
 	if err != nil {
 		return nil, err
 	}
 	defer peer.Close()
 
-	err = peer.writeProtobuf(pb.FetchBlobChunk{Sha3: sha3.Bytes()})
+	err = peer.writeProtobuf(pb.MakeBlobProtobuf_FetchChunk(sha3))
 	if err != nil {
 		return nil, err
 	}
 
-	proto, err := peer.readProtobuf()
+	var msg pb.BlobMessage
+	err = peer.readProtobuf(&msg)
 	if err != nil {
 		return nil, err
 	}
 
-	msg, is := proto.(*pb.SendBlobChunk)
-	if !is {
+	payload := msg.GetSendChunk()
+	if payload == nil {
 		return nil, swarm.ErrProtocol
-	} else if !msg.Exists {
-		return nil, types.Err404
 	}
-	return msg.Chunk, nil
-}
-
-func (peer *peerConn) ReadBlobChunkRequest() (sha3 types.Hash, err error) {
-	proto, err := peer.readProtobuf()
-	if err != nil {
-		return types.Hash{}, err
-	}
-	msg, is := proto.(*pb.FetchBlobChunk)
-	if !is {
-		return types.Hash{}, swarm.ErrProtocol
-	}
-	return types.HashFromBytes(msg.Sha3)
+	return payload.Chunk, nil
 }
 
 func (peer *peerConn) SendBlobChunk(chunk []byte, exists bool) error {
-	if exists {
-		return peer.writeProtobuf(pb.SendBlobChunk{Chunk: chunk, Exists: true})
+	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_BLOB)
+	if err != nil {
+		return err
 	}
-	return peer.writeProtobuf(pb.SendBlobChunk{Exists: false})
+	defer peer.Close()
+	return peer.writeProtobuf(pb.MakeBlobProtobuf_SendChunk(chunk, exists))
+}
+
+func (peer *peerConn) SendDHPubkeyAttestations(ctx context.Context, attestations []protohush.DHPubkeyAttestation) error {
+	err := peer.ensureStreamWithProtocol(ctx, PROTO_HUSH)
+	if err != nil {
+		return err
+	}
+	defer peer.Close()
+	return peer.writeProtobuf(pb.MakeHushProtobuf_DHPubkeyAttestations(attestations))
+}
+
+func (peer *peerConn) ProposeIndividualSession(ctx context.Context, encryptedProposal []byte) error {
+	err := peer.ensureStreamWithProtocol(ctx, PROTO_HUSH)
+	if err != nil {
+		return err
+	}
+	defer peer.Close()
+	return peer.writeProtobuf(pb.MakeHushProtobuf_ProposeIndividualSession(encryptedProposal))
+}
+
+func (peer *peerConn) ApproveIndividualSession(ctx context.Context, approval protohush.IndividualSessionApproval) error {
+	err := peer.ensureStreamWithProtocol(ctx, PROTO_HUSH)
+	if err != nil {
+		return err
+	}
+	defer peer.Close()
+	return peer.writeProtobuf(pb.MakeHushProtobuf_ApproveIndividualSession(approval))
+}
+
+func (peer *peerConn) SendHushIndividualMessage(ctx context.Context, msg protohush.IndividualMessage) error {
+	err := peer.ensureStreamWithProtocol(ctx, PROTO_HUSH)
+	if err != nil {
+		return err
+	}
+	defer peer.Close()
+	return peer.writeProtobuf(pb.MakeHushProtobuf_SendIndividualMessage(msg))
+}
+
+func (peer *peerConn) SendHushGroupMessage(ctx context.Context, msg protohush.GroupMessage) error {
+	err := peer.ensureStreamWithProtocol(ctx, PROTO_HUSH)
+	if err != nil {
+		return err
+	}
+	defer peer.Close()
+	return peer.writeProtobuf(pb.MakeHushProtobuf_SendGroupMessage(msg))
 }
 
 func (peer *peerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.PeerDialInfo) error {
@@ -272,63 +277,38 @@ func (peer *peerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.P
 	return peer.writeMsg(Msg{Type: msgType_AnnouncePeers, Payload: peerDialInfos})
 }
 
-func (peer *peerConn) readProtobuf() (_ interface{}, err error) {
+type protobufUnmarshaler interface {
+	Unmarshal(bs []byte) error
+}
+
+func (peer *peerConn) readProtobuf(proto protobufUnmarshaler) (err error) {
 	defer func() { peer.UpdateConnStats(err == nil) }()
 
 	// peer.stream.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 	size, err := readUint64(peer.stream)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	var buf bytes.Buffer
 	_, err = io.CopyN(&buf, peer.stream, int64(size))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var msg pb.Msg
-	err = msg.Unmarshal(buf.Bytes())
+	err = proto.Unmarshal(buf.Bytes())
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	if m := msg.GetFetchBlobManifest(); m != nil {
-		return m, nil
-	} else if m := msg.GetFetchBlobChunk(); m != nil {
-		return m, nil
-	} else if m := msg.GetSendBlobManifest(); m != nil {
-		return m, nil
-	} else if m := msg.GetSendBlobChunk(); m != nil {
-		return m, nil
-	}
-	return nil, swarm.ErrProtocol
+	return nil
 }
 
-func (peer *peerConn) writeProtobuf(child interface{}) error {
-	var msg pb.Msg
-	switch child := child.(type) {
-	case pb.FetchBlobManifest:
-		msg.Msg = &pb.Msg_FetchBlobManifest{
-			FetchBlobManifest: &child,
-		}
-	case pb.SendBlobManifest:
-		msg.Msg = &pb.Msg_SendBlobManifest{
-			SendBlobManifest: &child,
-		}
-	case pb.FetchBlobChunk:
-		msg.Msg = &pb.Msg_FetchBlobChunk{
-			FetchBlobChunk: &child,
-		}
-	case pb.SendBlobChunk:
-		msg.Msg = &pb.Msg_SendBlobChunk{
-			SendBlobChunk: &child,
-		}
-	default:
-		panic("invariant violation")
-	}
+type protobufMarshaler interface {
+	Marshal() ([]byte, error)
+}
 
+func (peer *peerConn) writeProtobuf(msg protobufMarshaler) error {
 	bs, err := msg.Marshal()
 	if err != nil {
 		return err

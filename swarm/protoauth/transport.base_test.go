@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
+	"redwood.dev/errors"
 	"redwood.dev/internal/testutils"
 	"redwood.dev/swarm/protoauth"
 	"redwood.dev/swarm/protoauth/mocks"

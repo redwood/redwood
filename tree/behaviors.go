@@ -11,7 +11,7 @@ import (
 )
 
 type Resolver interface {
-	ResolveState(node state.Node, blobStore blob.Store, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) error
+	ResolveState(node state.Node, blobStore blob.Store, sender types.Address, txID state.Version, parents []state.Version, patches []Patch) error
 	InternalState() map[string]interface{}
 }
 

@@ -9,8 +9,9 @@ import (
 	"strings"
 
 	"github.com/linode/linodego"
-	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
+
+	"redwood.dev/errors"
 )
 
 var (

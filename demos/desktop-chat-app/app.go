@@ -13,12 +13,10 @@ import (
 
 	"redwood.dev/cmd/cmdutils"
 	"redwood.dev/log"
-	"redwood.dev/process"
 	"redwood.dev/redwood.js/embed/sync9"
 	"redwood.dev/rpc"
 	"redwood.dev/state"
 	"redwood.dev/tree"
-	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
@@ -39,7 +37,7 @@ type App struct {
 
 const AppName = "redwood-chat"
 
-func newApp(password, mnemonic, profileRoot, profileName, configPath string, devMode bool, masterProcess process.ProcessTreer) (*App, error) {
+func newApp(password, mnemonic, profileRoot, profileName, configPath string, devMode bool) (*App, error) {
 	app := &App{
 		Logger:      log.NewLogger("app"),
 		profileRoot: profileRoot,
@@ -79,15 +77,6 @@ func newApp(password, mnemonic, profileRoot, profileName, configPath string, dev
 	cfg.HTTPRPC.Server = func(innerServer *rpc.HTTPServer) interface{} {
 		return &HTTPRPCServer{innerServer, app}
 	}
-
-	cfg.REPLConfig.Commands = append(cfg.REPLConfig.Commands, cmdutils.REPLCommand{
-		Command:  "ps",
-		HelpText: "display the current process tree",
-		Handler: func(args []string, _ *cmdutils.App) error {
-			app.Infof(0, "processes:\n%v", utils.PrettyJSON(masterProcess.ProcessTree()))
-			return nil
-		},
-	})
 
 	err = cfg.Save()
 	if err != nil {
@@ -162,11 +151,11 @@ func (app *App) monitorForDMs() {
 				}()
 				if !found {
 					err := app.TreeProto.SendTx(ctx, tree.Tx{
-						ID:       types.RandomID(),
+						ID:       state.RandomVersion(),
 						StateURI: "chat.local/dms",
 						Patches: []tree.Patch{{
-							Keypath: roomKeypath,
-							Val:     true,
+							Keypath:   roomKeypath,
+							ValueJSON: []byte("true"),
 						}},
 					})
 					if err != nil {

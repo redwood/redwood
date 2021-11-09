@@ -210,7 +210,7 @@ func (p *peerPool) GetPeer(ctx context.Context) (_ PeerConn, err error) {
 }
 
 func (p *peerPool) peerIsEligible(peerConn PeerConn) bool {
-	return peerConn.Ready() && len(peerConn.Addresses()) > 0 && !p.deviceIDAlreadyActive(peerConn.DeviceSpecificID())
+	return peerConn.Ready() && len(peerConn.Addresses()) > 0 && !p.deviceIDAlreadyActive(peerConn.DeviceUniqueID())
 }
 
 func (p *peerPool) deviceIDAlreadyActive(deviceID string) bool {
@@ -254,13 +254,13 @@ func (p *peerPool) setPeerState(peer PeerConn, state peerState) {
 		func() {
 			p.activePeerDeviceIDsMu.Lock()
 			defer p.activePeerDeviceIDsMu.Unlock()
-			p.activePeerDeviceIDs[peer.DeviceSpecificID()] = struct{}{}
+			p.activePeerDeviceIDs[peer.DeviceUniqueID()] = struct{}{}
 		}()
 	} else {
 		func() {
 			p.activePeerDeviceIDsMu.Lock()
 			defer p.activePeerDeviceIDsMu.Unlock()
-			delete(p.activePeerDeviceIDs, peer.DeviceSpecificID())
+			delete(p.activePeerDeviceIDs, peer.DeviceUniqueID())
 		}()
 	}
 }

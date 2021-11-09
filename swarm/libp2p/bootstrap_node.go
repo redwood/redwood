@@ -24,10 +24,12 @@ import (
 	"github.com/libp2p/go-libp2p-peerstore/pstoreds"
 	routing "github.com/libp2p/go-libp2p-routing"
 	mdns "github.com/libp2p/go-libp2p/p2p/discovery"
+	relayp2p "github.com/libp2p/go-libp2p/p2p/host/relay"
+	rhost "github.com/libp2p/go-libp2p/p2p/host/routed"
 	ma "github.com/multiformats/go-multiaddr"
 	madns "github.com/multiformats/go-multiaddr-dns"
-	"github.com/pkg/errors"
 
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/state"
@@ -99,7 +101,7 @@ func (bn *bootstrapNode) Start() error {
 	bn.BandwidthCounter = metrics.NewBandwidthCounter()
 
 	opts := badgerds.DefaultOptions
-	opts.Options.EncryptionKey = bn.encryptionConfig.Key.Bytes()
+	opts.Options.EncryptionKey = bn.encryptionConfig.Key
 	opts.Options.EncryptionKeyRotationDuration = bn.encryptionConfig.KeyRotationInterval
 	opts.Options.IndexCacheSize = 100 << 20 // @@TODO: make configurable
 	opts.Options.KeepL0InMemory = true      // @@TODO: make configurable
@@ -125,6 +127,8 @@ func (bn *bootstrapNode) Start() error {
 		bn.Warnf("while decoding bootstrap peers: %v", err)
 	}
 
+	relayp2p.AdvertiseBootDelay = 10 * time.Second
+
 	// Initialize the libp2p host
 	libp2pHost, err := libp2p.New(bn.Process.Ctx(),
 		libp2p.ListenAddrStrings(
@@ -134,8 +138,7 @@ func (bn *bootstrapNode) Start() error {
 		libp2p.BandwidthReporter(bn.BandwidthCounter),
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
-		// libp2p.DefaultStaticRelays(),
-		libp2p.EnableRelay(circuitp2p.OptHop),
+		libp2p.EnableRelay(circuitp2p.OptActive, circuitp2p.OptHop),
 		libp2p.EnableAutoRelay(),
 		libp2p.Peerstore(bn.peerstore),
 		libp2p.ForceReachabilityPublic(),
@@ -157,7 +160,8 @@ func (bn *bootstrapNode) Start() error {
 	if err != nil {
 		return errors.Wrap(err, "could not initialize libp2p host")
 	}
-	bn.libp2pHost = libp2pHost
+
+	bn.libp2pHost = rhost.Wrap(libp2pHost, bn.dht)
 	bn.libp2pHost.Network().Notify(bn) // Register for libp2p connect/disconnect notifications
 
 	err = bn.dht.Bootstrap(bn.Process.Ctx())
@@ -170,24 +174,41 @@ func (bn *bootstrapNode) Start() error {
 	discovery.Advertise(bn.Process.Ctx(), routingDiscovery, "redwood")
 
 	bn.Process.Go(nil, "find peers", func(ctx context.Context) {
-		chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
-		if err != nil {
-			bn.Errorf("error finding peers: %v", err)
-			return
-		}
-		for pinfo := range chPeers {
-			pinfo := pinfo
-			bn.Process.Go(nil, fmt.Sprintf("connect to %v", pinfo.ID.Pretty()), func(ctx context.Context) {
-				if pinfo.ID == bn.peerID {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			func() {
+				ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+
+				chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
+				if err != nil {
+					bn.Errorf("error finding peers: %v", err)
 					return
 				}
+				for pinfo := range chPeers {
+					if pinfo.ID == bn.peerID {
+						continue
+					} else if len(bn.libp2pHost.Network().ConnsToPeer(pinfo.ID)) > 0 {
+						continue
+					}
 
-				bn.Debugf("DHT peer found: %v", pinfo.ID.Pretty())
-				err := bn.libp2pHost.Connect(ctx, pinfo)
-				if err != nil {
-					bn.Errorf("could not connect to %v: %v", pinfo.ID, err)
+					pinfo := pinfo
+					bn.Process.Go(nil, fmt.Sprintf("connect to %v", pinfo.ID.Pretty()), func(ctx context.Context) {
+						bn.Debugf("DHT peer found: %v", pinfo.ID.Pretty())
+
+						err := bn.libp2pHost.Connect(ctx, pinfo)
+						if err != nil {
+							bn.Errorf("could not connect to %v: %v", pinfo.ID, err)
+						}
+					})
 				}
-			})
+				time.Sleep(1 * time.Second)
+			}()
 		}
 	})
 

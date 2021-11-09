@@ -1,4 +1,4 @@
-package tree
+package pb
 
 import (
 	"testing"
@@ -16,5 +16,5 @@ func TestParsePatch(t *testing.T) {
 	require.NotNil(t, patch.Range)
 	require.Equal(t, int64(0), patch.Range.Start)
 	require.Equal(t, int64(0), patch.Range.End)
-	require.Equal(t, "a", patch.Val)
+	require.Equal(t, []byte(` "a"`), patch.ValueJSON)
 }

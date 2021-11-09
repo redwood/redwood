@@ -6,17 +6,16 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
-	"github.com/pkg/errors"
 	"rogchap.com/v8go"
 
 	//"github.com/saibing/go-v8"
 
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/tree/nelson"
 	"redwood.dev/types"
-	"redwood.dev/utils"
 )
 
 type jsResolver struct {
@@ -29,7 +28,7 @@ type jsResolver struct {
 var _ Resolver = (*jsResolver)(nil)
 
 func NewJSResolver(config state.Node, internalState map[string]interface{}) (_ Resolver, err error) {
-	defer utils.Annotate(&err, "NewJSResolver")
+	defer errors.Annotate(&err, "NewJSResolver")
 
 	// srcval, exists, err := nelson.GetValueRecursive(config, state.Keypath("src"), nil)
 	srcval, exists, err := config.Value(state.Keypath("src"), nil)
@@ -75,14 +74,19 @@ func (r *jsResolver) InternalState() map[string]interface{} {
 	return r.internalState
 }
 
-func (r *jsResolver) ResolveState(node state.Node, blobStore blob.Store, sender types.Address, txID types.ID, parents []types.ID, patches []Patch) (err error) {
-	defer utils.Annotate(&err, "jsResolver.ResolveState")
+func (r *jsResolver) ResolveState(node state.Node, blobStore blob.Store, sender types.Address, txID state.Version, parents []state.Version, patches []Patch) (err error) {
+	defer errors.Annotate(&err, "jsResolver.ResolveState")
 
 	convertedPatches := make([]interface{}, len(patches))
 	for i, patch := range patches {
+		val, err := patch.Value()
+		if err != nil {
+			return err
+		}
+
 		convertedPatch := map[string]interface{}{
 			"keys": patch.Keypath.PartStrings(),
-			"val":  patch.Val,
+			"val":  val,
 		}
 
 		if patch.Range != nil {
@@ -121,6 +125,5 @@ func (r *jsResolver) ResolveState(node state.Node, blobStore blob.Store, sender 
 	}
 
 	r.internalState = output["internalState"].(map[string]interface{})
-	node.Set(nil, nil, output["state"])
-	return nil
+	return node.Set(nil, nil, output["state"])
 }

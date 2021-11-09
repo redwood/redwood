@@ -14,18 +14,20 @@ export interface RedwoodClient {
 
 export interface RPCClient {
     rpcFetch: (method: string, params?: {[key: string]: any}) => Promise<any>
+    ucan: () => Promise<string>
     subscribe: ({ stateURI, keypath, txs, states }: RPCSubscribeParams) => void
     identities: () => Promise<RPCIdentitiesResponse[]>
     newIdentity: () => Promise<string>
     knownStateURIs: () => Promise<string[]>
-    sendTx: (tx: Tx) => void
+    sendTx: (tx: RPCSendTx) => void
     addPeer: (dialInfo: PeerDialInfo) => void
     privateTreeMembers: (stateURI: string) => Promise<string[]>
     peers: () => Promise<RPCPeer[]>
 }
 
 export interface Transport {
-    subscribe: (opts: SubscribeParams) => Promise<UnsubscribeFunc>
+    setUcan: (newUcan: string) => void
+    subscribe: (opts: SubscribeParams, onOpen: () => void) => Promise<UnsubscribeFunc>
     get?: ({ stateURI, keypath, raw }: GetParams) => Promise<any>
     put: (tx: Tx) => Promise<void>
     ack: (txID: string) => Promise<void>
@@ -59,6 +61,17 @@ export interface Tx {
     parents: string[]
     patches: string[]
     from: string
+    sig: string
+    recipients?: string[]
+    attachment?: string | Blob
+}
+
+export interface RPCSendTx {
+    stateURI: string
+    id?: string
+    parents?: string[]
+    patches: string[]
+    from?: string
     recipients?: string[]
     attachment?: string | Blob
     sig?: string

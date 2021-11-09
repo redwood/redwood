@@ -21,7 +21,7 @@ type HTTPClient struct {
 }
 
 func NewHTTPClient(dialAddr string) *HTTPClient {
-	httpClient := utils.MakeHTTPClient(10*time.Second, 30*time.Second)
+	httpClient := utils.MakeHTTPClient(10*time.Second, 30*time.Second, nil, nil)
 
 	var c *HTTPClient
 	c = &HTTPClient{
@@ -122,4 +122,9 @@ func (c *HTTPClient) KnownStateURIs() ([]string, error) {
 
 func (c *HTTPClient) SendTx(args SendTxArgs) error {
 	return c.rpcClient.Call("RPC.SendTx", args, nil)
+}
+
+func (c *HTTPClient) StoreBlob(args StoreBlobArgs) (StoreBlobResponse, error) {
+	var resp StoreBlobResponse
+	return resp, c.rpcClient.Call("RPC.StoreBlob", args, &resp)
 }

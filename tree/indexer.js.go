@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/pkg/errors"
 	"rogchap.com/v8go"
 
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/tree/nelson"
-	"redwood.dev/utils"
 )
 
 type jsIndexer struct {
@@ -48,7 +47,7 @@ func NewJSIndexer(config state.Node) (Indexer, error) {
 }
 
 func (i *jsIndexer) IndexNode(relKeypath state.Keypath, node state.Node) (_ state.Keypath, _ state.Node, err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	exists, err := node.Exists(nil)
 	if err != nil {

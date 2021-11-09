@@ -3,8 +3,7 @@ package swarm
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
 	"redwood.dev/process"
 )
 
@@ -16,9 +15,8 @@ type Transport interface {
 
 //go:generate mockery --name PeerConn --output ./mocks/ --case=underscore
 type PeerConn interface {
-	PeerDetails
+	PeerEndpoint
 
-	DeviceSpecificID() string
 	Transport() Transport
 	EnsureConnected(ctx context.Context) error
 	Close() error

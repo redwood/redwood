@@ -3,20 +3,15 @@ package braidhttp
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
-
-	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/swarm"
-	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
-	"redwood.dev/types"
 )
 
 var altSvcRegexp1 = regexp.MustCompile(`\s*(\w+)="([^"]+)"\s*(;[^,]*)?`)
@@ -40,10 +35,10 @@ func forEachAltSvcHeaderPeer(header string, fn func(transportName, dialAddr stri
 	}
 }
 
-func makeAltSvcHeader(peerDialInfos []swarm.PeerDialInfo) string {
+func makeAltSvcHeader(peerDialInfos map[swarm.PeerDialInfo]struct{}) string {
 	var others []string
-	for _, tuple := range peerDialInfos {
-		others = append(others, fmt.Sprintf(`%s="%s"`, tuple.TransportName, tuple.DialAddr))
+	for dialInfo := range peerDialInfos {
+		others = append(others, fmt.Sprintf(`%s="%s"`, dialInfo.TransportName, dialInfo.DialAddr))
 	}
 	return strings.Join(others, ", ")
 }
@@ -71,46 +66,9 @@ func parseIndexParams(r *http.Request) (string, string) {
 // public, the `senderEncKeypair` and `recipientEncPubkey` parameters may be nil.
 func putRequestFromTx(
 	requestContext context.Context,
-	tx *tree.Tx,
+	tx tree.Tx,
 	dialAddr string,
-	senderEncKeypair *crypto.AsymEncKeypair,
-	recipientAddress types.Address,
-	recipientEncPubkey crypto.AsymEncPubkey,
 ) (*http.Request, error) {
-	if tx.IsPrivate() {
-		if recipientEncPubkey == nil {
-			return nil, errors.New("no encrypting pubkey provided")
-		}
-
-		marshalledTx, err := json.Marshal(tx)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-
-		encryptedTxBytes, err := senderEncKeypair.SealMessageFor(recipientEncPubkey, marshalledTx)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-
-		msg, err := json.Marshal(prototree.EncryptedTx{
-			TxID:             tx.ID,
-			EncryptedPayload: encryptedTxBytes,
-			SenderPublicKey:  senderEncKeypair.AsymEncPubkey.Bytes(),
-			RecipientAddress: recipientAddress,
-		})
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-
-		req, err := http.NewRequestWithContext(requestContext, "PUT", dialAddr, bytes.NewReader(msg))
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-		req.Header.Set("Private", "true")
-
-		return req, nil
-	}
-
 	var parentStrs []string
 	for _, parent := range tx.Parents {
 		parentStrs = append(parentStrs, parent.Hex())
@@ -137,8 +95,4 @@ func putRequestFromTx(
 		req.Header.Set("Checkpoint", "true")
 	}
 	return req, nil
-}
-
-func deviceUniqueID(sessionID types.ID) string {
-	return sessionID.Hex()
 }

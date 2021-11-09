@@ -11,7 +11,6 @@ import (
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/swarm/prototree/mocks"
 	"redwood.dev/tree"
-	"redwood.dev/types"
 )
 
 func TestBaseTreeTransport_TxReceived(t *testing.T) {
@@ -19,7 +18,7 @@ func TestBaseTreeTransport_TxReceived(t *testing.T) {
 
 	var transport prototree.BaseTreeTransport
 
-	expectedTx := tree.Tx{ID: types.IDFromString("foo bar")}
+	expectedTx := tree.Tx{ID: state.VersionFromString("foo bar")}
 	expectedPeerConn := new(mocks.TreePeerConn)
 
 	callback1 := testutils.NewAwaiter()
@@ -48,20 +47,20 @@ func TestBaseTreeTransport_AckReceived(t *testing.T) {
 	var transport prototree.BaseTreeTransport
 
 	expectedStateURI := "foo.bar/blah"
-	expectedTxID := types.RandomID()
+	expectedTxID := state.RandomVersion()
 	expectedPeerConn := new(mocks.TreePeerConn)
 
 	callback1 := testutils.NewAwaiter()
 	callback2 := testutils.NewAwaiter()
 
-	transport.OnAckReceived(func(stateURI string, txID types.ID, peerConn prototree.TreePeerConn) {
+	transport.OnAckReceived(func(stateURI string, txID state.Version, peerConn prototree.TreePeerConn) {
 		require.Equal(t, expectedStateURI, stateURI)
 		require.Equal(t, expectedTxID, txID)
 		require.Equal(t, expectedPeerConn, peerConn)
 		callback1.ItHappened()
 	})
 
-	transport.OnAckReceived(func(stateURI string, txID types.ID, peerConn prototree.TreePeerConn) {
+	transport.OnAckReceived(func(stateURI string, txID state.Version, peerConn prototree.TreePeerConn) {
 		require.Equal(t, expectedStateURI, stateURI)
 		require.Equal(t, expectedTxID, txID)
 		require.Equal(t, expectedPeerConn, peerConn)
@@ -82,30 +81,29 @@ func TestBaseTreeTransport_WritableSubscriptionOpened(t *testing.T) {
 	expectedKeypath := state.Keypath("hello")
 	expectedSubType := prototree.SubscriptionType_States
 	expectedWriteSubImpl := new(mocks.WritableSubscriptionImpl)
-	expectedFetchHistoryOpts := &prototree.FetchHistoryOpts{FromTxID: types.RandomID(), ToTxID: types.RandomID()}
+	expectedFetchHistoryOpts := &prototree.FetchHistoryOpts{FromTxID: state.RandomVersion(), ToTxID: state.RandomVersion()}
 
-	callback1 := testutils.NewAwaiter()
-	callback2 := testutils.NewAwaiter()
+	callback := testutils.NewAwaiter()
 
-	transport.OnWritableSubscriptionOpened(func(stateURI string, keypath state.Keypath, subType prototree.SubscriptionType, writeSubImpl prototree.WritableSubscriptionImpl, fetchHistoryOpts *prototree.FetchHistoryOpts) {
-		require.Equal(t, expectedStateURI, stateURI)
-		require.Equal(t, expectedKeypath, keypath)
-		require.Equal(t, expectedSubType, subType)
+	transport.OnWritableSubscriptionOpened(func(req prototree.SubscriptionRequest, writeSubImplFactory prototree.WritableSubscriptionImplFactory) (<-chan struct{}, error) {
+		writeSubImpl, err := writeSubImplFactory()
+		require.NoError(t, err)
+		require.Equal(t, expectedStateURI, req.StateURI)
+		require.Equal(t, expectedKeypath, req.Keypath)
+		require.Equal(t, expectedSubType, req.Type)
 		require.Equal(t, expectedWriteSubImpl, writeSubImpl)
-		require.Equal(t, expectedFetchHistoryOpts, fetchHistoryOpts)
-		callback1.ItHappened()
+		require.Equal(t, expectedFetchHistoryOpts, req.FetchHistoryOpts)
+		callback.ItHappened()
+		return nil, nil
 	})
 
-	transport.OnWritableSubscriptionOpened(func(stateURI string, keypath state.Keypath, subType prototree.SubscriptionType, writeSubImpl prototree.WritableSubscriptionImpl, fetchHistoryOpts *prototree.FetchHistoryOpts) {
-		require.Equal(t, expectedStateURI, stateURI)
-		require.Equal(t, expectedKeypath, keypath)
-		require.Equal(t, expectedSubType, subType)
-		require.Equal(t, expectedWriteSubImpl, writeSubImpl)
-		require.Equal(t, expectedFetchHistoryOpts, fetchHistoryOpts)
-		callback2.ItHappened()
+	transport.HandleWritableSubscriptionOpened(prototree.SubscriptionRequest{
+		StateURI:         expectedStateURI,
+		Keypath:          expectedKeypath,
+		Type:             expectedSubType,
+		FetchHistoryOpts: expectedFetchHistoryOpts,
+	}, func() (prototree.WritableSubscriptionImpl, error) {
+		return expectedWriteSubImpl, nil
 	})
-
-	transport.HandleWritableSubscriptionOpened(expectedStateURI, expectedKeypath, expectedSubType, expectedWriteSubImpl, expectedFetchHistoryOpts)
-	callback1.AwaitOrFail(t, 1*time.Second)
-	callback2.AwaitOrFail(t, 1*time.Second)
+	callback.AwaitOrFail(t, 1*time.Second)
 }

@@ -1,21 +1,22 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
+	"io/ioutil"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
-	"github.com/pkg/errors"
 
+	"redwood.dev/blob"
 	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/state"
@@ -29,19 +30,20 @@ import (
 )
 
 type HTTPConfig struct {
-	Enabled    bool                                      `json:"enabled"    yaml:"Enabled"`
-	ListenHost string                                    `json:"listenHost" yaml:"ListenHost"`
-	Whitelist  HTTPWhitelistConfig                       `json:"whitelist"  yaml:"Whitelist"`
-	Server     func(innerServer *HTTPServer) interface{} `json:"-"          yaml:"-"`
+	Enabled     bool                                      `json:"enabled"    yaml:"Enabled"`
+	ListenHost  string                                    `json:"listenHost" yaml:"ListenHost"`
+	TLSCertFile string                                    `json:"tlsCertFile" yaml:"TLSCertFile"`
+	TLSKeyFile  string                                    `json:"tlsKeyFile" yaml:"TLSKeyFile"`
+	Whitelist   HTTPWhitelistConfig                       `json:"whitelist"  yaml:"Whitelist"`
+	Server      func(innerServer *HTTPServer) interface{} `json:"-"          yaml:"-"`
 }
 
 type HTTPWhitelistConfig struct {
 	Enabled        bool            `json:"enabled"        yaml:"Enabled"`
 	PermittedAddrs []types.Address `json:"permittedAddrs" yaml:"PermittedAddrs"`
-	JWTSecret      string          `json:"jwtSecret"      yaml:"JWTSecret"`
 }
 
-func StartHTTPRPC(svc interface{}, config *HTTPConfig) (*http.Server, error) {
+func StartHTTPRPC(svc interface{}, config *HTTPConfig, jwtSecret []byte) (*http.Server, error) {
 	if config == nil || !config.Enabled {
 		return nil, nil
 	}
@@ -57,10 +59,9 @@ func StartHTTPRPC(svc interface{}, config *HTTPConfig) (*http.Server, error) {
 
 		httpServer.Handler = server
 		if config.Whitelist.Enabled {
-			httpServer.Handler = NewWhitelistMiddleware(config.Whitelist.PermittedAddrs, []byte(config.Whitelist.JWTSecret), server)
+			httpServer.Handler = NewWhitelistMiddleware(config.Whitelist.PermittedAddrs, jwtSecret, server)
 		}
 		httpServer.Handler = utils.UnrestrictedCors(httpServer.Handler)
-
 		httpServer.ListenAndServe()
 	}()
 
@@ -69,31 +70,65 @@ func StartHTTPRPC(svc interface{}, config *HTTPConfig) (*http.Server, error) {
 
 type HTTPServer struct {
 	log.Logger
+	jwtSecret     []byte
 	authProto     protoauth.AuthProtocol
 	blobProto     protoblob.BlobProtocol
 	treeProto     prototree.TreeProtocol
 	peerStore     swarm.PeerStore
 	keyStore      identity.KeyStore
+	blobStore     blob.Store
 	controllerHub tree.ControllerHub
 }
 
 func NewHTTPServer(
+	jwtSecret []byte,
 	authProto protoauth.AuthProtocol,
 	blobProto protoblob.BlobProtocol,
 	treeProto prototree.TreeProtocol,
 	peerStore swarm.PeerStore,
 	keyStore identity.KeyStore,
+	blobStore blob.Store,
 	controllerHub tree.ControllerHub,
 ) *HTTPServer {
 	return &HTTPServer{
 		Logger:        log.NewLogger("http rpc"),
+		jwtSecret:     jwtSecret,
 		authProto:     authProto,
 		blobProto:     blobProto,
 		treeProto:     treeProto,
 		peerStore:     peerStore,
 		keyStore:      keyStore,
+		blobStore:     blobStore,
 		controllerHub: controllerHub,
 	}
+}
+
+type (
+	UcanArgs     struct{}
+	UcanResponse struct {
+		JWT string
+	}
+)
+
+func (s *HTTPServer) Ucan(r *http.Request, args *UcanArgs, resp *UcanResponse) error {
+	identity, err := s.keyStore.DefaultPublicIdentity()
+	if err != nil {
+		return err
+	}
+
+	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"address": identity.Address().Hex(),
+		"nbf":     time.Date(2015, 10, 10, 12, 0, 0, 0, time.UTC).Unix(),
+	})
+
+	// Sign and get the complete encoded token as a string using the secret
+	jwtTokenString, err := jwtToken.SignedString(s.jwtSecret)
+	if err != nil {
+		return err
+	}
+
+	resp.JWT = jwtTokenString
+	return nil
 }
 
 type (
@@ -108,7 +143,7 @@ type (
 
 func (s *HTTPServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *SubscribeResponse) (err error) {
 	if s.treeProto == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	} else if args.StateURI == "" {
 		return errors.New("missing StateURI")
 	}
@@ -144,7 +179,7 @@ type (
 
 func (s *HTTPServer) Identities(r *http.Request, args *IdentitiesArgs, resp *IdentitiesResponse) error {
 	if s.keyStore == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 
 	identities, err := s.keyStore.Identities()
@@ -168,7 +203,7 @@ type (
 
 func (s *HTTPServer) NewIdentity(r *http.Request, args *NewIdentityArgs, resp *NewIdentityResponse) error {
 	if s.keyStore == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 	identity, err := s.keyStore.NewIdentity(args.Public)
 	if err != nil {
@@ -188,7 +223,7 @@ type (
 
 func (s *HTTPServer) AddPeer(r *http.Request, args *AddPeerArgs, resp *AddPeerResponse) error {
 	if s.peerStore == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 	s.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: args.TransportName, DialAddr: args.DialAddr}, "")
 	return nil
@@ -203,7 +238,7 @@ type (
 
 func (s *HTTPServer) KnownStateURIs(r *http.Request, args *KnownStateURIsArgs, resp *KnownStateURIsResponse) error {
 	if s.controllerHub == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 	stateURIs, err := s.controllerHub.KnownStateURIs()
 	if err != nil {
@@ -222,9 +257,29 @@ type (
 
 func (s *HTTPServer) SendTx(r *http.Request, args *SendTxArgs, resp *SendTxResponse) error {
 	if s.treeProto == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 	return s.treeProto.SendTx(context.Background(), args.Tx)
+}
+
+type (
+	StoreBlobArgs struct {
+		Blob []byte
+	}
+	StoreBlobResponse struct {
+		SHA1 types.Hash
+		SHA3 types.Hash
+	}
+)
+
+func (s *HTTPServer) StoreBlob(r *http.Request, args *StoreBlobArgs, resp *StoreBlobResponse) error {
+	sha1, sha3, err := s.blobStore.StoreBlob(ioutil.NopCloser(bytes.NewReader(args.Blob)))
+	if err != nil {
+		return err
+	}
+	resp.SHA1 = sha1
+	resp.SHA3 = sha3
+	return nil
 }
 
 type (
@@ -238,13 +293,25 @@ type (
 
 func (s *HTTPServer) PrivateTreeMembers(r *http.Request, args *PrivateTreeMembersArgs, resp *PrivateTreeMembersResponse) error {
 	if s.controllerHub == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
-	members, err := s.controllerHub.Members(args.StateURI)
+	node, err := s.controllerHub.StateAtVersion(args.StateURI, nil)
 	if err != nil {
 		return err
 	}
-	resp.Members = members.Slice()
+	defer node.Close()
+
+	subkeys := node.NodeAt(state.Keypath("Members"), nil).Subkeys()
+	var addrs []types.Address
+	for _, k := range subkeys {
+		addr, err := types.AddressFromHex(string(k))
+		if err != nil {
+			continue
+		}
+		addrs = append(addrs, addr)
+	}
+	resp.Members = addrs
+
 	return nil
 }
 
@@ -264,36 +331,38 @@ type (
 	}
 	PeerIdentity struct {
 		Address          types.Address
-		SigningPublicKey crypto.SigningPublicKey
-		AsymEncPubkey    crypto.AsymEncPubkey
+		SigningPublicKey *crypto.SigningPublicKey
+		AsymEncPubkey    *crypto.AsymEncPubkey
 	}
 )
 
 func (s *HTTPServer) Peers(r *http.Request, args *PeersArgs, resp *PeersResponse) error {
 	if s.peerStore == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 	for _, peer := range s.peerStore.Peers() {
-		var identities []PeerIdentity
-		for _, addr := range peer.Addresses() {
-			sigpubkey, encpubkey := peer.PublicKeys(addr)
-			identities = append(identities, PeerIdentity{
-				Address:          addr,
-				SigningPublicKey: sigpubkey,
-				AsymEncPubkey:    encpubkey,
+		for _, endpoint := range peer.Endpoints() {
+			var identities []PeerIdentity
+			for _, addr := range peer.Addresses() {
+				sigpubkey, encpubkey := peer.PublicKeys(addr)
+				identities = append(identities, PeerIdentity{
+					Address:          addr,
+					SigningPublicKey: sigpubkey,
+					AsymEncPubkey:    encpubkey,
+				})
+			}
+			var lastContact uint64
+			if !endpoint.LastContact().IsZero() {
+				lastContact = uint64(endpoint.LastContact().UTC().Unix())
+			}
+			resp.Peers = append(resp.Peers, Peer{
+				Identities:  identities,
+				Transport:   endpoint.DialInfo().TransportName,
+				DialAddr:    endpoint.DialInfo().DialAddr,
+				StateURIs:   peer.StateURIs().Slice(),
+				LastContact: lastContact,
 			})
 		}
-		var lastContact uint64
-		if !peer.LastContact().IsZero() {
-			lastContact = uint64(peer.LastContact().UTC().Unix())
-		}
-		resp.Peers = append(resp.Peers, Peer{
-			Identities:  identities,
-			Transport:   peer.DialInfo().TransportName,
-			DialAddr:    peer.DialInfo().DialAddr,
-			StateURIs:   peer.StateURIs().Slice(),
-			LastContact: lastContact,
-		})
 	}
 	return nil
 }
@@ -402,31 +471,16 @@ func (mw *whitelistMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		}
 
 	} else {
-		authHeader := r.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
+		claims, exists, err := utils.ParseJWT(r.Header.Get("Authorization"), mw.jwtSecret)
+		if err != nil {
 			http.Error(w, "bad Authorization header", http.StatusBadRequest)
 			return
-		}
-
-		jwtToken := strings.TrimSpace(authHeader[len("Bearer "):])
-
-		token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
-			}
-			return mw.jwtSecret, nil
-		})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || !token.Valid {
-			http.Error(w, "invalid jwt token", http.StatusBadRequest)
+		} else if !exists {
+			http.Error(w, "no JWT present", http.StatusForbidden)
 			return
 		}
 		addrHex, ok := claims["address"].(string)
-		if err != nil {
+		if !ok {
 			http.Error(w, "jwt does not contain 'address' claim", http.StatusBadRequest)
 			return
 		}
@@ -435,7 +489,7 @@ func (mw *whitelistMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "jwt 'address' claim contains invalid data", http.StatusBadRequest)
 			return
 		}
-		_, exists := mw.permittedAddrs[addr]
+		_, exists = mw.permittedAddrs[addr]
 		if !exists {
 			http.Error(w, "nope", http.StatusForbidden)
 			return

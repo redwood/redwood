@@ -85,6 +85,10 @@ function Provider(props: {
             if (!!identity) {
                 await client.authorize()
             }
+            if (!!rpcEndpoint && !!client.rpc) {
+                let ucan = await client.rpc.ucan()
+                client.setUcan(ucan)
+            }
             setInterval(async () => {
                 if (!!client.rpc) {
                     try {

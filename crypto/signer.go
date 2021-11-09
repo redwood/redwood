@@ -3,75 +3,58 @@ package crypto
 import (
 	"crypto/ecdsa"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcutil/hdkeychain"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/pkg/errors"
 	"github.com/tyler-smith/go-bip39"
 
+	"redwood.dev/errors"
 	"redwood.dev/types"
 )
 
 type (
 	SigKeypair struct {
-		SigningPrivateKey
-		SigningPublicKey
+		*SigningPrivateKey
+		*SigningPublicKey
 	}
 
-	SigningPrivateKey interface {
-		SignHash(data types.Hash) ([]byte, error)
-		Bytes() []byte
-		Hex() string
-		String() string
-	}
-
-	SigningPublicKey interface {
-		VerifySignature(hash types.Hash, signature []byte) bool
-		Address() types.Address
-		Bytes() []byte
-		Hex() string
-		String() string
-		json.Marshaler
-	}
-
-	signingPrivateKey struct {
+	SigningPrivateKey struct {
 		*ecdsa.PrivateKey
 	}
 
-	signingPublicKey struct {
+	SigningPublicKey struct {
 		*ecdsa.PublicKey
 	}
 )
 
-func (pubkey *signingPublicKey) VerifySignature(hash types.Hash, signature []byte) bool {
+func (pubkey *SigningPublicKey) VerifySignature(hash types.Hash, signature []byte) bool {
 	signatureNoRecoverID := signature[:len(signature)-1] // remove recovery id
 	return crypto.VerifySignature(pubkey.Bytes(), hash[:], signatureNoRecoverID)
 }
 
-func (pubkey *signingPublicKey) Address() types.Address {
+func (pubkey *SigningPublicKey) Address() types.Address {
 	ethAddr := crypto.PubkeyToAddress(*pubkey.PublicKey)
 	var a types.Address
 	copy(a[:], ethAddr[:])
 	return a
 }
 
-func (pubkey *signingPublicKey) Bytes() []byte {
+func (pubkey *SigningPublicKey) Bytes() []byte {
 	return crypto.FromECDSAPub(pubkey.PublicKey)
 }
 
-func (pubkey *signingPublicKey) Hex() string {
+func (pubkey *SigningPublicKey) Hex() string {
 	return hex.EncodeToString(pubkey.Bytes())
 }
 
-func (pubkey *signingPublicKey) String() string {
+func (pubkey *SigningPublicKey) String() string {
 	return pubkey.Hex()
 }
 
-func (pubkey *signingPublicKey) UnmarshalText(bs []byte) error {
+func (pubkey *SigningPublicKey) UnmarshalText(bs []byte) error {
 	pk, err := crypto.UnmarshalPubkey(bs)
 	if err != nil {
 		return err
@@ -80,15 +63,23 @@ func (pubkey *signingPublicKey) UnmarshalText(bs []byte) error {
 	return nil
 }
 
-func (pubkey *signingPublicKey) MarshalText() ([]byte, error) {
+func (pubkey *SigningPublicKey) MarshalText() ([]byte, error) {
 	return crypto.FromECDSAPub(pubkey.PublicKey), nil
 }
 
-func (pubkey *signingPublicKey) MarshalJSON() ([]byte, error) {
+func (pubkey *SigningPublicKey) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + pubkey.Hex() + `"`), nil
 }
 
-func (privkey *signingPrivateKey) SignHash(hash types.Hash) ([]byte, error) {
+func (pubkey *SigningPublicKey) UnmarshalStateBytes(bs []byte) error {
+	return pubkey.UnmarshalText(bs)
+}
+
+func (pubkey SigningPublicKey) MarshalStateBytes() ([]byte, error) {
+	return pubkey.MarshalText()
+}
+
+func (privkey *SigningPrivateKey) SignHash(hash types.Hash) ([]byte, error) {
 	sig, err := crypto.Sign(hash[:], privkey.PrivateKey)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -96,15 +87,15 @@ func (privkey *signingPrivateKey) SignHash(hash types.Hash) ([]byte, error) {
 	return sig, nil
 }
 
-func (privkey *signingPrivateKey) Bytes() []byte {
+func (privkey *SigningPrivateKey) Bytes() []byte {
 	return crypto.FromECDSA(privkey.PrivateKey)
 }
 
-func (privkey *signingPrivateKey) Hex() string {
+func (privkey *SigningPrivateKey) Hex() string {
 	return hex.EncodeToString(privkey.Bytes())
 }
 
-func (privkey *signingPrivateKey) String() string {
+func (privkey *SigningPrivateKey) String() string {
 	return hex.EncodeToString(privkey.Bytes())
 }
 
@@ -114,8 +105,8 @@ func GenerateSigKeypair() (*SigKeypair, error) {
 		return nil, errors.WithStack(err)
 	}
 	return &SigKeypair{
-		SigningPrivateKey: &signingPrivateKey{pk},
-		SigningPublicKey:  &signingPublicKey{&pk.PublicKey},
+		SigningPrivateKey: &SigningPrivateKey{pk},
+		SigningPublicKey:  &SigningPublicKey{&pk.PublicKey},
 	}, nil
 }
 
@@ -125,23 +116,23 @@ func SigKeypairFromHex(s string) (*SigKeypair, error) {
 		return nil, errors.WithStack(err)
 	}
 	return &SigKeypair{
-		SigningPrivateKey: &signingPrivateKey{pk},
-		SigningPublicKey:  &signingPublicKey{&pk.PublicKey},
+		SigningPrivateKey: &SigningPrivateKey{pk},
+		SigningPublicKey:  &SigningPublicKey{&pk.PublicKey},
 	}, nil
 }
 
-func SigningPublicKeyFromBytes(bs []byte) (SigningPublicKey, error) {
-	var sigpubkey signingPublicKey
+func SigningPublicKeyFromBytes(bs []byte) (*SigningPublicKey, error) {
+	var sigpubkey SigningPublicKey
 	err := sigpubkey.UnmarshalText(bs)
 	return &sigpubkey, err
 }
 
-func RecoverSigningPubkey(hash types.Hash, signature []byte) (SigningPublicKey, error) {
+func RecoverSigningPubkey(hash types.Hash, signature []byte) (*SigningPublicKey, error) {
 	ecdsaPubkey, err := crypto.SigToPub(hash[:], signature)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	return &signingPublicKey{ecdsaPubkey}, nil
+	return &SigningPublicKey{ecdsaPubkey}, nil
 }
 
 func GenerateMnemonic() (string, error) {
@@ -188,8 +179,8 @@ func SigKeypairFromHDMnemonic(mnemonic string, accountIndex uint32) (*SigKeypair
 	ecdsaPrivKey := ecPrivKey.ToECDSA()
 
 	return &SigKeypair{
-		SigningPrivateKey: &signingPrivateKey{ecdsaPrivKey},
-		SigningPublicKey:  &signingPublicKey{&ecdsaPrivKey.PublicKey},
+		SigningPrivateKey: &SigningPrivateKey{ecdsaPrivKey},
+		SigningPublicKey:  &SigningPublicKey{&ecdsaPrivKey.PublicKey},
 	}, nil
 }
 

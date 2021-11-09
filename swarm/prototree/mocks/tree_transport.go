@@ -153,6 +153,11 @@ func (_m *TreeTransport) OnP2PStateURIReceived(handler prototree.P2PStateURIRece
 	_m.Called(handler)
 }
 
+// OnPrivateTxReceived provides a mock function with given fields: handler
+func (_m *TreeTransport) OnPrivateTxReceived(handler prototree.PrivateTxReceivedCallback) {
+	_m.Called(handler)
+}
+
 // OnTxReceived provides a mock function with given fields: handler
 func (_m *TreeTransport) OnTxReceived(handler prototree.TxReceivedCallback) {
 	_m.Called(handler)

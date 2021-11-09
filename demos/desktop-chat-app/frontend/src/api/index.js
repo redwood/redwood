@@ -139,7 +139,6 @@ export default function(redwoodClient, ownAddress) {
             users[addr] = {}
         }
 
-        await redwoodClient.rpc.subscribe({ stateURI, keypath: '/', txs: true, states: true })
         await redwoodClient.rpc.sendTx({
             stateURI: stateURI,
             id: Redwood.utils.genesisTxID,
@@ -178,6 +177,10 @@ export default function(redwoodClient, ownAddress) {
                 `.rooms["${roomName}"] = true`,
             ],
         })
+
+        setTimeout(async () => {
+            await redwoodClient.rpc.subscribe({ stateURI, keypath: '/', txs: true, states: true })
+        }, 3000)
     }
 
     async function sendMessage(messageText, files, nodeAddress, server, room, messages) {

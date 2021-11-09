@@ -17,10 +17,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
 	"golang.org/x/net/publicsuffix"
 
 	"redwood.dev/crypto"
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -163,7 +163,7 @@ func (c *LightClient) Subscribe(ctx context.Context, stateURI string) (chan Mayb
 	return ch, nil
 }
 
-func (c *LightClient) FetchTx(stateURI string, txID types.ID) (*tree.Tx, error) {
+func (c *LightClient) FetchTx(stateURI string, txID state.Version) (*tree.Tx, error) {
 	client := c.client()
 	req, err := http.NewRequest("GET", c.dialAddr+"/__tx/"+txID.Hex(), nil)
 	if err != nil {
@@ -176,7 +176,7 @@ func (c *LightClient) FetchTx(stateURI string, txID types.ID) (*tree.Tx, error) 
 	if err != nil {
 		return nil, errors.WithStack(err)
 	} else if resp.StatusCode == 404 {
-		return nil, types.Err404
+		return nil, errors.Err404
 	} else if resp.StatusCode != 200 {
 		return nil, errors.Errorf("error fetching tx: (%v) %v", resp.StatusCode, resp.Status)
 	}
@@ -190,7 +190,7 @@ func (c *LightClient) FetchTx(stateURI string, txID types.ID) (*tree.Tx, error) 
 	return &tx, nil
 }
 
-func (c *LightClient) Get(stateURI string, version *types.ID, keypath state.Keypath, rng *state.Range, raw bool) (io.ReadCloser, int64, []types.ID, error) {
+func (c *LightClient) Get(stateURI string, version *state.Version, keypath state.Keypath, rng *state.Range, raw bool) (io.ReadCloser, int64, []state.Version, error) {
 	client := c.client()
 	url := c.dialAddr + "/" + string(keypath)
 	if raw {
@@ -229,12 +229,12 @@ func (c *LightClient) Get(stateURI string, version *types.ID, keypath state.Keyp
 		}
 	}
 
-	var parents []types.ID
+	var parents []state.Version
 	if parentsHeader := resp.Header.Get("Parents"); parentsHeader != "" {
 		parentStrs := strings.Split(parentsHeader, ",")
 		for _, pstr := range parentStrs {
 			pstr = strings.TrimSpace(pstr)
-			pid, err := types.IDFromHex(pstr)
+			pid, err := state.VersionFromHex(pstr)
 			if err != nil {
 				return nil, 0, nil, errors.New("bad parents header")
 			}
@@ -245,7 +245,7 @@ func (c *LightClient) Get(stateURI string, version *types.ID, keypath state.Keyp
 	return resp.Body, int64(contentLength), parents, nil
 }
 
-func (c *LightClient) Put(ctx context.Context, tx *tree.Tx, recipientAddress types.Address, recipientEncPubkey crypto.AsymEncPubkey) error {
+func (c *LightClient) Put(ctx context.Context, tx tree.Tx, recipientAddress types.Address, recipientEncPubkey *crypto.AsymEncPubkey) error {
 	if len(tx.Sig) == 0 {
 		sig, err := c.sigkeys.SignHash(tx.Hash())
 		if err != nil {
@@ -254,7 +254,7 @@ func (c *LightClient) Put(ctx context.Context, tx *tree.Tx, recipientAddress typ
 		tx.Sig = sig
 	}
 
-	req, err := putRequestFromTx(ctx, tx, c.dialAddr, c.enckeys, recipientAddress, recipientEncPubkey)
+	req, err := putRequestFromTx(ctx, tx, c.dialAddr)
 	if err != nil {
 		return errors.WithStack(err)
 	}

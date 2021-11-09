@@ -72,3 +72,9 @@ require (
 )
 
 go 1.16
+
+// To fix CVE: c16fb56d-9de6-4065-9fca-d2b4cfb13020
+// See https://github.com/dgrijalva/jwt-go/issues/463
+// If that happens to get released in a 3.X.X version, we can add a constraint to our go.mod
+// for it. If its in 4.X.X, then we need all our transitive deps to upgrade to it.
+replace github.com/dgrijalva/jwt-go => github.com/form3tech-oss/jwt-go v3.2.1+incompatible

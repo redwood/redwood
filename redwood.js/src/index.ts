@@ -14,6 +14,7 @@ import {
     GetParams,
     Tx,
     StoreBlobResponse,
+    UnsubscribeFunc,
 } from './types'
 
 export * from './types'
@@ -45,6 +46,14 @@ function createPeer(opts: CreatePeerOptions) {
     //     transports.push(webrtcTransport({ onFoundPeers, peerID: identity.peerID }))
     // }
 
+    function setUcan(newUcan: string) {
+        for (let tpt of transports) {
+            if (tpt.setUcan) {
+                return tpt.setUcan(newUcan)
+            }
+        }
+    }
+
     let knownPeers: PeersMap = {}
     function onFoundPeers(peers: PeersMap) {
         knownPeers = utils.deepmerge(knownPeers, peers)
@@ -71,9 +80,45 @@ function createPeer(opts: CreatePeerOptions) {
         }
     }
 
+    const subscriptions: {
+        [stateURI: string]: {
+            params: SubscribeParams
+            subscribed: boolean
+            innerUnsubscribe: UnsubscribeFunc
+        }
+    } = {}
+
+    setInterval(async () => {
+        for (let stateURI of Object.keys(subscriptions)) {
+            if (!subscriptions[stateURI].subscribed) {
+                subscriptions[stateURI].innerUnsubscribe = await initSubscription(subscriptions[stateURI].params)
+            }
+        }
+    }, 1000)
+
     async function subscribe(params: SubscribeParams) {
+        if (subscriptions[params.stateURI] && subscriptions[params.stateURI].subscribed) {
+            return subscriptions[params.stateURI].innerUnsubscribe
+        }
+        subscriptions[params.stateURI] = { params, subscribed: false, innerUnsubscribe: () => {} }
+        return () => {
+            subscriptions[params.stateURI].innerUnsubscribe()
+            delete subscriptions[params.stateURI]
+        }
+    }
+
+    async function initSubscription(params: SubscribeParams) {
+        let callback = params.callback
+        params.callback = (err, update) => {
+            if (err) {
+                console.error('subscription error:', err)
+                subscriptions[params.stateURI].subscribed = false
+            }
+            callback(err, update)
+        }
+
         let unsubscribers = (await Promise.all(
-            transports.map(tpt => tpt.subscribe(params))
+            transports.map(tpt => tpt.subscribe(params, () => { subscriptions[params.stateURI].subscribed = true }))
         )).filter(unsub => !!unsub)
         return () => {
             for (let unsub of unsubscribers) {
@@ -126,6 +171,7 @@ function createPeer(opts: CreatePeerOptions) {
     }
 
     return {
+        setUcan,
         identity,
         get,
         subscribe,

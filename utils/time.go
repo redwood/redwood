@@ -44,9 +44,40 @@ func (eb *ExponentialBackoff) Reset() {
 	eb.current = eb.Min
 }
 
+type Ticker interface {
+	Start()
+	Close()
+	Notify() <-chan time.Time
+}
+
+type StaticTicker struct {
+	t        *time.Ticker
+	interval time.Duration
+}
+
+func NewStaticTicker(interval time.Duration) StaticTicker {
+	return StaticTicker{
+		t:        time.NewTicker(interval),
+		interval: interval,
+	}
+}
+
+func (t StaticTicker) Start() {
+	t.t.Reset(t.interval)
+}
+
+func (t StaticTicker) Close() {
+	t.t.Stop()
+}
+
+func (t StaticTicker) Notify() <-chan time.Time {
+	return t.t.C
+}
+
 type ExponentialBackoffTicker struct {
 	backoff ExponentialBackoff
 	chTick  chan time.Time
+	chReset chan struct{}
 	chStop  chan struct{}
 	chDone  chan struct{}
 }
@@ -55,6 +86,7 @@ func NewExponentialBackoffTicker(min, max time.Duration) *ExponentialBackoffTick
 	return &ExponentialBackoffTicker{
 		backoff: ExponentialBackoff{Min: min, Max: max},
 		chTick:  make(chan time.Time),
+		chReset: make(chan struct{}),
 		chStop:  make(chan struct{}),
 		chDone:  make(chan struct{}),
 	}
@@ -64,28 +96,42 @@ func (t *ExponentialBackoffTicker) Start() {
 	go func() {
 		defer close(t.chDone)
 		for {
-			duration := t.backoff.Next()
-			select {
-			case <-t.chStop:
-				return
+			func() {
+				duration := t.backoff.Next()
+				timer := time.NewTimer(duration)
+				defer timer.Stop()
 
-			case tick := <-time.After(duration):
 				select {
 				case <-t.chStop:
 					return
-				case t.chTick <- tick:
-				case <-time.After(duration):
+
+				case <-t.chReset:
+					t.backoff.Reset()
+
+				case now := <-timer.C:
+					select {
+					case <-t.chStop:
+						return
+					case t.chTick <- now:
+					}
 				}
-			}
+			}()
 		}
 	}()
 }
 
-func (t *ExponentialBackoffTicker) Stop() {
+func (t *ExponentialBackoffTicker) Reset() {
+	select {
+	case <-t.chStop:
+	case t.chReset <- struct{}{}:
+	}
+}
+
+func (t *ExponentialBackoffTicker) Close() {
 	close(t.chStop)
 	<-t.chDone
 }
 
-func (t *ExponentialBackoffTicker) Tick() <-chan time.Time {
+func (t *ExponentialBackoffTicker) Notify() <-chan time.Time {
 	return t.chTick
 }

@@ -2,23 +2,20 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"path/filepath"
-	"runtime"
-	"time"
 
 	"github.com/brynbellomy/klog"
 	"github.com/urfave/cli"
 
 	"redwood.dev/cmd/cmdutils"
+	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/swarm/prototree"
-	"redwood.dev/utils"
 )
 
 var logger = log.NewLogger("redwood")
@@ -27,7 +24,8 @@ func main() {
 	go func() {
 		http.ListenAndServe(":6060", nil)
 	}()
-	runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
+	// runtime.SetBlockProfileRate(1)
+	// runtime.SetMutexProfileFraction(1)
 
 	defer klog.Flush()
 
@@ -83,7 +81,7 @@ func main() {
 const AppName = "redwood"
 
 func run(configPath, passwordFile string, gui, dev bool, stateURIs []string) (err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 
 	if passwordFile == "" {
 		return errors.New("must specify --password-file flag")
@@ -129,8 +127,7 @@ func run(configPath, passwordFile string, gui, dev bool, stateURIs []string) (er
 	go func() {
 		err = app.Start()
 		if err != nil {
-			panic(err)
-			// return err
+			panic(fmt.Sprintf("%+v", err))
 		}
 	}()
 

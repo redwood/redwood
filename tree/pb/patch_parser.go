@@ -1,12 +1,10 @@
-package tree
+package pb
 
 import (
 	"bytes"
-	"encoding/json"
 	"strconv"
 
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
 	"redwood.dev/state"
 )
 
@@ -54,10 +52,12 @@ func ParsePatch(s []byte) (Patch, error) {
 				}
 			}
 			i++
-			err := json.Unmarshal([]byte(s[i:]), &patch.Val)
-			if err != nil {
-				return Patch{}, errors.Wrapf(ErrBadPatch, err.Error())
-			}
+			patch.ValueJSON = make([]byte, len(s[i:]))
+			copy(patch.ValueJSON, s[i:])
+			// err := json.Unmarshal([]byte(s[i:]), &patch.Val)
+			// if err != nil {
+			// 	return Patch{}, errors.Wrapf(ErrBadPatch, err.Error())
+			// }
 			return patch, nil
 		}
 	}

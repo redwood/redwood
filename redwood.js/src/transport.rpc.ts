@@ -1,4 +1,4 @@
-import { RPCClient, Tx, RPCSubscribeParams, RPCIdentitiesResponse, RPCPeer, RPCPeerIdentity } from './types'
+import { RPCClient, RPCSendTx, RPCSubscribeParams, RPCIdentitiesResponse, RPCPeer, RPCPeerIdentity } from './types'
 
 let theFetch: typeof fetch = typeof window !== 'undefined'
                                 ? fetch
@@ -31,6 +31,10 @@ export default function createRPCClient({ endpoint }: { endpoint: string }): RPC
     return {
         rpcFetch: (method: string, params?: {[key: string]: any}) => rpcFetch(endpoint, method, params),
 
+        ucan: async function() {
+            return (await rpcFetch(endpoint, 'RPC.Ucan')).JWT
+        },
+
         subscribe: async function ({ stateURI, keypath, txs, states }: RPCSubscribeParams) {
             await rpcFetch(endpoint, 'RPC.Subscribe', { stateURI, txs, states, keypath })
         },
@@ -48,7 +52,7 @@ export default function createRPCClient({ endpoint }: { endpoint: string }): RPC
             return (await rpcFetch(endpoint, 'RPC.KnownStateURIs')).StateURIs as string[]
         },
 
-        sendTx: async function (tx: Tx) {
+        sendTx: async function (tx: RPCSendTx) {
             await rpcFetch(endpoint, 'RPC.SendTx', { Tx: tx })
         },
 

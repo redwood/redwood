@@ -1,8 +1,7 @@
 package tree
 
 import (
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
 	"redwood.dev/state"
 )
 

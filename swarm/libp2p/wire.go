@@ -6,13 +6,12 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
+	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/protoauth"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
-	"redwood.dev/types"
 )
 
 type Msg struct {
@@ -36,8 +35,8 @@ const (
 )
 
 type ackMsg struct {
-	StateURI string   `json:"stateURI"`
-	TxID     types.ID `json:"txID"`
+	StateURI string        `json:"stateURI"`
+	TxID     state.Version `json:"txID"`
 }
 
 func readMsg(r io.Reader) (msg Msg, err error) {
@@ -51,9 +50,11 @@ func readMsg(r io.Reader) (msg Msg, err error) {
 	if err != nil {
 		return Msg{}, err
 	}
+	bs := buf.Bytes()
 
-	err = json.NewDecoder(buf).Decode(&msg)
-	return msg, err
+	// err = json.NewDecoder(buf).Decode(&msg)
+	err = json.Unmarshal(bs, &msg)
+	return msg, errors.Wrapf(err, `while decoding libp2p message "%v"`, string(bs))
 }
 
 func readUint64(r io.Reader) (uint64, error) {
@@ -105,14 +106,6 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 		}
 		msg.Payload = tx
 
-	case msgType_Ack:
-		var payload ackMsg
-		err := json.Unmarshal(m.PayloadBytes, &payload)
-		if err != nil {
-			return err
-		}
-		msg.Payload = payload
-
 	case msgType_EncryptedTx:
 		var ep prototree.EncryptedTx
 		err := json.Unmarshal(m.PayloadBytes, &ep)
@@ -120,6 +113,14 @@ func (msg *Msg) UnmarshalJSON(bs []byte) error {
 			return err
 		}
 		msg.Payload = ep
+
+	case msgType_Ack:
+		var payload ackMsg
+		err := json.Unmarshal(m.PayloadBytes, &payload)
+		if err != nil {
+			return err
+		}
+		msg.Payload = payload
 
 	case msgType_AnnounceP2PStateURI:
 		stateURI := string(m.PayloadBytes)

@@ -7,13 +7,12 @@ import (
 	cid "github.com/ipfs/go-cid"
 	corepeer "github.com/libp2p/go-libp2p-core/peer"
 	peer "github.com/libp2p/go-libp2p-peer"
-	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	peerstoreaddr "github.com/libp2p/go-libp2p-peerstore/addr"
 	ma "github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
-	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
+	"redwood.dev/errors"
 	"redwood.dev/swarm"
 )
 
@@ -27,7 +26,7 @@ func cidForString(s string) (cid.Cid, error) {
 }
 
 func multiaddrsFromPeerInfo(pinfo corepeer.AddrInfo) []ma.Multiaddr {
-	multiaddrs, err := peerstore.InfoToP2pAddrs(&pinfo)
+	multiaddrs, err := corepeer.AddrInfoToP2pAddrs(&pinfo)
 	if err != nil {
 		panic(err)
 	}

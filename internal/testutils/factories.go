@@ -36,7 +36,7 @@ func RandomAddress(t *testing.T) types.Address {
 	return types.AddressFromBytes(RandomBytes(t, len(types.Address{})))
 }
 
-func RandomSigningPublicKey(t *testing.T) crypto.SigningPublicKey {
+func RandomSigningPublicKey(t *testing.T) *crypto.SigningPublicKey {
 	t.Helper()
 
 	k, err := crypto.GenerateSigKeypair()
@@ -44,7 +44,7 @@ func RandomSigningPublicKey(t *testing.T) crypto.SigningPublicKey {
 	return k.SigningPublicKey
 }
 
-func RandomAsymEncPubkey(t *testing.T) crypto.AsymEncPubkey {
+func RandomAsymEncPubkey(t *testing.T) *crypto.AsymEncPubkey {
 	t.Helper()
 
 	k, err := crypto.GenerateAsymEncKeypair()

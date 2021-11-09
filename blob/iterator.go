@@ -1,8 +1,7 @@
 package blob
 
 import (
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/types"
 )
@@ -51,7 +50,7 @@ func (iter *IDIterator) Next() {
 
 		var manifest Manifest
 		err := manifestNode.Scan(&manifest)
-		if errors.Cause(err) == types.Err404 {
+		if errors.Cause(err) == errors.Err404 {
 			iter.err = err
 			iter.currentSHA1 = types.Hash{}
 			iter.currentSHA3 = types.Hash{}

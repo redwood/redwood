@@ -1,9 +1,12 @@
 package state
 
 import (
-	"github.com/pkg/errors"
+	"bytes"
+	"encoding/hex"
 
-	"redwood.dev/types"
+	"redwood.dev/errors"
+	"redwood.dev/state/pb"
+	"redwood.dev/utils"
 )
 
 var (
@@ -11,10 +14,7 @@ var (
 	ErrNodeEncoding      = errors.New("corrupted encoding for node")
 	ErrInvalidRange      = errors.New("invalid range")
 	ErrRangeOverNonSlice = errors.New("range over non-slice")
-)
-
-var (
-	CurrentVersion = types.EmptyID
+	ErrNilKeypath        = errors.New("nil keypath")
 )
 
 // A Node is a view over the database at a particular keypath
@@ -26,6 +26,8 @@ type Node interface {
 	Length() (uint64, error)
 	Subkeys() []Keypath
 	NumSubkeys() uint64
+	IndexOfMapSubkey(rootKeypath Keypath, subkey Keypath) (uint64, error)
+	// NthMapSubkey(rootKeypath Keypath, n uint64) (Keypath, error)
 	Exists(keypath Keypath) (bool, error)
 	NodeAt(keypath Keypath, rng *Range) Node
 	ParentNodeFor(keypath Keypath) (Node, Keypath)
@@ -115,57 +117,18 @@ func (vt ValueType) String() string {
 	}
 }
 
-type Range struct {
-	Start int64
-	End   int64
-}
-
-func (rng *Range) Copy() *Range {
-	if rng == nil {
-		return nil
-	}
-	return &Range{rng.Start, rng.End}
-}
-
-func (rng *Range) Valid() bool {
-	if rng.End < rng.Start {
-		return false
-	}
-	if rng.Start < 0 && rng.End > 0 {
-		return false
-	}
-	return true
-}
-
-func (rng *Range) Size() uint64 {
-	if rng.Start < 0 {
-		return uint64(-(rng.Start - rng.End))
-	}
-	return uint64(rng.End - rng.Start)
-}
-
-func (rng *Range) ValidForLength(length uint64) bool {
-	if rng.Start < 0 {
-		return uint64(-rng.Start) <= length
-	}
-	return uint64(rng.End) <= length
-}
-
-func (rng *Range) IndicesForLength(length uint64) (uint64, uint64) {
-	if rng.Start < 0 {
-		return uint64(int64(length) + rng.Start), uint64(int64(length) + rng.End)
-	}
-	return uint64(rng.Start), uint64(rng.End)
-}
+type Range = pb.Range
 
 type Iterator interface {
 	RootKeypath() Keypath
 	Rewind()
-	SeekTo(keypath Keypath)
+	SeekTo(relKeypath Keypath)
 	Valid() bool
 	Next()
 	Node() Node
 	Close()
+
+	seekTo(absKeypath Keypath)
 }
 
 type Diff struct {
@@ -255,4 +218,122 @@ func (d *Diff) Copy() *Diff {
 		d2.Removed[kp] = struct{}{}
 	}
 	return d2
+}
+
+type Version [32]byte
+
+var (
+	CurrentVersion = Version{}
+)
+
+func RandomVersion() Version {
+	bs := utils.RandomBytes(len(Version{}))
+	var v Version
+	copy(v[:], bs)
+	return v
+}
+
+func VersionFromHex(h string) (Version, error) {
+	bs, err := hex.DecodeString(h)
+	if err != nil {
+		return Version{}, errors.WithStack(err)
+	}
+	var id Version
+	copy(id[:], bs)
+	return id, nil
+}
+
+func VersionFromString(s string) Version {
+	var id Version
+	copy(id[:], []byte(s))
+	return id
+}
+
+func VersionFromBytes(bs []byte) Version {
+	var id Version
+	copy(id[:], bs)
+	return id
+}
+
+func (id Version) String() string {
+	return id.Hex()
+}
+
+func (id Version) Bytes() []byte {
+	return id[:]
+}
+
+func (id Version) Pretty() string {
+	return id.String()[:6]
+}
+
+func (id Version) Hex() string {
+	return hex.EncodeToString(id[:])
+}
+
+func (id Version) MarshalText() ([]byte, error) {
+	return []byte(hex.EncodeToString(id[:])), nil
+}
+
+func (id *Version) UnmarshalText(text []byte) error {
+	if id == nil {
+		id = &Version{}
+	}
+	bs, err := hex.DecodeString(string(text))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	copy((*id)[:], bs)
+	return nil
+}
+
+func (id Version) Marshal() ([]byte, error) { return id[:], nil }
+
+func (id *Version) MarshalTo(data []byte) (n int, err error) {
+	copy(data, (*id)[:])
+	return len(data), nil
+}
+
+func (id *Version) Unmarshal(data []byte) error {
+	*id = Version{}
+	copy((*id)[:], data)
+	return nil
+}
+
+func (id *Version) Size() int { return len(*id) }
+func (id Version) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + id.Hex() + `"`), nil
+}
+func (id *Version) UnmarshalJSON(data []byte) error {
+	if len(data) < 3 {
+		*id = Version{}
+		return nil
+	}
+	bs, err := hex.DecodeString(string(data[1 : len(data)-1]))
+	if err != nil {
+		return err
+	}
+	*id = VersionFromBytes(bs)
+	return err
+}
+func (id Version) Compare(other Version) int { return bytes.Compare(id[:], other[:]) }
+func (id Version) Equal(other Version) bool  { return bytes.Equal(id[:], other[:]) }
+
+func NewPopulatedVersion(_ gogoprotobufTest) *Version {
+	var id Version
+	copy(id[:], utils.RandomBytes(32))
+	return &id
+}
+
+func (id Version) MapKey() (Keypath, error) {
+	return Keypath(id.Hex()), nil
+}
+
+func (id *Version) ScanMapKey(keypath Keypath) error {
+	bs, err := hex.DecodeString(string(keypath))
+	if err != nil {
+		return err
+	}
+	copy((*id)[:], bs)
+	return nil
 }

@@ -8,11 +8,14 @@ import (
 	fmt "fmt"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
-	types "github.com/gogo/protobuf/types"
 	io "io"
 	math "math"
 	math_bits "math/bits"
+	redwood_dev_state "redwood.dev/state"
+	pb "redwood.dev/state/pb"
+	redwood_dev_types "redwood.dev/types"
 	reflect "reflect"
+	strconv "strconv"
 	strings "strings"
 )
 
@@ -27,19 +30,44 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+type TxStatus int32
+
+const (
+	TxStatusUnknown   TxStatus = 0
+	TxStatusInMempool TxStatus = 1
+	TxStatusInvalid   TxStatus = 2
+	TxStatusValid     TxStatus = 3
+)
+
+var TxStatus_name = map[int32]string{
+	0: "Unknown",
+	1: "InMempool",
+	2: "Invalid",
+	3: "Valid",
+}
+
+var TxStatus_value = map[string]int32{
+	"Unknown":   0,
+	"InMempool": 1,
+	"Invalid":   2,
+	"Valid":     3,
+}
+
+func (TxStatus) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_0fd2153dc07d3b5c, []int{0}
+}
+
 type Tx struct {
-	Id         []byte   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Parents    [][]byte `protobuf:"bytes,2,rep,name=parents,proto3" json:"parents,omitempty"`
-	Children   [][]byte `protobuf:"bytes,3,rep,name=children,proto3" json:"children,omitempty"`
-	From       []byte   `protobuf:"bytes,4,opt,name=from,proto3" json:"from,omitempty"`
-	Sig        []byte   `protobuf:"bytes,5,opt,name=sig,proto3" json:"sig,omitempty"`
-	StateURI   string   `protobuf:"bytes,6,opt,name=stateURI,proto3" json:"stateURI,omitempty"`
-	Patches    []*Patch `protobuf:"bytes,7,rep,name=patches,proto3" json:"patches,omitempty"`
-	Recipients [][]byte `protobuf:"bytes,8,rep,name=recipients,proto3" json:"recipients,omitempty"`
-	Checkpoint bool     `protobuf:"varint,9,opt,name=checkpoint,proto3" json:"checkpoint,omitempty"`
-	Attachment []byte   `protobuf:"bytes,10,opt,name=attachment,proto3" json:"attachment,omitempty"`
-	Status     string   `protobuf:"bytes,11,opt,name=status,proto3" json:"status,omitempty"`
-	Confidence uint64   `protobuf:"varint,12,opt,name=confidence,proto3" json:"confidence,omitempty"`
+	ID         redwood_dev_state.Version   `protobuf:"bytes,1,opt,name=id,proto3,customtype=redwood.dev/state.Version" json:"id"`
+	Parents    []redwood_dev_state.Version `protobuf:"bytes,2,rep,name=parents,proto3,customtype=redwood.dev/state.Version" json:"parents"`
+	Children   []redwood_dev_state.Version `protobuf:"bytes,3,rep,name=children,proto3,customtype=redwood.dev/state.Version" json:"children"`
+	From       redwood_dev_types.Address   `protobuf:"bytes,4,opt,name=from,proto3,customtype=redwood.dev/types.Address" json:"from"`
+	Sig        redwood_dev_types.Signature `protobuf:"bytes,5,opt,name=sig,proto3,customtype=redwood.dev/types.Signature" json:"sig"`
+	StateURI   string                      `protobuf:"bytes,6,opt,name=stateURI,proto3" json:"stateURI,omitempty"`
+	Patches    []Patch                     `protobuf:"bytes,7,rep,name=patches,proto3" json:"patches"`
+	Checkpoint bool                        `protobuf:"varint,8,opt,name=checkpoint,proto3" json:"checkpoint,omitempty"`
+	Attachment []byte                      `protobuf:"bytes,9,opt,name=attachment,proto3" json:"attachment,omitempty"`
+	Status     TxStatus                    `protobuf:"varint,10,opt,name=status,proto3,enum=Redwood.tree.TxStatus" json:"status,omitempty"`
 }
 
 func (m *Tx) Reset()      { *m = Tx{} }
@@ -74,41 +102,6 @@ func (m *Tx) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Tx proto.InternalMessageInfo
 
-func (m *Tx) GetId() []byte {
-	if m != nil {
-		return m.Id
-	}
-	return nil
-}
-
-func (m *Tx) GetParents() [][]byte {
-	if m != nil {
-		return m.Parents
-	}
-	return nil
-}
-
-func (m *Tx) GetChildren() [][]byte {
-	if m != nil {
-		return m.Children
-	}
-	return nil
-}
-
-func (m *Tx) GetFrom() []byte {
-	if m != nil {
-		return m.From
-	}
-	return nil
-}
-
-func (m *Tx) GetSig() []byte {
-	if m != nil {
-		return m.Sig
-	}
-	return nil
-}
-
 func (m *Tx) GetStateURI() string {
 	if m != nil {
 		return m.StateURI
@@ -116,16 +109,9 @@ func (m *Tx) GetStateURI() string {
 	return ""
 }
 
-func (m *Tx) GetPatches() []*Patch {
+func (m *Tx) GetPatches() []Patch {
 	if m != nil {
 		return m.Patches
-	}
-	return nil
-}
-
-func (m *Tx) GetRecipients() [][]byte {
-	if m != nil {
-		return m.Recipients
 	}
 	return nil
 }
@@ -144,24 +130,17 @@ func (m *Tx) GetAttachment() []byte {
 	return nil
 }
 
-func (m *Tx) GetStatus() string {
+func (m *Tx) GetStatus() TxStatus {
 	if m != nil {
 		return m.Status
 	}
-	return ""
-}
-
-func (m *Tx) GetConfidence() uint64 {
-	if m != nil {
-		return m.Confidence
-	}
-	return 0
+	return TxStatusUnknown
 }
 
 type Patch struct {
-	Keypath []byte     `protobuf:"bytes,1,opt,name=keypath,proto3" json:"keypath,omitempty"`
-	Range   *Range     `protobuf:"bytes,2,opt,name=range,proto3" json:"range,omitempty"`
-	Value   *types.Any `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Keypath   redwood_dev_state.Keypath `protobuf:"bytes,1,opt,name=keypath,proto3,customtype=redwood.dev/state.Keypath" json:"keypath"`
+	Range     *pb.Range                 `protobuf:"bytes,2,opt,name=range,proto3" json:"range,omitempty"`
+	ValueJSON []byte                    `protobuf:"bytes,3,opt,name=valueJSON,proto3" json:"valueJSON,omitempty"`
 }
 
 func (m *Patch) Reset()      { *m = Patch{} }
@@ -196,121 +175,77 @@ func (m *Patch) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Patch proto.InternalMessageInfo
 
-func (m *Patch) GetKeypath() []byte {
-	if m != nil {
-		return m.Keypath
-	}
-	return nil
-}
-
-func (m *Patch) GetRange() *Range {
+func (m *Patch) GetRange() *pb.Range {
 	if m != nil {
 		return m.Range
 	}
 	return nil
 }
 
-func (m *Patch) GetValue() *types.Any {
+func (m *Patch) GetValueJSON() []byte {
 	if m != nil {
-		return m.Value
+		return m.ValueJSON
 	}
 	return nil
 }
 
-type Range struct {
-	Start int64 `protobuf:"varint,1,opt,name=start,proto3" json:"start,omitempty"`
-	End   int64 `protobuf:"varint,2,opt,name=end,proto3" json:"end,omitempty"`
-}
-
-func (m *Range) Reset()      { *m = Range{} }
-func (*Range) ProtoMessage() {}
-func (*Range) Descriptor() ([]byte, []int) {
-	return fileDescriptor_0fd2153dc07d3b5c, []int{2}
-}
-func (m *Range) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *Range) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_Range.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *Range) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Range.Merge(m, src)
-}
-func (m *Range) XXX_Size() int {
-	return m.Size()
-}
-func (m *Range) XXX_DiscardUnknown() {
-	xxx_messageInfo_Range.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_Range proto.InternalMessageInfo
-
-func (m *Range) GetStart() int64 {
-	if m != nil {
-		return m.Start
-	}
-	return 0
-}
-
-func (m *Range) GetEnd() int64 {
-	if m != nil {
-		return m.End
-	}
-	return 0
-}
-
 func init() {
+	proto.RegisterEnum("Redwood.tree.TxStatus", TxStatus_name, TxStatus_value)
 	proto.RegisterType((*Tx)(nil), "Redwood.tree.Tx")
 	proto.RegisterType((*Patch)(nil), "Redwood.tree.Patch")
-	proto.RegisterType((*Range)(nil), "Redwood.tree.Range")
 }
 
 func init() { proto.RegisterFile("tx.proto", fileDescriptor_0fd2153dc07d3b5c) }
 
 var fileDescriptor_0fd2153dc07d3b5c = []byte{
-	// 481 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x51, 0x3f, 0x8f, 0xd3, 0x30,
-	0x14, 0x8f, 0x93, 0xe6, 0xae, 0xe7, 0xab, 0x10, 0x32, 0x27, 0x30, 0x1d, 0x4c, 0x74, 0x53, 0x40,
-	0xba, 0x54, 0x82, 0x8d, 0x0d, 0x36, 0x36, 0x64, 0xc1, 0x82, 0xc4, 0xe0, 0x26, 0x6e, 0x62, 0x5d,
-	0x6b, 0x47, 0x8e, 0x7b, 0x5c, 0x17, 0xc4, 0x47, 0xe0, 0x23, 0x30, 0xf2, 0x11, 0x18, 0x19, 0x19,
-	0x3b, 0x1e, 0xdb, 0x35, 0x5d, 0x18, 0x6f, 0xbc, 0x11, 0xf9, 0xa5, 0x3d, 0x22, 0xb1, 0xbd, 0xdf,
-	0x1f, 0xbf, 0xf7, 0x7b, 0x7e, 0x78, 0xe8, 0x2e, 0xb3, 0xda, 0x1a, 0x67, 0xc8, 0x88, 0xcb, 0xe2,
-	0x93, 0x31, 0x45, 0xe6, 0xac, 0x94, 0xe3, 0xb3, 0x52, 0xb9, 0x6a, 0x39, 0xcd, 0x72, 0xb3, 0x98,
-	0x94, 0xa6, 0x34, 0x13, 0x30, 0x4d, 0x97, 0x33, 0x40, 0x00, 0xa0, 0xea, 0x1e, 0x8f, 0x1f, 0x97,
-	0xc6, 0x94, 0x73, 0xf9, 0xcf, 0x25, 0xf4, 0xaa, 0x93, 0x4e, 0x7f, 0x87, 0x38, 0x7c, 0x77, 0x49,
-	0xee, 0xe1, 0x50, 0x15, 0x14, 0x25, 0x28, 0x1d, 0xf1, 0x50, 0x15, 0x84, 0xe2, 0xc3, 0x5a, 0x58,
-	0xa9, 0x5d, 0x43, 0xc3, 0x24, 0x4a, 0x47, 0x7c, 0x0f, 0xc9, 0x18, 0x0f, 0xf3, 0x4a, 0xcd, 0x0b,
-	0x2b, 0x35, 0x8d, 0x40, 0xba, 0xc3, 0x84, 0xe0, 0xc1, 0xcc, 0x9a, 0x05, 0x1d, 0x40, 0x1f, 0xa8,
-	0xc9, 0x7d, 0x1c, 0x35, 0xaa, 0xa4, 0x31, 0x50, 0xbe, 0xf4, 0x1d, 0x1a, 0x27, 0x9c, 0x7c, 0xcf,
-	0xdf, 0xd0, 0x83, 0x04, 0xa5, 0x47, 0xfc, 0x0e, 0x93, 0x33, 0x3f, 0xd7, 0xe5, 0x95, 0x6c, 0xe8,
-	0x61, 0x12, 0xa5, 0xc7, 0xcf, 0x1f, 0x64, 0xfd, 0xc5, 0xb3, 0xb7, 0x5e, 0xe4, 0x7b, 0x0f, 0x61,
-	0x18, 0x5b, 0x99, 0xab, 0x5a, 0x41, 0xd2, 0x21, 0xc4, 0xe9, 0x31, 0x5e, 0xcf, 0x2b, 0x99, 0x9f,
-	0xd7, 0x46, 0x69, 0x47, 0x8f, 0x12, 0x94, 0x0e, 0x79, 0x8f, 0xf1, 0xba, 0x70, 0x4e, 0xe4, 0xd5,
-	0x42, 0x6a, 0x47, 0x31, 0x64, 0xec, 0x31, 0xe4, 0x21, 0x3e, 0xf0, 0xd1, 0x96, 0x0d, 0x3d, 0x86,
-	0xa0, 0x3b, 0x04, 0x7d, 0x8d, 0x9e, 0xa9, 0x42, 0xea, 0x5c, 0xd2, 0x51, 0x82, 0xd2, 0x01, 0xef,
-	0x31, 0x2f, 0x07, 0xb7, 0xdf, 0x9e, 0x04, 0xa7, 0x9f, 0x71, 0x0c, 0x79, 0xfd, 0x6f, 0x9e, 0xcb,
-	0x55, 0x2d, 0x5c, 0xb5, 0xfb, 0xe2, 0x3d, 0x24, 0x4f, 0x71, 0x6c, 0x85, 0x2e, 0x25, 0x0d, 0x13,
-	0xf4, 0xff, 0xb6, 0xdc, 0x4b, 0xbc, 0x73, 0x90, 0x67, 0x38, 0xbe, 0x10, 0xf3, 0xa5, 0xa4, 0x11,
-	0x58, 0x4f, 0xb2, 0xee, 0xa8, 0xd9, 0xfe, 0xa8, 0xd9, 0x2b, 0xbd, 0xe2, 0x9d, 0x65, 0x37, 0x7f,
-	0x82, 0x63, 0xe8, 0x40, 0x4e, 0x70, 0xdc, 0x38, 0x61, 0x1d, 0x4c, 0x8f, 0x78, 0x07, 0xfc, 0x65,
-	0xa4, 0x2e, 0x60, 0x72, 0xc4, 0x7d, 0xf9, 0xfa, 0xe3, 0x7a, 0xc3, 0x82, 0xab, 0x0d, 0x0b, 0xae,
-	0x37, 0x0c, 0xdd, 0x6c, 0x18, 0xba, 0xdd, 0x30, 0xf4, 0xa5, 0x65, 0xe8, 0x7b, 0xcb, 0xd0, 0x8f,
-	0x96, 0xa1, 0x9f, 0x2d, 0x43, 0xbf, 0x5a, 0x86, 0xd6, 0x2d, 0x43, 0xd7, 0x2d, 0x43, 0x7f, 0x5a,
-	0x16, 0xdc, 0xb4, 0x0c, 0x7d, 0xdd, 0xb2, 0x60, 0xbd, 0x65, 0xc1, 0xd5, 0x96, 0x05, 0x1f, 0x1e,
-	0xd9, 0xdd, 0x0e, 0x85, 0xbc, 0x98, 0x28, 0xed, 0xa4, 0xd5, 0x62, 0x3e, 0xa9, 0xa7, 0xd3, 0x03,
-	0x88, 0xfa, 0xe2, 0x6f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x57, 0x86, 0x83, 0x56, 0xd6, 0x02, 0x00,
-	0x00,
+	// 603 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x53, 0xbd, 0x6f, 0xd3, 0x4c,
+	0x18, 0xf7, 0xd9, 0x49, 0xeb, 0x5c, 0xfb, 0xbe, 0xb4, 0xd7, 0x82, 0x4c, 0xa8, 0x2e, 0x47, 0x41,
+	0xc2, 0xaa, 0x84, 0x23, 0xb5, 0xaa, 0x90, 0x8a, 0x18, 0x88, 0x58, 0x02, 0xe2, 0x43, 0xd7, 0x0f,
+	0x09, 0x36, 0x27, 0xbe, 0x26, 0x56, 0x93, 0x3b, 0xcb, 0xbe, 0xf4, 0x63, 0xeb, 0xdc, 0x09, 0x31,
+	0xb1, 0x54, 0x62, 0xe4, 0x4f, 0x60, 0x64, 0xec, 0xd8, 0xb1, 0x42, 0xa8, 0x6a, 0xdc, 0x85, 0x09,
+	0x75, 0xec, 0x88, 0xee, 0x62, 0x87, 0x46, 0x20, 0x60, 0xbb, 0xe7, 0xf7, 0x71, 0xcf, 0xcf, 0xf7,
+	0xf8, 0x81, 0xb6, 0xdc, 0xf5, 0xa2, 0x58, 0x48, 0x81, 0x26, 0x29, 0x0b, 0x76, 0x84, 0x08, 0x3c,
+	0x19, 0x33, 0x56, 0xbe, 0xdf, 0x0a, 0x65, 0xbb, 0xd7, 0xf0, 0x9a, 0xa2, 0x5b, 0x6d, 0x89, 0x96,
+	0xa8, 0x6a, 0x51, 0xa3, 0xb7, 0xa9, 0x2b, 0x5d, 0xe8, 0xd3, 0xc0, 0x5c, 0x9e, 0x4d, 0xa4, 0x2f,
+	0x59, 0x35, 0x6a, 0x54, 0xf5, 0x61, 0x80, 0xce, 0x7f, 0xb7, 0xa0, 0xb9, 0xb6, 0x8b, 0x1e, 0x40,
+	0x33, 0x0c, 0x1c, 0x40, 0x80, 0x3b, 0x59, 0xbb, 0x77, 0x74, 0x5a, 0x31, 0xbe, 0x9c, 0x56, 0x6e,
+	0xc6, 0x59, 0xb7, 0x80, 0x6d, 0x67, 0x9e, 0x0d, 0x16, 0x27, 0xa1, 0xe0, 0xe9, 0x69, 0xc5, 0xac,
+	0x3f, 0xa1, 0x66, 0x18, 0xa0, 0x87, 0x70, 0x3c, 0xf2, 0x63, 0xc6, 0x65, 0xe2, 0x98, 0xc4, 0x72,
+	0x27, 0x6b, 0xb7, 0xff, 0xea, 0xa6, 0xb9, 0x03, 0x3d, 0x82, 0x76, 0xb3, 0x1d, 0x76, 0x82, 0x98,
+	0x71, 0xc7, 0xfa, 0x57, 0xf7, 0xd0, 0x82, 0x96, 0x61, 0x61, 0x33, 0x16, 0x5d, 0xa7, 0xa0, 0x63,
+	0xff, 0xd6, 0x2a, 0xf7, 0x22, 0x96, 0x78, 0x8f, 0x83, 0x20, 0x66, 0x49, 0x42, 0xb5, 0x1c, 0x2d,
+	0x43, 0x2b, 0x09, 0x5b, 0x4e, 0x51, 0xbb, 0xee, 0x64, 0xae, 0x5b, 0xbf, 0xba, 0x56, 0xc3, 0x16,
+	0xf7, 0x65, 0x2f, 0x66, 0x54, 0xe9, 0x51, 0x19, 0xda, 0x3a, 0xc8, 0x3a, 0xad, 0x3b, 0x63, 0x04,
+	0xb8, 0x25, 0x3a, 0xac, 0xd1, 0x92, 0x7a, 0x05, 0xd9, 0x6c, 0xb3, 0xc4, 0x19, 0x27, 0x96, 0x3b,
+	0xb1, 0x38, 0xe3, 0x5d, 0x1d, 0x95, 0xf7, 0x4a, 0x91, 0xb5, 0x82, 0xea, 0x45, 0x73, 0x25, 0xc2,
+	0x10, 0x36, 0xdb, 0xac, 0xb9, 0x15, 0x89, 0x90, 0x4b, 0xc7, 0x26, 0xc0, 0xb5, 0xe9, 0x15, 0x44,
+	0xf1, 0xbe, 0x94, 0x7e, 0xb3, 0xdd, 0x65, 0x5c, 0x3a, 0x25, 0x15, 0x97, 0x5e, 0x41, 0x90, 0x07,
+	0xc7, 0x54, 0x80, 0x5e, 0xe2, 0x40, 0x02, 0xdc, 0xff, 0x17, 0x6f, 0x8c, 0xf6, 0x5c, 0xdb, 0x5d,
+	0xd5, 0x2c, 0xcd, 0x54, 0x2b, 0x85, 0xcb, 0x0f, 0x15, 0x63, 0xfe, 0x3d, 0x80, 0x45, 0x1d, 0x47,
+	0x8d, 0x6e, 0x8b, 0xed, 0x45, 0xbe, 0x6c, 0x67, 0x83, 0xff, 0xc3, 0xe3, 0x3f, 0x1b, 0x08, 0x69,
+	0xee, 0x40, 0x0b, 0xb0, 0x18, 0xfb, 0xbc, 0xc5, 0x1c, 0x93, 0x00, 0x77, 0x62, 0x71, 0x76, 0xd8,
+	0x7b, 0xa0, 0xa7, 0x8a, 0xa3, 0x03, 0x09, 0x9a, 0x83, 0xa5, 0x6d, 0xbf, 0xd3, 0x63, 0x4f, 0x57,
+	0x5f, 0xbe, 0x70, 0x2c, 0xfd, 0x1d, 0x3f, 0x81, 0x15, 0x5b, 0xc5, 0xda, 0xff, 0x4a, 0x8c, 0x85,
+	0x77, 0x00, 0xda, 0x79, 0x6a, 0x44, 0xe0, 0xf8, 0x3a, 0xdf, 0xe2, 0x62, 0x87, 0x4f, 0x19, 0xe5,
+	0x99, 0x83, 0x43, 0x72, 0x2d, 0xa7, 0x32, 0x18, 0xdd, 0x85, 0xa5, 0x3a, 0x7f, 0xce, 0xba, 0x91,
+	0x10, 0x9d, 0x29, 0x50, 0xbe, 0x7e, 0x70, 0x48, 0xa6, 0x73, 0xcd, 0x90, 0x50, 0xf7, 0xd4, 0xf9,
+	0xb6, 0xdf, 0x09, 0x83, 0x29, 0x73, 0xf4, 0x9e, 0x0c, 0x46, 0x73, 0xb0, 0xb8, 0xa1, 0x79, 0xab,
+	0x3c, 0x7d, 0x70, 0x48, 0xfe, 0xcb, 0x79, 0x0d, 0xd6, 0x5e, 0x1f, 0xf7, 0xb1, 0x71, 0xd2, 0xc7,
+	0xc6, 0x59, 0x1f, 0x83, 0x8b, 0x3e, 0x06, 0x97, 0x7d, 0x0c, 0xf6, 0x53, 0x0c, 0x3e, 0xa6, 0x18,
+	0x7c, 0x4a, 0x31, 0xf8, 0x9c, 0x62, 0x70, 0x94, 0x62, 0x70, 0x9c, 0x62, 0x70, 0x96, 0x62, 0xf0,
+	0x2d, 0xc5, 0xc6, 0x45, 0x8a, 0xc1, 0xdb, 0x73, 0x6c, 0x1c, 0x9f, 0x63, 0xe3, 0xe4, 0x1c, 0x1b,
+	0x6f, 0x66, 0x46, 0x7e, 0xaf, 0x98, 0xa9, 0x3d, 0x6c, 0x8c, 0xe9, 0x15, 0x5c, 0xfa, 0x11, 0x00,
+	0x00, 0xff, 0xff, 0x8c, 0x71, 0x28, 0x2d, 0xe1, 0x03, 0x00, 0x00,
 }
 
+func (x TxStatus) String() string {
+	s, ok := TxStatus_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
 func (this *Tx) VerboseEqual(that interface{}) error {
 	if that == nil {
 		if this == nil {
@@ -336,14 +271,14 @@ func (this *Tx) VerboseEqual(that interface{}) error {
 	} else if this == nil {
 		return fmt.Errorf("that is type *Tx but is not nil && this == nil")
 	}
-	if !bytes.Equal(this.Id, that1.Id) {
-		return fmt.Errorf("Id this(%v) Not Equal that(%v)", this.Id, that1.Id)
+	if !this.ID.Equal(that1.ID) {
+		return fmt.Errorf("ID this(%v) Not Equal that(%v)", this.ID, that1.ID)
 	}
 	if len(this.Parents) != len(that1.Parents) {
 		return fmt.Errorf("Parents this(%v) Not Equal that(%v)", len(this.Parents), len(that1.Parents))
 	}
 	for i := range this.Parents {
-		if !bytes.Equal(this.Parents[i], that1.Parents[i]) {
+		if !this.Parents[i].Equal(that1.Parents[i]) {
 			return fmt.Errorf("Parents this[%v](%v) Not Equal that[%v](%v)", i, this.Parents[i], i, that1.Parents[i])
 		}
 	}
@@ -351,14 +286,14 @@ func (this *Tx) VerboseEqual(that interface{}) error {
 		return fmt.Errorf("Children this(%v) Not Equal that(%v)", len(this.Children), len(that1.Children))
 	}
 	for i := range this.Children {
-		if !bytes.Equal(this.Children[i], that1.Children[i]) {
+		if !this.Children[i].Equal(that1.Children[i]) {
 			return fmt.Errorf("Children this[%v](%v) Not Equal that[%v](%v)", i, this.Children[i], i, that1.Children[i])
 		}
 	}
-	if !bytes.Equal(this.From, that1.From) {
+	if !this.From.Equal(that1.From) {
 		return fmt.Errorf("From this(%v) Not Equal that(%v)", this.From, that1.From)
 	}
-	if !bytes.Equal(this.Sig, that1.Sig) {
+	if !this.Sig.Equal(that1.Sig) {
 		return fmt.Errorf("Sig this(%v) Not Equal that(%v)", this.Sig, that1.Sig)
 	}
 	if this.StateURI != that1.StateURI {
@@ -368,16 +303,8 @@ func (this *Tx) VerboseEqual(that interface{}) error {
 		return fmt.Errorf("Patches this(%v) Not Equal that(%v)", len(this.Patches), len(that1.Patches))
 	}
 	for i := range this.Patches {
-		if !this.Patches[i].Equal(that1.Patches[i]) {
+		if !this.Patches[i].Equal(&that1.Patches[i]) {
 			return fmt.Errorf("Patches this[%v](%v) Not Equal that[%v](%v)", i, this.Patches[i], i, that1.Patches[i])
-		}
-	}
-	if len(this.Recipients) != len(that1.Recipients) {
-		return fmt.Errorf("Recipients this(%v) Not Equal that(%v)", len(this.Recipients), len(that1.Recipients))
-	}
-	for i := range this.Recipients {
-		if !bytes.Equal(this.Recipients[i], that1.Recipients[i]) {
-			return fmt.Errorf("Recipients this[%v](%v) Not Equal that[%v](%v)", i, this.Recipients[i], i, that1.Recipients[i])
 		}
 	}
 	if this.Checkpoint != that1.Checkpoint {
@@ -388,9 +315,6 @@ func (this *Tx) VerboseEqual(that interface{}) error {
 	}
 	if this.Status != that1.Status {
 		return fmt.Errorf("Status this(%v) Not Equal that(%v)", this.Status, that1.Status)
-	}
-	if this.Confidence != that1.Confidence {
-		return fmt.Errorf("Confidence this(%v) Not Equal that(%v)", this.Confidence, that1.Confidence)
 	}
 	return nil
 }
@@ -413,14 +337,14 @@ func (this *Tx) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if !bytes.Equal(this.Id, that1.Id) {
+	if !this.ID.Equal(that1.ID) {
 		return false
 	}
 	if len(this.Parents) != len(that1.Parents) {
 		return false
 	}
 	for i := range this.Parents {
-		if !bytes.Equal(this.Parents[i], that1.Parents[i]) {
+		if !this.Parents[i].Equal(that1.Parents[i]) {
 			return false
 		}
 	}
@@ -428,14 +352,14 @@ func (this *Tx) Equal(that interface{}) bool {
 		return false
 	}
 	for i := range this.Children {
-		if !bytes.Equal(this.Children[i], that1.Children[i]) {
+		if !this.Children[i].Equal(that1.Children[i]) {
 			return false
 		}
 	}
-	if !bytes.Equal(this.From, that1.From) {
+	if !this.From.Equal(that1.From) {
 		return false
 	}
-	if !bytes.Equal(this.Sig, that1.Sig) {
+	if !this.Sig.Equal(that1.Sig) {
 		return false
 	}
 	if this.StateURI != that1.StateURI {
@@ -445,15 +369,7 @@ func (this *Tx) Equal(that interface{}) bool {
 		return false
 	}
 	for i := range this.Patches {
-		if !this.Patches[i].Equal(that1.Patches[i]) {
-			return false
-		}
-	}
-	if len(this.Recipients) != len(that1.Recipients) {
-		return false
-	}
-	for i := range this.Recipients {
-		if !bytes.Equal(this.Recipients[i], that1.Recipients[i]) {
+		if !this.Patches[i].Equal(&that1.Patches[i]) {
 			return false
 		}
 	}
@@ -464,9 +380,6 @@ func (this *Tx) Equal(that interface{}) bool {
 		return false
 	}
 	if this.Status != that1.Status {
-		return false
-	}
-	if this.Confidence != that1.Confidence {
 		return false
 	}
 	return true
@@ -496,14 +409,14 @@ func (this *Patch) VerboseEqual(that interface{}) error {
 	} else if this == nil {
 		return fmt.Errorf("that is type *Patch but is not nil && this == nil")
 	}
-	if !bytes.Equal(this.Keypath, that1.Keypath) {
+	if !this.Keypath.Equal(that1.Keypath) {
 		return fmt.Errorf("Keypath this(%v) Not Equal that(%v)", this.Keypath, that1.Keypath)
 	}
 	if !this.Range.Equal(that1.Range) {
 		return fmt.Errorf("Range this(%v) Not Equal that(%v)", this.Range, that1.Range)
 	}
-	if !this.Value.Equal(that1.Value) {
-		return fmt.Errorf("Value this(%v) Not Equal that(%v)", this.Value, that1.Value)
+	if !bytes.Equal(this.ValueJSON, that1.ValueJSON) {
+		return fmt.Errorf("ValueJSON this(%v) Not Equal that(%v)", this.ValueJSON, that1.ValueJSON)
 	}
 	return nil
 }
@@ -526,73 +439,13 @@ func (this *Patch) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if !bytes.Equal(this.Keypath, that1.Keypath) {
+	if !this.Keypath.Equal(that1.Keypath) {
 		return false
 	}
 	if !this.Range.Equal(that1.Range) {
 		return false
 	}
-	if !this.Value.Equal(that1.Value) {
-		return false
-	}
-	return true
-}
-func (this *Range) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*Range)
-	if !ok {
-		that2, ok := that.(Range)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *Range")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *Range but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *Range but is not nil && this == nil")
-	}
-	if this.Start != that1.Start {
-		return fmt.Errorf("Start this(%v) Not Equal that(%v)", this.Start, that1.Start)
-	}
-	if this.End != that1.End {
-		return fmt.Errorf("End this(%v) Not Equal that(%v)", this.End, that1.End)
-	}
-	return nil
-}
-func (this *Range) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*Range)
-	if !ok {
-		that2, ok := that.(Range)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if this.Start != that1.Start {
-		return false
-	}
-	if this.End != that1.End {
+	if !bytes.Equal(this.ValueJSON, that1.ValueJSON) {
 		return false
 	}
 	return true
@@ -601,22 +454,24 @@ func (this *Tx) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 16)
+	s := make([]string, 0, 14)
 	s = append(s, "&pb.Tx{")
-	s = append(s, "Id: "+fmt.Sprintf("%#v", this.Id)+",\n")
+	s = append(s, "ID: "+fmt.Sprintf("%#v", this.ID)+",\n")
 	s = append(s, "Parents: "+fmt.Sprintf("%#v", this.Parents)+",\n")
 	s = append(s, "Children: "+fmt.Sprintf("%#v", this.Children)+",\n")
 	s = append(s, "From: "+fmt.Sprintf("%#v", this.From)+",\n")
 	s = append(s, "Sig: "+fmt.Sprintf("%#v", this.Sig)+",\n")
 	s = append(s, "StateURI: "+fmt.Sprintf("%#v", this.StateURI)+",\n")
 	if this.Patches != nil {
-		s = append(s, "Patches: "+fmt.Sprintf("%#v", this.Patches)+",\n")
+		vs := make([]Patch, len(this.Patches))
+		for i := range vs {
+			vs[i] = this.Patches[i]
+		}
+		s = append(s, "Patches: "+fmt.Sprintf("%#v", vs)+",\n")
 	}
-	s = append(s, "Recipients: "+fmt.Sprintf("%#v", this.Recipients)+",\n")
 	s = append(s, "Checkpoint: "+fmt.Sprintf("%#v", this.Checkpoint)+",\n")
 	s = append(s, "Attachment: "+fmt.Sprintf("%#v", this.Attachment)+",\n")
 	s = append(s, "Status: "+fmt.Sprintf("%#v", this.Status)+",\n")
-	s = append(s, "Confidence: "+fmt.Sprintf("%#v", this.Confidence)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -630,20 +485,7 @@ func (this *Patch) GoString() string {
 	if this.Range != nil {
 		s = append(s, "Range: "+fmt.Sprintf("%#v", this.Range)+",\n")
 	}
-	if this.Value != nil {
-		s = append(s, "Value: "+fmt.Sprintf("%#v", this.Value)+",\n")
-	}
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *Range) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 6)
-	s = append(s, "&pb.Range{")
-	s = append(s, "Start: "+fmt.Sprintf("%#v", this.Start)+",\n")
-	s = append(s, "End: "+fmt.Sprintf("%#v", this.End)+",\n")
+	s = append(s, "ValueJSON: "+fmt.Sprintf("%#v", this.ValueJSON)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -675,24 +517,17 @@ func (m *Tx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Confidence != 0 {
-		i = encodeVarintTx(dAtA, i, uint64(m.Confidence))
+	if m.Status != 0 {
+		i = encodeVarintTx(dAtA, i, uint64(m.Status))
 		i--
-		dAtA[i] = 0x60
-	}
-	if len(m.Status) > 0 {
-		i -= len(m.Status)
-		copy(dAtA[i:], m.Status)
-		i = encodeVarintTx(dAtA, i, uint64(len(m.Status)))
-		i--
-		dAtA[i] = 0x5a
+		dAtA[i] = 0x50
 	}
 	if len(m.Attachment) > 0 {
 		i -= len(m.Attachment)
 		copy(dAtA[i:], m.Attachment)
 		i = encodeVarintTx(dAtA, i, uint64(len(m.Attachment)))
 		i--
-		dAtA[i] = 0x52
+		dAtA[i] = 0x4a
 	}
 	if m.Checkpoint {
 		i--
@@ -702,16 +537,7 @@ func (m *Tx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			dAtA[i] = 0
 		}
 		i--
-		dAtA[i] = 0x48
-	}
-	if len(m.Recipients) > 0 {
-		for iNdEx := len(m.Recipients) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.Recipients[iNdEx])
-			copy(dAtA[i:], m.Recipients[iNdEx])
-			i = encodeVarintTx(dAtA, i, uint64(len(m.Recipients[iNdEx])))
-			i--
-			dAtA[i] = 0x42
-		}
+		dAtA[i] = 0x40
 	}
 	if len(m.Patches) > 0 {
 		for iNdEx := len(m.Patches) - 1; iNdEx >= 0; iNdEx-- {
@@ -734,45 +560,64 @@ func (m *Tx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x32
 	}
-	if len(m.Sig) > 0 {
-		i -= len(m.Sig)
-		copy(dAtA[i:], m.Sig)
-		i = encodeVarintTx(dAtA, i, uint64(len(m.Sig)))
-		i--
-		dAtA[i] = 0x2a
+	{
+		size := m.Sig.Size()
+		i -= size
+		if _, err := m.Sig.MarshalTo(dAtA[i:]); err != nil {
+			return 0, err
+		}
+		i = encodeVarintTx(dAtA, i, uint64(size))
 	}
-	if len(m.From) > 0 {
-		i -= len(m.From)
-		copy(dAtA[i:], m.From)
-		i = encodeVarintTx(dAtA, i, uint64(len(m.From)))
-		i--
-		dAtA[i] = 0x22
+	i--
+	dAtA[i] = 0x2a
+	{
+		size := m.From.Size()
+		i -= size
+		if _, err := m.From.MarshalTo(dAtA[i:]); err != nil {
+			return 0, err
+		}
+		i = encodeVarintTx(dAtA, i, uint64(size))
 	}
+	i--
+	dAtA[i] = 0x22
 	if len(m.Children) > 0 {
 		for iNdEx := len(m.Children) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.Children[iNdEx])
-			copy(dAtA[i:], m.Children[iNdEx])
-			i = encodeVarintTx(dAtA, i, uint64(len(m.Children[iNdEx])))
+			{
+				size := m.Children[iNdEx].Size()
+				i -= size
+				if _, err := m.Children[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+					return 0, err
+				}
+				i = encodeVarintTx(dAtA, i, uint64(size))
+			}
 			i--
 			dAtA[i] = 0x1a
 		}
 	}
 	if len(m.Parents) > 0 {
 		for iNdEx := len(m.Parents) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.Parents[iNdEx])
-			copy(dAtA[i:], m.Parents[iNdEx])
-			i = encodeVarintTx(dAtA, i, uint64(len(m.Parents[iNdEx])))
+			{
+				size := m.Parents[iNdEx].Size()
+				i -= size
+				if _, err := m.Parents[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+					return 0, err
+				}
+				i = encodeVarintTx(dAtA, i, uint64(size))
+			}
 			i--
 			dAtA[i] = 0x12
 		}
 	}
-	if len(m.Id) > 0 {
-		i -= len(m.Id)
-		copy(dAtA[i:], m.Id)
-		i = encodeVarintTx(dAtA, i, uint64(len(m.Id)))
-		i--
-		dAtA[i] = 0xa
+	{
+		size := m.ID.Size()
+		i -= size
+		if _, err := m.ID.MarshalTo(dAtA[i:]); err != nil {
+			return 0, err
+		}
+		i = encodeVarintTx(dAtA, i, uint64(size))
 	}
+	i--
+	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -796,15 +641,10 @@ func (m *Patch) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Value != nil {
-		{
-			size, err := m.Value.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintTx(dAtA, i, uint64(size))
-		}
+	if len(m.ValueJSON) > 0 {
+		i -= len(m.ValueJSON)
+		copy(dAtA[i:], m.ValueJSON)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.ValueJSON)))
 		i--
 		dAtA[i] = 0x1a
 	}
@@ -820,46 +660,16 @@ func (m *Patch) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x12
 	}
-	if len(m.Keypath) > 0 {
-		i -= len(m.Keypath)
-		copy(dAtA[i:], m.Keypath)
-		i = encodeVarintTx(dAtA, i, uint64(len(m.Keypath)))
-		i--
-		dAtA[i] = 0xa
+	{
+		size := m.Keypath.Size()
+		i -= size
+		if _, err := m.Keypath.MarshalTo(dAtA[i:]); err != nil {
+			return 0, err
+		}
+		i = encodeVarintTx(dAtA, i, uint64(size))
 	}
-	return len(dAtA) - i, nil
-}
-
-func (m *Range) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *Range) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *Range) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.End != 0 {
-		i = encodeVarintTx(dAtA, i, uint64(m.End))
-		i--
-		dAtA[i] = 0x10
-	}
-	if m.Start != 0 {
-		i = encodeVarintTx(dAtA, i, uint64(m.Start))
-		i--
-		dAtA[i] = 0x8
-	}
+	i--
+	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -876,64 +686,40 @@ func encodeVarintTx(dAtA []byte, offset int, v uint64) int {
 }
 func NewPopulatedTx(r randyTx, easy bool) *Tx {
 	this := &Tx{}
-	v1 := r.Intn(100)
-	this.Id = make([]byte, v1)
-	for i := 0; i < v1; i++ {
-		this.Id[i] = byte(r.Intn(256))
-	}
+	v1 := redwood_dev_state.NewPopulatedVersion(r)
+	this.ID = *v1
 	v2 := r.Intn(10)
-	this.Parents = make([][]byte, v2)
+	this.Parents = make([]redwood_dev_state.Version, v2)
 	for i := 0; i < v2; i++ {
-		v3 := r.Intn(100)
-		this.Parents[i] = make([]byte, v3)
-		for j := 0; j < v3; j++ {
-			this.Parents[i][j] = byte(r.Intn(256))
-		}
+		v3 := redwood_dev_state.NewPopulatedVersion(r)
+		this.Parents[i] = *v3
 	}
 	v4 := r.Intn(10)
-	this.Children = make([][]byte, v4)
+	this.Children = make([]redwood_dev_state.Version, v4)
 	for i := 0; i < v4; i++ {
-		v5 := r.Intn(100)
-		this.Children[i] = make([]byte, v5)
-		for j := 0; j < v5; j++ {
-			this.Children[i][j] = byte(r.Intn(256))
-		}
+		v5 := redwood_dev_state.NewPopulatedVersion(r)
+		this.Children[i] = *v5
 	}
-	v6 := r.Intn(100)
-	this.From = make([]byte, v6)
-	for i := 0; i < v6; i++ {
-		this.From[i] = byte(r.Intn(256))
-	}
-	v7 := r.Intn(100)
-	this.Sig = make([]byte, v7)
-	for i := 0; i < v7; i++ {
-		this.Sig[i] = byte(r.Intn(256))
-	}
+	v6 := redwood_dev_types.NewPopulatedAddress(r)
+	this.From = *v6
+	v7 := redwood_dev_types.NewPopulatedSignature(r)
+	this.Sig = *v7
 	this.StateURI = string(randStringTx(r))
 	if r.Intn(5) != 0 {
 		v8 := r.Intn(5)
-		this.Patches = make([]*Patch, v8)
+		this.Patches = make([]Patch, v8)
 		for i := 0; i < v8; i++ {
-			this.Patches[i] = NewPopulatedPatch(r, easy)
-		}
-	}
-	v9 := r.Intn(10)
-	this.Recipients = make([][]byte, v9)
-	for i := 0; i < v9; i++ {
-		v10 := r.Intn(100)
-		this.Recipients[i] = make([]byte, v10)
-		for j := 0; j < v10; j++ {
-			this.Recipients[i][j] = byte(r.Intn(256))
+			v9 := NewPopulatedPatch(r, easy)
+			this.Patches[i] = *v9
 		}
 	}
 	this.Checkpoint = bool(bool(r.Intn(2) == 0))
-	v11 := r.Intn(100)
-	this.Attachment = make([]byte, v11)
-	for i := 0; i < v11; i++ {
+	v10 := r.Intn(100)
+	this.Attachment = make([]byte, v10)
+	for i := 0; i < v10; i++ {
 		this.Attachment[i] = byte(r.Intn(256))
 	}
-	this.Status = string(randStringTx(r))
-	this.Confidence = uint64(uint64(r.Uint32()))
+	this.Status = TxStatus([]int32{0, 1, 2, 3}[r.Intn(4)])
 	if !easy && r.Intn(10) != 0 {
 	}
 	return this
@@ -941,31 +727,15 @@ func NewPopulatedTx(r randyTx, easy bool) *Tx {
 
 func NewPopulatedPatch(r randyTx, easy bool) *Patch {
 	this := &Patch{}
+	v11 := redwood_dev_state.NewPopulatedKeypath(r)
+	this.Keypath = *v11
+	if r.Intn(5) != 0 {
+		this.Range = pb.NewPopulatedRange(r, easy)
+	}
 	v12 := r.Intn(100)
-	this.Keypath = make([]byte, v12)
+	this.ValueJSON = make([]byte, v12)
 	for i := 0; i < v12; i++ {
-		this.Keypath[i] = byte(r.Intn(256))
-	}
-	if r.Intn(5) != 0 {
-		this.Range = NewPopulatedRange(r, easy)
-	}
-	if r.Intn(5) != 0 {
-		this.Value = types.NewPopulatedAny(r, easy)
-	}
-	if !easy && r.Intn(10) != 0 {
-	}
-	return this
-}
-
-func NewPopulatedRange(r randyTx, easy bool) *Range {
-	this := &Range{}
-	this.Start = int64(r.Int63())
-	if r.Intn(2) == 0 {
-		this.Start *= -1
-	}
-	this.End = int64(r.Int63())
-	if r.Intn(2) == 0 {
-		this.End *= -1
+		this.ValueJSON[i] = byte(r.Intn(256))
 	}
 	if !easy && r.Intn(10) != 0 {
 	}
@@ -1050,30 +820,24 @@ func (m *Tx) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.Id)
-	if l > 0 {
-		n += 1 + l + sovTx(uint64(l))
-	}
+	l = m.ID.Size()
+	n += 1 + l + sovTx(uint64(l))
 	if len(m.Parents) > 0 {
-		for _, b := range m.Parents {
-			l = len(b)
+		for _, e := range m.Parents {
+			l = e.Size()
 			n += 1 + l + sovTx(uint64(l))
 		}
 	}
 	if len(m.Children) > 0 {
-		for _, b := range m.Children {
-			l = len(b)
+		for _, e := range m.Children {
+			l = e.Size()
 			n += 1 + l + sovTx(uint64(l))
 		}
 	}
-	l = len(m.From)
-	if l > 0 {
-		n += 1 + l + sovTx(uint64(l))
-	}
-	l = len(m.Sig)
-	if l > 0 {
-		n += 1 + l + sovTx(uint64(l))
-	}
+	l = m.From.Size()
+	n += 1 + l + sovTx(uint64(l))
+	l = m.Sig.Size()
+	n += 1 + l + sovTx(uint64(l))
 	l = len(m.StateURI)
 	if l > 0 {
 		n += 1 + l + sovTx(uint64(l))
@@ -1084,12 +848,6 @@ func (m *Tx) Size() (n int) {
 			n += 1 + l + sovTx(uint64(l))
 		}
 	}
-	if len(m.Recipients) > 0 {
-		for _, b := range m.Recipients {
-			l = len(b)
-			n += 1 + l + sovTx(uint64(l))
-		}
-	}
 	if m.Checkpoint {
 		n += 2
 	}
@@ -1097,12 +855,8 @@ func (m *Tx) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovTx(uint64(l))
 	}
-	l = len(m.Status)
-	if l > 0 {
-		n += 1 + l + sovTx(uint64(l))
-	}
-	if m.Confidence != 0 {
-		n += 1 + sovTx(uint64(m.Confidence))
+	if m.Status != 0 {
+		n += 1 + sovTx(uint64(m.Status))
 	}
 	return n
 }
@@ -1113,32 +867,15 @@ func (m *Patch) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.Keypath)
-	if l > 0 {
-		n += 1 + l + sovTx(uint64(l))
-	}
+	l = m.Keypath.Size()
+	n += 1 + l + sovTx(uint64(l))
 	if m.Range != nil {
 		l = m.Range.Size()
 		n += 1 + l + sovTx(uint64(l))
 	}
-	if m.Value != nil {
-		l = m.Value.Size()
+	l = len(m.ValueJSON)
+	if l > 0 {
 		n += 1 + l + sovTx(uint64(l))
-	}
-	return n
-}
-
-func (m *Range) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.Start != 0 {
-		n += 1 + sovTx(uint64(m.Start))
-	}
-	if m.End != 0 {
-		n += 1 + sovTx(uint64(m.End))
 	}
 	return n
 }
@@ -1153,47 +890,22 @@ func (this *Tx) String() string {
 	if this == nil {
 		return "nil"
 	}
-	repeatedStringForPatches := "[]*Patch{"
+	repeatedStringForPatches := "[]Patch{"
 	for _, f := range this.Patches {
-		repeatedStringForPatches += strings.Replace(f.String(), "Patch", "Patch", 1) + ","
+		repeatedStringForPatches += fmt.Sprintf("%v", f) + ","
 	}
 	repeatedStringForPatches += "}"
 	s := strings.Join([]string{`&Tx{`,
-		`Id:` + fmt.Sprintf("%v", this.Id) + `,`,
+		`ID:` + fmt.Sprintf("%v", this.ID) + `,`,
 		`Parents:` + fmt.Sprintf("%v", this.Parents) + `,`,
 		`Children:` + fmt.Sprintf("%v", this.Children) + `,`,
 		`From:` + fmt.Sprintf("%v", this.From) + `,`,
 		`Sig:` + fmt.Sprintf("%v", this.Sig) + `,`,
 		`StateURI:` + fmt.Sprintf("%v", this.StateURI) + `,`,
 		`Patches:` + repeatedStringForPatches + `,`,
-		`Recipients:` + fmt.Sprintf("%v", this.Recipients) + `,`,
 		`Checkpoint:` + fmt.Sprintf("%v", this.Checkpoint) + `,`,
 		`Attachment:` + fmt.Sprintf("%v", this.Attachment) + `,`,
 		`Status:` + fmt.Sprintf("%v", this.Status) + `,`,
-		`Confidence:` + fmt.Sprintf("%v", this.Confidence) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *Patch) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Patch{`,
-		`Keypath:` + fmt.Sprintf("%v", this.Keypath) + `,`,
-		`Range:` + strings.Replace(this.Range.String(), "Range", "Range", 1) + `,`,
-		`Value:` + strings.Replace(fmt.Sprintf("%v", this.Value), "Any", "types.Any", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *Range) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Range{`,
-		`Start:` + fmt.Sprintf("%v", this.Start) + `,`,
-		`End:` + fmt.Sprintf("%v", this.End) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1237,7 +949,7 @@ func (m *Tx) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -1264,9 +976,8 @@ func (m *Tx) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Id = append(m.Id[:0], dAtA[iNdEx:postIndex]...)
-			if m.Id == nil {
-				m.Id = []byte{}
+			if err := m.ID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		case 2:
@@ -1298,8 +1009,11 @@ func (m *Tx) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Parents = append(m.Parents, make([]byte, postIndex-iNdEx))
-			copy(m.Parents[len(m.Parents)-1], dAtA[iNdEx:postIndex])
+			var v redwood_dev_state.Version
+			m.Parents = append(m.Parents, v)
+			if err := m.Parents[len(m.Parents)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -1330,8 +1044,11 @@ func (m *Tx) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Children = append(m.Children, make([]byte, postIndex-iNdEx))
-			copy(m.Children[len(m.Children)-1], dAtA[iNdEx:postIndex])
+			var v redwood_dev_state.Version
+			m.Children = append(m.Children, v)
+			if err := m.Children[len(m.Children)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -1362,9 +1079,8 @@ func (m *Tx) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.From = append(m.From[:0], dAtA[iNdEx:postIndex]...)
-			if m.From == nil {
-				m.From = []byte{}
+			if err := m.From.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		case 5:
@@ -1396,9 +1112,8 @@ func (m *Tx) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Sig = append(m.Sig[:0], dAtA[iNdEx:postIndex]...)
-			if m.Sig == nil {
-				m.Sig = []byte{}
+			if err := m.Sig.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		case 6:
@@ -1462,44 +1177,12 @@ func (m *Tx) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Patches = append(m.Patches, &Patch{})
+			m.Patches = append(m.Patches, Patch{})
 			if err := m.Patches[len(m.Patches)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		case 8:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Recipients", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthTx
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthTx
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Recipients = append(m.Recipients, make([]byte, postIndex-iNdEx))
-			copy(m.Recipients[len(m.Recipients)-1], dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 9:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Checkpoint", wireType)
 			}
@@ -1519,7 +1202,7 @@ func (m *Tx) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.Checkpoint = bool(v != 0)
-		case 10:
+		case 9:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Attachment", wireType)
 			}
@@ -1553,11 +1236,11 @@ func (m *Tx) Unmarshal(dAtA []byte) error {
 				m.Attachment = []byte{}
 			}
 			iNdEx = postIndex
-		case 11:
-			if wireType != 2 {
+		case 10:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
 			}
-			var stringLen uint64
+			m.Status = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowTx
@@ -1567,39 +1250,7 @@ func (m *Tx) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthTx
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthTx
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Status = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 12:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Confidence", wireType)
-			}
-			m.Confidence = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Confidence |= uint64(b&0x7F) << shift
+				m.Status |= TxStatus(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1683,9 +1334,8 @@ func (m *Patch) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Keypath = append(m.Keypath[:0], dAtA[iNdEx:postIndex]...)
-			if m.Keypath == nil {
-				m.Keypath = []byte{}
+			if err := m.Keypath.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		case 2:
@@ -1718,7 +1368,7 @@ func (m *Patch) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Range == nil {
-				m.Range = &Range{}
+				m.Range = &pb.Range{}
 			}
 			if err := m.Range.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1726,9 +1376,9 @@ func (m *Patch) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ValueJSON", wireType)
 			}
-			var msglen int
+			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowTx
@@ -1738,116 +1388,26 @@ func (m *Patch) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= int(b&0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if msglen < 0 {
+			if byteLen < 0 {
 				return ErrInvalidLengthTx
 			}
-			postIndex := iNdEx + msglen
+			postIndex := iNdEx + byteLen
 			if postIndex < 0 {
 				return ErrInvalidLengthTx
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Value == nil {
-				m.Value = &types.Any{}
-			}
-			if err := m.Value.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
+			m.ValueJSON = append(m.ValueJSON[:0], dAtA[iNdEx:postIndex]...)
+			if m.ValueJSON == nil {
+				m.ValueJSON = []byte{}
 			}
 			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipTx(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthTx
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *Range) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowTx
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Range: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Range: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Start", wireType)
-			}
-			m.Start = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Start |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field End", wireType)
-			}
-			m.End = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.End |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTx(dAtA[iNdEx:])

@@ -7,10 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pkg/errors"
-
+	"redwood.dev/errors"
 	"redwood.dev/log"
-	"redwood.dev/types"
 )
 
 var logger = log.NewLogger("memory node")
@@ -162,7 +160,7 @@ func (n *MemoryNode) NumSubkeys() uint64 {
 // returned, but calling .Value on it will return a result with
 // NodeTypeInvalid.
 func (n *MemoryNode) NodeAt(relKeypath Keypath, rng *Range) Node {
-	absKeypath := n.keypath.Push(relKeypath)
+	absKeypath := n.keypath.Push(relKeypath.Normalized())
 
 	if node, relKeypath := n.ParentNodeFor(relKeypath); n != node {
 		return node.NodeAt(relKeypath, rng)
@@ -228,7 +226,7 @@ func (n *MemoryNode) NodeInfo(relKeypath Keypath) (NodeType, ValueType, uint64, 
 
 	switch n.nodeTypes[string(absKeypath)] {
 	case NodeTypeInvalid:
-		return 0, 0, 0, errors.WithStack(types.Err404)
+		return 0, 0, 0, errors.WithStack(errors.Err404)
 
 	case NodeTypeMap:
 		return NodeTypeMap, 0, uint64(n.contentLengths[string(absKeypath)]), nil
@@ -239,7 +237,7 @@ func (n *MemoryNode) NodeInfo(relKeypath Keypath) (NodeType, ValueType, uint64, 
 	case NodeTypeValue:
 		val, exists := n.values[string(absKeypath)]
 		if !exists {
-			return 0, 0, 0, errors.WithStack(types.Err404)
+			return 0, 0, 0, errors.WithStack(errors.Err404)
 		}
 		switch v := val.(type) {
 		case string:
@@ -571,7 +569,7 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 		}
 	}
 
-	walkGoValue(value, func(nodeKeypath Keypath, nodeValue interface{}) error {
+	walkGoValue(value, func(nodeKeypath Keypath, nodeValue interface{}) (keepRecursing bool, _ error) {
 		absNodeKeypath := absKeypath.Push(nodeKeypath)
 		newKeypaths = append(newKeypaths, absNodeKeypath)
 
@@ -592,7 +590,7 @@ func (t *MemoryNode) Set(keypath Keypath, rng *Range, value interface{}) error {
 			t.nodeTypes[string(absNodeKeypath)] = NodeTypeValue
 			t.values[string(absNodeKeypath)] = nodeValue
 		}
-		return nil
+		return true, nil
 	})
 
 	t.diff.AddMany(newKeypaths)
@@ -628,9 +626,9 @@ func (n *MemoryNode) Delete(keypath Keypath, rng *Range) error {
 
 		switch n.nodeTypes[string(absKeypath)] {
 		case NodeTypeMap:
-			n.contentLengths[string(absKeypath)] -= rng.Size()
+			n.contentLengths[string(absKeypath)] -= rng.Length()
 		case NodeTypeSlice:
-			n.contentLengths[string(absKeypath)] -= rng.Size()
+			n.contentLengths[string(absKeypath)] -= rng.Length()
 		case NodeTypeValue:
 			if s, isString := n.values[string(absKeypath)].(string); isString {
 				if !rng.ValidForLength(uint64(len(s))) {
@@ -676,6 +674,14 @@ func (n *MemoryNode) Delete(keypath Keypath, rng *Range) error {
 	}
 	n.diff.RemoveMany(deletedKeypaths)
 	return nil
+}
+
+func (node *MemoryNode) IndexOfMapSubkey(rootKeypath Keypath, subkey Keypath) (uint64, error) {
+	panic("unimplemented")
+}
+
+func (node *MemoryNode) NthMapSubkey(rootKeypath Keypath, n uint64) (Keypath, error) {
+	panic("unimplemented")
 }
 
 func (n *MemoryNode) Diff() *Diff {
@@ -808,6 +814,10 @@ func (iter *memoryIterator) SeekTo(keypath Keypath) {
 	}
 }
 
+func (iter *memoryIterator) seekTo(absKeypath Keypath) {
+	panic("unimplemented")
+}
+
 func (iter *memoryIterator) Node() Node {
 	if iter.done || iter.noItems() {
 		return nil
@@ -912,6 +922,10 @@ func (iter *memoryDepthFirstIterator) SeekTo(keypath Keypath) {
 	} else {
 		iter.done = true
 	}
+}
+
+func (iter *memoryDepthFirstIterator) seekTo(absKeypath Keypath) {
+	panic("unimplemented")
 }
 
 func (iter *memoryDepthFirstIterator) Valid() bool {

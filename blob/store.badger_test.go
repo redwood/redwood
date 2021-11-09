@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
 	"redwood.dev/blob"
+	"redwood.dev/errors"
 	"redwood.dev/internal/testutils"
 	"redwood.dev/types"
 )
@@ -420,7 +420,7 @@ func TestStore(t *testing.T) {
 		require.Contains(t, ids, blob.ID{types.SHA1, blob2SHA1})
 
 		err = store.VerifyBlobOrPrune(blobID3)
-		require.Equal(t, types.Err404, errors.Cause(err))
+		require.Equal(t, errors.Err404, errors.Cause(err))
 
 		require.Len(t, ids, 4)
 		require.Contains(t, ids, blob.ID{types.SHA3, blob1SHA3})

@@ -3,11 +3,9 @@ package swarm
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"redwood.dev/crypto"
 	"redwood.dev/types"
-	"redwood.dev/utils"
 )
 
 const (
@@ -44,40 +42,54 @@ func (p *peerPool) CopyPeers() map[PeerDialInfo]peersMapEntry {
 type ConcretePeerStore = peerStore
 
 func (p *peerStore) FetchAllPeerDetails() ([]*peerDetails, error) {
-	return p.fetchAllPeerDetails()
-}
-
-func (p *peerStore) FetchPeerDetails(dialInfo PeerDialInfo) (*peerDetails, error) {
-	return p.fetchPeerDetails(dialInfo)
+	pds, err := p.fetchAllPeerDetails()
+	if err != nil {
+		return nil, err
+	}
+	var s []*peerDetails
+	for _, pd := range pds {
+		s = append(s, pd)
+	}
+	return s, nil
 }
 
 func (p *peerStore) SavePeerDetails(peerDetails *peerDetails) error {
 	return p.savePeerDetails(peerDetails)
 }
 
+func (p *peerStore) EnsurePeerDetails(dialInfo PeerDialInfo, deviceUniqueID string) (pd *peerDetails, knownPeer bool, needsSave bool) {
+	return p.ensurePeerDetails(dialInfo, deviceUniqueID)
+}
+
 func NewPeerDetails(
 	peerStore *peerStore,
 	dialInfo PeerDialInfo,
 	deviceUniqueID string,
-	addresses utils.AddressSet,
-	sigpubkeys map[types.Address]crypto.SigningPublicKey,
-	encpubkeys map[types.Address]crypto.AsymEncPubkey,
-	stateURIs utils.StringSet,
-	lastContact time.Time,
-	lastFailure time.Time,
+	addresses types.AddressSet,
+	sigpubkeys map[types.Address]*crypto.SigningPublicKey,
+	encpubkeys map[types.Address]*crypto.AsymEncPubkey,
+	stateURIs types.StringSet,
+	lastContact types.Time,
+	lastFailure types.Time,
 	failures uint64,
 ) *peerDetails {
-	return &peerDetails{
+	e := endpoint{
+		Dialinfo:    dialInfo,
+		Lastcontact: lastContact,
+		Lastfailure: lastFailure,
+		Fails:       failures,
+	}
+	pd := peerDetails{
 		peerStore,
-		dialInfo,
 		deviceUniqueID,
 		addresses,
 		sigpubkeys,
 		encpubkeys,
 		stateURIs,
-		lastContact,
-		lastFailure,
-		failures,
-		utils.ExponentialBackoff{},
+		map[PeerDialInfo]*endpoint{
+			dialInfo: &e,
+		},
 	}
+	e.peerDetails = &pd
+	return &pd
 }

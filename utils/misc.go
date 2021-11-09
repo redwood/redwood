@@ -2,8 +2,25 @@ package utils
 
 import (
 	"encoding/json"
+	"math/rand"
 	"strconv"
 )
+
+func RandomBytes(length int) []byte {
+	bs := make([]byte, length)
+	rand.Read(bs)
+	return bs
+}
+
+func RandomString(n int) string {
+	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+	s := make([]rune, n)
+	for i := range s {
+		s[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(s)
+}
 
 func GetValue(x interface{}, keypath []string) (interface{}, bool) {
 	for i := 0; i < len(keypath); i++ {

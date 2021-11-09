@@ -2,7 +2,6 @@ package cmdutils
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -11,8 +10,8 @@ import (
 	"time"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/pkg/errors"
 
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/prototree"
@@ -37,6 +36,19 @@ var (
 				return err
 			}
 			app.Debugf("mnemonic: %v", m)
+			return nil
+		},
+	}
+
+	CmdAddress = REPLCommand{
+		"address",
+		"show your address",
+		func(args []string, app *App) error {
+			identity, err := app.KeyStore.DefaultPublicIdentity()
+			if err != nil {
+				return err
+			}
+			app.Debugf("address: %v", identity.Address())
 			return nil
 		},
 	}
@@ -137,19 +149,46 @@ var (
 			stateURI := args[0]
 			keypath := state.Keypath(args[1])
 			jsonVal := strings.Join(args[2:], " ")
-			var val interface{}
-			err := json.Unmarshal([]byte(jsonVal), &val)
-			if err != nil {
-				return err
+
+			_, err := app.ControllerHub.StateAtVersion(stateURI, nil)
+			var txID state.Version
+			if errors.Cause(err) == tree.ErrNoController {
+				txID = tree.GenesisTxID
+			} else {
+				txID = state.RandomVersion()
 			}
+
 			err = app.TreeProto.SendTx(context.TODO(), tree.Tx{
-				ID:       types.RandomID(),
+				ID:       txID,
 				StateURI: stateURI,
 				Patches: []tree.Patch{{
-					Keypath: keypath,
-					Val:     val,
+					Keypath:   keypath,
+					ValueJSON: []byte(jsonVal),
 				}},
 			})
+			return err
+		},
+	}
+
+	CmdListTxs = REPLCommand{
+		"txs",
+		"list the txs for a given state URI",
+		func(args []string, app *App) error {
+			if len(args) < 1 {
+				return errors.New("requires 1 arguments: txs <state URI>")
+			}
+			stateURI := args[0]
+
+			iter := app.TxStore.AllTxsForStateURI(stateURI, tree.GenesisTxID)
+			defer iter.Close()
+
+			for {
+				tx := iter.Next()
+				if tx == nil {
+					break
+				}
+				app.Debugf("- %v", tx.ID)
+			}
 			return nil
 		},
 	}
@@ -190,11 +229,20 @@ var (
 		"peers",
 		"list all known peers",
 		func(args []string, app *App) error {
-			fmtPeerRow := func(addr, dialAddr, duID string, lastContact, lastFailure time.Time, failures uint64, remainingBackoff time.Duration, stateURIs []string) []string {
-				if len(addr) > 10 {
+			var full bool
+			if len(args) > 0 {
+				if args[0] == "full" {
+					full = true
+				} else {
+					return errors.Errorf("unknown argument '%v'", args[0])
+				}
+			}
+
+			fmtPeerRow := func(addr, duID, dialAddr string, lastContact, lastFailure time.Time, failures uint64, remainingBackoff time.Duration, stateURIs []string) []string {
+				if !full && len(addr) > 10 {
 					addr = addr[:4] + "..." + addr[len(addr)-4:]
 				}
-				if len(dialAddr) > 30 {
+				if !full && len(dialAddr) > 30 {
 					dialAddr = dialAddr[:30] + "..." + dialAddr[len(dialAddr)-6:]
 				}
 				lastContactStr := time.Now().Sub(lastContact).Round(1 * time.Second).String()
@@ -210,19 +258,21 @@ var (
 				if remainingBackoff == 0 {
 					remainingBackoffStr = ""
 				}
-				if len(duID) > 4 {
+				if !full && len(duID) > 4 {
 					duID = duID[:4] + "..."
 				}
-				return []string{addr, dialAddr, duID, lastContactStr, lastFailureStr, failuresStr, remainingBackoffStr, fmt.Sprintf("%v", stateURIs)}
+				return []string{addr, duID, dialAddr, lastContactStr, lastFailureStr, failuresStr, remainingBackoffStr, fmt.Sprintf("%v", stateURIs)}
 			}
 
 			var data [][]string
 			for _, peer := range app.PeerStore.Peers() {
-				for _, addr := range peer.Addresses() {
-					data = append(data, fmtPeerRow(addr.Hex(), peer.DialInfo().DialAddr, peer.DeviceUniqueID(), peer.LastContact(), peer.LastFailure(), peer.Failures(), peer.RemainingBackoff(), peer.StateURIs().Slice()))
-				}
-				if len(peer.Addresses()) == 0 {
-					data = append(data, fmtPeerRow("?", peer.DialInfo().DialAddr, peer.DeviceUniqueID(), peer.LastContact(), peer.LastFailure(), peer.Failures(), peer.RemainingBackoff(), peer.StateURIs().Slice()))
+				for _, e := range peer.Endpoints() {
+					for _, addr := range peer.Addresses() {
+						data = append(data, fmtPeerRow(addr.Hex(), e.DeviceUniqueID(), e.DialInfo().DialAddr, e.LastContact(), e.LastFailure(), e.Failures(), e.RemainingBackoff(), e.StateURIs().Slice()))
+					}
+					if len(e.Addresses()) == 0 {
+						data = append(data, fmtPeerRow("?", e.DeviceUniqueID(), e.DialInfo().DialAddr, e.LastContact(), e.LastFailure(), e.Failures(), e.RemainingBackoff(), e.StateURIs().Slice()))
+					}
 				}
 			}
 
@@ -239,7 +289,7 @@ var (
 			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
 			table.SetCenterSeparator("|")
 			table.SetRowLine(true)
-			table.SetHeader([]string{"Address", "DialAddr", "DeviceID", "LastContact", "LastFailure", "Failures", "Backoff", "StateURIs"})
+			table.SetHeader([]string{"Address", "DeviceID", "DialAddr", "LastContact", "LastFailure", "Failures", "Backoff", "StateURIs"})
 			table.SetAutoMergeCellsByColumnIndex([]int{0, 1})
 			table.SetColumnColor(
 				tablewriter.Colors{tablewriter.Bold, tablewriter.FgCyanColor},
@@ -274,9 +324,9 @@ var (
 		"rmallpeers",
 		"remove all peers",
 		func(args []string, app *App) error {
-			var toDelete []swarm.PeerDialInfo
+			var toDelete []string
 			for _, peer := range app.PeerStore.Peers() {
-				toDelete = append(toDelete, peer.DialInfo())
+				toDelete = append(toDelete, peer.DeviceUniqueID())
 			}
 			app.PeerStore.RemovePeers(toDelete)
 			return nil
@@ -287,10 +337,10 @@ var (
 		"rmunverifiedpeers",
 		"remove peers who haven't been verified",
 		func(args []string, app *App) error {
-			var toDelete []swarm.PeerDialInfo
+			var toDelete []string
 			for _, peer := range app.PeerStore.Peers() {
 				if len(peer.Addresses()) == 0 {
-					toDelete = append(toDelete, peer.DialInfo())
+					toDelete = append(toDelete, peer.DeviceUniqueID())
 				}
 			}
 			app.PeerStore.RemovePeers(toDelete)
@@ -311,13 +361,92 @@ var (
 				return errors.Wrap(err, "bad argument")
 			}
 
-			var toDelete []swarm.PeerDialInfo
+			var toDelete []string
 			for _, peer := range app.PeerStore.Peers() {
 				if peer.Failures() > uint64(num) {
-					toDelete = append(toDelete, peer.DialInfo())
+					toDelete = append(toDelete, peer.DeviceUniqueID())
 				}
 			}
 			app.PeerStore.RemovePeers(toDelete)
+			return nil
+		},
+	}
+
+	CmdHushSendIndividualMessage = REPLCommand{
+		"hushmsg",
+		"send a 1:1 Hush message",
+		func(args []string, app *App) error {
+			if len(args) < 2 {
+				return errors.New("requires 2 arguments: hushmsg <recipient address> <message>")
+			}
+
+			recipient, err := types.AddressFromHex(args[0])
+			if err != nil {
+				return err
+			}
+			msg := strings.Join(args[1:], " ")
+
+			return app.HushProto.EncryptIndividualMessage("foo", recipient, []byte(msg))
+		},
+	}
+
+	CmdHushSendGroupMessage = REPLCommand{
+		"hushgroup",
+		"send a group Hush message",
+		func(args []string, app *App) error {
+			if len(args) < 2 {
+				return errors.New("requires 2 arguments: hushmsg <comma-separated recipient addresses> <message>")
+			}
+
+			addrStrs := strings.Split(args[0], ",")
+			var recipients []types.Address
+			for _, s := range addrStrs {
+				addr, err := types.AddressFromHex(s)
+				if err != nil {
+					return err
+				}
+				recipients = append(recipients, addr)
+			}
+
+			msg := strings.Join(args[1:], " ")
+
+			id := types.RandomID()
+			return app.HushProto.EncryptGroupMessage("foo", id.Hex(), recipients, []byte(msg))
+		},
+	}
+
+	CmdHushStoreDebugPrint = REPLCommand{
+		"hushstore",
+		"print the contents of the protohush store",
+		func(args []string, app *App) error {
+			app.HushProtoStore.DebugPrint()
+			return nil
+		},
+	}
+
+	CmdTreeStoreDebugPrint = REPLCommand{
+		"treestore",
+		"print the contents of the prototree store",
+		func(args []string, app *App) error {
+			app.TreeProtoStore.DebugPrint()
+			return nil
+		},
+	}
+
+	CmdPeerStoreDebugPrint = REPLCommand{
+		"peerstore",
+		"print the contents of the peer store",
+		func(args []string, app *App) error {
+			app.PeerStore.DebugPrint()
+			return nil
+		},
+	}
+
+	CmdProcessTree = REPLCommand{
+		Command:  "ps",
+		HelpText: "display the current process tree",
+		Handler: func(args []string, app *App) error {
+			app.Infof(0, "processes:\n%v", utils.PrettyJSON(app.ProcessTree()))
 			return nil
 		},
 	}
