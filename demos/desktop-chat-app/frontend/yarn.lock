@@ -1758,16 +1758,18 @@
     redux-thunk "^2.3.0"
     reselect "^4.0.0"
 
-"@redwood.dev/client@0.2.13":
-  version "0.2.13"
-  resolved "https://registry.yarnpkg.com/@redwood.dev/client/-/client-0.2.13.tgz#e26215e13d907f6a548cabe5329ce89106faa035"
-  integrity sha512-8SsvFJNR7IWFlQ2eGc5+lxXBC/NxaFzylWjzvSk0m0H7HYno9HXkMjJDreTAybkfgd2a+tR7lKrYHsQp4I3WWA==
+"@redwood.dev/client@0.2.17":
+  version "0.2.17"
+  resolved "https://registry.yarnpkg.com/@redwood.dev/client/-/client-0.2.17.tgz#3b44cf84394252d0a176495ef0ca010ccf9fa273"
+  integrity sha512-ctY0+IpS+18L3qTPxjgivla2b97+luie0eIqhGErbUq+lBc1uLzs1YTpSzv7s0EMcPPvky3j3vD56aeP3uVu6g==
   dependencies:
     "@types/json-stable-stringify" "^1.0.32"
     "@types/react" "^17.0.2"
     ethers "^5.0.31"
+    isomorphic-ws "^4.0.1"
     json-stable-stringify "^1.0.1"
     node-fetch "^2.6.1"
+    ws "^8.2.3"
 
 "@rollup/plugin-node-resolve@^7.1.1":
   version "7.1.3"
@@ -6085,6 +6087,11 @@ isomorphic-fetch@^3.0.0:
   dependencies:
     node-fetch "^2.6.1"
     whatwg-fetch "^3.4.1"
+
+isomorphic-ws@^4.0.1:
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/isomorphic-ws/-/isomorphic-ws-4.0.1.tgz#55fd4cd6c5e6491e76dc125938dd863f5cd4f2dc"
+  integrity sha512-BhBvN2MBpWTaSHdWRb/bwdZJ1WaehQ2L1KngkCkfLUGF0mAWAT1sQUQacEmQ0jXkFw/czDXPNQSL5u2/Krsz1w==
 
 isstream@~0.1.2:
   version "0.1.2"
@@ -11012,6 +11019,11 @@ ws@^6.2.1:
 ws@^7.4.4:
   version "7.4.5"
   resolved "https://registry.yarnpkg.com/ws/-/ws-7.4.5.tgz#a484dd851e9beb6fdb420027e3885e8ce48986c1"
+
+ws@^8.2.3:
+  version "8.2.3"
+  resolved "https://registry.yarnpkg.com/ws/-/ws-8.2.3.tgz#63a56456db1b04367d0b721a0b80cae6d8becbba"
+  integrity sha512-wBuoj1BDpC6ZQ1B7DWQBYVLphPWkm8i9Y0/3YdHjHKHiohOJ1ws+3OccDWtH+PoC9DZD5WOTrJvNbWvjS6JWaA==
 
 xml-name-validator@^3.0.0:
   version "3.0.0"
