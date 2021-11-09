@@ -45,6 +45,14 @@ function createPeer(opts: CreatePeerOptions) {
     //     transports.push(webrtcTransport({ onFoundPeers, peerID: identity.peerID }))
     // }
 
+    function setUcan(newUcan: string) {
+        for (let tpt of transports) {
+            if (tpt.setUcan) {
+                return tpt.setUcan(newUcan)
+            }
+        }
+    }
+
     let knownPeers: PeersMap = {}
     function onFoundPeers(peers: PeersMap) {
         knownPeers = utils.deepmerge(knownPeers, peers)
@@ -126,6 +134,7 @@ function createPeer(opts: CreatePeerOptions) {
     }
 
     return {
+        setUcan,
         identity,
         get,
         subscribe,

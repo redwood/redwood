@@ -14,6 +14,7 @@ export interface RedwoodClient {
 
 export interface RPCClient {
     rpcFetch: (method: string, params?: {[key: string]: any}) => Promise<any>
+    ucan: () => Promise<string>
     subscribe: ({ stateURI, keypath, txs, states }: RPCSubscribeParams) => void
     identities: () => Promise<RPCIdentitiesResponse[]>
     newIdentity: () => Promise<string>
@@ -25,7 +26,7 @@ export interface RPCClient {
 }
 
 export interface Transport {
-    subscribe: (opts: SubscribeParams) => Promise<UnsubscribeFunc>
+    setUcan: (newUcan: string) => void
     get?: ({ stateURI, keypath, raw }: GetParams) => Promise<any>
     put: (tx: Tx) => Promise<void>
     ack: (txID: string) => Promise<void>

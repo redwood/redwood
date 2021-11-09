@@ -45,7 +45,10 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
         }
     }
 
-    async function subscribe(opts: SubscribeParams) {
+    let ucan: string | undefined
+    function setUcan(newUcan: string) {
+        ucan = newUcan
+    }
         let { stateURI, keypath, fromTxID, states, txs, callback } = opts
         try {
             let subscriptionType: SubscribeType
@@ -73,8 +76,11 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
                     url.protocol = 'ws'
                     url.pathname = '/ws'
 
+                    if (!!ucan) {
+                        url.searchParams.set('ucan', `Bearer ${ucan}`)
+                    }
                     websocketConn = new WebSocket(url.toString())
-                    websocketConn.onopen = function (evt) {
+                    websocketConn.onopen = function (evt: any) {
                         websocketConnected = true
                         for (let pendingSubscribeOpts of websocketPendingSubscribeOpts) {
                             if (!websocketConn) {
@@ -86,10 +92,10 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
                             }))
                         }
                     }
-                    websocketConn.onclose = function (evt) {
+                    websocketConn.onclose = function (evt: any) {
                         websocketConnected = false
                     }
-                    websocketConn.onmessage = function (evt) {
+                    websocketConn.onmessage = function (evt: any) {
                         let messages = (evt.data as string).split('\n').filter(x => x.trim().length > 0)
                         for (let msg of messages) {
                             if (!websocketConn) {
@@ -401,6 +407,10 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
 
     function makeRequestHeaders() {
         const headers: { [header: string]: string } = {}
+        if (ucan) {
+            headers['Authorization'] = `Bearer ${ucan}`
+        }
+
         const altSvc = []
         for (let tptName of Object.keys(knownPeers)) {
             for (let reachableAt of Object.keys(knownPeers[tptName])) {
@@ -420,6 +430,7 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
     return {
         transportName:   () => 'http',
         altSvcAddresses: () => [],
+        setUcan,
         subscribe,
         get,
         put,
