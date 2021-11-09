@@ -326,26 +326,28 @@ func (s *HTTPServer) Peers(r *http.Request, args *PeersArgs, resp *PeersResponse
 		return errors.ErrUnsupported
 	}
 	for _, peer := range s.peerStore.Peers() {
-		var identities []PeerIdentity
-		for _, addr := range peer.Addresses() {
-			sigpubkey, encpubkey := peer.PublicKeys(addr)
-			identities = append(identities, PeerIdentity{
-				Address:          addr,
-				SigningPublicKey: sigpubkey,
-				AsymEncPubkey:    encpubkey,
+		for _, endpoint := range peer.Endpoints() {
+			var identities []PeerIdentity
+			for _, addr := range peer.Addresses() {
+				sigpubkey, encpubkey := peer.PublicKeys(addr)
+				identities = append(identities, PeerIdentity{
+					Address:          addr,
+					SigningPublicKey: sigpubkey,
+					AsymEncPubkey:    encpubkey,
+				})
+			}
+			var lastContact uint64
+			if !endpoint.LastContact().IsZero() {
+				lastContact = uint64(endpoint.LastContact().UTC().Unix())
+			}
+			resp.Peers = append(resp.Peers, Peer{
+				Identities:  identities,
+				Transport:   endpoint.DialInfo().TransportName,
+				DialAddr:    endpoint.DialInfo().DialAddr,
+				StateURIs:   peer.StateURIs().Slice(),
+				LastContact: lastContact,
 			})
 		}
-		var lastContact uint64
-		if !peer.LastContact().IsZero() {
-			lastContact = uint64(peer.LastContact().UTC().Unix())
-		}
-		resp.Peers = append(resp.Peers, Peer{
-			Identities:  identities,
-			Transport:   peer.DialInfo().TransportName,
-			DialAddr:    peer.DialInfo().DialAddr,
-			StateURIs:   peer.StateURIs().Slice(),
-			LastContact: lastContact,
-		})
 	}
 	return nil
 }
