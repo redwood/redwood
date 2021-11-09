@@ -27,6 +27,7 @@ export interface RPCClient {
 
 export interface Transport {
     setUcan: (newUcan: string) => void
+    subscribe: (opts: SubscribeParams, onOpen: () => void) => Promise<UnsubscribeFunc>
     get?: ({ stateURI, keypath, raw }: GetParams) => Promise<any>
     put: (tx: Tx) => Promise<void>
     ack: (txID: string) => Promise<void>

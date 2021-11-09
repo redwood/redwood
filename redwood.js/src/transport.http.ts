@@ -49,6 +49,8 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
     function setUcan(newUcan: string) {
         ucan = newUcan
     }
+
+    async function subscribe(opts: SubscribeParams, onOpen: () => void) {
         let { stateURI, keypath, fromTxID, states, txs, callback } = opts
         try {
             let subscriptionType: SubscribeType
@@ -174,6 +176,9 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
                 })
             }
             unsubscribes.push(unsubscribe)
+
+            onOpen()
+
             return unsubscribe
 
         } catch (err) {
