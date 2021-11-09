@@ -10,7 +10,6 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/internal/testutils"
 	"redwood.dev/state"
-	"redwood.dev/types"
 )
 
 func TestVersionedDBTree_Value_MapWithRange(t *testing.T) {
@@ -165,6 +164,82 @@ func TestDBNode_Set_NoRange(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, exists)
 		require.Equal(t, S{"a", "b", "c", "d"}, val)
+	})
+
+	t.Run("map", func(t *testing.T) {
+		t.Run("increments map length by 1 when setting a new key (`node` is the non-existent node)", func(t *testing.T) {
+			db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("data"), fixture1.input)
+			defer db.DeleteDB()
+
+			node := db.StateAtVersion(nil, true)
+
+			err := node.NodeAt(state.Keypath("data/hello/zork"), nil).Set(nil, nil, true)
+			require.NoError(t, err)
+
+			err = node.Save()
+			require.NoError(t, err)
+
+			node = db.StateAtVersion(nil, false)
+			defer node.Close()
+
+			helloNode := node.NodeAt(state.Keypath("data/hello"), nil)
+			nodeType, valueType, length, err := helloNode.NodeInfo(nil)
+			require.NoError(t, err)
+			require.Equal(t, state.NodeTypeMap, nodeType)
+			require.Equal(t, state.ValueTypeInvalid, valueType)
+			require.Equal(t, uint64(2), length)
+
+			m, is, err := node.MapValue(state.Keypath("data/hello"))
+			require.NoError(t, err)
+			require.True(t, is)
+			expected := M{
+				"xyzzy": uint64(33),
+				"zork":  true,
+			}
+			require.Equal(t, expected, m)
+
+			b, is, err := node.BoolValue(state.Keypath("data/hello/zork"))
+			require.NoError(t, err)
+			require.True(t, is)
+			require.Equal(t, true, b)
+		})
+
+		t.Run("increments map length by 1 when setting a new key (`node` is an ancestor of the non-existent node)", func(t *testing.T) {
+			db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("data"), fixture1.input)
+			defer db.DeleteDB()
+
+			node := db.StateAtVersion(nil, true).NodeAt(state.Keypath("data"), nil).(*state.DBNode)
+
+			err := node.Set(state.Keypath("hello/zork"), nil, true)
+			require.NoError(t, err)
+
+			err = node.Save()
+			require.NoError(t, err)
+
+			node = db.StateAtVersion(nil, false)
+			defer node.Close()
+
+			helloNode := node.NodeAt(state.Keypath("data/hello"), nil)
+			nodeType, valueType, length, err := helloNode.NodeInfo(nil)
+			require.NoError(t, err)
+			require.Equal(t, state.NodeTypeMap, nodeType)
+			require.Equal(t, state.ValueTypeInvalid, valueType)
+			require.Equal(t, uint64(2), length)
+
+			m, is, err := node.MapValue(state.Keypath("data/hello"))
+			require.NoError(t, err)
+			require.True(t, is)
+			expected := M{
+				"xyzzy": uint64(33),
+				"zork":  true,
+			}
+			require.Equal(t, expected, m)
+
+			b, is, err := node.BoolValue(state.Keypath("data/hello/zork"))
+			require.NoError(t, err)
+			require.True(t, is)
+			require.Equal(t, true, b)
+		})
 	})
 
 	t.Run("struct", func(t *testing.T) {
@@ -402,7 +477,7 @@ func TestDBNode_Scan(t *testing.T) {
 func TestVersionedDBTree_Set_Range_String(t *testing.T) {
 	db := testutils.SetupVersionedDBTree(t)
 	defer db.DeleteDB()
-	v := types.RandomID()
+	v := state.RandomVersion()
 
 	err := update(db, &v, func(tx *state.DBNode) error {
 		err := tx.Set(state.Keypath("foo/string"), nil, "abcdefgh")
@@ -504,34 +579,229 @@ func TestVersionedDBTree_Set_Range_Slice(t *testing.T) {
 
 func TestDBNode_Delete_NoRange(t *testing.T) {
 	t.Run("slice", func(t *testing.T) {
-		db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("data"), fixture1.input)
-		defer db.DeleteDB()
+		t.Run("basic delete of an entire slice", func(t *testing.T) {
+			tests := []struct {
+				name     string
+				nodeAt   state.Keypath
+				deleteAt state.Keypath
+			}{
+				{"node is root", nil, state.Keypath("data/flox")},
+				{"node is intermediate", state.Keypath("data"), state.Keypath("flox")},
+				{"node is deleted", state.Keypath("data/flox"), nil},
+			}
 
-		node := db.StateAtVersion(nil, true)
+			for _, test := range tests {
+				test := test
+				t.Run(test.name, func(t *testing.T) {
+					db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("data"), fixture1.input)
+					defer db.DeleteDB()
 
-		err := node.Delete(state.Keypath("data/flox"), nil)
-		require.NoError(t, err)
+					node := db.StateAtVersion(nil, true)
+					if test.nodeAt != nil {
+						node = node.NodeAt(test.nodeAt, nil).(*state.DBNode)
+					}
 
-		err = node.Save()
-		require.NoError(t, err)
+					err := node.Delete(test.deleteAt, nil)
+					require.NoError(t, err)
 
-		node = db.StateAtVersion(nil, false)
+					err = node.Save()
+					require.NoError(t, err)
 
-		expected := append(
-			makeSetKeypathFixtureOutputs(state.Keypath("data")),
-			prefixFixtureOutputs(state.Keypath("data"), fixture1.output)...,
-		)
-		expected = removeFixtureOutputsWithPrefix(state.Keypath("data/flox"), expected...)
+					node = db.StateAtVersion(nil, false)
+					defer node.Close()
 
-		iter := node.Iterator(nil, false, 0)
-		defer iter.Close()
+					expected := append(
+						makeSetKeypathFixtureOutputs(state.Keypath("data")),
+						prefixFixtureOutputs(state.Keypath("data"), fixture1.output)...,
+					)
+					expected = removeFixtureOutputsWithPrefix(state.Keypath("data/flox"), expected...)
 
-		i := 0
-		for iter.Rewind(); iter.Valid(); iter.Next() {
-			require.Equal(t, expected[i].keypath, iter.Node().Keypath())
-			i++
-		}
+					iter := node.Iterator(nil, false, 0)
+					defer iter.Close()
+
+					i := 0
+					for iter.Rewind(); iter.Valid(); iter.Next() {
+						require.Equal(t, expected[i].keypath, iter.Node().Keypath())
+						i++
+					}
+				})
+			}
+		})
+
+		t.Run("decrements length by 1 when a single slice element is deleted", func(t *testing.T) {
+			tests := []struct {
+				name     string
+				nodeAt   state.Keypath
+				deleteAt state.Keypath
+			}{
+				{"node is root", nil, state.Keypath("data/flox").PushIndex(1)},
+				{"node is intermediate", state.Keypath("data"), state.Keypath("flox").PushIndex(1)},
+				{"node is deleted", state.Keypath("data/flox"), state.EncodeSliceIndex(1)},
+			}
+
+			for _, test := range tests {
+				test := test
+				t.Run(test.name, func(t *testing.T) {
+					db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("data"), fixture1.input)
+					defer db.DeleteDB()
+
+					node := db.StateAtVersion(nil, true)
+					if test.nodeAt != nil {
+						node = node.NodeAt(test.nodeAt, nil).(*state.DBNode)
+					}
+
+					err := node.Delete(test.deleteAt, nil)
+					require.NoError(t, err)
+
+					err = node.Save()
+					require.NoError(t, err)
+
+					node = db.StateAtVersion(nil, false)
+					nodeType, valueType, length, err := node.NodeInfo(state.Keypath("data/flox"))
+					require.NoError(t, err)
+					require.Equal(t, state.NodeTypeSlice, nodeType)
+					require.Equal(t, state.ValueTypeInvalid, valueType)
+					require.Equal(t, uint64(2), length)
+
+					slice, is, err := node.SliceValue(state.Keypath("data/flox"))
+					require.NoError(t, err)
+					require.True(t, is)
+					require.Equal(t, S{uint64(65), "jkjkjkj"}, slice)
+				})
+			}
+		})
 	})
+
+	t.Run("map", func(t *testing.T) {
+		t.Run("basic delete of an entire map", func(t *testing.T) {
+			tests := []struct {
+				name     string
+				nodeAt   state.Keypath
+				deleteAt state.Keypath
+			}{
+				{"node is root", nil, state.Keypath("data/flox").PushIndex(1)},
+				{"node is intermediate", state.Keypath("data"), state.Keypath("flox").PushIndex(1)},
+				{"node is deleted", state.Keypath("data/flox").PushIndex(1), nil},
+			}
+
+			for _, test := range tests {
+				test := test
+				t.Run(test.name, func(t *testing.T) {
+					db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("data"), fixture1.input)
+					defer db.DeleteDB()
+
+					node := db.StateAtVersion(nil, true)
+					if test.nodeAt != nil {
+						node = node.NodeAt(test.nodeAt, nil).(*state.DBNode)
+					}
+
+					err := node.Delete(test.deleteAt, nil)
+					require.NoError(t, err)
+
+					err = node.Save()
+					require.NoError(t, err)
+
+					node = db.StateAtVersion(nil, false)
+					defer node.Close()
+
+					expected := append(
+						makeSetKeypathFixtureOutputs(state.Keypath("data")),
+						prefixFixtureOutputs(state.Keypath("data"), fixture1.output)...,
+					)
+					expected = removeFixtureOutputsWithPrefix(state.Keypath("data/flox").PushIndex(1), expected...)
+					expected = renumberSliceFixtureOutputsWithPrefix(state.Keypath("data/flox"), 1, -1, expected...)
+
+					iter := node.Iterator(nil, false, 0)
+					defer iter.Close()
+
+					i := 0
+					for iter.Rewind(); iter.Valid(); iter.Next() {
+						require.Equal(t, expected[i].keypath, iter.Node().Keypath())
+						i++
+					}
+				})
+			}
+		})
+
+		t.Run("decrements length by 1 when a single map element is deleted", func(t *testing.T) {
+			tests := []struct {
+				name     string
+				nodeAt   state.Keypath
+				deleteAt state.Keypath
+			}{
+				{"node is root", nil, state.Keypath("data/flox").PushIndex(1).Pushs("yup")},
+				{"node is intermediate", state.Keypath("data"), state.Keypath("flox").PushIndex(1).Pushs("yup")},
+				{"node is deleted", state.Keypath("data/flox"), state.EncodeSliceIndex(1).Pushs("yup")},
+			}
+
+			for _, test := range tests {
+				test := test
+				t.Run(test.name, func(t *testing.T) {
+					db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("data"), fixture1.input)
+					defer db.DeleteDB()
+
+					node := db.StateAtVersion(nil, true)
+					if test.nodeAt != nil {
+						node = node.NodeAt(test.nodeAt, nil).(*state.DBNode)
+					}
+
+					err := node.Delete(test.deleteAt, nil)
+					require.NoError(t, err)
+
+					err = node.Save()
+					require.NoError(t, err)
+
+					node = db.StateAtVersion(nil, false)
+					nodeType, valueType, length, err := node.NodeInfo(state.Keypath("data/flox").PushIndex(1))
+					require.NoError(t, err)
+					require.Equal(t, state.NodeTypeMap, nodeType)
+					require.Equal(t, state.ValueTypeInvalid, valueType)
+					require.Equal(t, uint64(1), length)
+
+					m, is, err := node.MapValue(state.Keypath("data/flox").PushIndex(1))
+					require.NoError(t, err)
+					require.True(t, is)
+					require.Equal(t, M{"hey": uint64(321)}, m)
+				})
+			}
+		})
+	})
+}
+
+func TestDBNode_Subkeys(t *testing.T) {
+	fmt.Println("hi")
+	db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("data"), fixture1.input)
+	defer db.DeleteDB()
+
+	node := db.StateAtVersion(nil, false)
+	defer node.Close()
+
+	subkeys := node.NodeAt(state.Keypath("data").Pushs("flox").PushIndex(1), nil).Subkeys()
+	expected := []state.Keypath{
+		state.Keypath("hey"),
+		state.Keypath("yup"),
+	}
+	require.Equal(t, expected, subkeys)
+}
+
+func TestDBNode_IndexOfSubkey(t *testing.T) {
+	db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("data"), fixture1.input)
+	defer db.DeleteDB()
+
+	node := db.StateAtVersion(nil, false)
+	defer node.Close()
+	idx, err := node.IndexOfMapSubkey(state.Keypath("data"), state.Keypath("flox"))
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), idx)
+
+	idx, err = node.IndexOfMapSubkey(state.Keypath("data"), state.Keypath("nonexistent"))
+	require.Equal(t, errors.Err404, errors.Cause(err))
+	require.Equal(t, uint64(0), idx)
+
+	// Nil subkey is not allowed
+	idx, err = node.IndexOfMapSubkey(state.Keypath("data"), nil)
+	require.Equal(t, state.ErrNilKeypath, errors.Cause(err))
+	require.Equal(t, uint64(0), idx)
 }
 
 func TestVersionedDBTree_CopyToMemory(t *testing.T) {
@@ -597,335 +867,12 @@ func TestVersionedDBTree_CopyToMemory(t *testing.T) {
 
 }
 
-func TestDBNode_Iterator(t *testing.T) {
-	tests := []struct {
-		name        string
-		setKeypath  state.Keypath
-		iterKeypath state.Keypath
-		fixture     fixture
-	}{
-		{"root set, root iter, map value", state.Keypath(nil), state.Keypath(nil), fixture1},
-		{"root set, root iter, map value 2", state.Keypath(nil), state.Keypath(nil), fixture2},
-		{"root set, root iter, float value", state.Keypath(nil), state.Keypath(nil), fixture5},
-		{"root set, root iter, string value", state.Keypath(nil), state.Keypath(nil), fixture6},
-		{"root set, root iter, bool value", state.Keypath(nil), state.Keypath(nil), fixture7},
-
-		{"non-root set, root iter, map value", state.Keypath("foo/bar"), state.Keypath(nil), fixture1},
-		{"non-root set, root iter, map value 2", state.Keypath("foo/bar"), state.Keypath(nil), fixture2},
-		{"non-root set, root iter, float value", state.Keypath("foo/bar"), state.Keypath(nil), fixture5},
-		{"non-root set, root iter, string value", state.Keypath("foo/bar"), state.Keypath(nil), fixture6},
-		{"non-root set, root iter, bool value", state.Keypath("foo/bar"), state.Keypath(nil), fixture7},
-
-		{"root set, non-root iter, map value", state.Keypath(nil), state.Keypath("flox"), fixture1},
-		{"root set, non-root iter, map value 2", state.Keypath(nil), state.Keypath("flox"), fixture2},
-		{"root set, non-root iter, float value", state.Keypath(nil), state.Keypath("flox"), fixture5},
-		{"root set, non-root iter, string value", state.Keypath(nil), state.Keypath("flox"), fixture6},
-		{"root set, non-root iter, bool value", state.Keypath(nil), state.Keypath("flox"), fixture7},
-
-		{"non-root set, non-root iter, map value", state.Keypath("foo/bar"), state.Keypath("flox"), fixture1},
-		{"non-root set, non-root iter, map value 2", state.Keypath("foo/bar"), state.Keypath("flox"), fixture2},
-		{"non-root set, non-root iter, float value", state.Keypath("foo/bar"), state.Keypath("flox"), fixture5},
-		{"non-root set, non-root iter, string value", state.Keypath("foo/bar"), state.Keypath("flox"), fixture6},
-		{"non-root set, non-root iter, bool value", state.Keypath("foo/bar"), state.Keypath("flox"), fixture7},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			db := testutils.SetupVersionedDBTreeWithValue(t, test.setKeypath, test.fixture.input)
-			defer db.DeleteDB()
-
-			node := db.StateAtVersion(nil, false)
-
-			setKeypathOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
-			valueOutputs := prefixFixtureOutputs(test.setKeypath, test.fixture.output)
-			expected := append(setKeypathOutputs, valueOutputs...)
-			expected = filterFixtureOutputsWithPrefix(test.iterKeypath, expected...)
-
-			iter := node.Iterator(test.iterKeypath, false, 0)
-			defer iter.Close()
-			var i int
-			for iter.Rewind(); iter.Valid(); iter.Next() {
-				node := iter.Node()
-				require.Equal(t, expected[i].keypath, node.Keypath())
-				i++
-			}
-			require.Equal(t, len(expected), i)
-
-		})
-	}
-}
-
-func TestDBNode_ReusableIterator(t *testing.T) {
-	val := M{
-		"aaa": uint64(123),
-		"bbb": uint64(123),
-		"ccc": M{
-			"111": M{
-				"a": uint64(1),
-				"b": uint64(1),
-				"c": uint64(1),
-			},
-		},
-		"ddd": uint64(123),
-		"eee": uint64(123),
-	}
-
-	db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("foo"), val)
-	defer db.DeleteDB()
-
-	node := db.StateAtVersion(nil, true)
-	iter := node.Iterator(state.Keypath("foo"), false, 0)
-	defer iter.Close()
-
-	iter.Rewind()
-	require.True(t, iter.Valid())
-	require.Equal(t, state.Keypath("foo"), iter.Node().Keypath())
-
-	iter.Next()
-	require.True(t, iter.Valid())
-	require.Equal(t, state.Keypath("foo/aaa"), iter.Node().Keypath())
-
-	iter.Next()
-	require.True(t, iter.Valid())
-	require.Equal(t, state.Keypath("foo/bbb"), iter.Node().Keypath())
-
-	iter.Next()
-	require.True(t, iter.Valid())
-	require.Equal(t, state.Keypath("foo/ccc"), iter.Node().Keypath())
-
-	{
-		reusableIter := iter.Node().Iterator(state.Keypath("111"), true, 10)
-		require.IsType(t, &state.ReusableIterator{}, reusableIter)
-
-		reusableIter.Rewind()
-		require.True(t, reusableIter.Valid())
-		require.Equal(t, state.Keypath("foo/ccc/111"), reusableIter.Node().Keypath())
-
-		reusableIter.Next()
-		require.True(t, reusableIter.Valid())
-		require.Equal(t, state.Keypath("foo/ccc/111/a"), reusableIter.Node().Keypath())
-
-		reusableIter.Next()
-		require.True(t, reusableIter.Valid())
-		require.Equal(t, state.Keypath("foo/ccc/111/b"), reusableIter.Node().Keypath())
-
-		reusableIter.Next()
-		require.True(t, reusableIter.Valid())
-		require.Equal(t, state.Keypath("foo/ccc/111/c"), reusableIter.Node().Keypath())
-
-		reusableIter.Next()
-		require.False(t, reusableIter.Valid())
-
-		require.True(t, iter.Valid())
-		require.Equal(t, state.Keypath("foo/ccc"), iter.Node().Keypath())
-
-		reusableIter.Close()
-
-		require.Equal(t, []byte("foo/ccc"), iter.(*state.DBIterator).BadgerIter().Item().Key()[33:])
-
-		iter.Next()
-		require.True(t, iter.Valid())
-		require.Equal(t, state.Keypath("foo/ccc/111"), iter.Node().Keypath())
-	}
-}
-
-func TestDBNode_ChildIterator(t *testing.T) {
-	tests := []struct {
-		name        string
-		setKeypath  state.Keypath
-		iterKeypath state.Keypath
-		fixture     fixture
-	}{
-		{"root set, root iter, map value", state.Keypath(nil), state.Keypath(nil), fixture1},
-		{"root set, root iter, map value 2", state.Keypath(nil), state.Keypath(nil), fixture2},
-		{"root set, root iter, float value", state.Keypath(nil), state.Keypath(nil), fixture5},
-		{"root set, root iter, string value", state.Keypath(nil), state.Keypath(nil), fixture6},
-		{"root set, root iter, bool value", state.Keypath(nil), state.Keypath(nil), fixture7},
-
-		{"non-root set, root iter, map value", state.Keypath("foo/bar"), state.Keypath(nil), fixture1},
-		{"non-root set, root iter, map value 2", state.Keypath("foo/bar"), state.Keypath(nil), fixture2},
-		{"non-root set, root iter, float value", state.Keypath("foo/bar"), state.Keypath(nil), fixture5},
-		{"non-root set, root iter, string value", state.Keypath("foo/bar"), state.Keypath(nil), fixture6},
-		{"non-root set, root iter, bool value", state.Keypath("foo/bar"), state.Keypath(nil), fixture7},
-
-		{"root set, non-root iter, map value", state.Keypath(nil), state.Keypath("flox"), fixture1},
-		{"root set, non-root iter, map value 2", state.Keypath(nil), state.Keypath("flox"), fixture2},
-		{"root set, non-root iter, float value", state.Keypath(nil), state.Keypath("flox"), fixture5},
-		{"root set, non-root iter, string value", state.Keypath(nil), state.Keypath("flox"), fixture6},
-		{"root set, non-root iter, bool value", state.Keypath(nil), state.Keypath("flox"), fixture7},
-
-		{"non-root set, non-root iter, map value", state.Keypath("foo/bar"), state.Keypath("flox"), fixture1},
-		{"non-root set, non-root iter, map value 2", state.Keypath("foo/bar"), state.Keypath("flox"), fixture2},
-		{"non-root set, non-root iter, float value", state.Keypath("foo/bar"), state.Keypath("flox"), fixture5},
-		{"non-root set, non-root iter, string value", state.Keypath("foo/bar"), state.Keypath("flox"), fixture6},
-		{"non-root set, non-root iter, bool value", state.Keypath("foo/bar"), state.Keypath("flox"), fixture7},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			db := testutils.SetupVersionedDBTreeWithValue(t, test.setKeypath, test.fixture.input)
-			defer db.DeleteDB()
-
-			node := db.StateAtVersion(nil, false)
-
-			prefixOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
-			valueOutputs := combineFixtureOutputs(test.setKeypath, test.fixture)
-			expected := append(prefixOutputs, valueOutputs...)
-			expected = filterFixtureOutputsToDirectDescendantsOf(test.iterKeypath, expected...)
-
-			iter := node.ChildIterator(test.iterKeypath, false, 0)
-			defer iter.Close()
-			var i int
-			for iter.Rewind(); iter.Valid(); iter.Next() {
-				node := iter.Node()
-				require.Equal(t, expected[i].keypath, node.Keypath())
-				i++
-			}
-			require.Equal(t, len(expected), i)
-
-		})
-	}
-}
-
-func TestDBNode_ReusableChildIterator(t *testing.T) {
-	val := M{
-		"aaa": uint64(123),
-		"bbb": uint64(123),
-		"ccc": M{
-			"111": M{
-				"a": uint64(1),
-				"b": uint64(1),
-				"c": uint64(1),
-			},
-		},
-		"ddd": uint64(123),
-		"eee": uint64(123),
-	}
-
-	db := testutils.SetupVersionedDBTreeWithValue(t, state.Keypath("foo"), val)
-	defer db.DeleteDB()
-
-	node := db.StateAtVersion(nil, true)
-	iter := node.ChildIterator(state.Keypath("foo"), false, 0)
-	defer iter.Close()
-
-	iter.Rewind()
-	require.True(t, iter.Valid())
-	require.Equal(t, state.Keypath("foo/aaa"), iter.Node().Keypath())
-
-	iter.Next()
-	require.True(t, iter.Valid())
-	require.Equal(t, state.Keypath("foo/bbb"), iter.Node().Keypath())
-
-	iter.Next()
-	require.True(t, iter.Valid())
-	require.Equal(t, state.Keypath("foo/ccc"), iter.Node().Keypath())
-
-	{
-		reusableIter := iter.Node().Iterator(state.Keypath("111"), true, 10)
-		require.IsType(t, &state.ReusableIterator{}, reusableIter)
-
-		reusableIter.Rewind()
-		require.True(t, reusableIter.Valid())
-		require.Equal(t, state.Keypath("foo/ccc/111"), reusableIter.Node().Keypath())
-
-		reusableIter.Next()
-		require.True(t, reusableIter.Valid())
-		require.Equal(t, state.Keypath("foo/ccc/111/a"), reusableIter.Node().Keypath())
-
-		reusableIter.Next()
-		require.True(t, reusableIter.Valid())
-		require.Equal(t, state.Keypath("foo/ccc/111/b"), reusableIter.Node().Keypath())
-
-		reusableIter.Next()
-		require.True(t, reusableIter.Valid())
-		require.Equal(t, state.Keypath("foo/ccc/111/c"), reusableIter.Node().Keypath())
-
-		reusableIter.Next()
-		require.False(t, reusableIter.Valid())
-
-		require.True(t, iter.Valid())
-		require.Equal(t, state.Keypath("foo/ccc"), iter.Node().Keypath())
-
-		reusableIter.Close()
-
-		// require.Equal(t, []byte("foo/ccc"), iter.(*dbChildIterator).iter.Item().Key()[33:])
-
-		iter.Next()
-		require.True(t, iter.Valid())
-		require.Equal(t, state.Keypath("foo/ddd"), iter.Node().Keypath())
-	}
-}
-
-func TestDBNode_DepthFirstIterator(t *testing.T) {
-	tests := []struct {
-		name        string
-		setKeypath  state.Keypath
-		iterKeypath state.Keypath
-		fixture     fixture
-	}{
-		{"root set, root iter, map value", state.Keypath(nil), state.Keypath(nil), fixture1},
-		{"root set, root iter, map value 2", state.Keypath(nil), state.Keypath(nil), fixture2},
-		{"root set, root iter, float value", state.Keypath(nil), state.Keypath(nil), fixture5},
-		{"root set, root iter, string value", state.Keypath(nil), state.Keypath(nil), fixture6},
-		{"root set, root iter, bool value", state.Keypath(nil), state.Keypath(nil), fixture7},
-
-		{"non-root set, root iter, map value", state.Keypath("foo/bar"), state.Keypath(nil), fixture1},
-		{"non-root set, root iter, map value 2", state.Keypath("foo/bar"), state.Keypath(nil), fixture2},
-		{"non-root set, root iter, float value", state.Keypath("foo/bar"), state.Keypath(nil), fixture5},
-		{"non-root set, root iter, string value", state.Keypath("foo/bar"), state.Keypath(nil), fixture6},
-		{"non-root set, root iter, bool value", state.Keypath("foo/bar"), state.Keypath(nil), fixture7},
-
-		{"root set, non-root iter, map value", state.Keypath(nil), state.Keypath("flox"), fixture1},
-		{"root set, non-root iter, map value 2", state.Keypath(nil), state.Keypath("eee"), fixture2},
-		{"root set, non-root iter, float value", state.Keypath(nil), state.Keypath("flox"), fixture5},
-		{"root set, non-root iter, string value", state.Keypath(nil), state.Keypath("flox"), fixture6},
-		{"root set, non-root iter, bool value", state.Keypath(nil), state.Keypath("flox"), fixture7},
-
-		{"non-root set, non-root iter, map value", state.Keypath("foo/bar"), state.Keypath("foo/bar/flox"), fixture1},
-		{"non-root set, non-root iter, map value 2", state.Keypath("foo/bar"), state.Keypath("foo/bar/eee"), fixture2},
-		{"non-root set, non-root iter, float value", state.Keypath("foo/bar"), state.Keypath("foo/bar"), fixture5},
-		{"non-root set, non-root iter, string value", state.Keypath("foo/bar"), state.Keypath("foo/bar"), fixture6},
-		{"non-root set, non-root iter, bool value", state.Keypath("foo/bar"), state.Keypath("foo/bar"), fixture7},
-		{"non-root set, non-root iter, nonexistent value", state.Keypath("foo/bar"), state.Keypath("foo/bar/asdf"), fixture7},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			db := testutils.SetupVersionedDBTreeWithValue(t, test.setKeypath, test.fixture.input)
-			defer db.DeleteDB()
-
-			node := db.StateAtVersion(nil, false)
-
-			prefixOutputs := makeSetKeypathFixtureOutputs(test.setKeypath)
-			valueOutputs := combineFixtureOutputs(test.setKeypath, test.fixture)
-			expected := append(prefixOutputs, valueOutputs...)
-			expected = filterFixtureOutputsWithPrefix(test.iterKeypath, expected...)
-			expected = reverseFixtureOutputs(expected...)
-
-			iter := node.DepthFirstIterator(test.iterKeypath, false, 0)
-			defer iter.Close()
-			var i int
-			for iter.Rewind(); iter.Valid(); iter.Next() {
-				node := iter.Node()
-				require.Equal(t, expected[i].keypath, node.Keypath())
-				i++
-			}
-			require.Equal(t, len(expected), i)
-
-		})
-	}
-}
-
 func TestVersionedDBTree_CopyVersion(t *testing.T) {
 	db := testutils.SetupVersionedDBTree(t)
 	defer db.DeleteDB()
 
-	srcVersion := types.RandomID()
-	dstVersion := types.RandomID()
+	srcVersion := state.RandomVersion()
+	dstVersion := state.RandomVersion()
 
 	err := update(db, &srcVersion, func(tx *state.DBNode) error {
 		err := tx.Set(nil, nil, fixture1.input)
@@ -1046,13 +993,13 @@ func TestVersionedDBTree_CopyVersion(t *testing.T) {
 //    fmt.Println(prettyJSON(v))
 //}
 
-func view(t *state.VersionedDBTree, v *types.ID, fn func(*state.DBNode) error) error {
+func view(t *state.VersionedDBTree, v *state.Version, fn func(*state.DBNode) error) error {
 	node := t.StateAtVersion(v, false)
 	defer node.Close()
 	return fn(node)
 }
 
-func update(t *state.VersionedDBTree, v *types.ID, fn func(*state.DBNode) error) error {
+func update(t *state.VersionedDBTree, v *state.Version, fn func(*state.DBNode) error) error {
 	node := t.StateAtVersion(v, true)
 	defer node.Close()
 

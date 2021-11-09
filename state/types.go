@@ -26,6 +26,8 @@ type Node interface {
 	Length() (uint64, error)
 	Subkeys() []Keypath
 	NumSubkeys() uint64
+	IndexOfMapSubkey(rootKeypath Keypath, subkey Keypath) (uint64, error)
+	// NthMapSubkey(rootKeypath Keypath, n uint64) (Keypath, error)
 	Exists(keypath Keypath) (bool, error)
 	NodeAt(keypath Keypath, rng *Range) Node
 	ParentNodeFor(keypath Keypath) (Node, Keypath)
@@ -120,11 +122,13 @@ type Range = pb.Range
 type Iterator interface {
 	RootKeypath() Keypath
 	Rewind()
-	SeekTo(keypath Keypath)
+	SeekTo(relKeypath Keypath)
 	Valid() bool
 	Next()
 	Node() Node
 	Close()
+
+	seekTo(absKeypath Keypath)
 }
 
 type Diff struct {

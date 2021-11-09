@@ -206,6 +206,37 @@ func removeFixtureOutputsWithPrefix(prefix state.Keypath, outs ...fixtureOutput)
 	return newOuts
 }
 
+func renumberSliceFixtureOutputsWithPrefix(prefix state.Keypath, startIndex uint64, delta int64, outs ...fixtureOutput) []fixtureOutput {
+	var newOuts []fixtureOutput
+	for _, out := range outs {
+		if !out.keypath.StartsWith(prefix) {
+			newOuts = append(newOuts, out)
+			continue
+		}
+		tail := out.keypath.RelativeTo(prefix)
+		if len(tail) == 0 {
+			newOuts = append(newOuts, out)
+			continue
+		}
+		oldIdxKey, rest := tail.Shift()
+		oldIdx := state.DecodeSliceIndex(oldIdxKey)
+		if oldIdx < startIndex {
+			newOuts = append(newOuts, out)
+			continue
+		}
+
+		newIdx := uint64(int64(oldIdx) + delta)
+		newIdxKey := state.EncodeSliceIndex(newIdx)
+		newKeypath := prefix.Push(newIdxKey).Push(rest)
+		newOuts = append(newOuts, fixtureOutput{
+			keypath:  newKeypath,
+			nodeType: out.nodeType,
+			value:    out.value,
+		})
+	}
+	return newOuts
+}
+
 func removeFixtureOutputPrefixes(prefix state.Keypath, outs ...fixtureOutput) []fixtureOutput {
 	var newOuts []fixtureOutput
 	for _, out := range outs {

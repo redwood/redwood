@@ -47,6 +47,23 @@ func DecodeSliceLen(k Keypath) uint64 {
 }
 
 func convertKeypathToType(keypath Keypath, typ reflect.Type) (reflect.Value, error) {
+	if typ.Implements(mapKeyScannerType) {
+		val := reflect.New(typ).Elem().Interface().(MapKeyScanner)
+		err := val.ScanMapKey(keypath)
+		if err != nil {
+			return reflect.Value{}, errors.Wrapf(err, "while scanning map key")
+		}
+		return reflect.ValueOf(val), nil
+
+	} else if reflect.PtrTo(typ).Implements(mapKeyScannerType) {
+		val := reflect.New(typ).Interface().(MapKeyScanner)
+		err := val.ScanMapKey(keypath)
+		if err != nil {
+			return reflect.Value{}, errors.Wrapf(err, "while scanning map key")
+		}
+		return reflect.ValueOf(val).Elem(), nil
+	}
+
 	var val reflect.Value
 
 	switch typ.Kind() {
@@ -138,7 +155,7 @@ func convertKeypathToType(keypath Keypath, typ reflect.Type) (reflect.Value, err
 		reflect.Copy(val.Slice(0, val.Len()), reflect.ValueOf([]byte(keypath)))
 
 	default:
-		return reflect.Value{}, errors.Errorf("could not convert tree.Keypath to %v", typ)
+		return reflect.Value{}, errors.Errorf("could not convert %v to %v", val.Type(), typ)
 	}
 
 	if val.Type() != typ {
@@ -150,14 +167,42 @@ func convertKeypathToType(keypath Keypath, typ reflect.Type) (reflect.Value, err
 	return val, nil
 }
 
+type MapKeyScanner interface {
+	ScanMapKey(keypath Keypath) error
+}
+
+type MapKey interface {
+	MapKey() (Keypath, error)
+}
+
+type StateBytesUnmarshaler interface {
+	UnmarshalStateBytes(bs []byte) error
+}
+
+type StateBytesMarshaler interface {
+	MarshalStateBytes() ([]byte, error)
+}
+
 var (
-	int64Type  = reflect.TypeOf(int64(0))
-	uint64Type = reflect.TypeOf(uint64(0))
-	stringType = reflect.TypeOf("")
-	bytesType  = reflect.TypeOf([]byte(nil))
+	mapKeyScannerType         = reflect.TypeOf((*MapKeyScanner)(nil)).Elem()
+	mapKeySetterType          = reflect.TypeOf((*MapKey)(nil)).Elem()
+	stateBytesUnmarshalerType = reflect.TypeOf((*StateBytesUnmarshaler)(nil)).Elem()
+	stateBytesMarshalerType   = reflect.TypeOf((*StateBytesMarshaler)(nil)).Elem()
+
+	int64Type   = reflect.TypeOf(int64(0))
+	uint64Type  = reflect.TypeOf(uint64(0))
+	uint32Type  = reflect.TypeOf(uint32(0))
+	float64Type = reflect.TypeOf(float64(0))
+	stringType  = reflect.TypeOf("")
+	bytesType   = reflect.TypeOf([]byte(nil))
+	boolType    = reflect.TypeOf(false)
 )
 
 func convertToKeypath(val reflect.Value) (Keypath, error) {
+	if val.Type().Implements(mapKeySetterType) {
+		return val.Interface().(MapKey).MapKey()
+	}
+
 	switch val.Kind() {
 	case reflect.Uint, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8:
 		i := val.Convert(uint64Type).Interface().(uint64)
@@ -175,7 +220,7 @@ func convertToKeypath(val reflect.Value) (Keypath, error) {
 	}
 }
 
-func walkGoValue(tree interface{}, fn func(keypath Keypath, val interface{}) error) error {
+func walkGoValue(tree interface{}, fn func(keypath Keypath, val interface{}) (keepRecursing bool, _ error)) error {
 	type item struct {
 		val     interface{}
 		keypath Keypath
@@ -188,9 +233,13 @@ func walkGoValue(tree interface{}, fn func(keypath Keypath, val interface{}) err
 		current = stack[0]
 		stack = stack[1:]
 
-		err := fn(current.keypath, current.val)
+		keepRecursing, err := fn(current.keypath, current.val)
 		if err != nil {
 			return err
+		}
+
+		if !keepRecursing {
+			continue
 		}
 
 		if _, isNode := current.val.(Node); isNode {
@@ -225,10 +274,30 @@ func walkGoValue(tree interface{}, fn func(keypath Keypath, val interface{}) err
 					if fieldName == "-" {
 						continue
 					}
+					realName := z.Field(fieldName).Name()
+
+					if kind == reflect.Ptr {
+						field, ok := rval.Elem().Type().FieldByName(realName)
+						if !ok {
+							continue
+						} else if !field.IsExported() {
+							continue
+						}
+
+					} else {
+						field, ok := rval.Type().FieldByName(realName)
+						if !ok {
+							continue
+						} else if !field.IsExported() {
+							continue
+						}
+					}
+
 					rval, err := z.GetFieldValueV(rval, fieldName)
 					if err != nil {
 						return err
 					}
+
 					stack = append(stack, item{
 						val:     rval.Interface(),
 						keypath: current.keypath.Push(Keypath(fieldName)),
