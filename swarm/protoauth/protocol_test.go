@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -18,162 +17,6 @@ import (
 	"redwood.dev/swarm/protoauth/mocks"
 	"redwood.dev/types"
 )
-
-func TestAuthProtocol_PeersClaimingAddress(t *testing.T) {
-	t.Run("happy path", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			http             = new(mocks.AuthTransport)
-			libp2p           = new(mocks.AuthTransport)
-			notAuthTransport = new(swarmmocks.Transport)
-			transports       = []swarm.Transport{http, libp2p, notAuthTransport}
-			keyStore         = new(identitymocks.KeyStore)
-			peerStore        = new(swarmmocks.PeerStore)
-		)
-
-		http.On("Name").Return("http")
-		http.On("OnChallengeIdentity", mock.Anything).Return()
-		libp2p.On("Name").Return("libp2p")
-		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
-
-		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return()
-
-		proto := protoauth.NewAuthProtocol(transports, keyStore, peerStore)
-		proto.Start()
-		defer proto.Close()
-
-		peerStore.On("AllDialInfos").Return(nil).Maybe()
-		peerStore.On("UnverifiedPeers").Return(nil).Maybe()
-
-		addr1 := testutils.RandomAddress(t)
-
-		chHttp := make(chan protoauth.AuthPeerConn)
-		httpPeers := []protoauth.AuthPeerConn{new(mocks.AuthPeerConn), new(mocks.AuthPeerConn), new(mocks.AuthPeerConn)}
-		go func() {
-			defer close(chHttp)
-			for _, peer := range httpPeers {
-				chHttp <- peer
-			}
-		}()
-
-		chLibp2p := make(chan protoauth.AuthPeerConn)
-		libp2pPeers := []protoauth.AuthPeerConn{new(mocks.AuthPeerConn), new(mocks.AuthPeerConn), new(mocks.AuthPeerConn)}
-		go func() {
-			defer close(chLibp2p)
-			for _, peer := range libp2pPeers {
-				chLibp2p <- peer
-			}
-		}()
-
-		http.On("PeersClaimingAddress", mock.Anything, addr1).Return((<-chan protoauth.AuthPeerConn)(chHttp), nil)
-		libp2p.On("PeersClaimingAddress", mock.Anything, addr1).Return((<-chan protoauth.AuthPeerConn)(chLibp2p), nil)
-
-		var recvd []protoauth.AuthPeerConn
-		for peer := range proto.PeersClaimingAddress(context.Background(), addr1) {
-			recvd = append(recvd, peer)
-		}
-
-		expected := append(httpPeers, libp2pPeers...)
-		for _, x := range expected {
-			require.Contains(t, recvd, x)
-		}
-
-		http.AssertExpectations(t)
-		libp2p.AssertExpectations(t)
-		peerStore.AssertExpectations(t)
-	})
-
-	t.Run("terminates when context is canceled", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			http             = new(mocks.AuthTransport)
-			libp2p           = new(mocks.AuthTransport)
-			notAuthTransport = new(swarmmocks.Transport)
-			transports       = []swarm.Transport{http, libp2p, notAuthTransport}
-			keyStore         = new(identitymocks.KeyStore)
-			peerStore        = new(swarmmocks.PeerStore)
-		)
-
-		http.On("Name").Return("http")
-		http.On("OnChallengeIdentity", mock.Anything).Return()
-		libp2p.On("Name").Return("libp2p")
-		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
-
-		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return()
-
-		proto := protoauth.NewAuthProtocol(transports, keyStore, peerStore)
-		proto.Start()
-		defer proto.Close()
-
-		peerStore.On("AllDialInfos").Return(nil).Maybe()
-		peerStore.On("UnverifiedPeers").Return(nil).Maybe()
-
-		addr1 := testutils.RandomAddress(t)
-
-		chDone := make(chan struct{})
-		defer close(chDone)
-
-		chHttp := make(chan protoauth.AuthPeerConn)
-		go func() {
-			for {
-				select {
-				case chHttp <- new(mocks.AuthPeerConn):
-				case <-chDone:
-					return
-				}
-			}
-		}()
-
-		chLibp2p := make(chan protoauth.AuthPeerConn)
-		go func() {
-			for {
-				select {
-				case chLibp2p <- new(mocks.AuthPeerConn):
-				case <-chDone:
-					return
-				}
-			}
-		}()
-
-		http.On("PeersClaimingAddress", mock.Anything, addr1).Return((<-chan protoauth.AuthPeerConn)(chHttp), nil)
-		libp2p.On("PeersClaimingAddress", mock.Anything, addr1).Return((<-chan protoauth.AuthPeerConn)(chLibp2p), nil)
-
-		ctx, cancel := context.WithCancel(context.Background())
-
-		ch := proto.PeersClaimingAddress(ctx, addr1)
-		select {
-		case _, open := <-ch:
-			require.True(t, open)
-		case <-time.After(1 * time.Second):
-			t.Fatal("could not receive")
-		}
-
-		select {
-		case _, open := <-ch:
-			require.True(t, open)
-		case <-time.After(1 * time.Second):
-			t.Fatal("could not receive")
-		}
-
-		cancel()
-
-		// Give it a moment to terminate
-		time.Sleep(1 * time.Second)
-
-		select {
-		case _, open := <-ch:
-			require.False(t, open)
-		case <-time.After(1 * time.Second):
-			t.Fatal("could not receive")
-		}
-
-		http.AssertExpectations(t)
-		libp2p.AssertExpectations(t)
-		peerStore.AssertExpectations(t)
-	})
-}
 
 func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
@@ -195,13 +38,12 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
 
 		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return()
+		peerStore.On("AllDialInfos").Return(nil).Maybe()
+		peerStore.On("UnverifiedPeers").Return(nil).Maybe()
 
 		proto := protoauth.NewAuthProtocol(transports, keyStore, peerStore)
 		proto.Start()
 		defer proto.Close()
-
-		peerStore.On("AllDialInfos").Return(nil).Maybe()
-		peerStore.On("UnverifiedPeers").Return(nil).Maybe()
 
 		identity1 := testutils.RandomIdentity(t)
 		identity2 := testutils.RandomIdentity(t)
@@ -209,7 +51,7 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 
 		peerConn.On("Ready").Return(true).Maybe()
 		peerConn.On("Dialable").Return(true).Maybe()
-		peerConn.On("DeviceSpecificID").Return("foo").Maybe()
+		peerConn.On("DeviceUniqueID").Return("foo").Maybe()
 		peerConn.On("EnsureConnected", mock.Anything).Return(nil).Once()
 		peerConn.On("DialInfo").Return(dialInfo)
 
@@ -268,6 +110,7 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
 
 		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return()
+		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil)
 
 		proto := protoauth.NewAuthProtocol(transports, keyStore, peerStore)
 		proto.Start()
@@ -281,7 +124,7 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		peerConn.On("EnsureConnected", mock.Anything).Return(expectedErr).Once()
 		peerConn.On("Ready").Return(true).Maybe()
 		peerConn.On("Dialable").Return(true).Maybe()
-		peerConn.On("DeviceSpecificID").Return("foo").Maybe()
+		peerConn.On("DeviceUniqueID").Return("foo").Maybe()
 
 		err := proto.ChallengePeerIdentity(context.Background(), peerConn)
 		require.Equal(t, expectedErr, errors.Cause(err))
@@ -311,6 +154,7 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
 
 		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return()
+		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil)
 
 		proto := protoauth.NewAuthProtocol(transports, keyStore, peerStore)
 		proto.Start()
@@ -323,7 +167,7 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 
 		peerConn.On("Ready").Return(true).Maybe()
 		peerConn.On("Dialable").Return(true).Maybe()
-		peerConn.On("DeviceSpecificID").Return("foo").Maybe()
+		peerConn.On("DeviceUniqueID").Return("foo").Maybe()
 		peerConn.On("EnsureConnected", mock.Anything).Return(nil).Once()
 		peerConn.On("ChallengeIdentity", mock.Anything).Return(expectedErr)
 
@@ -355,6 +199,7 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
 
 		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return()
+		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil)
 
 		proto := protoauth.NewAuthProtocol(transports, keyStore, peerStore)
 		proto.Start()
@@ -367,7 +212,7 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 
 		peerConn.On("Ready").Return(true).Maybe()
 		peerConn.On("Dialable").Return(true).Maybe()
-		peerConn.On("DeviceSpecificID").Return("foo").Maybe()
+		peerConn.On("DeviceUniqueID").Return("foo").Maybe()
 		peerConn.On("EnsureConnected", mock.Anything).Return(nil).Once()
 		peerConn.On("ChallengeIdentity", mock.Anything).Return(nil)
 		peerConn.On("ReceiveChallengeIdentityResponse").Return(nil, expectedErr).Once()
@@ -400,6 +245,7 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
 
 		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return()
+		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil)
 
 		proto := protoauth.NewAuthProtocol(transports, keyStore, peerStore)
 		proto.Start()
@@ -414,7 +260,7 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 
 		peerConn.On("Ready").Return(true).Maybe()
 		peerConn.On("Dialable").Return(true).Maybe()
-		peerConn.On("DeviceSpecificID").Return("foo").Maybe()
+		peerConn.On("DeviceUniqueID").Return("foo").Maybe()
 		peerConn.On("EnsureConnected", mock.Anything).Return(nil).Once()
 		peerConn.On("DialInfo").Return(dialInfo)
 

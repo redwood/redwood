@@ -17,14 +17,12 @@ import (
 //go:generate mockery --name AuthProtocol --output ./mocks/ --case=underscore
 type AuthProtocol interface {
 	process.Interface
-	PeersClaimingAddress(ctx context.Context, address types.Address) <-chan AuthPeerConn
 	ChallengePeerIdentity(ctx context.Context, peerConn AuthPeerConn) (err error)
 }
 
 //go:generate mockery --name AuthTransport --output ./mocks/ --case=underscore
 type AuthTransport interface {
 	swarm.Transport
-	PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan AuthPeerConn, error)
 	OnChallengeIdentity(handler ChallengeIdentityCallback)
 }
 
@@ -85,42 +83,6 @@ func (ap *authProtocol) Start() error {
 	return nil
 }
 
-func (ap *authProtocol) PeersClaimingAddress(ctx context.Context, address types.Address) <-chan AuthPeerConn {
-	ch := make(chan AuthPeerConn)
-
-	child := ap.Process.NewChild(ctx, "PeersClaimingAddress "+address.String())
-	defer child.AutocloseWithCleanup(func() {
-		close(ch)
-	})
-
-	for _, tpt := range ap.transports {
-		innerCh, err := tpt.PeersClaimingAddress(ctx, address)
-		if err != nil {
-			continue
-		}
-
-		child.Go(nil, tpt.Name(), func(ctx context.Context) {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case peerConn, open := <-innerCh:
-					if !open {
-						return
-					}
-
-					select {
-					case <-ctx.Done():
-						return
-					case ch <- peerConn:
-					}
-				}
-			}
-		})
-	}
-	return ch
-}
-
 func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn AuthPeerConn) (err error) {
 	defer errors.AddStack(&err)
 
@@ -155,7 +117,7 @@ func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn Auth
 		}
 		encpubkey := crypto.AsymEncPubkeyFromBytes(proof.AsymEncPubkey)
 
-		ap.peerStore.AddVerifiedCredentials(peerConn.DialInfo(), peerConn.DeviceSpecificID(), sigpubkey.Address(), sigpubkey, encpubkey)
+		ap.peerStore.AddVerifiedCredentials(peerConn.DialInfo(), peerConn.DeviceUniqueID(), sigpubkey.Address(), sigpubkey, encpubkey)
 	}
 
 	return nil
