@@ -76,7 +76,13 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
                     if (fromTxID) {
                         url.searchParams.set('from_tx', fromTxID)
                     }
-                    url.protocol = 'ws'
+                    if (url.protocol === 'https:') {
+                        url.protocol = 'wss'
+                    } else if (url.protocol === 'http:') {
+                        url.protocol = 'ws'
+                    } else {
+                        throw new Error('bad http host: ' + httpHost)
+                    }
                     url.pathname = '/ws'
 
                     if (!!ucan) {
