@@ -101,6 +101,34 @@ func NewHTTPServer(
 }
 
 type (
+	UcanArgs     struct{}
+	UcanResponse struct {
+		JWT string
+	}
+)
+
+func (s *HTTPServer) Ucan(r *http.Request, args *UcanArgs, resp *UcanResponse) error {
+	identity, err := s.keyStore.DefaultPublicIdentity()
+	if err != nil {
+		return err
+	}
+
+	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"address": identity.Address().Hex(),
+		"nbf":     time.Date(2015, 10, 10, 12, 0, 0, 0, time.UTC).Unix(),
+	})
+
+	// Sign and get the complete encoded token as a string using the secret
+	jwtTokenString, err := jwtToken.SignedString(s.jwtSecret)
+	if err != nil {
+		return err
+	}
+
+	resp.JWT = jwtTokenString
+	return nil
+}
+
+type (
 	SubscribeArgs struct {
 		StateURI string
 		Txs      bool
@@ -288,14 +316,14 @@ type (
 	}
 	PeerIdentity struct {
 		Address          types.Address
-		SigningPublicKey crypto.SigningPublicKey
-		AsymEncPubkey    crypto.AsymEncPubkey
+		SigningPublicKey *crypto.SigningPublicKey
+		AsymEncPubkey    *crypto.AsymEncPubkey
 	}
 )
 
 func (s *HTTPServer) Peers(r *http.Request, args *PeersArgs, resp *PeersResponse) error {
 	if s.peerStore == nil {
-		return types.ErrUnsupported
+		return errors.ErrUnsupported
 	}
 	for _, peer := range s.peerStore.Peers() {
 		var identities []PeerIdentity
