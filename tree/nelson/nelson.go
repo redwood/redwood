@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-
 	"redwood.dev/blob"
 	"redwood.dev/errors"
 	"redwood.dev/state"
@@ -15,6 +14,7 @@ import (
 
 type Frame struct {
 	state.Node
+	childmostNode state.Node
 	contentType   string
 	contentLength int64
 	overrideValue interface{} // This is currently only used when a NelSON frame resolves to a blob, and we want to open that blob for the caller.  It will contain an io.ReadCloser.
@@ -54,19 +54,6 @@ func (frame *Frame) ContentType() (string, error) {
 
 func (frame *Frame) ContentLength() (int64, error) {
 	return frame.contentLength, nil
-}
-
-func (frame *Frame) DebugPrint(printFn func(inFormat string, args ...interface{}), newlines bool, indentLevel int) {
-	if newlines {
-		oldPrintFn := printFn
-		printFn = func(inFormat string, args ...interface{}) { oldPrintFn(inFormat+"\n", args...) }
-	}
-
-	indent := strings.Repeat(" ", 4*indentLevel)
-
-	printFn(indent + "NelSON Frame {")
-	frame.Node.DebugPrint(printFn, false, indentLevel+1)
-	printFn(indent + "}")
 }
 
 func (frame *Frame) Value(keypath state.Keypath, rng *state.Range) (interface{}, bool, error) {
@@ -116,100 +103,193 @@ func (frame *Frame) ValueNode() state.Node {
 	return frame.Node
 }
 
+func (frame *Frame) DebugPrint(printFn func(inFormat string, args ...interface{}), newlines bool, indentLevel int) {
+	if newlines {
+		oldPrintFn := printFn
+		printFn = func(inFormat string, args ...interface{}) { oldPrintFn(inFormat+"\n", args...) }
+	}
+
+	indent := strings.Repeat(" ", 4*indentLevel)
+
+	printFn(indent + "NelSON Frame {")
+	frame.Node.DebugPrint(printFn, false, indentLevel+1)
+	printFn(indent + "}")
+}
+
 type StateResolver interface {
-	StateAtVersion(stateURI string, version *types.ID) (state.Node, error)
+	StateAtVersion(stateURI string, version *state.Version) (state.Node, error)
 }
 
 type BlobResolver interface {
 	BlobReader(blobID blob.ID) (io.ReadCloser, int64, error)
 }
 
-func Seek(node state.Node, keypath state.Keypath, stateResolver StateResolver, blobResolver BlobResolver) (_ state.Node, exists bool, _ error) {
-	for {
-		isNelSONFrame, err := node.Exists(ValueKey)
+// Drills down to the provided keypath, resolving links as necessary. If the
+// keypath resolves to a NelSON frame, the frame is resolved and returned.
+// Otherwise, a regular state.Node is returned.
+func Seek(
+	node state.Node,
+	keypath state.Keypath,
+	stateResolver StateResolver,
+	blobResolver BlobResolver,
+) (_ state.Node, exists bool, _ error) {
+	for len(keypath) > 0 {
+		frameNode, nonFrameNode, remainingKeypath, err := DrillDownUntilFrame(node, keypath)
 		if err != nil {
 			return nil, false, err
 		}
+		keypath = remainingKeypath
 
-		// Regular node, keep drilling down
-		if !isNelSONFrame {
-			if len(keypath) == 0 {
-				break
+		if frameNode == nil && nonFrameNode == nil {
+			return nil, false, nil
+		} else if frameNode == nil && nonFrameNode != nil {
+			// ONLY can happen if len(keypath) == 0
+			if len(keypath) != 0 {
+				panic("nooooo")
 			}
-
-			nodeExists, err := node.Exists(keypath.Part(0))
-			if err != nil {
-				return nil, false, err
-			} else if !nodeExists {
-				return nil, false, nil
-			}
-
-			node = node.NodeAt(keypath.Part(0), nil)
-			_, keypath = keypath.Shift()
-			continue
+			return nonFrameNode, true, nil
 		}
 
-		contentType, _, err := node.StringValue(ContentTypeKey)
-		if err != nil && errors.Cause(err) != errors.Err404 {
+		// We have a frame
+		frame, nonFrameNode, remainingKeypath, err := CollapseFrame(frameNode, keypath, stateResolver, blobResolver)
+		if err != nil {
 			return nil, false, err
 		}
+		keypath = remainingKeypath
+		node = frame.Node
 
-		// Simple NelSON frame
-		if contentType != "link" {
+		if len(keypath) == 0 {
+			return frame, true, nil
+		}
+	}
+	return node, true, nil
+}
+
+// Given a state.Node, DrillDownUntilFrame will return the first NelSON frame
+// encountered along the provided keypath.
+func DrillDownUntilFrame(
+	node state.Node,
+	keypath state.Keypath,
+) (frameNode, nonFrameNode state.Node, remaining state.Keypath, _ error) {
+	for {
+		isNelSONFrame, err := node.Exists(ValueKey)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		if isNelSONFrame {
+			return node, nil, keypath, nil
+
+		} else if len(keypath) == 0 {
+			return nil, node, nil, nil
+		}
+
+		nodeExists, err := node.Exists(keypath.Part(0))
+		if err != nil {
+			return nil, nil, nil, err
+		} else if !nodeExists {
+			return nil, nil, nil, nil
+		}
+
+		node = node.NodeAt(keypath.Part(0), nil)
+		_, keypath = keypath.Shift()
+	}
+}
+
+// Given a regular state.Node representing a NelSON frame, CollapseFrame resolves
+// that frame to a *Frame. If a state.Node is provided that does not represent a
+// frame, the function will panic.
+func CollapseFrame(
+	node state.Node,
+	keypath state.Keypath,
+	stateResolver StateResolver,
+	blobResolver BlobResolver,
+) (*Frame, state.Node, state.Keypath, error) {
+	exists, err := node.Exists(ContentTypeKey)
+	if err != nil {
+		return nil, nil, nil, err
+	} else if !exists {
+		panic("CollapseFrame was not passed a state.Node representing a NelSON frame")
+	}
+
+	frame := &Frame{Node: node}
+
+	var contentType string
+	for {
+		frame.Node = node
+
+		exists, err := node.Exists(ContentTypeKey)
+		if err != nil {
+			return nil, nil, nil, err
+		} else if !exists {
+			return frame, node, keypath, nil
+		}
+
+		thisContentType, _, err := node.StringValue(ContentTypeKey)
+		if err != nil && errors.Cause(err) != errors.Err404 {
+			return nil, nil, nil, err
+		}
+
+		// Simple frame
+		if thisContentType != "link" {
+			if contentType == "" {
+				contentType = thisContentType
+			}
 			node = node.NodeAt(ValueKey, nil)
 			continue
 		}
 
-		// Link
+		// Link frame
 		linkStr, isString, err := node.StringValue(ValueKey)
 		if err != nil && errors.Cause(err) != errors.Err404 {
-			return nil, false, err
+			return nil, nil, nil, err
 		} else if !isString {
-			return nil, false, nil
+			return nil, nil, nil, errors.Err404
 		}
 
 		linkType, linkValue := DetermineLinkType(linkStr)
 		if linkType == LinkTypeBlob {
 			if len(keypath) > 0 {
-				return nil, false, nil
+				return nil, nil, nil, errors.Err404
 			}
-
-			frame := &Frame{Node: node}
 
 			var blobID blob.ID
 			err := blobID.UnmarshalText([]byte(linkValue))
 			if err != nil {
-				return nil, false, err
+				return nil, nil, nil, err
 			}
 			reader, contentLength, err := blobResolver.BlobReader(blobID)
-			if errors.Cause(err) == errors.Err404 {
-				return nil, false, nil
-			} else if err != nil {
-				return nil, false, err
+			if err != nil && errors.Cause(err) != errors.Err404 {
+				return nil, nil, nil, err
 			}
 			frame.overrideValue = reader
+			frame.contentType = contentType
 			frame.contentLength = contentLength
-			frame.fullyResolved = true
-			return frame, true, nil
+			frame.fullyResolved = errors.Cause(err) != errors.Err404
+			return frame, nil, nil, nil
 
 		} else if linkType == LinkTypeState {
 			stateURI, linkedKeypath, version, err := ParseStateLink(linkValue)
 			if err != nil {
-				return nil, false, err
+				return nil, nil, nil, err
 			}
 
 			keypath = keypath.Unshift(linkedKeypath)
 
 			root, err := stateResolver.StateAtVersion(stateURI, version)
-			if err != nil {
-				return nil, false, err
+			if errors.Cause(err) == errors.Err404 {
+				frame.fullyResolved = false
+				return frame, node, keypath, nil
+			} else if err != nil {
+				return nil, nil, nil, err
 			}
 
 			nodeExists, err := root.Exists(keypath.Part(0))
 			if err != nil {
-				return nil, false, err
+				return nil, nil, nil, err
 			} else if !nodeExists {
-				return nil, false, err
+				frame.fullyResolved = false
+				return frame, node, keypath, nil
 			}
 
 			node = root.NodeAt(keypath.Part(0), nil)
@@ -217,14 +297,19 @@ func Seek(node state.Node, keypath state.Keypath, stateResolver StateResolver, b
 			continue
 
 		} else {
-			return nil, false, errors.Errorf("unknown link type (%v)", linkStr)
+			return nil, nil, nil, errors.Errorf("unknown link type (%v)", linkStr)
 		}
-
 	}
-	return node, true, nil
+	return frame, node, keypath, nil
 }
 
-func Resolve(outerNode state.Node, stateResolver StateResolver, blobResolver BlobResolver) (state.Node, bool, error) {
+// Given a state.Node, Resolve will recursively resolve all NelSON frames
+// contained therein.
+func Resolve(
+	outerNode state.Node,
+	stateResolver StateResolver,
+	blobResolver BlobResolver,
+) (state.Node, bool, error) {
 	var anyMissing bool
 
 	iter := outerNode.DepthFirstIterator(nil, false, 0)
@@ -390,12 +475,13 @@ func resolveLink(frame *Frame, linkStr string, stateResolver StateResolver, blob
 	}
 }
 
-func ParseStateLink(linkValue string) (string, state.Keypath, *types.ID, error) {
+// ParseStateLink parses state links of the form "<state URI>[/<keypath>][@<version>]".
+func ParseStateLink(linkValue string) (string, state.Keypath, *state.Version, error) {
 	parts := strings.Split(linkValue, "/")
-	var version *types.ID
+	var version *state.Version
 	if i := strings.Index(parts[1], "@"); i >= 0 {
 		vstr := parts[1][i:]
-		v, err := types.IDFromHex(vstr)
+		v, err := state.VersionFromHex(vstr)
 		if err != nil {
 			return "", nil, nil, err
 		}
