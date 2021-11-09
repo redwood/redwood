@@ -1,4 +1,4 @@
-FROM golang:1.15.7-buster AS build
+FROM golang:1.17.1-buster AS build
 
 RUN apt update
 RUN apt -y install build-essential
@@ -6,13 +6,14 @@ RUN apt -y install pkg-config
 
 ADD go.mod go.sum /build/
 ADD ./blob /build/blob/
-ADD ./config /build/config/
-ADD ./cmd/redwood /build/cmd/redwood/
+ADD ./cmd /build/cmd/
 ADD ./crypto /build/crypto/
 ADD ./errors /build/errors/
 ADD ./identity /build/identity/
 ADD ./internal /build/internal/
 ADD ./log /build/log/
+ADD ./process /build/process/
+ADD ./redwood.js /build/redwood.js/
 ADD ./rpc /build/rpc/
 ADD ./state /build/state/
 ADD ./swarm /build/swarm/
@@ -28,7 +29,7 @@ RUN go build -o /redwood .
 
 
 
-FROM golang:1.15.7-buster
+FROM golang:1.17.1-buster
 
 COPY --from=build /redwood /redwood
 WORKDIR /
