@@ -1,7 +1,7 @@
 package libp2p
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/gogo/protobuf/proto"
 	dstore "github.com/ipfs/go-datastore"
@@ -28,19 +28,19 @@ func (ds *notifyingDatastore) Put(k dstore.Key, v []byte) error {
 }
 
 func (ds *notifyingDatastore) decodeDatastoreKeyValue(key dstore.Key, value []byte) (string, []byte, error) {
-	buf, err := ds.Batching.Get(key)
-	if err == dstore.ErrNotFound {
-		return "", nil, nil
-	} else if err != nil {
-		return "", nil, err
-	}
+	// buf, err := ds.Batching.Get(key)
+	// if err == dstore.ErrNotFound {
+	// 	return "", nil, nil
+	// } else if err != nil {
+	// 	return "", nil, err
+	// }
 
 	rec := new(recpb.Record)
-	err = proto.Unmarshal(buf, rec)
+	err := proto.Unmarshal(value, rec)
 	if err != nil {
 		// Bad data in datastore, log it but don't return an error, we'll just overwrite it
-		fmt.Printf("Bad record data stored in datastore with key %s: could not unmarshal record\n", key)
+		// fmt.Printf("Bad record data stored in datastore with key %s: could not unmarshal record\n", key)
 		return "", nil, nil
 	}
-	return string(rec.Key), rec.Value, nil
+	return strings.Join(key.Namespaces(), "/") + string(rec.Key), rec.Value, nil
 }

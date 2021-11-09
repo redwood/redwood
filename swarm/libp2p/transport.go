@@ -3,7 +3,6 @@ package libp2p
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -12,6 +11,7 @@ import (
 	badgerds "github.com/ipfs/go-ds-badger2"
 	dohp2p "github.com/libp2p/go-doh-resolver"
 	libp2p "github.com/libp2p/go-libp2p"
+	circuitp2p "github.com/libp2p/go-libp2p-circuit"
 	cryptop2p "github.com/libp2p/go-libp2p-core/crypto"
 	corehost "github.com/libp2p/go-libp2p-core/host"
 	metrics "github.com/libp2p/go-libp2p-core/metrics"
@@ -29,6 +29,8 @@ import (
 	protocol "github.com/libp2p/go-libp2p-protocol"
 	routing "github.com/libp2p/go-libp2p-routing"
 	mdns "github.com/libp2p/go-libp2p/p2p/discovery"
+	relayp2p "github.com/libp2p/go-libp2p/p2p/host/relay"
+	rhost "github.com/libp2p/go-libp2p/p2p/host/routed"
 	ma "github.com/multiformats/go-multiaddr"
 	madns "github.com/multiformats/go-multiaddr-dns"
 
@@ -38,8 +40,10 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/swarm"
+	"redwood.dev/swarm/libp2p/pb"
 	"redwood.dev/swarm/protoauth"
 	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/protohush"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -51,6 +55,7 @@ type Transport interface {
 	swarm.Transport
 	protoauth.AuthTransport
 	protoblob.BlobTransport
+	protohush.HushTransport
 	prototree.TreeTransport
 	Libp2pPeerID() string
 	ListenAddrs() []string
@@ -62,10 +67,12 @@ type transport struct {
 	log.Logger
 	protoauth.BaseAuthTransport
 	protoblob.BaseBlobTransport
+	protohush.BaseHushTransport
 	prototree.BaseTreeTransport
 
-	libp2pHost        p2phost.Host
-	dht               *dht.IpfsDHT
+	libp2pHost p2phost.Host
+	dht        *dht.IpfsDHT
+	// dht               *dual.DHT
 	mdns              mdns.Service
 	peerID            peer.ID
 	port              uint
@@ -77,24 +84,22 @@ type transport struct {
 	dohDNSResolverURL string
 	*metrics.BandwidthCounter
 
-	address types.Address
-
 	controllerHub tree.ControllerHub
 	peerStore     swarm.PeerStore
 	keyStore      identity.KeyStore
 	blobStore     blob.Store
 
-	writeSubsByPeerID   map[peer.ID]map[netp2p.Stream]prototree.WritableSubscriptionImpl
+	writeSubsByPeerID   map[peer.ID]map[netp2p.Stream]*writableSubscription
 	writeSubsByPeerIDMu sync.Mutex
 }
 
 var _ Transport = (*transport)(nil)
 
 const (
-	PROTO_MAIN          protocol.ID = "/redwood/main/1.0.0"
-	PROTO_BLOB_MANIFEST protocol.ID = "/redwood/blob/manifest/1.0.0"
-	PROTO_BLOB_CHUNK    protocol.ID = "/redwood/blob/chunk/1.0.0"
-	TransportName       string      = "libp2p"
+	PROTO_MAIN    protocol.ID = "/redwood/main/1.0.0"
+	PROTO_BLOB    protocol.ID = "/redwood/blob/1.0.0"
+	PROTO_HUSH    protocol.ID = "/redwood/hush/1.0.0"
+	TransportName string      = "libp2p"
 )
 
 func NewTransport(
@@ -122,7 +127,7 @@ func NewTransport(
 		keyStore:          keyStore,
 		blobStore:         blobStore,
 		peerStore:         peerStore,
-		writeSubsByPeerID: make(map[peer.ID]map[netp2p.Stream]prototree.WritableSubscriptionImpl),
+		writeSubsByPeerID: make(map[peer.ID]map[netp2p.Stream]*writableSubscription),
 	}
 	return t, nil
 }
@@ -174,6 +179,8 @@ func (t *transport) Start() error {
 		t.Warnf("while decoding bootstrap peers: %v", err)
 	}
 
+	relayp2p.AdvertiseBootDelay = 10 * time.Second
+
 	// Initialize the libp2p host
 	libp2pHost, err := libp2p.New(t.Process.Ctx(),
 		libp2p.ListenAddrStrings(
@@ -183,34 +190,34 @@ func (t *transport) Start() error {
 		libp2p.BandwidthReporter(t.BandwidthCounter),
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
-		libp2p.ForceReachabilityPrivate(),
+		// libp2p.ForceReachabilityPrivate(),
 		libp2p.StaticRelays(staticRelays),
+		libp2p.EnableRelay(circuitp2p.OptActive, circuitp2p.OptHop),
 		libp2p.EnableAutoRelay(),
-		// libp2p.DefaultStaticRelays(),
 		libp2p.Peerstore(peerStore),
 		libp2p.Security(noisep2p.ID, noisep2p.New),
 		libp2p.MultiaddrResolver(dnsResolver),
 		libp2p.Muxer(string("/mplex/6.7.0"), mplex.DefaultTransport),
 		libp2p.Routing(func(host corehost.Host) (routing.PeerRouting, error) {
 			t.dht, err = dht.New(t.Process.Ctx(), host,
-				dht.BootstrapPeers(bootstrapPeers...),
+				dht.BootstrapPeers(append(staticRelays, bootstrapPeers...)...),
 				dht.Mode(dht.ModeServer),
 				dht.Datastore(datastore),
 				// dht.Validator(blankValidator{}), // Set a pass-through validator
 			)
-			if err != nil {
-				return nil, err
-			}
 			return t.dht, err
 		}),
 	)
 	if err != nil {
 		return errors.Wrap(err, "could not initialize libp2p host")
 	}
+
+	t.libp2pHost = rhost.Wrap(libp2pHost, t.dht)
+
 	t.libp2pHost = libp2pHost
 	t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
-	t.libp2pHost.SetStreamHandler(PROTO_BLOB_MANIFEST, t.handleBlobManifestRequest)
-	t.libp2pHost.SetStreamHandler(PROTO_BLOB_CHUNK, t.handleBlobChunkRequest)
+	t.libp2pHost.SetStreamHandler(PROTO_BLOB, t.handleBlobStream)
+	t.libp2pHost.SetStreamHandler(PROTO_HUSH, t.handleHushStream)
 	t.libp2pHost.Network().Notify(t) // Register for libp2p connect/disconnect notifications
 
 	err = t.dht.Bootstrap(t.Process.Ctx())
@@ -235,13 +242,32 @@ func (t *transport) Start() error {
 	discovery.Advertise(t.Process.Ctx(), routingDiscovery, "redwood")
 
 	t.Process.Go(nil, "find peers", func(ctx context.Context) {
-		chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
-		if err != nil {
-			t.Errorf("error finding peers: %v", err)
-			return
-		}
-		for pinfo := range chPeers {
-			t.onPeerFound("routing", pinfo)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			func() {
+				ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+
+				chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
+				if err != nil {
+					t.Errorf("error finding peers: %v", err)
+					return
+				}
+				for pinfo := range chPeers {
+					if pinfo.ID == t.peerID {
+						continue
+					} else if len(t.libp2pHost.Network().ConnsToPeer(pinfo.ID)) > 0 {
+						continue
+					}
+					t.onPeerFound("routing", pinfo)
+				}
+				time.Sleep(3 * time.Second)
+			}()
 		}
 	})
 
@@ -253,31 +279,28 @@ func (t *transport) Start() error {
 	t.mdns.RegisterNotifee(t)
 
 	// Update our node's info in the peer store
-	myDialAddrs := utils.NewStringSet(nil)
-	for _, addr := range filterUselessMultiaddrs(t.libp2pHost.Addrs()) {
-		addrStr := addr.String()
-		myDialAddrs.Add(addrStr)
+	myDialAddrs := types.NewStringSet(nil)
+	for _, addr := range t.ListenAddrs() {
+		myDialAddrs.Add(addr)
 	}
 	if t.reachableAt != "" {
 		myDialAddrs.Add(t.reachableAt)
 	}
 	// myDialAddrs = cleanLibp2pAddrs(myDialAddrs, t.peerID)
 
-	if len(myDialAddrs) > 0 {
-		for dialAddr := range myDialAddrs {
-			identities, err := t.keyStore.Identities()
-			if err != nil {
-				return err
-			}
-			for _, identity := range identities {
-				t.peerStore.AddVerifiedCredentials(
-					swarm.PeerDialInfo{TransportName: TransportName, DialAddr: dialAddr},
-					t.libp2pHost.ID().Pretty(),
-					identity.SigKeypair.SigningPublicKey.Address(),
-					identity.SigKeypair.SigningPublicKey,
-					identity.AsymEncKeypair.AsymEncPubkey,
-				)
-			}
+	for dialAddr := range myDialAddrs {
+		identities, err := t.keyStore.Identities()
+		if err != nil {
+			return err
+		}
+		for _, identity := range identities {
+			t.peerStore.AddVerifiedCredentials(
+				swarm.PeerDialInfo{TransportName: TransportName, DialAddr: dialAddr},
+				t.libp2pHost.ID().Pretty(),
+				identity.SigKeypair.SigningPublicKey.Address(),
+				identity.SigKeypair.SigningPublicKey,
+				identity.AsymEncKeypair.AsymEncPubkey,
+			)
 		}
 	}
 
@@ -293,10 +316,6 @@ func (t *transport) Start() error {
 		t.Process.SpawnChild(nil, announceBlobsTask)
 		t.blobStore.OnBlobsSaved(announceBlobsTask.Enqueue)
 	}
-
-	announceIdentitiesTask := NewAnnounceIdentitiesTask(30*time.Second, t.keyStore, t.dht)
-	announceIdentitiesTask.Enqueue()
-	t.Process.SpawnChild(nil, announceIdentitiesTask)
 
 	connectToStaticRelaysTask := NewConnectToStaticRelaysTask(8*time.Second, staticRelays, t.libp2pHost)
 	connectToStaticRelaysTask.Enqueue()
@@ -411,7 +430,7 @@ func (t *transport) ClosedStream(network netp2p.Network, stream netp2p.Stream) {
 	writeSubs, exists := t.writeSubsByPeerID[peerID]
 	if exists {
 		if sub, exists := writeSubs[stream]; exists && sub != nil {
-			t.Debugf("closing libp2p writable subscription (peer: %v, stateURI: %v)", peerID.Pretty(), sub.StateURI())
+			t.Debugf("closing libp2p writable subscription (peer: %v, stateURI: %v)", peerID.Pretty(), sub.stateURI)
 			delete(t.writeSubsByPeerID[peerID], stream)
 			sub.Close()
 		}
@@ -430,8 +449,6 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	} else if pinfo.ID == t.libp2pHost.ID() {
 		return
 	}
-	// dialInfos := peerDialInfosFromPeerInfo(pinfo)
-	// t.peerStore.AddDialInfos(dialInfos)
 
 	var i uint
 	for _, dialInfo := range peerDialInfosFromPeerInfo(pinfo) {
@@ -442,13 +459,16 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 
 	if i > 0 {
 		t.Infof(0, "%v: peer %+v found", via, pinfo.ID.Pretty())
+		t.addPeerInfosToPeerStore([]corepeer.AddrInfo{pinfo})
 	}
-
-	t.addPeerInfosToPeerStore([]corepeer.AddrInfo{pinfo})
 
 	peer, err := t.makeDisconnectedPeerConn(pinfo)
 	if err != nil {
 		t.Errorf("while making disconnected peer conn (%v): %v", pinfo.ID.Pretty(), err)
+		return
+	}
+
+	if !peer.Ready() || !peer.Dialable() {
 		return
 	}
 
@@ -459,36 +479,71 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	if err != nil {
 		t.Errorf("error connecting to %v peer %v: %v", via, pinfo, err)
 	}
-	// if len(dialInfos) > 0 {
-	//  err := t.libp2pHost.Connect(ctx, pinfo)
-	//  if err != nil {
-	//      t.Errorf("error connecting to peer %v: %v", pinfo.ID.Pretty(), err)
-	//  }
-	// }
 }
 
-func (t *transport) handleBlobManifestRequest(stream netp2p.Stream) {
+func (t *transport) handleBlobStream(stream netp2p.Stream) {
 	peerConn := t.makeConnectedPeerConn(stream)
 	defer peerConn.Close()
 
-	blobID, err := peerConn.ReadBlobManifestRequest()
+	var proto pb.BlobMessage
+	err := peerConn.readProtobuf(&proto)
 	if err != nil {
-		t.Errorf("could not read blob manifest request: %v", err)
+		t.Errorf("while reading incoming blob stream: %v", err)
 		return
 	}
-	t.HandleBlobManifestRequest(blobID, peerConn)
+
+	if msg := proto.GetFetchManifest(); msg != nil {
+		blobID, err := blob.IDFromProtobuf(msg.Id)
+		if err != nil {
+			t.Errorf("while parsing blob ID: %v", err)
+			return
+		}
+		t.HandleBlobManifestRequest(blobID, peerConn)
+
+	} else if msg := proto.GetFetchChunk(); msg != nil {
+		sha3, err := types.HashFromBytes(msg.Sha3)
+		if err != nil {
+			t.Errorf("while parsing blob hash: %v", err)
+			return
+		}
+		t.HandleBlobChunkRequest(sha3, peerConn)
+
+	} else {
+		t.Errorf("while reading incoming blob stream: got unknown message")
+	}
 }
 
-func (t *transport) handleBlobChunkRequest(stream netp2p.Stream) {
+func (t *transport) handleHushStream(stream netp2p.Stream) {
 	peerConn := t.makeConnectedPeerConn(stream)
 	defer peerConn.Close()
 
-	chunkSHA3, err := peerConn.ReadBlobChunkRequest()
+	var proto pb.HushMessage
+	err := peerConn.readProtobuf(&proto)
 	if err != nil {
-		t.Errorf("could not read blob chunk request: %v", err)
+		t.Errorf("while reading incoming hush stream: %v", err)
 		return
 	}
-	t.HandleBlobChunkRequest(chunkSHA3, peerConn)
+
+	ctx := context.TODO()
+
+	if msg := proto.GetDhPubkeyAttestations(); msg != nil {
+		t.HandleIncomingDHPubkeyAttestations(ctx, msg.Attestations, peerConn)
+
+	} else if msg := proto.GetProposeIndividualSession(); msg != nil {
+		t.HandleIncomingIndividualSessionProposal(ctx, msg.EncryptedProposal, peerConn)
+
+	} else if msg := proto.GetApproveIndividualSession(); msg != nil {
+		t.HandleIncomingIndividualSessionApproval(ctx, *msg.Approval, peerConn)
+
+	} else if msg := proto.GetSendIndividualMessage(); msg != nil {
+		t.HandleIncomingIndividualMessage(ctx, *msg.Message, peerConn)
+
+	} else if msg := proto.GetSendGroupMessage(); msg != nil {
+		t.HandleIncomingGroupMessage(ctx, *msg.Message, peerConn)
+
+	} else {
+		t.Errorf("while reading incoming hush stream: got unknown message")
+	}
 }
 
 func (t *transport) handleIncomingStream(stream netp2p.Stream) {
@@ -510,18 +565,34 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 		}
 		t.Infof(0, "incoming libp2p subscription: %v %v", peer.DialInfo(), stateURI)
 
-		writeSub := newWritableSubscription(peer, stateURI)
+		fetchHistoryOpts := &prototree.FetchHistoryOpts{FromTxID: tree.GenesisTxID} // Fetch all history (@@TODO)
+
+		var writeSub *writableSubscription
+		req := prototree.SubscriptionRequest{
+			StateURI:         stateURI,
+			Keypath:          nil,
+			Type:             prototree.SubscriptionType_Txs,
+			FetchHistoryOpts: fetchHistoryOpts,
+			Addresses:        types.NewAddressSet(peer.Addresses()),
+		}
+		_, err := t.HandleWritableSubscriptionOpened(req, func() (prototree.WritableSubscriptionImpl, error) {
+			writeSub = newWritableSubscription(peer, stateURI)
+			return writeSub, nil
+		})
+		if err != nil {
+			peer.Close()
+			t.Errorf("while starting incoming subscription: %v", err)
+			return
+		}
+
 		func() {
 			t.writeSubsByPeerIDMu.Lock()
 			defer t.writeSubsByPeerIDMu.Unlock()
 			if _, exists := t.writeSubsByPeerID[peer.pinfo.ID]; !exists {
-				t.writeSubsByPeerID[peer.pinfo.ID] = make(map[netp2p.Stream]prototree.WritableSubscriptionImpl)
+				t.writeSubsByPeerID[peer.pinfo.ID] = make(map[netp2p.Stream]*writableSubscription)
 			}
 			t.writeSubsByPeerID[peer.pinfo.ID][stream] = writeSub
 		}()
-
-		fetchHistoryOpts := &prototree.FetchHistoryOpts{} // Fetch all history (@@TODO)
-		t.HandleWritableSubscriptionOpened(stateURI, nil, prototree.SubscriptionType_Txs, writeSub, fetchHistoryOpts)
 
 	case msgType_Tx:
 		defer peer.Close()
@@ -567,35 +638,6 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 			t.Errorf("msgType_ChallengeIdentityRequest: error from verifyAddressHandler: %v", err)
 			return
 		}
-
-	case msgType_EncryptedTx:
-		defer peer.Close()
-
-		encryptedTx, ok := msg.Payload.(prototree.EncryptedTx)
-		if !ok {
-			t.Errorf("Private message: bad payload: (%T) %v", msg.Payload, msg.Payload)
-			return
-		}
-		bs, err := t.keyStore.OpenMessageFrom(
-			encryptedTx.RecipientAddress,
-			crypto.AsymEncPubkeyFromBytes(encryptedTx.SenderPublicKey),
-			encryptedTx.EncryptedPayload,
-		)
-		if err != nil {
-			t.Errorf("error decrypting tx: %v", err)
-			return
-		}
-
-		var tx tree.Tx
-		err = json.Unmarshal(bs, &tx)
-		if err != nil {
-			t.Errorf("error decoding tx: %v", err)
-			return
-		} else if encryptedTx.TxID != tx.ID {
-			t.Errorf("private tx id does not match")
-			return
-		}
-		t.HandleTxReceived(tx, peer)
 
 	case msgType_AnnouncePeers:
 		defer peer.Close()
@@ -721,45 +763,6 @@ func (t *transport) ProvidersOfBlob(ctx context.Context, refID blob.ID) (<-chan 
 	return ch, nil
 }
 
-func (t *transport) PeersClaimingAddress(ctx context.Context, address types.Address) (<-chan protoauth.AuthPeerConn, error) {
-	ctx, cancel := utils.CombinedContext(ctx, t.Process.Ctx())
-	defer cancel()
-
-	addrCid, err := cidForString("addr:" + address.String())
-	if err != nil {
-		t.Errorf("error creating cid: %v", err)
-		return nil, err
-	}
-
-	ch := make(chan protoauth.AuthPeerConn)
-
-	go func() {
-		defer close(ch)
-
-		for pinfo := range t.dht.FindProvidersAsync(ctx, addrCid, 8) {
-			if pinfo.ID == t.libp2pHost.ID() {
-				continue
-			}
-
-			peer, err := t.makeDisconnectedPeerConn(pinfo)
-			if err != nil {
-				t.Errorf("while making disconnected peer conn (%v): %v", pinfo.ID.Pretty(), err)
-				continue
-			} else if peer.DialInfo().DialAddr == "" {
-				continue
-			}
-
-			select {
-			case <-ctx.Done():
-				return
-			case ch <- peer:
-			}
-		}
-	}()
-
-	return ch, nil
-}
-
 func (t *transport) AnnounceBlob(ctx context.Context, refID blob.ID) error {
 	c, err := cidForString("blob:" + refID.String())
 	if err != nil {
@@ -771,7 +774,6 @@ func (t *transport) AnnounceBlob(ctx context.Context, refID blob.ID) error {
 		t.Errorf(`announce: could not dht.Provide ref "%v": %v`, refID.String(), err)
 		return err
 	}
-
 	return nil
 }
 
@@ -791,16 +793,12 @@ func (t *transport) makeConnectedPeerConn(stream netp2p.Stream) *peerConn {
 	peer := &peerConn{t: t, pinfo: pinfo, stream: stream}
 
 	duID := deviceUniqueID(pinfo.ID)
+	maddrs := multiaddrsFromPeerInfo(pinfo)
 
-	for _, addr := range multiaddrsFromPeerInfo(pinfo) {
-		t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: addr.String()}, duID)
+	peer.PeerEndpoint = t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, maddrs[0].String()}, duID)
+	for _, addr := range maddrs[1:] {
+		t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, addr.String()}, duID)
 	}
-
-	pds := t.peerStore.PeersWithDeviceUniqueID(duID)
-	if len(pds) == 0 {
-		return nil
-	}
-	peer.PeerDetails = pds[0]
 	return peer
 }
 
@@ -814,7 +812,7 @@ func (t *transport) makeDisconnectedPeerConn(pinfo corepeer.AddrInfo) (*peerConn
 		return nil, swarm.ErrUnreachable
 	}
 
-	peer.PeerDetails = t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: multiaddrs[0].String()}, duID)
+	peer.PeerEndpoint = t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: multiaddrs[0].String()}, duID)
 	for _, addr := range multiaddrs[1:] {
 		t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: addr.String()}, duID)
 	}
@@ -845,7 +843,7 @@ func NewAnnounceBlobsTask(
 		blobStore: blobStore,
 		dht:       dht,
 	}
-	t.PeriodicTask = *process.NewPeriodicTask("AnnounceBlobsTask", interval, t.announceBlobs)
+	t.PeriodicTask = *process.NewPeriodicTask("AnnounceBlobsTask", utils.NewStaticTicker(interval), t.announceBlobs)
 	return t
 }
 
@@ -896,7 +894,7 @@ func NewAnnounceStateURIsTask(
 		controllerHub: controllerHub,
 		dht:           dht,
 	}
-	t.PeriodicTask = *process.NewPeriodicTask("AnnounceStateURIsTask", interval, t.announceStateURIs)
+	t.PeriodicTask = *process.NewPeriodicTask("AnnounceStateURIsTask", utils.NewStaticTicker(interval), t.announceStateURIs)
 	return t
 }
 
@@ -932,58 +930,6 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 	}
 }
 
-type announceIdentitiesTask struct {
-	process.PeriodicTask
-	log.Logger
-	keyStore identity.KeyStore
-	dht      DHT
-}
-
-func NewAnnounceIdentitiesTask(
-	interval time.Duration,
-	keyStore identity.KeyStore,
-	dht DHT,
-) *announceIdentitiesTask {
-	t := &announceIdentitiesTask{
-		Logger:   log.NewLogger("libp2p"),
-		keyStore: keyStore,
-		dht:      dht,
-	}
-	t.PeriodicTask = *process.NewPeriodicTask("AnnounceIdentitiesTask", interval, t.announceIdentities)
-	return t
-}
-
-func (t *announceIdentitiesTask) announceIdentities(ctx context.Context) {
-	// Announce our address (for exchanging private txs)
-	identities, err := t.keyStore.Identities()
-	if err != nil {
-		t.Errorf("announce: error fetching identities: %v", err)
-		return
-	}
-
-	var chDones []<-chan struct{}
-	for _, identity := range identities {
-		identity := identity
-
-		chDone := t.Process.Go(nil, "identity "+identity.SigKeypair.Address().Hex(), func(ctx context.Context) {
-			c, err := cidForString("addr:" + identity.Address().String())
-			if err != nil {
-				t.Errorf("announce: error creating cid: %v", err)
-				return
-			}
-
-			err = t.dht.Provide(ctx, c, true)
-			if err != nil && err != kbucket.ErrLookupFailure {
-				t.Errorf(`announce: could not dht.Provide pubkey: %v`, err)
-			}
-		})
-		chDones = append(chDones, chDone)
-	}
-	for _, chDone := range chDones {
-		<-chDone
-	}
-}
-
 type connectToStaticRelaysTask struct {
 	process.PeriodicTask
 	log.Logger
@@ -1001,7 +947,7 @@ func NewConnectToStaticRelaysTask(
 		staticRelays: staticRelays,
 		libp2pHost:   libp2pHost,
 	}
-	t.PeriodicTask = *process.NewPeriodicTask("ConnectToStaticRelaysTask", interval, t.connectToStaticRelays)
+	t.PeriodicTask = *process.NewPeriodicTask("ConnectToStaticRelaysTask", utils.NewStaticTicker(interval), t.connectToStaticRelays)
 	return t
 }
 
@@ -1016,7 +962,7 @@ func (t *connectToStaticRelaysTask) connectToStaticRelays(ctx context.Context) {
 		chDone := t.Process.Go(nil, "relay "+relay.ID.Pretty(), func(ctx context.Context) {
 			err := t.libp2pHost.Connect(ctx, relay)
 			if err != nil {
-				t.Errorf("error connecting to static relay (%v): %v", relay.ID, err)
+				// t.Errorf("error connecting to static relay (%v): %v", relay.ID, err)
 			}
 		})
 		chDones = append(chDones, chDone)

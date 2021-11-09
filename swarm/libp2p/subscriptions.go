@@ -2,18 +2,14 @@ package libp2p
 
 import (
 	"context"
-	"encoding/json"
 
 	"go.uber.org/multierr"
 
 	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/process"
-	"redwood.dev/state"
-	"redwood.dev/swarm"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
-	"redwood.dev/types"
 )
 
 type readableSubscription struct {
@@ -22,42 +18,23 @@ type readableSubscription struct {
 
 var _ prototree.ReadableSubscription = (*readableSubscription)(nil)
 
-func (sub *readableSubscription) Read() (_ *prototree.SubscriptionMsg, err error) {
+func (sub *readableSubscription) Read() (_ prototree.SubscriptionMsg, err error) {
 	msg, err := sub.readMsg()
 	if err != nil {
-		return nil, errors.Errorf("error reading from subscription: %v", err)
+		return prototree.SubscriptionMsg{}, errors.Errorf("error reading from subscription: %v", err)
 	}
 
 	switch msg.Type {
 	case msgType_Tx:
 		tx := msg.Payload.(tree.Tx)
-		return &prototree.SubscriptionMsg{Tx: &tx}, nil
+		return prototree.SubscriptionMsg{Tx: &tx}, nil
 
 	case msgType_EncryptedTx:
-		encryptedTx, ok := msg.Payload.(prototree.EncryptedTx)
-		if !ok {
-			return nil, errors.Errorf("encrypted tx: bad payload: (%T) %v", msg.Payload, msg.Payload)
-		}
-		bs, err := sub.t.keyStore.OpenMessageFrom(
-			encryptedTx.RecipientAddress,
-			crypto.AsymEncPubkeyFromBytes(encryptedTx.SenderPublicKey),
-			encryptedTx.EncryptedPayload,
-		)
-		if err != nil {
-			return nil, errors.Errorf("while decrypting tx: %v", err)
-		}
-
-		var tx tree.Tx
-		err = json.Unmarshal(bs, &tx)
-		if err != nil {
-			return nil, errors.Errorf("while unmarshaling encrypted tx: %v", err)
-		} else if encryptedTx.TxID != tx.ID {
-			return nil, errors.Errorf("encrypted tx ID does not match")
-		}
-		return &prototree.SubscriptionMsg{Tx: &tx, EncryptedTx: &encryptedTx}, nil
+		encryptedTx := msg.Payload.(prototree.EncryptedTx)
+		return prototree.SubscriptionMsg{EncryptedTx: &encryptedTx}, nil
 
 	default:
-		return nil, errors.New("protocol error, expecting msgType_Tx or msgType_EncryptedTx")
+		return prototree.SubscriptionMsg{}, errors.New("protocol error, expecting msgType_Tx or msgType_EncryptedTx")
 	}
 }
 
@@ -77,14 +54,6 @@ func newWritableSubscription(peerConn *peerConn, stateURI string) *writableSubsc
 	}
 }
 
-func (sub *writableSubscription) DialInfo() swarm.PeerDialInfo {
-	return sub.peerConn.DialInfo()
-}
-
-func (sub *writableSubscription) StateURI() string {
-	return sub.stateURI
-}
-
 func (sub *writableSubscription) Close() error {
 	sub.Infof(0, "libp2p writable subscription closed (%v)", sub.stateURI)
 	return multierr.Append(
@@ -93,12 +62,18 @@ func (sub *writableSubscription) Close() error {
 	)
 }
 
-func (sub *writableSubscription) Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) (err error) {
+func (sub *writableSubscription) Put(ctx context.Context, msg prototree.SubscriptionMsg) (err error) {
 	err = sub.peerConn.EnsureConnected(ctx)
 	if err != nil {
 		return err
 	}
-	return sub.peerConn.Put(ctx, tx, state, leaves)
+	if msg.EncryptedTx != nil {
+		return sub.peerConn.SendPrivateTx(ctx, *msg.EncryptedTx)
+	} else if msg.Tx != nil {
+		return sub.peerConn.SendTx(ctx, *msg.Tx)
+	} else {
+		panic("invariant violation")
+	}
 }
 
 func (sub writableSubscription) String() string {
