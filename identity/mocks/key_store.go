@@ -16,6 +16,29 @@ type KeyStore struct {
 	mock.Mock
 }
 
+// Addresses provides a mock function with given fields:
+func (_m *KeyStore) Addresses() (types.AddressSet, error) {
+	ret := _m.Called()
+
+	var r0 types.AddressSet
+	if rf, ok := ret.Get(0).(func() types.AddressSet); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(types.AddressSet)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Close provides a mock function with given fields:
 func (_m *KeyStore) Close() error {
 	ret := _m.Called()
@@ -205,11 +228,11 @@ func (_m *KeyStore) NewIdentity(public bool) (identity.Identity, error) {
 }
 
 // OpenMessageFrom provides a mock function with given fields: usingIdentity, senderPublicKey, msgEncrypted
-func (_m *KeyStore) OpenMessageFrom(usingIdentity types.Address, senderPublicKey crypto.AsymEncPubkey, msgEncrypted []byte) ([]byte, error) {
+func (_m *KeyStore) OpenMessageFrom(usingIdentity types.Address, senderPublicKey *crypto.AsymEncPubkey, msgEncrypted []byte) ([]byte, error) {
 	ret := _m.Called(usingIdentity, senderPublicKey, msgEncrypted)
 
 	var r0 []byte
-	if rf, ok := ret.Get(0).(func(types.Address, crypto.AsymEncPubkey, []byte) []byte); ok {
+	if rf, ok := ret.Get(0).(func(types.Address, *crypto.AsymEncPubkey, []byte) []byte); ok {
 		r0 = rf(usingIdentity, senderPublicKey, msgEncrypted)
 	} else {
 		if ret.Get(0) != nil {
@@ -218,7 +241,7 @@ func (_m *KeyStore) OpenMessageFrom(usingIdentity types.Address, senderPublicKey
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(types.Address, crypto.AsymEncPubkey, []byte) error); ok {
+	if rf, ok := ret.Get(1).(func(types.Address, *crypto.AsymEncPubkey, []byte) error); ok {
 		r1 = rf(usingIdentity, senderPublicKey, msgEncrypted)
 	} else {
 		r1 = ret.Error(1)
@@ -250,38 +273,6 @@ func (_m *KeyStore) PublicIdentities() ([]identity.Identity, error) {
 	return r0, r1
 }
 
-// RatchetKeyStore provides a mock function with given fields:
-func (_m *KeyStore) RatchetKeyStore() identity.RatchetKeyStore {
-	ret := _m.Called()
-
-	var r0 identity.RatchetKeyStore
-	if rf, ok := ret.Get(0).(func() identity.RatchetKeyStore); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(identity.RatchetKeyStore)
-		}
-	}
-
-	return r0
-}
-
-// RatchetSessionStore provides a mock function with given fields:
-func (_m *KeyStore) RatchetSessionStore() identity.RatchetSessionStore {
-	ret := _m.Called()
-
-	var r0 identity.RatchetSessionStore
-	if rf, ok := ret.Get(0).(func() identity.RatchetSessionStore); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(identity.RatchetSessionStore)
-		}
-	}
-
-	return r0
-}
-
 // SaveExtraUserData provides a mock function with given fields: key, value
 func (_m *KeyStore) SaveExtraUserData(key string, value interface{}) error {
 	ret := _m.Called(key, value)
@@ -297,11 +288,11 @@ func (_m *KeyStore) SaveExtraUserData(key string, value interface{}) error {
 }
 
 // SealMessageFor provides a mock function with given fields: usingIdentity, recipientPubKey, msg
-func (_m *KeyStore) SealMessageFor(usingIdentity types.Address, recipientPubKey crypto.AsymEncPubkey, msg []byte) ([]byte, error) {
+func (_m *KeyStore) SealMessageFor(usingIdentity types.Address, recipientPubKey *crypto.AsymEncPubkey, msg []byte) ([]byte, error) {
 	ret := _m.Called(usingIdentity, recipientPubKey, msg)
 
 	var r0 []byte
-	if rf, ok := ret.Get(0).(func(types.Address, crypto.AsymEncPubkey, []byte) []byte); ok {
+	if rf, ok := ret.Get(0).(func(types.Address, *crypto.AsymEncPubkey, []byte) []byte); ok {
 		r0 = rf(usingIdentity, recipientPubKey, msg)
 	} else {
 		if ret.Get(0) != nil {
@@ -310,7 +301,7 @@ func (_m *KeyStore) SealMessageFor(usingIdentity types.Address, recipientPubKey 
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(types.Address, crypto.AsymEncPubkey, []byte) error); ok {
+	if rf, ok := ret.Get(1).(func(types.Address, *crypto.AsymEncPubkey, []byte) error); ok {
 		r1 = rf(usingIdentity, recipientPubKey, msg)
 	} else {
 		r1 = ret.Error(1)
