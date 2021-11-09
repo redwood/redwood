@@ -125,6 +125,5 @@ func (r *jsResolver) ResolveState(node state.Node, blobStore blob.Store, sender 
 	}
 
 	r.internalState = output["internalState"].(map[string]interface{})
-	node.Set(nil, nil, output["state"])
-	return nil
+	return node.Set(nil, nil, output["state"])
 }
