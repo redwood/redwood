@@ -14,19 +14,15 @@ import (
 	"go.uber.org/multierr"
 
 	"redwood.dev/errors"
-	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/state"
-	"redwood.dev/swarm"
 	"redwood.dev/swarm/prototree"
-	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
 type httpReadableSubscription struct {
-	client  *http.Client
 	stream  io.ReadCloser
 	peer    *peerConn
 	private bool
@@ -34,13 +30,13 @@ type httpReadableSubscription struct {
 
 var _ prototree.ReadableSubscription = (*httpReadableSubscription)(nil)
 
-func (s *httpReadableSubscription) Read() (_ *prototree.SubscriptionMsg, err error) {
+func (s *httpReadableSubscription) Read() (_ prototree.SubscriptionMsg, err error) {
 	defer func() { s.peer.UpdateConnStats(err == nil) }()
 
 	r := bufio.NewReader(s.stream)
 	bs, err := r.ReadBytes(byte('\n'))
 	if err != nil {
-		return nil, err
+		return prototree.SubscriptionMsg{}, err
 	}
 	bs = bytes.TrimPrefix(bs, []byte("data: "))
 	bs = bytes.Trim(bs, "\n ")
@@ -48,48 +44,20 @@ func (s *httpReadableSubscription) Read() (_ *prototree.SubscriptionMsg, err err
 	var msg prototree.SubscriptionMsg
 	err = json.Unmarshal(bs, &msg)
 	if err != nil {
-		return nil, err
+		return prototree.SubscriptionMsg{}, err
 	}
-
-	if s.private {
-		if msg.EncryptedTx == nil {
-			return nil, errors.New("no encrypted tx sent by http peer")
-		}
-
-		bs, err = s.peer.t.keyStore.OpenMessageFrom(
-			msg.EncryptedTx.RecipientAddress,
-			crypto.AsymEncPubkeyFromBytes(msg.EncryptedTx.SenderPublicKey),
-			msg.EncryptedTx.EncryptedPayload,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		var tx tree.Tx
-		err = json.Unmarshal(bs, &tx)
-		if err != nil {
-			return nil, err
-		}
-		msg.Tx = &tx
-		return &msg, nil
-
-	} else {
-		if msg.Tx == nil {
-			return nil, errors.New("no tx sent by http peer")
-		}
-		return &msg, nil
-	}
+	return msg, nil
 }
 
 func (c *httpReadableSubscription) Close() error {
-	c.client.CloseIdleConnections()
 	return c.peer.Close()
 }
 
 type httpWritableSubscription struct {
 	process.Process
 	log.Logger
-	peerConn  *peerConn
+	w         http.ResponseWriter
+	r         *http.Request
 	stateURI  string
 	closeOnce sync.Once
 }
@@ -98,19 +66,16 @@ var _ prototree.WritableSubscriptionImpl = (*httpWritableSubscription)(nil)
 
 func newHTTPWritableSubscription(
 	stateURI string,
-	peerConn *peerConn,
-	subscriptionType prototree.SubscriptionType,
+	w http.ResponseWriter,
+	r *http.Request,
 ) *httpWritableSubscription {
 	return &httpWritableSubscription{
-		Process:  *process.New("sub impl (http) " + peerConn.DialInfo().String() + " " + stateURI),
+		Process:  *process.New("sub impl (" + TransportName + ") " + stateURI),
 		Logger:   log.NewLogger(TransportName),
 		stateURI: stateURI,
-		peerConn: peerConn,
+		w:        w,
+		r:        r,
 	}
-}
-
-func (sub *httpWritableSubscription) DialInfo() swarm.PeerDialInfo {
-	return sub.peerConn.DialInfo()
 }
 
 func (sub *httpWritableSubscription) Start() error {
@@ -118,80 +83,34 @@ func (sub *httpWritableSubscription) Start() error {
 	if err != nil {
 		return err
 	}
-	defer sub.Process.AutocloseWithCleanup(func() {
-		sub.peerConn.Close()
-	})
+	defer sub.Process.Autoclose()
+
+	// Set the headers related to event streaming
+	sub.w.Header().Set("Content-Type", "text/event-stream")
+	sub.w.Header().Set("Cache-Control", "no-cache")
+	sub.w.Header().Set("Connection", "keep-alive")
+	sub.w.Header().Set("Transfer-Encoding", "chunked")
 
 	// Listen to the closing of the http connection via the CloseNotifier
-	notify := sub.peerConn.stream.Writer.(http.CloseNotifier).CloseNotify()
+	notify := sub.w.(http.CloseNotifier).CloseNotify()
 	sub.Process.Go(nil, "", func(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 		case <-notify:
 		}
 	})
+
+	sub.w.(http.Flusher).Flush()
+
 	return nil
 }
 
 func (sub *httpWritableSubscription) Close() (err error) {
-	sub.Infof(0, "http writable subscription closed (%v)", sub.stateURI)
-	return multierr.Append(
-		sub.peerConn.Close(),
-		sub.Process.Close(),
-	)
+	sub.Infof(0, "%v writable subscription closed (%v)", TransportName, sub.stateURI)
+	return sub.Process.Close()
 }
 
-func (sub *httpWritableSubscription) StateURI() string {
-	return sub.stateURI
-}
-
-func (sub *httpWritableSubscription) Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) (err error) {
-	var msg *prototree.SubscriptionMsg
-
-	if tx != nil && tx.IsPrivate() {
-		marshalledTx, err := json.Marshal(tx)
-		if err != nil {
-			return err
-		}
-
-		peerAddrs := types.OverlappingAddresses(tx.Recipients, sub.peerConn.Addresses())
-		if len(peerAddrs) == 0 {
-			return errors.New("tx not intended for this peer")
-		}
-
-		peerSigPubkey, peerEncPubkey := sub.peerConn.PublicKeys(peerAddrs[0])
-
-		var ownIdentity identity.Identity
-		for _, addr := range tx.Recipients {
-			ownIdentity, err = sub.peerConn.t.keyStore.IdentityWithAddress(addr)
-			if err != nil {
-				return err
-			}
-			if ownIdentity != (identity.Identity{}) {
-				break
-			}
-		}
-		if ownIdentity == (identity.Identity{}) {
-			return errors.New("private tx Recipients field must contain own address")
-		}
-
-		encryptedTxBytes, err := sub.peerConn.t.keyStore.SealMessageFor(ownIdentity.Address(), peerEncPubkey, marshalledTx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		etx := &prototree.EncryptedTx{
-			TxID:             tx.ID,
-			EncryptedPayload: encryptedTxBytes,
-			SenderPublicKey:  ownIdentity.AsymEncKeypair.AsymEncPubkey.Bytes(),
-			RecipientAddress: peerSigPubkey.Address(),
-		}
-
-		msg = &prototree.SubscriptionMsg{StateURI: stateURI, EncryptedTx: etx, Leaves: leaves}
-	} else {
-		msg = &prototree.SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves}
-	}
-
+func (sub *httpWritableSubscription) Put(ctx context.Context, msg prototree.SubscriptionMsg) (err error) {
 	bs, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -200,18 +119,18 @@ func (sub *httpWritableSubscription) Put(ctx context.Context, stateURI string, t
 	// This is encoded using HTTP's SSE format
 	event := []byte("data: " + string(bs) + "\n\n")
 
-	n, err := sub.peerConn.stream.Writer.Write(event)
+	n, err := sub.w.Write(event)
 	if err != nil {
 		return err
 	} else if n < len(event) {
 		return errors.New("error writing message to http peer: didn't write enough")
 	}
-	sub.peerConn.stream.Flush()
+	sub.w.(http.Flusher).Flush()
 	return nil
 }
 
 func (sub httpWritableSubscription) String() string {
-	return sub.peerConn.DialInfo().TransportName + " " + sub.peerConn.DialInfo().DialAddr + " (" + sub.stateURI + ")"
+	return TransportName + " (" + sub.stateURI + ")"
 }
 
 const (
@@ -233,15 +152,23 @@ var (
 type wsWritableSubscription struct {
 	process.Process
 	log.Logger
-	peerConn  *peerConn
+	wsConn                     *websocket.Conn
+	addresses                  []types.Address
+	writableSubscriptionOpener writableSubscriptionOpener
+
 	stateURI  string
-	wsConn    *websocket.Conn
-	transport *transport
 	messages  *utils.Mailbox
 	writeMu   sync.Mutex
 	startOnce sync.Once
 	closed    bool
 	closeOnce sync.Once
+}
+
+type writableSubscriptionOpener interface {
+	HandleWritableSubscriptionOpened(
+		req prototree.SubscriptionRequest,
+		writeSubImplFactory prototree.WritableSubscriptionImplFactory,
+	) (<-chan struct{}, error)
 }
 
 type wsMessage struct {
@@ -251,20 +178,21 @@ type wsMessage struct {
 
 var _ prototree.WritableSubscriptionImpl = (*wsWritableSubscription)(nil)
 
-func newWSWritableSubscription(stateURI string, wsConn *websocket.Conn, peerConn *peerConn, transport *transport) *wsWritableSubscription {
+func newWSWritableSubscription(
+	stateURI string,
+	wsConn *websocket.Conn,
+	addresses []types.Address,
+	writableSubscriptionOpener writableSubscriptionOpener,
+) *wsWritableSubscription {
 	return &wsWritableSubscription{
-		Process:   *process.New("sub impl (ws) " + peerConn.DialInfo().String() + " " + stateURI),
-		Logger:    log.NewLogger(TransportName),
-		stateURI:  stateURI,
-		wsConn:    wsConn,
-		peerConn:  peerConn,
-		transport: transport,
-		messages:  utils.NewMailbox(300), // @@TODO: configurable?
+		Process:                    *process.New("sub impl (ws) " + stateURI),
+		Logger:                     log.NewLogger(TransportName),
+		stateURI:                   stateURI,
+		wsConn:                     wsConn,
+		addresses:                  addresses,
+		writableSubscriptionOpener: writableSubscriptionOpener,
+		messages:                   utils.NewMailbox(300), // @@TODO: configurable?
 	}
-}
-
-func (sub *wsWritableSubscription) DialInfo() swarm.PeerDialInfo {
-	return sub.peerConn.DialInfo()
 }
 
 func (sub *wsWritableSubscription) Start() (err error) {
@@ -275,6 +203,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 		}
 		defer sub.Process.Autoclose()
 
+		chGotCloseMsg := make(chan struct{})
 		ticker := time.NewTicker(wsPingPeriod)
 
 		// Say hello
@@ -286,6 +215,8 @@ func (sub *wsWritableSubscription) Start() (err error) {
 			for {
 				select {
 				case <-ctx.Done():
+					return
+				case <-chGotCloseMsg:
 					return
 
 				case <-sub.messages.Notify():
@@ -315,6 +246,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 				}
 
 				if msg.msgType == websocket.CloseMessage {
+					close(chGotCloseMsg)
 					return
 				} else if msg.msgType == websocket.PingMessage {
 					sub.messages.Deliver(wsMessage{websocket.PongMessage, nil})
@@ -328,10 +260,10 @@ func (sub *wsWritableSubscription) Start() (err error) {
 
 				var addSubMsg struct {
 					Params struct {
-						StateURI         string `json:"stateURI"`
-						Keypath          string `json:"keypath"`
-						SubscriptionType string `json:"subscriptionType"`
-						FromTxID         string `json:"fromTxID"`
+						StateURI         string                     `json:"stateURI"`
+						Keypath          state.Keypath              `json:"keypath"`
+						SubscriptionType prototree.SubscriptionType `json:"subscriptionType"`
+						FromTxID         string                     `json:"fromTxID"`
 					} `json:"params"`
 				}
 				err = json.Unmarshal(msg.data, &addSubMsg)
@@ -341,18 +273,9 @@ func (sub *wsWritableSubscription) Start() (err error) {
 				}
 				sub.Infof(0, "incoming websocket subscription (state uri: %v)", addSubMsg.Params.StateURI)
 
-				var subscriptionType prototree.SubscriptionType
-				if addSubMsg.Params.SubscriptionType != "" {
-					err := subscriptionType.UnmarshalText([]byte(addSubMsg.Params.SubscriptionType))
-					if err != nil {
-						sub.Errorf("could not parse subscription type: %v", err)
-						continue
-					}
-				}
-
 				var fetchHistoryOpts prototree.FetchHistoryOpts
 				if addSubMsg.Params.FromTxID != "" {
-					fromTxID, err := types.IDFromHex(addSubMsg.Params.FromTxID)
+					fromTxID, err := state.VersionFromHex(addSubMsg.Params.FromTxID)
 					if err != nil {
 						sub.Errorf("could not parse fromTxID: %v", err)
 						continue
@@ -360,13 +283,20 @@ func (sub *wsWritableSubscription) Start() (err error) {
 					fetchHistoryOpts = prototree.FetchHistoryOpts{FromTxID: fromTxID}
 				}
 
-				sub.transport.HandleWritableSubscriptionOpened(
-					addSubMsg.Params.StateURI,
-					state.Keypath(addSubMsg.Params.Keypath),
-					subscriptionType,
-					sub,
-					&fetchHistoryOpts,
+				_, err = sub.writableSubscriptionOpener.HandleWritableSubscriptionOpened(
+					prototree.SubscriptionRequest{
+						StateURI:         addSubMsg.Params.StateURI,
+						Keypath:          addSubMsg.Params.Keypath,
+						Type:             addSubMsg.Params.SubscriptionType,
+						FetchHistoryOpts: &fetchHistoryOpts,
+						Addresses:        types.NewAddressSet(sub.addresses),
+					},
+					func() (prototree.WritableSubscriptionImpl, error) { return sub, nil },
 				)
+				if err != nil {
+					sub.Errorf("bad incoming websocket subscription request: %v", err)
+					continue
+				}
 			}
 		})
 	})
@@ -435,9 +365,6 @@ func (sub *wsWritableSubscription) write(messageType int, bytes []byte) error {
 		return nil
 	}
 
-	var err error
-	defer func() { sub.peerConn.UpdateConnStats(err == nil) }()
-
 	sub.wsConn.SetWriteDeadline(time.Now().Add(wsWriteWait))
 
 	switch messageType {
@@ -451,7 +378,7 @@ func (sub *wsWritableSubscription) write(messageType int, bytes []byte) error {
 		bytes = []byte("pong\n")
 	}
 
-	err = sub.wsConn.WriteMessage(messageType, bytes)
+	err := sub.wsConn.WriteMessage(messageType, bytes)
 	if err != nil {
 		return errors.Wrapf(err, "while writing to websocket client")
 	}
@@ -463,25 +390,20 @@ func (sub *wsWritableSubscription) Close() error {
 	sub.closed = true
 	sub.writeMu.Unlock()
 
-	sub.Infof(0, "ws writable subscription closed (%v)", sub.stateURI)
+	sub.Infof(0, "ws writable subscription closed")
 
 	_ = sub.write(websocket.CloseMessage, []byte{})
 
 	return multierr.Combine(
 		sub.wsConn.Close(),
-		sub.peerConn.Close(),
 		sub.Process.Close(),
 	)
 }
 
-func (sub *wsWritableSubscription) StateURI() string {
-	return sub.stateURI
-}
-
-func (sub *wsWritableSubscription) Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) (err error) {
-	bs, err := json.Marshal(prototree.SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
+func (sub *wsWritableSubscription) Put(ctx context.Context, msg prototree.SubscriptionMsg) (err error) {
+	bs, err := json.Marshal(msg)
 	if err != nil {
-		sub.peerConn.t.Errorf("error marshaling message json: %v", err)
+		sub.Errorf("error marshaling message json: %v", err)
 		return err
 	}
 	sub.messages.Deliver(wsMessage{websocket.TextMessage, bs})
@@ -489,5 +411,5 @@ func (sub *wsWritableSubscription) Put(ctx context.Context, stateURI string, tx 
 }
 
 func (sub wsWritableSubscription) String() string {
-	return sub.peerConn.DialInfo().TransportName + "-ws " + sub.peerConn.DialInfo().DialAddr + " (" + sub.stateURI + ")"
+	return "websocket (" + sub.stateURI + ")"
 }

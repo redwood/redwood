@@ -1,12 +1,12 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
+	"io/ioutil"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -30,19 +30,20 @@ import (
 )
 
 type HTTPConfig struct {
-	Enabled    bool                                      `json:"enabled"    yaml:"Enabled"`
-	ListenHost string                                    `json:"listenHost" yaml:"ListenHost"`
-	Whitelist  HTTPWhitelistConfig                       `json:"whitelist"  yaml:"Whitelist"`
-	Server     func(innerServer *HTTPServer) interface{} `json:"-"          yaml:"-"`
+	Enabled     bool                                      `json:"enabled"    yaml:"Enabled"`
+	ListenHost  string                                    `json:"listenHost" yaml:"ListenHost"`
+	TLSCertFile string                                    `json:"tlsCertFile" yaml:"TLSCertFile"`
+	TLSKeyFile  string                                    `json:"tlsKeyFile" yaml:"TLSKeyFile"`
+	Whitelist   HTTPWhitelistConfig                       `json:"whitelist"  yaml:"Whitelist"`
+	Server      func(innerServer *HTTPServer) interface{} `json:"-"          yaml:"-"`
 }
 
 type HTTPWhitelistConfig struct {
 	Enabled        bool            `json:"enabled"        yaml:"Enabled"`
 	PermittedAddrs []types.Address `json:"permittedAddrs" yaml:"PermittedAddrs"`
-	JWTSecret      string          `json:"jwtSecret"      yaml:"JWTSecret"`
 }
 
-func StartHTTPRPC(svc interface{}, config *HTTPConfig) (*http.Server, error) {
+func StartHTTPRPC(svc interface{}, config *HTTPConfig, jwtSecret []byte) (*http.Server, error) {
 	if config == nil || !config.Enabled {
 		return nil, nil
 	}
@@ -58,10 +59,9 @@ func StartHTTPRPC(svc interface{}, config *HTTPConfig) (*http.Server, error) {
 
 		httpServer.Handler = server
 		if config.Whitelist.Enabled {
-			httpServer.Handler = NewWhitelistMiddleware(config.Whitelist.PermittedAddrs, []byte(config.Whitelist.JWTSecret), server)
+			httpServer.Handler = NewWhitelistMiddleware(config.Whitelist.PermittedAddrs, jwtSecret, server)
 		}
 		httpServer.Handler = utils.UnrestrictedCors(httpServer.Handler)
-
 		httpServer.ListenAndServe()
 	}()
 
@@ -70,6 +70,7 @@ func StartHTTPRPC(svc interface{}, config *HTTPConfig) (*http.Server, error) {
 
 type HTTPServer struct {
 	log.Logger
+	jwtSecret     []byte
 	authProto     protoauth.AuthProtocol
 	blobProto     protoblob.BlobProtocol
 	treeProto     prototree.TreeProtocol
@@ -80,6 +81,7 @@ type HTTPServer struct {
 }
 
 func NewHTTPServer(
+	jwtSecret []byte,
 	authProto protoauth.AuthProtocol,
 	blobProto protoblob.BlobProtocol,
 	treeProto prototree.TreeProtocol,
@@ -90,6 +92,7 @@ func NewHTTPServer(
 ) *HTTPServer {
 	return &HTTPServer{
 		Logger:        log.NewLogger("http rpc"),
+		jwtSecret:     jwtSecret,
 		authProto:     authProto,
 		blobProto:     blobProto,
 		treeProto:     treeProto,
@@ -292,11 +295,23 @@ func (s *HTTPServer) PrivateTreeMembers(r *http.Request, args *PrivateTreeMember
 	if s.controllerHub == nil {
 		return errors.ErrUnsupported
 	}
-	members, err := s.controllerHub.Members(args.StateURI)
+	node, err := s.controllerHub.StateAtVersion(args.StateURI, nil)
 	if err != nil {
 		return err
 	}
-	resp.Members = members.Slice()
+	defer node.Close()
+
+	subkeys := node.NodeAt(state.Keypath("Members"), nil).Subkeys()
+	var addrs []types.Address
+	for _, k := range subkeys {
+		addr, err := types.AddressFromHex(string(k))
+		if err != nil {
+			continue
+		}
+		addrs = append(addrs, addr)
+	}
+	resp.Members = addrs
+
 	return nil
 }
 
@@ -456,31 +471,16 @@ func (mw *whitelistMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		}
 
 	} else {
-		authHeader := r.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
+		claims, exists, err := utils.ParseJWT(r.Header.Get("Authorization"), mw.jwtSecret)
+		if err != nil {
 			http.Error(w, "bad Authorization header", http.StatusBadRequest)
 			return
-		}
-
-		jwtToken := strings.TrimSpace(authHeader[len("Bearer "):])
-
-		token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
-			}
-			return mw.jwtSecret, nil
-		})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || !token.Valid {
-			http.Error(w, "invalid jwt token", http.StatusBadRequest)
+		} else if !exists {
+			http.Error(w, "no JWT present", http.StatusForbidden)
 			return
 		}
 		addrHex, ok := claims["address"].(string)
-		if err != nil {
+		if !ok {
 			http.Error(w, "jwt does not contain 'address' claim", http.StatusBadRequest)
 			return
 		}
@@ -489,7 +489,7 @@ func (mw *whitelistMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "jwt 'address' claim contains invalid data", http.StatusBadRequest)
 			return
 		}
-		_, exists := mw.permittedAddrs[addr]
+		_, exists = mw.permittedAddrs[addr]
 		if !exists {
 			http.Error(w, "nope", http.StatusForbidden)
 			return

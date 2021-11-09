@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -22,11 +23,10 @@ import (
 )
 
 type peerConn struct {
-	swarm.PeerDetails
+	swarm.PeerEndpoint
 
 	t         *transport
 	sessionID types.ID
-	// sync.Mutex
 
 	// stream
 	stream struct {
@@ -41,10 +41,6 @@ var (
 	_ protoblob.BlobPeerConn = (*peerConn)(nil)
 	_ prototree.TreePeerConn = (*peerConn)(nil)
 )
-
-func (peer *peerConn) DeviceSpecificID() string {
-	return peer.sessionID.Hex()
-}
 
 func (p *peerConn) Transport() swarm.Transport {
 	return p.t
@@ -76,53 +72,39 @@ func (p *peerConn) Subscribe(ctx context.Context, stateURI string) (_ prototree.
 	}
 	req.Header.Set("Subscribe", string(subTypeBytes))
 
-	var client http.Client
-	resp, err := client.Do(req)
+	resp, err := p.t.doRequest(req)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error subscribing to peer (%v) (state URI: %v)", p.DialInfo().DialAddr, stateURI)
-	} else if resp.StatusCode != 200 {
-		return nil, errors.Wrapf(err, "error subscribing to peer (%v) (state URI: %v)", p.DialInfo().DialAddr, stateURI)
 	}
+	defer resp.Body.Close()
 
 	p.t.storeAltSvcHeaderPeers(resp.Header)
 
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		return nil, errors.Errorf("error subscribing to peer (%v) (state URI: %v): %v", p.DialInfo().DialAddr, stateURI, string(bodyBytes))
+	}
 	return &httpReadableSubscription{
-		client:  &client,
 		peer:    p,
 		stream:  resp.Body,
 		private: resp.Header.Get("Private") == "true",
 	}, nil
 }
 
-func (p *peerConn) Put(ctx context.Context, tx *tree.Tx, state state.Node, leaves []types.ID) (err error) {
+func (p *peerConn) SendTx(ctx context.Context, tx tree.Tx) (err error) {
+	if !p.Dialable() || !p.Ready() {
+		return nil
+	}
+
 	defer func() { p.UpdateConnStats(err == nil) }()
 
 	ctx, cancel := utils.CombinedContext(ctx, p.t.Ctx(), 10*time.Second)
 	defer cancel()
 
-	if p.DialInfo().DialAddr == "" {
-		p.t.Warn("peer has no DialAddr")
-		return nil
-	}
-
-	identity, err := p.t.keyStore.IdentityWithAddress(tx.From)
-	if err != nil {
-		return err
-	}
-
-	var (
-		peerSigPubkey crypto.SigningPublicKey
-		peerEncPubkey crypto.AsymEncPubkey
-	)
-	if tx.IsPrivate() {
-		peerAddrs := types.OverlappingAddresses(tx.Recipients, p.Addresses())
-		if len(peerAddrs) == 0 {
-			return errors.New("tx not intended for this peer")
-		}
-		peerSigPubkey, peerEncPubkey = p.PublicKeys(peerAddrs[0])
-	}
-
-	req, err := putRequestFromTx(ctx, tx, p.DialInfo().DialAddr, identity.AsymEncKeypair, peerSigPubkey.Address(), peerEncPubkey)
+	req, err := putRequestFromTx(ctx, tx, p.DialInfo().DialAddr)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -135,7 +117,37 @@ func (p *peerConn) Put(ctx context.Context, tx *tree.Tx, state state.Node, leave
 	return nil
 }
 
-func (p *peerConn) Ack(stateURI string, txID types.ID) (err error) {
+func (p *peerConn) SendPrivateTx(ctx context.Context, encryptedTx prototree.EncryptedTx) (err error) {
+	if !p.Dialable() || !p.Ready() {
+		return nil
+	}
+
+	defer func() { p.UpdateConnStats(err == nil) }()
+
+	ctx, cancel := utils.CombinedContext(ctx, p.t.Ctx(), 10*time.Second)
+	defer cancel()
+
+	var body bytes.Buffer
+	err = json.NewEncoder(&body).Encode(encryptedTx)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("PUT", p.DialInfo().DialAddr, &body)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	req.Header.Set("Private", "true")
+
+	resp, err := p.t.doRequest(req)
+	if err != nil {
+		return errors.Wrapf(err, "error PUTting tx to peer (%v)", p.DialInfo().DialAddr)
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func (p *peerConn) Ack(stateURI string, txID state.Version) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
 	if p.DialInfo().DialAddr == "" {
@@ -166,17 +178,13 @@ func (p *peerConn) Ack(stateURI string, txID types.ID) (err error) {
 }
 
 func (p *peerConn) AnnounceP2PStateURI(ctx context.Context, stateURI string) (err error) {
-	return types.ErrUnimplemented
+	// @@TODO?
+	return nil
 }
 
 func (p *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) (err error) {
-	defer utils.WithStack(&err)
+	defer errors.AddStack(&err)
 	defer func() { p.UpdateConnStats(err == nil) }()
-
-	if p.DialInfo().DialAddr == "" {
-		p.t.Warn("peer has no DialAddr")
-		return nil
-	}
 
 	ctx, cancel := context.WithTimeout(p.t.Ctx(), 10*time.Second)
 	defer cancel()
@@ -187,10 +195,11 @@ func (p *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) (err e
 	}
 	req.Header.Set("Challenge", hex.EncodeToString(challengeMsg))
 
-	resp, err := p.t.doRequest(req)
+	resp, err := p.doRequest(req)
 	if err != nil {
 		return errors.Wrapf(err, "error verifying peer address (%v)", p.DialInfo().DialAddr)
 	}
+
 	p.stream.ReadCloser = resp.Body
 	return nil
 }
@@ -249,7 +258,7 @@ func (p *peerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.Peer
 		return err
 	}
 
-	resp, err := p.t.doRequest(req)
+	resp, err := p.doRequest(req)
 	if err != nil {
 		return errors.Wrapf(err, "error announcing peers to peer (%v)", p.DialInfo().DialAddr)
 	}
@@ -262,4 +271,16 @@ func (p *peerConn) Close() error {
 		return p.stream.ReadCloser.Close()
 	}
 	return nil
+}
+
+func (p *peerConn) doRequest(req *http.Request) (*http.Response, error) {
+	resp, err := p.t.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
+		duID := utils.DeviceIDFromX509Pubkey(resp.TLS.PeerCertificates[0].PublicKey)
+		p.SetDeviceUniqueID(duID)
+	}
+	return resp, nil
 }

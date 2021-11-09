@@ -21,7 +21,7 @@ type HTTPClient struct {
 }
 
 func NewHTTPClient(dialAddr string) *HTTPClient {
-	httpClient := utils.MakeHTTPClient(10*time.Second, 30*time.Second)
+	httpClient := utils.MakeHTTPClient(10*time.Second, 30*time.Second, nil, nil)
 
 	var c *HTTPClient
 	c = &HTTPClient{
