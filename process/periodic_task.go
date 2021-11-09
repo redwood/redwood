@@ -2,24 +2,23 @@ package process
 
 import (
 	"context"
-	"time"
 
 	"redwood.dev/utils"
 )
 
 type PeriodicTask struct {
 	Process
-	interval time.Duration
-	mailbox  *utils.Mailbox
-	taskFn   func(ctx context.Context)
+	ticker  utils.Ticker
+	mailbox *utils.Mailbox
+	taskFn  func(ctx context.Context)
 }
 
-func NewPeriodicTask(name string, interval time.Duration, taskFn func(ctx context.Context)) *PeriodicTask {
+func NewPeriodicTask(name string, ticker utils.Ticker, taskFn func(ctx context.Context)) *PeriodicTask {
 	return &PeriodicTask{
-		Process:  *New(name),
-		interval: interval,
-		mailbox:  utils.NewMailbox(1),
-		taskFn:   taskFn,
+		Process: *New(name),
+		ticker:  ticker,
+		mailbox: utils.NewMailbox(1),
+		taskFn:  taskFn,
 	}
 }
 
@@ -28,29 +27,32 @@ func (task *PeriodicTask) Start() error {
 	if err != nil {
 		return err
 	}
+	task.ticker.Start()
 
 	task.Process.Go(nil, "ticker", func(ctx context.Context) {
-		ticker := time.NewTicker(task.interval)
-		defer ticker.Stop()
-
 	Loop:
 		for {
 			select {
 			case <-ctx.Done():
 				return
 
-			case <-ticker.C:
+			case <-task.ticker.Notify():
 				task.Enqueue()
 
 			case <-task.mailbox.Notify():
-				xs := task.mailbox.RetrieveAll()
-				if len(xs) == 0 {
+				x := task.mailbox.Retrieve()
+				if x == nil {
 					continue Loop
 				}
 				task.taskFn(ctx)
 			}
 		}
 	})
+	return nil
+}
+
+func (task *PeriodicTask) Close() error {
+	task.ticker.Close()
 	return nil
 }
 
