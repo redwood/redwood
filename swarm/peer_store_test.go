@@ -21,6 +21,12 @@ func TestPeerStore_EnsurePeerDetails(t *testing.T) {
 		i++
 	})
 
+	p.AddDialInfo(swarm.PeerDialInfo{"baz", "quux"}, "")
+	require.Equal(t, 0, i)
+
+	p.AddDialInfo(swarm.PeerDialInfo{"libp2p", "/ip4/10.0.0.7/tcp/21232/p2p/12D3KooWGQ6s2fgi5KBj4qNNjPb8ZLbD7xztNrtkHcbTWNNEbT2z"}, "12D3KooWGQ6s2fgi5KBj4qNNjPb8ZLbD7xztNrtkHcbTWNNEbT2z")
+	require.Equal(t, 1, i)
+
 	p.AddVerifiedCredentials(swarm.PeerDialInfo{"libp2p", "/ip4/10.0.0.7/tcp/21232/p2p/12D3KooWGQ6s2fgi5KBj4qNNjPb8ZLbD7xztNrtkHcbTWNNEbT2z"}, "12D3KooWGQ6s2fgi5KBj4qNNjPb8ZLbD7xztNrtkHcbTWNNEbT2z", testutils.RandomAddress(t), nil, nil)
 	p.AddDialInfo(swarm.PeerDialInfo{"libp2p", "/ip4/10.0.0.7/tcp/21232/p2p/12D3KooWGQ6s2fgi5KBj4qNNjPb8ZLbD7xztNrtkHcbTWNNEbT2z"}, "12D3KooWGQ6s2fgi5KBj4qNNjPb8ZLbD7xztNrtkHcbTWNNEbT2z")
 	p.AddDialInfo(swarm.PeerDialInfo{"libp2p", "/ip4/10.0.0.7/tcp/21232/p2p/12D3KooWGQ6s2fgi5KBj4qNNjPb8ZLbD7xztNrtkHcbTWNNEbT2z"}, "")
@@ -35,7 +41,7 @@ func TestPeerStore_EnsurePeerDetails(t *testing.T) {
 	p.AddDialInfo(swarm.PeerDialInfo{"baz", "quux"}, "12D3KooWGQ6s2fgi5KBj4qNNjPb8ZLbD7xztNrtkHcbTWNNEbT2z")
 	p.AddDialInfo(swarm.PeerDialInfo{"libp2p", "/ip4/10.0.0.7/tcp/21232/p2p/12D3KooWGQ6s2fgi5KBj4qNNjPb8ZLbD7xztNrtkHcbTWNNEbT2z"}, "")
 
-	require.Equal(t, 2, i)
+	require.Equal(t, 1, i)
 }
 
 func TestPeerStore_DB(t *testing.T) {
