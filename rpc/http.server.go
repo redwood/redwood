@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
 
+	"redwood.dev/blob"
 	"redwood.dev/crypto"
 	"redwood.dev/errors"
 	"redwood.dev/identity"
@@ -74,6 +75,7 @@ type HTTPServer struct {
 	treeProto     prototree.TreeProtocol
 	peerStore     swarm.PeerStore
 	keyStore      identity.KeyStore
+	blobStore     blob.Store
 	controllerHub tree.ControllerHub
 }
 
@@ -83,6 +85,7 @@ func NewHTTPServer(
 	treeProto prototree.TreeProtocol,
 	peerStore swarm.PeerStore,
 	keyStore identity.KeyStore,
+	blobStore blob.Store,
 	controllerHub tree.ControllerHub,
 ) *HTTPServer {
 	return &HTTPServer{
@@ -92,6 +95,7 @@ func NewHTTPServer(
 		treeProto:     treeProto,
 		peerStore:     peerStore,
 		keyStore:      keyStore,
+		blobStore:     blobStore,
 		controllerHub: controllerHub,
 	}
 }
@@ -225,6 +229,26 @@ func (s *HTTPServer) SendTx(r *http.Request, args *SendTxArgs, resp *SendTxRespo
 		return errors.ErrUnsupported
 	}
 	return s.treeProto.SendTx(context.Background(), args.Tx)
+}
+
+type (
+	StoreBlobArgs struct {
+		Blob []byte
+	}
+	StoreBlobResponse struct {
+		SHA1 types.Hash
+		SHA3 types.Hash
+	}
+)
+
+func (s *HTTPServer) StoreBlob(r *http.Request, args *StoreBlobArgs, resp *StoreBlobResponse) error {
+	sha1, sha3, err := s.blobStore.StoreBlob(ioutil.NopCloser(bytes.NewReader(args.Blob)))
+	if err != nil {
+		return err
+	}
+	resp.SHA1 = sha1
+	resp.SHA3 = sha3
+	return nil
 }
 
 type (
