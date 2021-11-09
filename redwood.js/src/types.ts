@@ -19,7 +19,7 @@ export interface RPCClient {
     identities: () => Promise<RPCIdentitiesResponse[]>
     newIdentity: () => Promise<string>
     knownStateURIs: () => Promise<string[]>
-    sendTx: (tx: Tx) => void
+    sendTx: (tx: RPCSendTx) => void
     addPeer: (dialInfo: PeerDialInfo) => void
     privateTreeMembers: (stateURI: string) => Promise<string[]>
     peers: () => Promise<RPCPeer[]>
@@ -61,6 +61,17 @@ export interface Tx {
     parents: string[]
     patches: string[]
     from: string
+    sig: string
+    recipients?: string[]
+    attachment?: string | Blob
+}
+
+export interface RPCSendTx {
+    stateURI: string
+    id?: string
+    parents?: string[]
+    patches: string[]
+    from?: string
     recipients?: string[]
     attachment?: string | Blob
     sig?: string
