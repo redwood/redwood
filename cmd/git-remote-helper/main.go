@@ -438,7 +438,7 @@ func push(srcRefName string, destRefName string, client *braidhttp.LightClient) 
 		commitId := stack[0]
 		stack = stack[1:]
 
-		txID := types.IDFromBytes(commitId[:])
+		txID := state.VersionFromBytes(commitId[:])
 		_, err := client.FetchTx(StateURI, txID)
 		if err == errors.Err404 {
 			err = pushCommit(commitId, destRefName, client)
@@ -466,33 +466,41 @@ func push(srcRefName string, destRefName string, client *braidhttp.LightClient) 
 func pushRef(destRefName string, commitId *git.Oid, client *braidhttp.LightClient) error {
 	branchKeypath := RootKeypath.Push(state.Keypath(destRefName))
 
-	parentID, err := types.IDFromHex(commitId.String())
+	parentID, err := state.VersionFromHex(commitId.String())
 	if err != nil {
 		return err
 	}
 
-	tx := &tree.Tx{
-		ID:       types.RandomID(),
+	tx := tree.Tx{
+		ID:       state.RandomVersion(),
 		StateURI: StateURI,
 		From:     sigkeys.Address(),
-		Parents:  []types.ID{parentID},
+		Parents:  []state.Version{parentID},
 		Patches: []tree.Patch{{
-			Keypath: branchKeypath.Push(state.Keypath("HEAD")),
-			Val:     commitId.String(),
+			Keypath:   branchKeypath.Push(state.Keypath("HEAD")),
+			ValueJSON: mustJSON(commitId.String()),
 		}, {
 			// 	Keypath: branchKeypath.Push(state.Keypath("reflog")),
 			// 	Range:   &state.Range{0, 0},
-			// 	Val:     commitId.String(),
+			// 	ValueJSON: mustJSON(    commitId.String()),
 			// }, {
 			Keypath: branchKeypath.Push(state.Keypath("worktree")),
-			Val: map[string]interface{}{
+			ValueJSON: mustJSON(map[string]interface{}{
 				"Content-Type": "link",
 				"value":        "state:" + StateURI + "/commits/" + commitId.String() + "/files",
-			},
+			}),
 		}},
 	}
 
 	return client.Put(context.Background(), tx, types.Address{}, nil)
+}
+
+func mustJSON(x interface{}) []byte {
+	bs, err := json.Marshal(x)
+	if err != nil {
+		panic(err)
+	}
+	return bs
 }
 
 func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightClient) error {
@@ -606,18 +614,18 @@ func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightCl
 			}
 		}()
 
-		var parents []types.ID
+		var parents []state.Version
 		var parentStrs []string
 		if commit.ParentCount() == 0 {
-			parents = []types.ID{tree.GenesisTxID}
+			parents = []state.Version{tree.GenesisTxID}
 		} else {
 			for i := uint(0); i < commit.ParentCount(); i++ {
 				parentStr := commit.ParentId(i).String()
 				parentStrs = append(parentStrs, parentStr)
 
-				var parentID types.ID
+				var parentID state.Version
 				var err error
-				parentID, err = types.IDFromHex(parentStr)
+				parentID, err = state.VersionFromHex(parentStr)
 				if err != nil {
 					return
 				}
@@ -626,12 +634,12 @@ func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightCl
 		}
 
 		commitHash := commit.Id().String()
-		commitID, err := types.IDFromHex(commitHash)
+		commitID, err := state.VersionFromHex(commitHash)
 		if err != nil {
 			return
 		}
 
-		tx := &tree.Tx{
+		tx := tree.Tx{
 			ID:         commitID,
 			StateURI:   StateURI,
 			From:       sigkeys.Address(),
@@ -640,21 +648,21 @@ func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightCl
 		}
 
 		tx.Patches = append(tx.Patches, tree.Patch{
-			Keypath: state.Keypath("commits/" + commitHash + "/parents"),
-			Val:     parentStrs,
+			Keypath:   state.Keypath("commits/" + commitHash + "/parents"),
+			ValueJSON: mustJSON(parentStrs),
 		})
 
 		tx.Patches = append(tx.Patches, tree.Patch{
-			Keypath: state.Keypath("commits/" + commitHash + "/message"),
-			Val:     commit.Message(),
+			Keypath:   state.Keypath("commits/" + commitHash + "/message"),
+			ValueJSON: mustJSON(commit.Message()),
 		})
 		timeStr, err := commit.Time().MarshalText()
 		if err != nil {
 			return
 		}
 		tx.Patches = append(tx.Patches, tree.Patch{
-			Keypath: state.Keypath("commits/" + commitHash + "/timestamp"),
-			Val:     string(timeStr),
+			Keypath:   state.Keypath("commits/" + commitHash + "/timestamp"),
+			ValueJSON: mustJSON(string(timeStr)),
 		})
 		author := commit.Author()
 		authorTimeStr, err := author.When.MarshalText()
@@ -663,11 +671,11 @@ func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightCl
 		}
 		tx.Patches = append(tx.Patches, tree.Patch{
 			Keypath: state.Keypath("commits/" + commitHash + "/author"),
-			Val: M{
+			ValueJSON: mustJSON(M{
 				"name":      author.Name,
 				"email":     author.Email,
 				"timestamp": string(authorTimeStr),
-			},
+			}),
 		})
 		committer := commit.Committer()
 		committerTimeStr, err := committer.When.MarshalText()
@@ -676,11 +684,11 @@ func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightCl
 		}
 		tx.Patches = append(tx.Patches, tree.Patch{
 			Keypath: state.Keypath("commits/" + commitHash + "/committer"),
-			Val: M{
+			ValueJSON: mustJSON(M{
 				"name":      committer.Name,
 				"email":     committer.Email,
 				"timestamp": string(committerTimeStr),
-			},
+			}),
 		})
 
 		fileTree := make(map[string]interface{})
@@ -697,19 +705,19 @@ func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightCl
 			}, true)
 		}
 		tx.Patches = append(tx.Patches, tree.Patch{
-			Keypath: state.Keypath("commits/" + commitHash + "/files"),
-			Val:     fileTree,
+			Keypath:   state.Keypath("commits/" + commitHash + "/files"),
+			ValueJSON: mustJSON(fileTree),
 		})
 
 		tx.Patches = append(tx.Patches, tree.Patch{
 			Keypath: state.Keypath("refs/heads/master"),
-			Val: map[string]interface{}{
+			ValueJSON: mustJSON(M{
 				"HEAD": commitHash,
 				"worktree": map[string]interface{}{
 					"Content-Type": "link",
 					"value":        "state:somegitprovider.org/gitdemo/commits/" + commitHash + "/files",
 				},
-			},
+			}),
 		})
 
 		err = client.Put(context.Background(), tx, types.Address{}, nil)
