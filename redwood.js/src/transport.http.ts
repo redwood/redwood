@@ -1,5 +1,6 @@
 import querystring from 'querystring'
 import url from 'url'
+import WebSocket from 'isomorphic-ws'
 import {
     Transport,
     Identity,
