@@ -15,7 +15,7 @@ type Transport interface {
 
 //go:generate mockery --name PeerConn --output ./mocks/ --case=underscore
 type PeerConn interface {
-	PeerDetails
+	PeerEndpoint
 
 	Transport() Transport
 	EnsureConnected(ctx context.Context) error

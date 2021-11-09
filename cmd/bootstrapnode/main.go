@@ -63,7 +63,7 @@ func main() {
 				cfg.Port = 21231
 				cfg.P2PKey = cryptop2p.ConfigEncodeKey(p2pkeyBytes)
 				cfg.Datastore.Path = "./data"
-				cfg.Datastore.Encryption.Key = datastoreKey
+				cfg.Datastore.Encryption.Key = datastoreKey.Bytes()
 				cfg.Datastore.Encryption.KeyRotationInterval = 24 * time.Hour
 				cfg.BootstrapPeers = []string{}
 				cfg.DNSOverHTTPSURL = ""

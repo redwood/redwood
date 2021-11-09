@@ -118,7 +118,7 @@ func (app *App) Start() error {
 	}
 
 	encryptionConfig := &state.EncryptionConfig{
-		Key:                 app.KeyStore.LocalSymEncKey(),
+		Key:                 app.KeyStore.LocalSymEncKey().Bytes(),
 		KeyRotationInterval: 24 * time.Hour, // @@TODO: make configurable
 	}
 
