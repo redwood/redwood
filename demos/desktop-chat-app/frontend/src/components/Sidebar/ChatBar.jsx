@@ -78,6 +78,7 @@ function ChatBar({ className }) {
     const { selectedServer, selectedRoomName, selectedStateURI, registryStateURI, isDirectMessage, navigate } = useNavigation()
     const { servers, rooms } = useServerAndRoomInfo()
     const { isLoggedIn, logout } = useLoginStatus()
+    const { stateTrees } = useRedwood()
 
     const { onPresent: onPresentNewChatModal, onDismiss: onDismissNewChatModal } = useModal('new chat')
     const { onPresent: onPresentNewDMModal, onDismiss: onDismissNewDMModal } = useModal('new dm')
@@ -102,7 +103,7 @@ function ChatBar({ className }) {
     return (
         <ChatBarWrapper className={className}>
             {serverRooms.map(roomStateURI => (
-                rooms[roomStateURI]
+                rooms[roomStateURI] && !!stateTrees[roomStateURI]
                     ? <ChatBarItem
                         key={roomStateURI}
                         stateURI={roomStateURI}
@@ -302,7 +303,7 @@ function NewDMModal({ serverRooms, onDismiss, navigate }) {
             let recipients = Object.keys(selectedPeers).filter(addr => !!selectedPeers[addr])
             await api.createNewDM([...recipients, sender])
             onDismiss()
-            navigate('chat.p2p', Redwood.utils.privateTxRootForRecipients([sender, recipientAddr]))
+            navigate('chat.p2p', Redwood.utils.privateTxRootForRecipients(Object.keys(selectedPeers)))
         } catch (err) {
             console.error(err)
         }

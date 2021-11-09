@@ -10,6 +10,7 @@ import (
 
 	"redwood.dev/errors"
 	"redwood.dev/rpc"
+	"redwood.dev/utils"
 )
 
 type Config struct {
@@ -19,6 +20,7 @@ type Config struct {
 	BootstrapPeers  []BootstrapPeer `yaml:"BootstrapPeers"`
 	DataRoot        string          `yaml:"DataRoot"`
 	DNSOverHTTPSURL string          `yaml:"DNSOverHTTPSURL"`
+	JWTSecret       string          `yaml:"JWTSecret"`
 	DevMode         bool            `yaml:"-"`
 
 	KeyStore KeyStoreConfig `yaml:"-"`
@@ -28,6 +30,7 @@ type Config struct {
 
 	AuthProtocol AuthProtocolConfig `yaml:"AuthProtocol"`
 	BlobProtocol BlobProtocolConfig `yaml:"BlobProtocol"`
+	HushProtocol HushProtocolConfig `yaml:"HushProtocol"`
 	TreeProtocol TreeProtocolConfig `yaml:"TreeProtocol"`
 
 	HTTPRPC *rpc.HTTPConfig `yaml:"HTTPRPC"`
@@ -55,6 +58,7 @@ type Libp2pTransportConfig struct {
 	Enabled      bool     `yaml:"Enabled"`
 	ListenAddr   string   `yaml:"ListenAddr"`
 	ListenPort   uint     `yaml:"ListenPort"`
+	Reachability string   `yaml:"Reachability"`
 	ReachableAt  string   `yaml:"ReachableAt"`
 	StaticRelays []string `yaml:"StaticRelays"`
 }
@@ -62,6 +66,9 @@ type Libp2pTransportConfig struct {
 type BraidHTTPTransportConfig struct {
 	Enabled         bool   `yaml:"Enabled"`
 	ListenHost      string `yaml:"ListenHost"`
+	ListenHostSSL   string `yaml:"ListenHostSSL"`
+	TLSCertFile     string `yaml:"TLSCertFile"`
+	TLSKeyFile      string `yaml:"TLSKeyFile"`
 	DefaultStateURI string `yaml:"DefaultStateURI"`
 	ReachableAt     string `yaml:"ReachableAt"`
 }
@@ -71,6 +78,10 @@ type AuthProtocolConfig struct {
 }
 
 type BlobProtocolConfig struct {
+	Enabled bool `yaml:"Enabled"`
+}
+
+type HushProtocolConfig struct {
 	Enabled bool `yaml:"Enabled"`
 }
 
@@ -100,21 +111,30 @@ func DefaultConfig(appName string) Config {
 			Prompt: ">",
 			Commands: []REPLCommand{
 				CmdMnemonic,
+				CmdAddress,
 				CmdLibp2pPeerID,
 				CmdSubscribe,
 				CmdStateURIs,
 				CmdGetState,
 				CmdSetState,
+				CmdListTxs,
 				CmdBlobs,
 				CmdPeers,
 				CmdAddPeer,
 				CmdRemoveAllPeers,
 				CmdRemoveUnverifiedPeers,
 				CmdRemoveFailedPeers,
+				CmdHushSendIndividualMessage,
+				CmdHushSendGroupMessage,
+				CmdHushStoreDebugPrint,
+				CmdTreeStoreDebugPrint,
+				CmdPeerStoreDebugPrint,
+				CmdProcessTree,
 			},
 		},
 		BootstrapPeers: []BootstrapPeer{},
 		DataRoot:       dataRoot,
+		JWTSecret:      utils.RandomString(32),
 		DevMode:        false,
 		Libp2pTransport: Libp2pTransportConfig{
 			Enabled:    true,
@@ -124,12 +144,16 @@ func DefaultConfig(appName string) Config {
 		BraidHTTPTransport: BraidHTTPTransportConfig{
 			Enabled:         true,
 			ListenHost:      ":8080",
+			ListenHostSSL:   ":8082",
 			DefaultStateURI: "",
 		},
 		AuthProtocol: AuthProtocolConfig{
 			Enabled: true,
 		},
 		BlobProtocol: BlobProtocolConfig{
+			Enabled: true,
+		},
+		HushProtocol: HushProtocolConfig{
 			Enabled: true,
 		},
 		TreeProtocol: TreeProtocolConfig{

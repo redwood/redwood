@@ -34,7 +34,7 @@ function Provider({ children }) {
             if (stateURI === 'chat.local/servers') {
                 for (let server of Object.keys(stateTrees['chat.local/servers'].value || {})) {
                     let registry = `${server}/registry`
-                    if (subscribedStateURIs.current[registry]) {
+                    if (subscribedStateURIs[registry]) {
                         continue
                     }
                     subscribe(registry)
@@ -59,21 +59,18 @@ function Provider({ children }) {
                 registryStateURI,
             }
 
-            if (room === 'registry' || stateURI === 'chat.local/dms') {
+            if (room === "registry" || stateURI === "chat.local/dms") {
                 for (let room of Object.keys((stateTrees[stateURI] || {}).rooms || {})) {
-                    let roomStateURI = `${stateURI === 'chat.local/dms' ? 'chat.p2p' : server}/${room}`
-                    if (subscribedStateURIs.current[roomStateURI]) {
-                        continue
+                    let roomStateURI = `${stateURI === "chat.local/dms" ? "chat.p2p" : server}/${room}`;
+                    if (!subscribedStateURIs[roomStateURI]) {
+                        subscribe(roomStateURI);
+                        api.subscribe(roomStateURI);
                     }
-                    subscribe(roomStateURI)
-                    api.subscribe(roomStateURI)
-                }
-
-            } else {
-                newRooms[stateURI] = {
-                    rawName: room,
-                    members: privateTreeMembers[stateURI] || [],
-                    isDirectMessage: stateURI.indexOf('chat.p2p/') === 0,
+                    newRooms[roomStateURI] = {
+                        rawName: room,
+                        members: privateTreeMembers[roomStateURI] || [],
+                        isDirectMessage: true,
+                    };
                 }
             }
         }
@@ -87,7 +84,7 @@ function Provider({ children }) {
 
         setServers(newServers)
         setRooms(newRooms)
-    }, [stateTrees, privateTreeMembers, nodeIdentities, addressBook])
+    }, [stateTrees, privateTreeMembers, nodeIdentities, addressBook, subscribedStateURIs])
 
     return (
       <Context.Provider value={{ servers, rooms }}>
