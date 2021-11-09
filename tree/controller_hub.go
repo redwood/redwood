@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 
 	"redwood.dev/blob"
@@ -12,7 +11,6 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/state"
-	"redwood.dev/utils"
 )
 
 type ControllerHub interface {
@@ -27,10 +25,6 @@ type ControllerHub interface {
 	StateAtVersion(stateURI string, version *state.Version) (state.Node, error)
 	QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
 	Leaves(stateURI string) ([]state.Version, error)
-
-	IsPrivate(stateURI string) (bool, error)
-	IsMember(stateURI string, addr types.Address) (bool, error)
-	Members(stateURI string) (utils.AddressSet, error)
 
 	BlobReader(refID blob.ID) (io.ReadCloser, int64, error)
 
@@ -127,13 +121,6 @@ func (m *controllerHub) KnownStateURIs() ([]string, error) {
 }
 
 func (m *controllerHub) AddTx(tx Tx) error {
-	if tx.IsPrivate() {
-		parts := strings.Split(tx.StateURI, "/")
-		if parts[len(parts)-1] != tx.PrivateRootKey() {
-			return errors.Wrapf(ErrInvalidPrivateRootKey, "got %v, expected %v", parts[len(parts)-1], tx.PrivateRootKey())
-		}
-	}
-
 	ctrl, err := m.EnsureController(tx.StateURI)
 	if err != nil {
 		return err
@@ -177,39 +164,6 @@ func (m *controllerHub) BlobReader(refID blob.ID) (io.ReadCloser, int64, error) 
 
 func (m *controllerHub) Leaves(stateURI string) ([]state.Version, error) {
 	return m.txStore.Leaves(stateURI)
-}
-
-func (m *controllerHub) IsPrivate(stateURI string) (bool, error) {
-	m.controllersMu.RLock()
-	defer m.controllersMu.RUnlock()
-
-	ctrl := m.controllers[stateURI]
-	if ctrl == nil {
-		return false, errors.Wrapf(ErrNoController, stateURI)
-	}
-	return ctrl.IsPrivate()
-}
-
-func (m *controllerHub) IsMember(stateURI string, addr types.Address) (bool, error) {
-	m.controllersMu.RLock()
-	defer m.controllersMu.RUnlock()
-
-	ctrl := m.controllers[stateURI]
-	if ctrl == nil {
-		return false, errors.Wrapf(ErrNoController, stateURI)
-	}
-	return ctrl.IsMember(addr)
-}
-
-func (m *controllerHub) Members(stateURI string) (utils.AddressSet, error) {
-	m.controllersMu.RLock()
-	defer m.controllersMu.RUnlock()
-
-	ctrl := m.controllers[stateURI]
-	if ctrl == nil {
-		return nil, errors.Wrapf(ErrNoController, stateURI)
-	}
-	return ctrl.Members()
 }
 
 func (m *controllerHub) OnNewState(fn NewStateCallback) {

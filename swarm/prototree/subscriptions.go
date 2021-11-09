@@ -12,26 +12,32 @@ import (
 	"redwood.dev/process"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
-	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
-type (
-	ReadableSubscription interface {
-		Read() (*SubscriptionMsg, error)
-		Close() error
-	}
+type SubscriptionRequest struct {
+	StateURI         string
+	Keypath          state.Keypath
+	Type             SubscriptionType
+	FetchHistoryOpts *FetchHistoryOpts
+	Addresses        types.AddressSet
+}
 
-	WritableSubscription interface {
-		process.Interface
-		StateURI() string
-		Keypath() state.Keypath
-		Type() SubscriptionType
-		EnqueueWrite(stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID)
-		String() string
-	}
-)
+type ReadableSubscription interface {
+	Read() (SubscriptionMsg, error)
+	Close() error
+}
+
+type WritableSubscription interface {
+	process.Interface
+	StateURI() string
+	Keypath() state.Keypath
+	Type() SubscriptionType
+	Addresses() []types.Address
+	EnqueueWrite(msg SubscriptionMsg)
+	String() string
+}
 
 type writableSubscription struct {
 	process.Process
@@ -40,6 +46,8 @@ type writableSubscription struct {
 	stateURI         string
 	keypath          state.Keypath
 	subscriptionType SubscriptionType
+	addresses        []types.Address
+	isPrivate        bool
 	treeProtocol     *treeProtocol
 	subImpl          WritableSubscriptionImpl
 	messages         *utils.Mailbox
@@ -49,9 +57,7 @@ type writableSubscription struct {
 //go:generate mockery --name WritableSubscriptionImpl --output ./mocks/ --case=underscore
 type WritableSubscriptionImpl interface {
 	process.Interface
-	DialInfo() swarm.PeerDialInfo
-	StateURI() string
-	Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) error
+	Put(ctx context.Context, msg SubscriptionMsg) error
 	String() string
 }
 
@@ -59,6 +65,8 @@ func newWritableSubscription(
 	stateURI string,
 	keypath state.Keypath,
 	subscriptionType SubscriptionType,
+	isPrivate bool,
+	addresses []types.Address,
 	subImpl WritableSubscriptionImpl,
 ) *writableSubscription {
 	return &writableSubscription{
@@ -67,6 +75,8 @@ func newWritableSubscription(
 		stateURI:         stateURI,
 		keypath:          keypath,
 		subscriptionType: subscriptionType,
+		isPrivate:        isPrivate,
+		addresses:        addresses,
 		subImpl:          subImpl,
 		messages:         utils.NewMailbox(10000),
 	}
@@ -123,20 +133,19 @@ func (sub *writableSubscription) writeMessages(ctx context.Context) (err error) 
 		if x == nil {
 			return nil
 		}
-		msg := x.(*SubscriptionMsg)
-		var tx *tree.Tx
-		var node state.Node
-		if sub.subscriptionType.Includes(SubscriptionType_Txs) {
-			tx = msg.Tx
+		msg := x.(SubscriptionMsg)
+		if !sub.subscriptionType.Includes(SubscriptionType_Txs) {
+			msg.Tx = nil
+			msg.EncryptedTx = nil
 		}
-		if sub.subscriptionType.Includes(SubscriptionType_States) {
-			node = msg.State
+		if !sub.subscriptionType.Includes(SubscriptionType_States) {
+			msg.State = nil
 		}
 
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second) // @@TODO: make configurable?
 		defer cancel()
 
-		err = sub.subImpl.Put(ctx, msg.StateURI, tx, node, msg.Leaves)
+		err = sub.subImpl.Put(ctx, msg)
 		if err != nil {
 			sub.Errorf("error writing to subscribed peer: %v", err)
 			return err
@@ -144,12 +153,13 @@ func (sub *writableSubscription) writeMessages(ctx context.Context) (err error) 
 	}
 }
 
-func (sub *writableSubscription) StateURI() string       { return sub.stateURI }
-func (sub *writableSubscription) Type() SubscriptionType { return sub.subscriptionType }
-func (sub *writableSubscription) Keypath() state.Keypath { return sub.keypath }
+func (sub *writableSubscription) StateURI() string           { return sub.stateURI }
+func (sub *writableSubscription) Type() SubscriptionType     { return sub.subscriptionType }
+func (sub *writableSubscription) Keypath() state.Keypath     { return sub.keypath }
+func (sub *writableSubscription) Addresses() []types.Address { return sub.addresses }
 
-func (sub *writableSubscription) EnqueueWrite(stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) {
-	sub.messages.Deliver(&SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves})
+func (sub *writableSubscription) EnqueueWrite(msg SubscriptionMsg) {
+	sub.messages.Deliver(msg)
 }
 
 func (sub *writableSubscription) String() string {
@@ -159,26 +169,26 @@ func (sub *writableSubscription) String() string {
 type multiReaderSubscription struct {
 	process.Process
 	log.Logger
-	stateURI       string
-	maxConns       uint64
-	onTxReceived   func(tx tree.Tx, peer TreePeerConn)
-	searchForPeers func(ctx context.Context, stateURI string) <-chan TreePeerConn
-	peerPool       swarm.PeerPool
+	stateURI          string
+	maxConns          uint64
+	onMessageReceived func(msg SubscriptionMsg, peer TreePeerConn)
+	searchForPeers    func(ctx context.Context, stateURI string) <-chan TreePeerConn
+	peerPool          swarm.PeerPool
 }
 
 func newMultiReaderSubscription(
 	stateURI string,
 	maxConns uint64,
-	onTxReceived func(tx tree.Tx, peer TreePeerConn),
+	onMessageReceived func(msg SubscriptionMsg, peer TreePeerConn),
 	searchForPeers func(ctx context.Context, stateURI string) <-chan TreePeerConn,
 ) *multiReaderSubscription {
 	return &multiReaderSubscription{
-		Process:        *process.New("MultiReaderSubscription " + stateURI),
-		Logger:         log.NewLogger("tree proto"),
-		stateURI:       stateURI,
-		maxConns:       maxConns,
-		onTxReceived:   onTxReceived,
-		searchForPeers: searchForPeers,
+		Process:           *process.New("MultiReaderSubscription " + stateURI),
+		Logger:            log.NewLogger("tree proto"),
+		stateURI:          stateURI,
+		maxConns:          maxConns,
+		onMessageReceived: onMessageReceived,
+		searchForPeers:    searchForPeers,
 	}
 }
 
@@ -273,6 +283,14 @@ func (s *multiReaderSubscription) getPeer(ctx context.Context) (TreePeerConn, er
 			panic("peer is nil")
 		}
 
+		if !peer.Dialable() {
+			s.peerPool.ReturnPeer(peer, true)
+			continue
+		} else if !peer.Ready() {
+			s.peerPool.ReturnPeer(peer, false)
+			continue
+		}
+
 		// Ensure the peer supports the tree protocol
 		treePeer, is := peer.(TreePeerConn)
 		if !is {
@@ -302,6 +320,8 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-s.Process.Done():
 			return
 		default:
@@ -311,12 +331,9 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 		if err != nil {
 			s.Errorf("while reading from peer subscription (%v): %v", peer.DialInfo(), err)
 			return
-		} else if msg.Tx == nil {
-			s.Error("peer sent empty subscription message")
-			return
 		}
 
-		s.onTxReceived(*msg.Tx, peer)
+		s.onMessageReceived(msg, peer)
 	}
 }
 
@@ -367,23 +384,23 @@ func (sub *inProcessSubscription) Type() SubscriptionType {
 	return sub.subscriptionType
 }
 
-func (sub *inProcessSubscription) Put(ctx context.Context, stateURI string, tx *tree.Tx, state state.Node, leaves []types.ID) error {
+func (sub *inProcessSubscription) Put(ctx context.Context, msg SubscriptionMsg) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-sub.Process.Done():
 		return errors.ErrClosed
-	case sub.chMessages <- SubscriptionMsg{StateURI: stateURI, Tx: tx, State: state, Leaves: leaves}:
+	case sub.chMessages <- msg:
 		return nil
 	}
 }
 
-func (sub *inProcessSubscription) Read() (*SubscriptionMsg, error) {
+func (sub *inProcessSubscription) Read() (SubscriptionMsg, error) {
 	select {
 	case <-sub.Process.Done():
 		return SubscriptionMsg{}, errors.ErrClosed
 	case msg := <-sub.chMessages:
-		return &msg, nil
+		return msg, nil
 	}
 }
 

@@ -25,9 +25,6 @@ type Controller interface {
 	QueryIndex(version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
 	Leaves() ([]state.Version, error)
 	OnNewState(fn NewStateCallback)
-	IsPrivate() (bool, error)
-	IsMember(addr types.Address) (bool, error)
-	Members() (utils.AddressSet, error)
 }
 
 type controller struct {
@@ -52,9 +49,6 @@ type controller struct {
 
 	mempool Mempool
 	addTxMu sync.Mutex
-
-	members   utils.AddressSet
-	isPrivate bool
 }
 
 type NewStateCallback func(tx Tx, state state.Node, leaves []state.Version)
@@ -62,7 +56,6 @@ type NewStateCallback func(tx Tx, state state.Node, leaves []state.Version)
 var (
 	MergeTypeKeypath = state.Keypath("Merge-Type")
 	ValidatorKeypath = state.Keypath("Validator")
-	MembersKeypath   = state.Keypath("Members")
 )
 
 func NewController(
@@ -112,16 +105,6 @@ func (c *controller) Start() (err error) {
 	}
 	c.indices = indices
 
-	// Load private/members from DB
-	c.isPrivate, err = c.IsPrivate()
-	if err != nil {
-		return err
-	}
-	c.members, err = c.Members()
-	if err != nil {
-		return err
-	}
-
 	// Add root resolver
 	c.behaviorTree.addResolver(state.Keypath(nil), &dumbResolver{})
 
@@ -164,54 +147,7 @@ func (c *controller) Leaves() ([]state.Version, error) {
 	return c.txStore.Leaves(c.stateURI)
 }
 
-func (c *controller) IsPrivate() (bool, error) {
-	node := c.StateAtVersion(nil)
-	defer node.Close()
-
-	nodeType, _, length, err := node.NodeInfo(MembersKeypath)
-	if errors.Cause(err) == types.Err404 {
-		return false, nil
-	} else if err != nil {
-		return false, err
-	}
-	return nodeType == state.NodeTypeMap && length > 0, nil
-}
-
-func (c *controller) IsMember(addr types.Address) (bool, error) {
-	state := c.StateAtVersion(nil)
-	defer state.Close()
-
-	is, ok, err := state.BoolValue(MembersKeypath.Pushs(addr.Hex()))
-	if err != nil {
-		return false, err
-	} else if !ok {
-		return false, nil
-	}
-	return is, nil
-}
-
-func (c *controller) Members() (utils.AddressSet, error) {
-	addrs := utils.NewAddressSet(nil)
-
-	state := c.StateAtVersion(nil)
-	defer state.Close()
-
-	iter := state.ChildIterator(MembersKeypath, true, 10)
-	defer iter.Close()
-
-	for iter.Rewind(); iter.Valid(); iter.Next() {
-		addrHex := iter.Node().Keypath().Part(-1).String()
-
-		addr, err := types.AddressFromHex(addrHex)
-		if err != nil {
-			return nil, err
-		}
-		addrs.Add(addr)
-	}
-	return addrs, nil
-}
-
-func (c *controller) AddTx(tx *Tx) error {
+func (c *controller) AddTx(tx Tx) error {
 	c.addTxMu.Lock()
 	defer c.addTxMu.Unlock()
 
@@ -220,11 +156,11 @@ func (c *controller) AddTx(tx *Tx) error {
 	if err != nil {
 		return err
 	} else if exists {
-		c.Infof(0, "already know tx %v, skipping", tx.ID.Pretty())
+		c.Infof(0, "already know tx %v %v, skipping", c.stateURI, tx.ID.Pretty())
 		return nil
 	}
 
-	c.Infof(0, "new tx %v (%v)", tx.ID.Pretty(), tx.Hash().String())
+	c.Infof(0, "new tx %v %v", c.stateURI, tx.ID.Pretty())
 
 	// Store the tx (so we can ignore txs we've seen before)
 	tx.Status = TxStatusInMempool
@@ -257,6 +193,8 @@ func (c *controller) processMempoolTx(tx Tx) processTxOutcome {
 
 	if err == nil {
 		c.Successf("tx added to chain (%v) %v", tx.StateURI, tx.ID.Pretty())
+		node := c.states.StateAtVersion(nil, false)
+		defer node.Close()
 		return processTxOutcome_Succeeded
 	}
 
@@ -305,8 +243,9 @@ func (c *controller) tryApplyTx(tx Tx) (err error) {
 		return ErrInvalidSignature
 	} else if sigPubKey.Address() != tx.From {
 		return errors.Wrapf(ErrInvalidSignature, "address doesn't match (expected=%v received=%v)", tx.From.Hex(), sigPubKey.Address().Hex())
-	} else if c.isPrivate && !c.members.Contains(sigPubKey.Address()) {
-		return errors.Wrapf(ErrSenderIsNotAMember, "tx=%v stateURI=%v sender=%v", tx.ID, tx.StateURI, sigPubKey.Address())
+		// } else if c.isPrivate && !c.members.Contains(sigPubKey.Address()) {
+		// 	return errors.Wrapf(ErrSenderIsNotAMember, "tx=%v stateURI=%v sender=%v", tx.ID, tx.StateURI, sigPubKey.Address())
+		// @@TODO
 	}
 
 	root := c.states.StateAtVersion(nil, true)
@@ -336,7 +275,7 @@ func (c *controller) tryApplyTx(tx Tx) (err error) {
 				}
 			}
 
-			txCopy := *tx
+			txCopy := tx
 			txCopy.Patches = patchesTrimmed
 
 			validator := c.behaviorTree.validators[string(validatorKeypath)]
@@ -437,11 +376,6 @@ func (c *controller) tryApplyTx(tx Tx) (err error) {
 		return err
 	}
 
-	err = c.updateMembers(root)
-	if err != nil {
-		return err
-	}
-
 	err = root.Save()
 	if err != nil {
 		return err
@@ -528,35 +462,6 @@ func (c *controller) handleNewBlobs(root state.Node) {
 			}
 		}
 	}
-}
-
-func (c *controller) updateMembers(root state.Node) error {
-	is, err := c.IsPrivate()
-	if err != nil {
-		return err
-	} else if !is {
-		return nil
-	}
-
-	diff := root.Diff()
-
-	for kp := range diff.Removed {
-		if !state.Keypath(kp).Part(0).Equals(MembersKeypath) {
-			continue
-		}
-		addr := types.AddressFromBytes([]byte(state.Keypath(kp).Part(1)))
-		c.members.Remove(addr)
-	}
-
-	for kp := range diff.Added {
-		if !state.Keypath(kp).Part(0).Equals(MembersKeypath) {
-			continue
-		}
-		addr := types.AddressFromBytes([]byte(state.Keypath(kp).Part(1)))
-		c.members.Add(addr)
-	}
-
-	return nil
 }
 
 func (c *controller) updateBehaviorTree(root state.Node) error {

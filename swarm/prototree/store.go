@@ -30,6 +30,9 @@ type Store interface {
 	MarkTxSeenByPeer(deviceUniqueID, stateURI string, txID state.Version) error
 	PruneTxSeenRecordsOlderThan(threshold time.Duration) error
 
+	EncryptedTx(stateURI string, txID state.Version) (EncryptedTx, error)
+	SaveEncryptedTx(stateURI string, txID state.Version, etx EncryptedTx) error
+
 	DebugPrint()
 }
 
@@ -292,6 +295,46 @@ func (s *store) PruneTxSeenRecordsOlderThan(threshold time.Duration) error {
 	}
 	return node.Save()
 }
+
+func (s *store) EncryptedTx(stateURI string, txID state.Version) (EncryptedTx, error) {
+	s.dataMu.RLock()
+	defer s.dataMu.RUnlock()
+
+	_, exists := s.data.EncryptedTxs[tree.StateURI(stateURI)]
+	if !exists {
+		return EncryptedTx{}, errors.Err404
+	}
+	etx, exists := s.data.EncryptedTxs[tree.StateURI(stateURI)][txID]
+	if !exists {
+		return EncryptedTx{}, errors.Err404
+	}
+	return etx, nil
+}
+
+func (s *store) SaveEncryptedTx(stateURI string, txID state.Version, etx EncryptedTx) error {
+	s.dataMu.Lock()
+	defer s.dataMu.Unlock()
+
+	_, exists := s.data.EncryptedTxs[tree.StateURI(stateURI)]
+	if !exists {
+		s.data.EncryptedTxs[tree.StateURI(stateURI)] = make(map[state.Version]EncryptedTx)
+	}
+	s.data.EncryptedTxs[tree.StateURI(stateURI)][txID] = etx
+
+	node := s.db.State(true)
+	defer node.Close()
+
+	err := node.Set(s.keypathForEncryptedTx(tree.StateURI(stateURI), txID), nil, etx)
+	if err != nil {
+		return err
+	}
+	return node.Save()
+}
+
+func (s *store) keypathForEncryptedTx(stateURI tree.StateURI, txID state.Version) state.Keypath {
+	return storeRootKeypath.Pushs("encryptedTxs").Pushs(url.QueryEscape(string(stateURI))).Pushs(txID.Hex())
+}
+
 func (s *store) DebugPrint() {
 	node := s.db.State(false)
 	defer node.Close()

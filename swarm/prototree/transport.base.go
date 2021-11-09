@@ -5,30 +5,40 @@ import (
 
 	"redwood.dev/state"
 	"redwood.dev/tree"
-	"redwood.dev/types"
 )
 
 type BaseTreeTransport struct {
-	muTxReceivedCallbacks                 sync.RWMutex
-	muAckReceivedCallbacks                sync.RWMutex
-	muWritableSubscriptionOpenedCallbacks sync.RWMutex
-	muP2PStateURIReceivedCallbacks        sync.RWMutex
+	muTxReceivedCallbacks                sync.RWMutex
+	muPrivateTxReceivedCallbacks         sync.RWMutex
+	muAckReceivedCallbacks               sync.RWMutex
+	muWritableSubscriptionOpenedCallback sync.RWMutex
+	muP2PStateURIReceivedCallbacks       sync.RWMutex
 
-	txReceivedCallbacks                 []TxReceivedCallback
-	ackReceivedCallbacks                []AckReceivedCallback
-	writableSubscriptionOpenedCallbacks []WritableSubscriptionOpenedCallback
-	p2pStateURIReceivedCallbacks        []P2PStateURIReceivedCallback
+	txReceivedCallbacks                []TxReceivedCallback
+	privateTxReceivedCallbacks         []PrivateTxReceivedCallback
+	ackReceivedCallbacks               []AckReceivedCallback
+	writableSubscriptionOpenedCallback WritableSubscriptionOpenedCallback
+	p2pStateURIReceivedCallbacks       []P2PStateURIReceivedCallback
 }
 
 type TxReceivedCallback func(tx tree.Tx, peerConn TreePeerConn)
-type AckReceivedCallback func(stateURI string, txID types.ID, peerConn TreePeerConn)
-type WritableSubscriptionOpenedCallback func(stateURI string, keypath state.Keypath, subType SubscriptionType, writeSubImpl WritableSubscriptionImpl, fetchHistoryOpts *FetchHistoryOpts)
+type PrivateTxReceivedCallback func(encryptedTx EncryptedTx, peerConn TreePeerConn)
+type AckReceivedCallback func(stateURI string, txID state.Version, peerConn TreePeerConn)
+type WritableSubscriptionOpenedCallback func(req SubscriptionRequest, writeSubImplFactory WritableSubscriptionImplFactory) (<-chan struct{}, error)
 type P2PStateURIReceivedCallback func(stateURI string, peerConn TreePeerConn)
+
+type WritableSubscriptionImplFactory func() (WritableSubscriptionImpl, error)
 
 func (t *BaseTreeTransport) OnTxReceived(handler TxReceivedCallback) {
 	t.muTxReceivedCallbacks.Lock()
 	defer t.muTxReceivedCallbacks.Unlock()
 	t.txReceivedCallbacks = append(t.txReceivedCallbacks, handler)
+}
+
+func (t *BaseTreeTransport) OnPrivateTxReceived(handler PrivateTxReceivedCallback) {
+	t.muPrivateTxReceivedCallbacks.Lock()
+	defer t.muPrivateTxReceivedCallbacks.Unlock()
+	t.privateTxReceivedCallbacks = append(t.privateTxReceivedCallbacks, handler)
 }
 
 func (t *BaseTreeTransport) OnAckReceived(handler AckReceivedCallback) {
@@ -38,9 +48,12 @@ func (t *BaseTreeTransport) OnAckReceived(handler AckReceivedCallback) {
 }
 
 func (t *BaseTreeTransport) OnWritableSubscriptionOpened(handler WritableSubscriptionOpenedCallback) {
-	t.muWritableSubscriptionOpenedCallbacks.Lock()
-	defer t.muWritableSubscriptionOpenedCallbacks.Unlock()
-	t.writableSubscriptionOpenedCallbacks = append(t.writableSubscriptionOpenedCallbacks, handler)
+	t.muWritableSubscriptionOpenedCallback.Lock()
+	defer t.muWritableSubscriptionOpenedCallback.Unlock()
+	if t.writableSubscriptionOpenedCallback != nil {
+		panic("only one")
+	}
+	t.writableSubscriptionOpenedCallback = handler
 }
 
 func (t *BaseTreeTransport) OnP2PStateURIReceived(handler P2PStateURIReceivedCallback) {
@@ -64,7 +77,22 @@ func (t *BaseTreeTransport) HandleTxReceived(tx tree.Tx, peerConn TreePeerConn) 
 	wg.Wait()
 }
 
-func (t *BaseTreeTransport) HandleAckReceived(stateURI string, txID types.ID, peerConn TreePeerConn) {
+func (t *BaseTreeTransport) HandlePrivateTxReceived(encryptedTx EncryptedTx, peerConn TreePeerConn) {
+	t.muPrivateTxReceivedCallbacks.RLock()
+	defer t.muPrivateTxReceivedCallbacks.RUnlock()
+	var wg sync.WaitGroup
+	wg.Add(len(t.privateTxReceivedCallbacks))
+	for _, handler := range t.privateTxReceivedCallbacks {
+		handler := handler
+		go func() {
+			defer wg.Done()
+			handler(encryptedTx, peerConn)
+		}()
+	}
+	wg.Wait()
+}
+
+func (t *BaseTreeTransport) HandleAckReceived(stateURI string, txID state.Version, peerConn TreePeerConn) {
 	t.muAckReceivedCallbacks.RLock()
 	defer t.muAckReceivedCallbacks.RUnlock()
 	var wg sync.WaitGroup
@@ -79,25 +107,10 @@ func (t *BaseTreeTransport) HandleAckReceived(stateURI string, txID types.ID, pe
 	wg.Wait()
 }
 
-func (t *BaseTreeTransport) HandleWritableSubscriptionOpened(
-	stateURI string,
-	keypath state.Keypath,
-	subType SubscriptionType,
-	writeSubImpl WritableSubscriptionImpl,
-	fetchHistoryOpts *FetchHistoryOpts,
-) {
-	t.muWritableSubscriptionOpenedCallbacks.RLock()
-	defer t.muWritableSubscriptionOpenedCallbacks.RUnlock()
-	var wg sync.WaitGroup
-	wg.Add(len(t.writableSubscriptionOpenedCallbacks))
-	for _, handler := range t.writableSubscriptionOpenedCallbacks {
-		handler := handler
-		go func() {
-			defer wg.Done()
-			handler(stateURI, keypath, subType, writeSubImpl, fetchHistoryOpts)
-		}()
-	}
-	wg.Wait()
+func (t *BaseTreeTransport) HandleWritableSubscriptionOpened(req SubscriptionRequest, writeSubImplFactory WritableSubscriptionImplFactory) (<-chan struct{}, error) {
+	t.muWritableSubscriptionOpenedCallback.RLock()
+	defer t.muWritableSubscriptionOpenedCallback.RUnlock()
+	return t.writableSubscriptionOpenedCallback(req, writeSubImplFactory)
 }
 
 func (t *BaseTreeTransport) HandleP2PStateURIReceived(stateURI string, peerConn TreePeerConn) {
