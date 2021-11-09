@@ -1,5 +1,3 @@
-// +build !headless
-
 package main
 
 import (
@@ -10,6 +8,8 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+
+	httppprof "net/http/pprof"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -58,6 +58,11 @@ func newAPI(port uint, configPath, profileRoot string, masterProcess process.Pro
 	router.HandleFunc("/api/check-login", api.checkLogin)
 	router.HandleFunc("/api/process-tree", api.processTree)
 	router.HandleFunc("/", api.serveHome)
+	router.HandleFunc("/debug/pprof/", httppprof.Index)
+	router.HandleFunc("/debug/pprof/cmdline", httppprof.Cmdline)
+	router.HandleFunc("/debug/pprof/profile", httppprof.Profile)
+	router.HandleFunc("/debug/pprof/symbol", httppprof.Symbol)
+	router.HandleFunc("/debug/pprof/trace", httppprof.Trace)
 
 	api.server = &http.Server{
 		Addr:           fmt.Sprintf(":%v", port),
@@ -153,10 +158,10 @@ func (api *API) loginUser(w http.ResponseWriter, r *http.Request) {
 		loginRequest.ProfileName,
 		api.configPath,
 		true,
-		api.masterProcess,
 	)
 	if err != nil {
 		api.app = nil
+		api.Errorf("while creating application: %+v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -164,6 +169,7 @@ func (api *API) loginUser(w http.ResponseWriter, r *http.Request) {
 	err = api.Process.SpawnChild(context.Background(), api.app)
 	if err != nil {
 		api.app = nil
+		api.Errorf("while spawning application: %+v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
