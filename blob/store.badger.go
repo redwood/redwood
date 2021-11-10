@@ -583,7 +583,7 @@ func (s *badgerStore) MaxFetchConns() (uint64, error) {
 	maxFetchConns, is, err := node.UintValue(state.Keypath("maxFetchConns"))
 	if err != nil && errors.Cause(err) != errors.Err404 {
 		return 0, err
-	} else if !is {
+	} else if !is || errors.Cause(err) == errors.Err404 {
 		return DefaultMaxFetchConns, nil
 	}
 	return maxFetchConns, nil
