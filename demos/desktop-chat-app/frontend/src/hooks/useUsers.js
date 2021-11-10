@@ -20,7 +20,8 @@ function useUsers(stateURI) {
         usersStateURI = `${server}/registry`
     }
     const usersTree = useStateTree(usersStateURI)
-    const users = !!usersTree ? usersTree.users : defaultValue.current
+    const users = (usersTree || {}).users || defaultValue.current
+    console.log('users', users)
 
     useEffect(() => {
         let newUsers = {}
