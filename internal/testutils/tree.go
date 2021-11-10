@@ -6,12 +6,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"redwood.dev/state"
+	"redwood.dev/utils/badgerutils"
 )
 
 func SetupDBTree(t *testing.T) *state.DBTree {
 	t.Helper()
 
-	db, err := state.NewDBTree(t.TempDir(), nil)
+	var badgerOpts badgerutils.OptsBuilder
+	db, err := state.NewDBTree(badgerOpts.ForPath(t.TempDir()))
 	require.NoError(t, err)
 	return db
 }
@@ -19,7 +21,8 @@ func SetupDBTree(t *testing.T) *state.DBTree {
 func SetupDBTreeWithValue(t *testing.T, keypath state.Keypath, val interface{}) *state.DBTree {
 	t.Helper()
 
-	db, err := state.NewDBTree(t.TempDir(), nil)
+	var badgerOpts badgerutils.OptsBuilder
+	db, err := state.NewDBTree(badgerOpts.ForPath(t.TempDir()))
 	require.NoError(t, err)
 
 	state := db.State(true)
@@ -34,7 +37,8 @@ func SetupDBTreeWithValue(t *testing.T, keypath state.Keypath, val interface{}) 
 func SetupVersionedDBTree(t *testing.T) *state.VersionedDBTree {
 	t.Helper()
 
-	db, err := state.NewVersionedDBTree(t.TempDir(), nil)
+	var badgerOpts badgerutils.OptsBuilder
+	db, err := state.NewVersionedDBTree(badgerOpts.ForPath(t.TempDir()))
 	require.NoError(t, err)
 	return db
 }
@@ -42,7 +46,8 @@ func SetupVersionedDBTree(t *testing.T) *state.VersionedDBTree {
 func SetupVersionedDBTreeWithValue(t *testing.T, keypath state.Keypath, val interface{}) *state.VersionedDBTree {
 	t.Helper()
 
-	db, err := state.NewVersionedDBTree(t.TempDir(), nil)
+	var badgerOpts badgerutils.OptsBuilder
+	db, err := state.NewVersionedDBTree(badgerOpts.ForPath(t.TempDir()))
 	require.NoError(t, err)
 
 	state := db.StateAtVersion(nil, true)
