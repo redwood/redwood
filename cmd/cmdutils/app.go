@@ -34,6 +34,7 @@ import (
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
+	"redwood.dev/utils/badgerutils"
 )
 
 type App struct {
@@ -110,12 +111,15 @@ func (app *App) Start() error {
 		return err
 	}
 
+	var badgerOpts badgerutils.OptsBuilder
+
+	// Initialize the KeyStore
 	{
 		scryptParams := identity.DefaultScryptParams
 		if cfg.KeyStore.InsecureScryptParams {
 			scryptParams = identity.InsecureScryptParams
 		}
-		app.KeyStore = identity.NewBadgerKeyStore(cfg.KeyStoreRoot(), scryptParams)
+		app.KeyStore = identity.NewBadgerKeyStore(badgerOpts.ForPath(cfg.KeyStoreRoot()), scryptParams)
 		err = app.KeyStore.Unlock(cfg.KeyStore.Password, cfg.KeyStore.Mnemonic)
 		if err != nil {
 			app.Errorf("while unlocking keystore: %+v", err)
@@ -124,12 +128,11 @@ func (app *App) Start() error {
 		defer closeIfError(&err, app.KeyStore)
 	}
 
-	encryptionConfig := &state.EncryptionConfig{
-		Key:                 app.KeyStore.LocalSymEncKey().Bytes(),
-		KeyRotationInterval: 24 * time.Hour, // @@TODO: make configurable
-	}
+	// All DBs other than the keystore are encrypted at rest
+	badgerOpts = badgerOpts.WithEncryption(app.KeyStore.LocalSymEncKey().Bytes(), 24*time.Hour)
 
-	db, err := state.NewDBTree(filepath.Join(cfg.DataRoot, "shared"), encryptionConfig)
+	// Initialize the config DB shared by various packages
+	db, err := state.NewDBTree(badgerOpts.ForPath(filepath.Join(cfg.DataRoot, "shared")))
 	if err != nil {
 		app.Errorf("while opening shared db: %+v", err)
 		return err
@@ -139,22 +142,24 @@ func (app *App) Start() error {
 
 	app.PeerStore = swarm.NewPeerStore(app.SharedStateDB)
 
-	app.BlobStore = blob.NewBadgerStore(cfg.BlobDataRoot(), encryptionConfig)
+	app.BlobStore = blob.NewBadgerStore(badgerOpts.ForPath(cfg.BlobDataRoot()))
 	err = app.BlobStore.Start()
 	if err != nil {
 		app.Errorf("while opening blob store: %+v", err)
 		return err
 	}
 
+	// Initialize the tree protocol
 	if cfg.TreeProtocol.Enabled {
-		app.TxStore = tree.NewBadgerTxStore(cfg.TxDBRoot(), encryptionConfig)
+		app.TxStore = tree.NewBadgerTxStore(badgerOpts.ForPath(cfg.TxDBRoot()))
+
 		err = app.TxStore.Start()
 		if err != nil {
 			app.Errorf("while opening tx store: %+v", err)
 			return err
 		}
 
-		app.ControllerHub = tree.NewControllerHub(cfg.StateDBRoot(), app.TxStore, app.BlobStore, encryptionConfig)
+		app.ControllerHub = tree.NewControllerHub(cfg.StateDBRoot(), app.TxStore, app.BlobStore, badgerOpts)
 		err = app.Process.SpawnChild(context.TODO(), app.ControllerHub)
 		if err != nil {
 			app.Errorf("while starting controller hub: %+v", err)

@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"sync"
 
+	"github.com/dgraph-io/badger/v2"
 	"golang.org/x/crypto/sha3"
 
 	"redwood.dev/errors"
@@ -17,9 +18,8 @@ import (
 type badgerStore struct {
 	log.Logger
 
-	dbFilename       string
-	db               *state.DBTree
-	encryptionConfig *state.EncryptionConfig
+	db         *state.DBTree
+	badgerOpts badger.Options
 
 	blobsNeededListeners   []func(blobs []ID)
 	blobsNeededListenersMu sync.RWMutex
@@ -39,18 +39,17 @@ const (
 	DefaultMaxFetchConns uint64 = 4
 )
 
-func NewBadgerStore(dbFilename string, encryptionConfig *state.EncryptionConfig) *badgerStore {
+func NewBadgerStore(badgerOpts badger.Options) *badgerStore {
 	return &badgerStore{
-		Logger:           log.NewLogger("blobstore"),
-		dbFilename:       dbFilename,
-		encryptionConfig: encryptionConfig,
+		Logger:     log.NewLogger("blobstore"),
+		badgerOpts: badgerOpts,
 	}
 }
 
 func (s *badgerStore) Start() error {
-	s.Infof(0, "opening blob store at %v", s.dbFilename)
+	s.Infof(0, "opening blob store at %v", s.badgerOpts.Dir)
 
-	db, err := state.NewDBTree(s.dbFilename, s.encryptionConfig)
+	db, err := state.NewDBTree(s.badgerOpts)
 	if err != nil {
 		return err
 	}

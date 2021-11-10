@@ -10,32 +10,21 @@ import (
 
 type badgerTxStore struct {
 	log.Logger
-	db               *badger.DB
-	dbFilename       string
-	encryptionConfig *state.EncryptionConfig
+	db         *badger.DB
+	badgerOpts badger.Options
 }
 
-func NewBadgerTxStore(dbFilename string, encryptionConfig *state.EncryptionConfig) TxStore {
+func NewBadgerTxStore(badgerOpts badger.Options) TxStore {
 	return &badgerTxStore{
-		Logger:           log.NewLogger("txstore"),
-		dbFilename:       dbFilename,
-		encryptionConfig: encryptionConfig,
+		Logger:     log.NewLogger("txstore"),
+		badgerOpts: badgerOpts,
 	}
 }
 
 func (p *badgerTxStore) Start() error {
-	p.Infof(0, "opening txstore at %v", p.dbFilename)
+	p.Infof(0, "opening txstore at %v", p.badgerOpts.Dir)
 
-	opts := badger.DefaultOptions(p.dbFilename)
-	opts.Logger = nil
-	if p.encryptionConfig != nil {
-		opts.EncryptionKey = p.encryptionConfig.Key
-		opts.EncryptionKeyRotationDuration = p.encryptionConfig.KeyRotationInterval
-		opts.IndexCacheSize = 100 << 20 // @@TODO: make configurable
-	}
-	opts.KeepL0InMemory = true // @@TODO: make configurable
-
-	db, err := badger.Open(opts)
+	db, err := badger.Open(p.badgerOpts)
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-// +build !otto
+//go:build !otto && !raspi
 
 package tree
 

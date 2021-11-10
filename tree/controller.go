@@ -15,6 +15,7 @@ import (
 	"redwood.dev/state"
 	"redwood.dev/tree/nelson"
 	"redwood.dev/utils"
+	"redwood.dev/utils/badgerutils"
 )
 
 type Controller interface {
@@ -31,9 +32,9 @@ type controller struct {
 	process.Process
 	log.Logger
 
-	stateURI         string
-	stateDBRootPath  string
-	encryptionConfig *state.EncryptionConfig
+	stateURI        string
+	stateDBRootPath string
+	badgerOpts      badgerutils.OptsBuilder
 
 	controllerHub ControllerHub
 	txStore       TxStore
@@ -61,21 +62,21 @@ var (
 func NewController(
 	stateURI string,
 	stateDBRootPath string,
-	encryptionConfig *state.EncryptionConfig,
+	badgerOpts badgerutils.OptsBuilder,
 	controllerHub ControllerHub,
 	txStore TxStore,
 	blobStore blob.Store,
 ) (Controller, error) {
 	c := &controller{
-		Process:          *process.New("controller " + stateURI),
-		Logger:           log.NewLogger("controller"),
-		stateURI:         stateURI,
-		stateDBRootPath:  stateDBRootPath,
-		encryptionConfig: encryptionConfig,
-		controllerHub:    controllerHub,
-		txStore:          txStore,
-		blobStore:        blobStore,
-		behaviorTree:     newBehaviorTree(),
+		Process:         *process.New("controller " + stateURI),
+		Logger:          log.NewLogger("controller"),
+		stateURI:        stateURI,
+		stateDBRootPath: stateDBRootPath,
+		badgerOpts:      badgerOpts,
+		controllerHub:   controllerHub,
+		txStore:         txStore,
+		blobStore:       blobStore,
+		behaviorTree:    newBehaviorTree(),
 	}
 	return c, nil
 }
@@ -93,13 +94,13 @@ func (c *controller) Start() (err error) {
 	}
 
 	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(c.stateURI)
-	states, err := state.NewVersionedDBTree(filepath.Join(c.stateDBRootPath, stateURIClean), c.encryptionConfig)
+	states, err := state.NewVersionedDBTree(c.badgerOpts.ForPath(filepath.Join(c.stateDBRootPath, stateURIClean)))
 	if err != nil {
 		return err
 	}
 	c.states = states
 
-	indices, err := state.NewVersionedDBTree(filepath.Join(c.stateDBRootPath, stateURIClean+"_indices"), c.encryptionConfig)
+	indices, err := state.NewVersionedDBTree(c.badgerOpts.ForPath(filepath.Join(c.stateDBRootPath, stateURIClean+"_indices")))
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-// +build otto
+//go:build otto || raspi
 
 package tree
 
@@ -77,9 +77,15 @@ func (r *jsResolver) ResolveState(node state.Node, blobStore blob.Store, sender 
 
 	convertedPatches := make([]interface{}, len(patches))
 	for i, patch := range patches {
+		var value interface{}
+		err = json.Unmarshal(patch.ValueJSON, &value)
+		if err != nil {
+			return err
+		}
+
 		convertedPatch := map[string]interface{}{
 			"keys": patch.Keypath.PartStrings(),
-			"val":  patch.Val,
+			"val":  value,
 		}
 
 		if patch.Range != nil {
