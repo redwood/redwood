@@ -475,21 +475,9 @@ func (a *App) EnsureDataDirs(config Config) error {
 	return nil
 }
 
-func (app *App) startREPL(prompt string, replCommands []REPLCommand) {
+func (app *App) startREPL(prompt string, replCommands REPLCommands) {
 	fmt.Println("Type \"help\" for a list of commands.")
 	fmt.Println()
-
-	commands := make(map[string]REPLCommand)
-	for _, cmd := range replCommands {
-		commands[cmd.Command] = cmd
-	}
-
-	var longestCommandLength int
-	for _, cmd := range replCommands {
-		if len(cmd.Command) > longestCommandLength {
-			longestCommandLength = len(cmd.Command)
-		}
-	}
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
@@ -510,22 +498,12 @@ func (app *App) startREPL(prompt string, replCommands []REPLCommand) {
 			continue
 		} else if parts[0] == "help" {
 			fmt.Println("___ Commands _________")
+			fmt.Println(replCommands.Help())
 			fmt.Println()
-			for _, cmd := range replCommands {
-				difference := longestCommandLength - len(cmd.Command)
-				space := strings.Repeat(" ", difference+4)
-				fmt.Printf("%v%v- %v\n", cmd.Command, space, cmd.HelpText)
-			}
 			continue
 		}
 
-		cmd, exists := commands[parts[0]]
-		if !exists {
-			app.Error("unknown command")
-			continue
-		}
-
-		err := cmd.Handler(parts[1:], app)
+		err := replCommands.Handle(nil, parts, app)
 		if err != nil {
 			app.Errorf("%+v", err)
 		}

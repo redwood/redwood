@@ -40,7 +40,7 @@ type Config struct {
 
 type REPLConfig struct {
 	Prompt   string
-	Commands []REPLCommand
+	Commands REPLCommands
 }
 
 type BootstrapPeer struct {
@@ -109,29 +109,8 @@ func DefaultConfig(appName string) Config {
 	return Config{
 		Mode: ModeREPL,
 		REPLConfig: REPLConfig{
-			Prompt: ">",
-			Commands: []REPLCommand{
-				CmdMnemonic,
-				CmdAddress,
-				CmdLibp2pPeerID,
-				CmdSubscribe,
-				CmdStateURIs,
-				CmdGetState,
-				CmdSetState,
-				CmdListTxs,
-				CmdBlobs,
-				CmdPeers,
-				CmdAddPeer,
-				CmdRemoveAllPeers,
-				CmdRemoveUnverifiedPeers,
-				CmdRemoveFailedPeers,
-				CmdHushSendIndividualMessage,
-				CmdHushSendGroupMessage,
-				CmdHushStoreDebugPrint,
-				CmdTreeStoreDebugPrint,
-				CmdPeerStoreDebugPrint,
-				CmdProcessTree,
-			},
+			Prompt:   ">",
+			Commands: defaultREPLCommands,
 		},
 		BootstrapPeers: []BootstrapPeer{},
 		DataRoot:       dataRoot,

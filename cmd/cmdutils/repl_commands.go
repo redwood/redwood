@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/logrusorgru/aurora/v3"
 	"github.com/olekukonko/tablewriter"
 
 	"redwood.dev/errors"
@@ -20,17 +21,157 @@ import (
 	"redwood.dev/utils"
 )
 
+type REPLHandler interface {
+	Handle(args []string, app *App) error
+	Help() string
+}
+
 type REPLCommand struct {
-	Command  string
-	HelpText string
-	Handler  func(args []string, app *App) error
+	HelpText    string
+	Subcommands REPLCommands
+	Handler     func(args []string, app *App) error
+}
+
+func (c REPLCommand) Handle(cmdParts []string, args []string, app *App) error {
+	if len(c.Subcommands) > 0 {
+		if len(args) == 0 {
+			return ErrShowHelp
+		}
+		return c.Subcommands.Handle(cmdParts, args, app)
+	}
+	return c.Handler(args, app)
+}
+
+func (c REPLCommand) Help() string {
+	txt := c.HelpText + "\n"
+	if len(c.Subcommands) > 0 {
+		txt += fmt.Sprintf("\n%v %v", aurora.Bold(aurora.White("COMMANDS")), c.Subcommands.Help())
+	}
+	return txt
+}
+
+type REPLCommands map[string]REPLCommand
+
+func (c REPLCommands) Handle(cmdParts []string, args []string, app *App) error {
+	cmd, exists := c[args[0]]
+	if !exists {
+		fmt.Println("unknown command")
+		return ErrShowHelp
+	}
+	fullCmd := append(cmdParts, args[0])
+	err := cmd.Handle(fullCmd, args[1:], app)
+	if errors.Cause(err) == ErrShowHelp {
+		fmt.Println()
+		fmt.Printf("%v: %v\n", aurora.Bold(aurora.White(aurora.Underline(strings.Join(fullCmd, " ")))), aurora.Cyan(cmd.Help()))
+		fmt.Println()
+		return nil
+	}
+	return err
+}
+
+func (c REPLCommands) Help() string {
+	var longestCommandLength int
+	for s := range c {
+		if len(s) > longestCommandLength {
+			longestCommandLength = len(s)
+		}
+	}
+	var txt string
+	for s, cmd := range c {
+		difference := longestCommandLength - len(s)
+		spaceAfter := strings.Repeat(" ", difference+4)
+		txt += fmt.Sprintf("\n    %v%v %v", s, spaceAfter, aurora.Cyan(cmd.HelpText))
+	}
+	return txt
+}
+
+// func (c REPLCommands) Help() string {
+// 	var longestCommandLength int
+// 	for cmd := range c {
+// 		if len(cmd) > longestCommandLength {
+// 			longestCommandLength = len(cmd)
+// 		}
+// 	}
+
+// 	var txts []string
+// 	for s, cmd := range c {
+// 		difference := longestCommandLength - len(s)
+// 		spaceAfter := strings.Repeat(" ", difference+4)
+// 		txts = append(txts, fmt.Sprintf("%v%v%v - %v\n", strings.Repeat(" ", indent*4), s, spaceAfter, cmd.Help(indent+1)))
+// 	}
+// 	return strings.Join(txts, "\n") + "\n"
+// }
+
+var ErrShowHelp = errors.New("")
+
+var defaultREPLCommands = REPLCommands{
+	"identity": REPLCommand{
+		HelpText: "view the node's identity",
+		Subcommands: REPLCommands{
+			"mnemonic": CmdMnemonic,
+			"address":  CmdAddress,
+		},
+	},
+	"peers": REPLCommand{
+		HelpText: "add, remove, and list peers",
+		Subcommands: REPLCommands{
+			"list": CmdPeers,
+			"add":  CmdAddPeer,
+			"rm": REPLCommand{
+				HelpText: "remove peers from the peer store",
+				Subcommands: REPLCommands{
+					"all":        CmdRemoveAllPeers,
+					"unverified": CmdRemoveUnverifiedPeers,
+					"failed":     CmdRemoveFailedPeers,
+				},
+			},
+			"dumpstore": CmdPeerStoreDebugPrint,
+		},
+	},
+	"hush": REPLCommand{
+		HelpText: "interact with the hush protocol",
+		Subcommands: REPLCommands{
+			"dumpstore": CmdHushStoreDebugPrint,
+			"send":      CmdHushSendIndividualMessage,
+			"sendgroup": CmdHushSendGroupMessage,
+		},
+	},
+	"tree": REPLCommand{
+		HelpText: "interact with the tree protocol",
+		Subcommands: REPLCommands{
+			"get":       CmdGetState,
+			"set":       CmdSetState,
+			"uris":      CmdStateURIs,
+			"txs":       CmdListTxs,
+			"subscribe": CmdSubscribe,
+			"dumpstore": CmdTreeStoreDebugPrint,
+		},
+	},
+	"blob": REPLCommand{
+		HelpText: "interact with the blob protocol",
+		Subcommands: REPLCommands{
+			"list": CmdBlobs,
+			"set": REPLCommand{
+				HelpText: "configure the blob protocol",
+				Subcommands: REPLCommands{
+					"maxfetchconns": CmdSetBlobMaxFetchConns,
+				},
+			},
+		},
+	},
+	"libp2p": REPLCommand{
+		HelpText: "interact with the libp2p transport",
+		Subcommands: REPLCommands{
+			"id": CmdLibp2pPeerID,
+		},
+	},
+	"ps": CmdProcessTree,
 }
 
 var (
 	CmdMnemonic = REPLCommand{
-		"mnemonic",
-		"show your identity's mnemonic",
-		func(args []string, app *App) error {
+		HelpText: "show your identity's mnemonic",
+		Handler: func(args []string, app *App) error {
 			m, err := app.KeyStore.Mnemonic()
 			if err != nil {
 				return err
@@ -41,9 +182,8 @@ var (
 	}
 
 	CmdAddress = REPLCommand{
-		"address",
-		"show your address",
-		func(args []string, app *App) error {
+		HelpText: "show your address",
+		Handler: func(args []string, app *App) error {
 			identity, err := app.KeyStore.DefaultPublicIdentity()
 			if err != nil {
 				return err
@@ -54,9 +194,8 @@ var (
 	}
 
 	CmdLibp2pPeerID = REPLCommand{
-		"libp2pid",
-		"show your libp2p peer ID",
-		func(args []string, app *App) error {
+		HelpText: "show your libp2p peer ID",
+		Handler: func(args []string, app *App) error {
 			if app.Libp2pTransport == nil {
 				return errors.New("libp2p is disabled")
 			}
@@ -67,9 +206,8 @@ var (
 	}
 
 	CmdSubscribe = REPLCommand{
-		"subscribe",
-		"subscribe to a state URI",
-		func(args []string, app *App) error {
+		HelpText: "subscribe to a state URI",
+		Handler: func(args []string, app *App) error {
 			if len(args) < 1 {
 				return errors.New("missing argument: state URI")
 			}
@@ -92,9 +230,8 @@ var (
 	}
 
 	CmdStateURIs = REPLCommand{
-		"stateuris",
-		"list all known state URIs",
-		func(args []string, app *App) error {
+		HelpText: "list all known state URIs",
+		Handler: func(args []string, app *App) error {
 			stateURIs, err := app.ControllerHub.KnownStateURIs()
 			if err != nil {
 				return err
@@ -111,9 +248,8 @@ var (
 	}
 
 	CmdGetState = REPLCommand{
-		"state",
-		"print the current state tree for a state URI",
-		func(args []string, app *App) error {
+		HelpText: "print the current state tree for a state URI",
+		Handler: func(args []string, app *App) error {
 			if len(args) < 1 {
 				return errors.New("missing argument: state URI")
 			}
@@ -140,9 +276,8 @@ var (
 	}
 
 	CmdSetState = REPLCommand{
-		"set",
-		"set a keypath in a state tree",
-		func(args []string, app *App) error {
+		HelpText: "set a keypath in a state tree",
+		Handler: func(args []string, app *App) error {
 			if len(args) < 3 {
 				return errors.New("requires 3 arguments: set <state URI> <keypath> <JSON value>")
 			}
@@ -171,9 +306,8 @@ var (
 	}
 
 	CmdListTxs = REPLCommand{
-		"txs",
-		"list the txs for a given state URI",
-		func(args []string, app *App) error {
+		HelpText: "list the txs for a given state URI",
+		Handler: func(args []string, app *App) error {
 			if len(args) < 1 {
 				return errors.New("requires 1 arguments: txs <state URI>")
 			}
@@ -194,9 +328,8 @@ var (
 	}
 
 	CmdBlobs = REPLCommand{
-		"blobs",
-		"list all blobs",
-		func(args []string, app *App) error {
+		HelpText: "list all blobs",
+		Handler: func(args []string, app *App) error {
 			app.BlobStore.DebugPrint()
 
 			contents, err := app.BlobStore.Contents()
@@ -226,9 +359,8 @@ var (
 	}
 
 	CmdPeers = REPLCommand{
-		"peers",
-		"list all known peers",
-		func(args []string, app *App) error {
+		HelpText: "list all known peers",
+		Handler: func(args []string, app *App) error {
 			var full bool
 			if len(args) > 0 {
 				if args[0] == "full" {
@@ -309,9 +441,8 @@ var (
 	}
 
 	CmdAddPeer = REPLCommand{
-		"addpeer",
-		"add a peer",
-		func(args []string, app *App) error {
+		HelpText: "add a peer",
+		Handler: func(args []string, app *App) error {
 			if len(args) < 2 {
 				return errors.New("requires 2 arguments: addpeer <transport> <dial addr>")
 			}
@@ -321,9 +452,8 @@ var (
 	}
 
 	CmdRemoveAllPeers = REPLCommand{
-		"rmallpeers",
-		"remove all peers",
-		func(args []string, app *App) error {
+		HelpText: "remove all peers",
+		Handler: func(args []string, app *App) error {
 			var toDelete []string
 			for _, peer := range app.PeerStore.Peers() {
 				toDelete = append(toDelete, peer.DeviceUniqueID())
@@ -334,9 +464,8 @@ var (
 	}
 
 	CmdRemoveUnverifiedPeers = REPLCommand{
-		"rmunverifiedpeers",
-		"remove peers who haven't been verified",
-		func(args []string, app *App) error {
+		HelpText: "remove peers who haven't been verified",
+		Handler: func(args []string, app *App) error {
 			var toDelete []string
 			for _, peer := range app.PeerStore.Peers() {
 				if len(peer.Addresses()) == 0 {
@@ -349,9 +478,8 @@ var (
 	}
 
 	CmdRemoveFailedPeers = REPLCommand{
-		"rmfailedpeers",
-		"remove peers with more than a certain number of failures",
-		func(args []string, app *App) error {
+		HelpText: "remove peers with more than a certain number of failures",
+		Handler: func(args []string, app *App) error {
 			if len(args) < 1 {
 				return errors.New("requires 1 argument: rmfailedpeers <number of failures>")
 			}
@@ -373,9 +501,8 @@ var (
 	}
 
 	CmdHushSendIndividualMessage = REPLCommand{
-		"hushmsg",
-		"send a 1:1 Hush message",
-		func(args []string, app *App) error {
+		HelpText: "send a 1:1 Hush message",
+		Handler: func(args []string, app *App) error {
 			if len(args) < 2 {
 				return errors.New("requires 2 arguments: hushmsg <recipient address> <message>")
 			}
@@ -391,9 +518,8 @@ var (
 	}
 
 	CmdHushSendGroupMessage = REPLCommand{
-		"hushgroup",
-		"send a group Hush message",
-		func(args []string, app *App) error {
+		HelpText: "send a group Hush message",
+		Handler: func(args []string, app *App) error {
 			if len(args) < 2 {
 				return errors.New("requires 2 arguments: hushmsg <comma-separated recipient addresses> <message>")
 			}
@@ -416,34 +542,38 @@ var (
 	}
 
 	CmdHushStoreDebugPrint = REPLCommand{
-		"hushstore",
-		"print the contents of the protohush store",
-		func(args []string, app *App) error {
+		HelpText: "print the contents of the protohush store",
+		Handler: func(args []string, app *App) error {
 			app.HushProtoStore.DebugPrint()
 			return nil
 		},
 	}
 
 	CmdTreeStoreDebugPrint = REPLCommand{
-		"treestore",
-		"print the contents of the prototree store",
-		func(args []string, app *App) error {
+		HelpText: "print the contents of the prototree store",
+		Handler: func(args []string, app *App) error {
 			app.TreeProtoStore.DebugPrint()
 			return nil
 		},
 	}
 
 	CmdPeerStoreDebugPrint = REPLCommand{
-		"peerstore",
-		"print the contents of the peer store",
-		func(args []string, app *App) error {
+		HelpText: "print the contents of the peer store",
+		Handler: func(args []string, app *App) error {
 			app.PeerStore.DebugPrint()
 			return nil
 		},
 	}
 
 	CmdProcessTree = REPLCommand{
-		Command:  "ps",
+		HelpText: "display the current process tree",
+		Handler: func(args []string, app *App) error {
+			app.Infof(0, "processes:\n%v", utils.PrettyJSON(app.ProcessTree()))
+			return nil
+		},
+	}
+
+	CmdSetBlobMaxFetchConns = REPLCommand{
 		HelpText: "display the current process tree",
 		Handler: func(args []string, app *App) error {
 			app.Infof(0, "processes:\n%v", utils.PrettyJSON(app.ProcessTree()))
