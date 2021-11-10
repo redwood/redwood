@@ -612,7 +612,8 @@ func (node *DBNode) scan(rval reflect.Value) error {
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(node, rval.Interface())
+			rval.Set(reflect.ValueOf(""))
+			return nil
 		}
 		rval.Set(reflect.ValueOf(x))
 		return nil
@@ -622,7 +623,8 @@ func (node *DBNode) scan(rval reflect.Value) error {
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(node, rval.Interface())
+			rval.Set(reflect.ValueOf(true))
+			return nil
 		}
 		rval.Set(reflect.ValueOf(x).Convert(rval.Type()))
 		return nil
@@ -632,7 +634,8 @@ func (node *DBNode) scan(rval reflect.Value) error {
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(node, rval.Interface())
+			rval.Set(reflect.ValueOf(uint64(0)))
+			return nil
 		}
 		rval.Set(reflect.ValueOf(x).Convert(rval.Type()))
 		return nil
@@ -642,7 +645,8 @@ func (node *DBNode) scan(rval reflect.Value) error {
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(node, rval.Interface())
+			rval.Set(reflect.ValueOf(uint32(0)))
+			return nil
 		}
 		if x > math.MaxUint32 {
 			return errors.Wrap(makeScanError(node, rval.Interface()), "overflows uint32")
@@ -655,7 +659,8 @@ func (node *DBNode) scan(rval reflect.Value) error {
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(node, rval.Interface())
+			rval.Set(reflect.ValueOf(int64(0)))
+			return nil
 		}
 		rval.Set(reflect.ValueOf(x).Convert(rval.Type()))
 		return nil
@@ -665,7 +670,8 @@ func (node *DBNode) scan(rval reflect.Value) error {
 		if err != nil {
 			return err
 		} else if !is {
-			return makeScanError(node, rval.Interface())
+			rval.Set(reflect.ValueOf(float64(0)))
+			return nil
 		}
 		rval.Set(reflect.ValueOf(x).Convert(rval.Type()))
 		return nil
