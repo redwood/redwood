@@ -429,3 +429,21 @@ func TestStore(t *testing.T) {
 		require.Contains(t, ids, blob.ID{types.SHA1, blob2SHA1})
 	})
 }
+
+func TestStore_MaxFetchConns(t *testing.T) {
+	store := blob.NewBadgerStore(t.TempDir(), nil)
+	err := store.Start()
+	require.NoError(t, err)
+	defer store.Close()
+
+	n, err := store.MaxFetchConns()
+	require.NoError(t, err)
+	require.Equal(t, blob.DefaultMaxFetchConns, n)
+
+	err = store.SetMaxFetchConns(blob.DefaultMaxFetchConns + 3)
+	require.NoError(t, err)
+
+	n, err = store.MaxFetchConns()
+	require.NoError(t, err)
+	require.Equal(t, blob.DefaultMaxFetchConns+3, n)
+}

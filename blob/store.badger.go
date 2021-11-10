@@ -35,6 +35,10 @@ var (
 	missingBlobsKey = state.Keypath("missing").Pushs("blobs")
 )
 
+const (
+	DefaultMaxFetchConns uint64 = 4
+)
+
 func NewBadgerStore(dbFilename string, encryptionConfig *state.EncryptionConfig) *badgerStore {
 	return &badgerStore{
 		Logger:           log.NewLogger("blobstore"),
@@ -570,6 +574,30 @@ func (s *badgerStore) Contents() (map[types.Hash]map[types.Hash]bool, error) {
 		}
 	}
 	return m, nil
+}
+
+func (s *badgerStore) MaxFetchConns() (uint64, error) {
+	node := s.db.State(false)
+	defer node.Close()
+
+	maxFetchConns, is, err := node.UintValue(state.Keypath("maxFetchConns"))
+	if err != nil && errors.Cause(err) != errors.Err404 {
+		return 0, err
+	} else if !is || errors.Cause(err) == errors.Err404 {
+		return DefaultMaxFetchConns, nil
+	}
+	return maxFetchConns, nil
+}
+
+func (s *badgerStore) SetMaxFetchConns(maxFetchConns uint64) error {
+	node := s.db.State(true)
+	defer node.Close()
+
+	err := node.Set(state.Keypath("maxFetchConns"), nil, maxFetchConns)
+	if err != nil {
+		return err
+	}
+	return node.Save()
 }
 
 func (s *badgerStore) DebugPrint() {

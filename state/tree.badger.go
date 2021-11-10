@@ -435,7 +435,7 @@ func (tx *DBNode) UintValue(keypath Keypath) (uint64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
-		return 0, true, nil
+		return 0, false, nil
 	}
 	u, isUint := val.(uint64)
 	if isUint {
@@ -451,7 +451,7 @@ func (tx *DBNode) IntValue(keypath Keypath) (int64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
-		return 0, true, nil
+		return 0, false, nil
 	}
 	i, isInt := val.(int64)
 	if isInt {
@@ -467,7 +467,7 @@ func (tx *DBNode) FloatValue(keypath Keypath) (float64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
-		return 0, true, nil
+		return 0, false, nil
 	}
 	f, isFloat := val.(float64)
 	if isFloat {
@@ -483,7 +483,7 @@ func (tx *DBNode) BoolValue(keypath Keypath) (bool, bool, error) {
 	if err != nil {
 		return false, false, err
 	} else if !exists {
-		return false, true, nil
+		return false, false, nil
 	}
 	b, isBool := val.(bool)
 	if isBool {
@@ -499,7 +499,7 @@ func (tx *DBNode) StringValue(keypath Keypath) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	} else if !exists {
-		return "", true, nil
+		return "", false, nil
 	}
 	s, isString := val.(string)
 	if !isString {
@@ -515,7 +515,7 @@ func (tx *DBNode) BytesValue(keypath Keypath) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, err
 	} else if !exists {
-		return nil, true, nil
+		return nil, false, nil
 	}
 	bs, isBytes := val.([]byte)
 	if !isBytes {
@@ -531,7 +531,7 @@ func (tx *DBNode) MapValue(keypath Keypath) (map[string]interface{}, bool, error
 	if err != nil {
 		return nil, false, err
 	} else if !exists {
-		return nil, true, nil
+		return nil, false, nil
 	}
 	m, isMap := val.(map[string]interface{})
 	if !isMap {
@@ -547,7 +547,7 @@ func (tx *DBNode) SliceValue(keypath Keypath) ([]interface{}, bool, error) {
 	if err != nil {
 		return nil, false, err
 	} else if !exists {
-		return nil, true, nil
+		return nil, false, nil
 	}
 	s, isSlice := val.([]interface{})
 	if !isSlice {

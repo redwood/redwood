@@ -171,7 +171,7 @@ func (bp *blobProtocol) fetchBlobs(blobs []blob.ID) {
 			continue
 		}
 
-		fetcher := newFetcher(blobID, 4, bp.blobStore, bp.ProvidersOfBlob)
+		fetcher := newFetcher(blobID, bp.blobStore, bp.ProvidersOfBlob)
 
 		err := bp.Process.SpawnChild(nil, fetcher)
 		if err != nil {
