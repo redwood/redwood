@@ -5,17 +5,17 @@
     <key>BuildMachineOSBuild</key>
     <string>16F73</string>
     <key>CFBundleDisplayName</key>
-    <string>Redwood Chat</string>
+    <string>Hush</string>
     <key>CFBundleExecutable</key>
-    <string>Redwood Chat</string>
+    <string>Hush</string>
     <key>CFBundleIconFile</key>
-    <string>Redwood Chat.icns</string>
+    <string>Hush.icns</string>
     <key>CFBundleIdentifier</key>
-    <string>com.redwood-chat.app</string>
+    <string>com.hush.app</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Redwood Chat</string>
+    <string>Hush</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

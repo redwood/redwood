@@ -93,14 +93,14 @@ jobs:
                 platform: [ubuntu-latest, macos-11, macos-10.15]
                 include:
                     - platform: ubuntu-latest
-                      app_name: redwood-chat
-                      zip_name: redwood-chat-ubuntu.zip
+                      app_name: hush
+                      zip_name: hush-ubuntu.zip
                     - platform: macos-11
-                      app_name: RedwoodChat.app/
-                      zip_name: redwood-chat-macos-11.zip
+                      app_name: Hush.app/
+                      zip_name: hush-macos-11.zip
                     - platform: macos-10.15
-                      app_name: RedwoodChat.app/
-                      zip_name: redwood-chat-macos-10.15.zip
+                      app_name: Hush.app/
+                      zip_name: hush-macos-10.15.zip
 
 
         runs-on: ${{ matrix.platform }}
@@ -160,11 +160,11 @@ jobs:
               working-directory: demos/desktop-chat-app/frontend
 
             - name: Build desktop-chat-app
-              run:  go build -o ./redwood-chat .
+              run:  go build -o ./hush .
               working-directory: demos/desktop-chat-app
 
             - name: Package macOS app
-              run:  mkdir -p ./packaging/RedwoodChat.app/Contents/MacOS && mv ./redwood-chat ./packaging/RedwoodChat.app/Contents/MacOS/ && chmod +x ./packaging/RedwoodChat.app/Contents/MacOS/redwood-chat && mv ./packaging/RedwoodChat.app .
+              run:  mkdir -p ./packaging/Hush.app/Contents/MacOS && mv ./hush ./packaging/Hush.app/Contents/MacOS/Hush && chmod +x ./packaging/Hush.app/Contents/MacOS/Hush && mv ./packaging/Hush.app .
               if:   ${{ matrix.platform == 'macos-11' || matrix.platform == 'macos-10.15' }}
               working-directory: demos/desktop-chat-app
 
