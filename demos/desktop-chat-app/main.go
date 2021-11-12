@@ -9,7 +9,6 @@ import (
 	"os"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/brynbellomy/klog"
 	"github.com/urfave/cli"
@@ -80,7 +79,7 @@ func main() {
 		go func() {
 			http.ListenAndServe(":"+c.String("pprof"), nil)
 		}()
-		runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
+		// runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
 
 		var (
 			profileRoot = c.String("root")

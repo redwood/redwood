@@ -19,6 +19,7 @@ import (
 
 	"redwood.dev/blob"
 	"redwood.dev/errors"
+	"redwood.dev/health"
 	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/process"
@@ -60,6 +61,8 @@ type App struct {
 	HTTPRPCServer       *http.Server
 	HTTPRPCServerConfig rpc.HTTPConfig
 	SharedStateDB       *state.DBTree
+
+	Nurse *health.Nurse
 }
 
 func NewApp(name string, config Config) *App {
@@ -80,6 +83,25 @@ func (app *App) Start() error {
 	}
 
 	cfg := app.Config
+
+	if cfg.Nurse.Enabled {
+		app.Nurse = health.NewNurse(health.NurseConfig{
+			ProfileRoot:          cfg.Nurse.ProfileRoot,
+			PollInterval:         cfg.Nurse.PollInterval,
+			GatherDuration:       cfg.Nurse.GatherDuration,
+			MaxProfileSize:       cfg.Nurse.MaxProfileSize,
+			CPUProfileRate:       cfg.Nurse.CPUProfileRate,
+			MemProfileRate:       cfg.Nurse.MemProfileRate,
+			BlockProfileRate:     cfg.Nurse.BlockProfileRate,
+			MutexProfileFraction: cfg.Nurse.MutexProfileFraction,
+			MemThreshold:         cfg.Nurse.MemThreshold,
+			GoroutineThreshold:   cfg.Nurse.GoroutineThreshold,
+		})
+		err = app.Process.SpawnChild(nil, app.Nurse)
+		if err != nil {
+			return err
+		}
+	}
 
 	if cfg.Mode == ModeTermUI {
 		app.TermUI = NewTermUI()

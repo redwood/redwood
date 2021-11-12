@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -14,16 +15,15 @@ import (
 )
 
 type Config struct {
-	Mode       Mode       `yaml:"-"`
-	REPLConfig REPLConfig `yaml:"-"`
-
+	Mode            Mode            `yaml:"-"`
+	REPLConfig      REPLConfig      `yaml:"-"`
 	BootstrapPeers  []BootstrapPeer `yaml:"BootstrapPeers"`
 	DataRoot        string          `yaml:"DataRoot"`
 	DNSOverHTTPSURL string          `yaml:"DNSOverHTTPSURL"`
 	JWTSecret       string          `yaml:"JWTSecret"`
 	DevMode         bool            `yaml:"-"`
-
-	KeyStore KeyStoreConfig `yaml:"-"`
+	Nurse           NurseConfig     `yaml:"Nurse"`
+	KeyStore        KeyStoreConfig  `yaml:"-"`
 
 	Libp2pTransport    Libp2pTransportConfig    `yaml:"Libp2pTransport"`
 	BraidHTTPTransport BraidHTTPTransportConfig `yaml:"BraidHTTPTransport"`
@@ -46,6 +46,20 @@ type REPLConfig struct {
 type BootstrapPeer struct {
 	Transport     string   `yaml:"Transport"`
 	DialAddresses []string `yaml:"DialAddresses"`
+}
+
+type NurseConfig struct {
+	Enabled              bool           `yaml:"Enabled"`
+	ProfileRoot          string         `yaml:"ProfileRoot"`
+	PollInterval         time.Duration  `yaml:"PollInterval"`
+	GatherDuration       time.Duration  `yaml:"GatherDuration"`
+	MaxProfileSize       utils.FileSize `yaml:"MaxProfileSize"`
+	CPUProfileRate       int            `yaml:"CPUProfileRate"`
+	MemProfileRate       int            `yaml:"MemProfileRate"`
+	BlockProfileRate     int            `yaml:"BlockProfileRate"`
+	MutexProfileFraction int            `yaml:"MutexProfileFraction"`
+	MemThreshold         utils.FileSize `yaml:"MemThreshold"`
+	GoroutineThreshold   int            `yaml:"GoroutineThreshold"`
 }
 
 type KeyStoreConfig struct {
@@ -115,6 +129,19 @@ func DefaultConfig(appName string) Config {
 		DataRoot:       dataRoot,
 		JWTSecret:      utils.RandomString(32),
 		DevMode:        false,
+		Nurse: NurseConfig{
+			Enabled:              true,
+			ProfileRoot:          filepath.Join(os.TempDir(), "redwood-pprof"),
+			PollInterval:         10 * time.Second,
+			GatherDuration:       10 * time.Second,
+			MaxProfileSize:       100 * utils.MB,
+			CPUProfileRate:       1,
+			MemProfileRate:       1,
+			BlockProfileRate:     1,
+			MutexProfileFraction: 1,
+			MemThreshold:         5 * utils.GB,
+			GoroutineThreshold:   10000,
+		},
 		Libp2pTransport: Libp2pTransportConfig{
 			Enabled:    true,
 			ListenAddr: "0.0.0.0",
