@@ -189,6 +189,7 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
             return unsubscribe
 
         } catch (err) {
+            throw err
             callback('http transport: ' + err, undefined as any)
             return () => {}
         }

@@ -13,6 +13,7 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/internal/testutils"
 	"redwood.dev/types"
+	"redwood.dev/utils/badgerutils"
 )
 
 func TestStore(t *testing.T) {
@@ -22,10 +23,12 @@ func TestStore(t *testing.T) {
 	quux := []byte("Donec ultricies sagittis nulla, at posuere justo bibendum ut. Phasellus sit amet tempus nulla. Vivamus eget ex arcu. Maecenas bibendum tortor sed nibh tempus feugiat. Donec ullamcorper mollis arcu non vestibulum. Curabitur porttitor, odio quis lacinia cursus, augue enim vehicula tellus, id consectetur magna dui ut risus. Suspendisse molestie, lacus id ultrices varius, nunc mauris accumsan erat, ornare bibendum nibh nisl eu lectus. Suspendisse nec tellus vitae arcu sollicitudin facilisis congue eu turpis. In tristique erat elit, faucibus pellentesque libero sagittis eget. Aliquam eget nunc erat. Etiam in euismod mi. Nunc vel purus imperdiet, viverra lectus vel, sollicitudin justo.")
 	zork := []byte("Phasellus convallis magna in fringilla laoreet. Aliquam ac orci non enim finibus suscipit non eget odio. Morbi finibus ante ut scelerisque maximus. Fusce consectetur id enim ac scelerisque. Nullam vulputate nisi ac est commodo, euismod condimentum ligula rhoncus. Donec eu magna nulla. Pellentesque in finibus est.")
 
+	var badgerOpts badgerutils.OptsBuilder
+
 	t.Run("will store a chunk with the correct hash", func(t *testing.T) {
 		t.Parallel()
 
-		store := blob.NewBadgerStore(t.TempDir(), nil)
+		store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))
 		err := store.Start()
 		require.NoError(t, err)
 		defer store.Close()
@@ -51,7 +54,7 @@ func TestStore(t *testing.T) {
 	t.Run("will not store a chunk with the hash doesn't match", func(t *testing.T) {
 		t.Parallel()
 
-		store := blob.NewBadgerStore(t.TempDir(), nil)
+		store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))
 		err := store.Start()
 		require.NoError(t, err)
 		defer store.Close()
@@ -74,7 +77,7 @@ func TestStore(t *testing.T) {
 	t.Run("will store a manifest", func(t *testing.T) {
 		t.Parallel()
 
-		store := blob.NewBadgerStore(t.TempDir(), nil)
+		store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))
 		err := store.Start()
 		require.NoError(t, err)
 		defer store.Close()
@@ -111,7 +114,7 @@ func TestStore(t *testing.T) {
 	t.Run("marks blobs as needed", func(t *testing.T) {
 		t.Parallel()
 
-		store := blob.NewBadgerStore(t.TempDir(), nil)
+		store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))
 		err := store.Start()
 		require.NoError(t, err)
 		defer store.Close()
@@ -139,7 +142,7 @@ func TestStore(t *testing.T) {
 	t.Run("will not mark a blob as needed if it is present", func(t *testing.T) {
 		t.Parallel()
 
-		store := blob.NewBadgerStore(t.TempDir(), nil)
+		store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))
 		err := store.Start()
 		require.NoError(t, err)
 		defer store.Close()
@@ -173,7 +176,7 @@ func TestStore(t *testing.T) {
 	t.Run("notifies subscribers of missing blobs when they are marked", func(t *testing.T) {
 		t.Parallel()
 
-		store := blob.NewBadgerStore(t.TempDir(), nil)
+		store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))
 		err := store.Start()
 		require.NoError(t, err)
 		defer store.Close()
@@ -225,7 +228,7 @@ func TestStore(t *testing.T) {
 	t.Run("does not notify subscribers of missing blobs if none are missing", func(t *testing.T) {
 		t.Parallel()
 
-		store := blob.NewBadgerStore(t.TempDir(), nil)
+		store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))
 		err := store.Start()
 		require.NoError(t, err)
 		defer store.Close()
@@ -256,7 +259,7 @@ func TestStore(t *testing.T) {
 	t.Run("notifies subscribers when blobs are saved via StoreBlob", func(t *testing.T) {
 		t.Parallel()
 
-		store := blob.NewBadgerStore(t.TempDir(), nil)
+		store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))
 		err := store.Start()
 		require.NoError(t, err)
 		defer store.Close()
@@ -283,7 +286,7 @@ func TestStore(t *testing.T) {
 	t.Run("notifies subscribers when blobs are saved in chunks", func(t *testing.T) {
 		t.Parallel()
 
-		store := blob.NewBadgerStore(t.TempDir(), nil)
+		store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))
 		err := store.Start()
 		require.NoError(t, err)
 		defer store.Close()
@@ -330,7 +333,7 @@ func TestStore(t *testing.T) {
 			return h
 		}
 
-		store := blob.NewBadgerStore(t.TempDir(), nil)
+		store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))
 		err := store.Start()
 		require.NoError(t, err)
 		defer store.Close()
@@ -431,7 +434,8 @@ func TestStore(t *testing.T) {
 }
 
 func TestStore_MaxFetchConns(t *testing.T) {
-	store := blob.NewBadgerStore(t.TempDir(), nil)
+	var badgerOpts badgerutils.OptsBuilder
+	store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))
 	err := store.Start()
 	require.NoError(t, err)
 	defer store.Close()

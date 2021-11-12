@@ -5,6 +5,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/dgraph-io/badger/v2"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 
 	"redwood.dev/crypto"
@@ -16,8 +17,8 @@ import (
 
 type BadgerKeyStore struct {
 	log.Logger
-	dbFilename   string
 	db           *state.DBTree
+	badgerOpts   badger.Options
 	scryptParams ScryptParams
 	unlockedUser *badgerUser
 	mu           sync.RWMutex
@@ -40,10 +41,10 @@ var (
 	InsecureScryptParams = ScryptParams{N: 2, P: 1}
 )
 
-func NewBadgerKeyStore(dbFilename string, scryptParams ScryptParams) *BadgerKeyStore {
+func NewBadgerKeyStore(badgerOpts badger.Options, scryptParams ScryptParams) *BadgerKeyStore {
 	return &BadgerKeyStore{
 		Logger:       log.NewLogger("keystore"),
-		dbFilename:   dbFilename,
+		badgerOpts:   badgerOpts,
 		scryptParams: scryptParams,
 	}
 }
@@ -55,7 +56,7 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
-	db, err := state.NewDBTree(ks.dbFilename, nil)
+	db, err := state.NewDBTree(ks.badgerOpts)
 	if err != nil {
 		return err
 	}

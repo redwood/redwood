@@ -33,21 +33,12 @@ type EncryptionConfig struct {
 	KeyRotationInterval time.Duration `json:"rotationInterval"`
 }
 
-func NewDBTree(dbFilename string, encryptionConfig *EncryptionConfig) (*DBTree, error) {
-	opts := badger.DefaultOptions(dbFilename)
-	opts.Logger = nil
-	if encryptionConfig != nil {
-		opts.EncryptionKey = encryptionConfig.Key
-		opts.EncryptionKeyRotationDuration = encryptionConfig.KeyRotationInterval
-		opts.IndexCacheSize = 256 * 1024 * 1024 // @@TODO: make configurable
-	}
-	opts.KeepL0InMemory = true // @@TODO: make configurable
-
-	db, err := badger.Open(opts)
+func NewDBTree(badgerOpts badger.Options) (*DBTree, error) {
+	db, err := badger.Open(badgerOpts)
 	if err != nil {
 		return nil, err
 	}
-	return &DBTree{db, dbFilename, log.NewLogger("db tree")}, nil
+	return &DBTree{db, badgerOpts.Dir, log.NewLogger("db tree")}, nil
 }
 
 func (t *DBTree) Close() error {
@@ -83,21 +74,12 @@ type VersionedDBTree struct {
 	log.Logger
 }
 
-func NewVersionedDBTree(dbFilename string, encryptionConfig *EncryptionConfig) (*VersionedDBTree, error) {
-	opts := badger.DefaultOptions(dbFilename)
-	opts.Logger = nil
-	if encryptionConfig != nil {
-		opts.EncryptionKey = encryptionConfig.Key
-		opts.EncryptionKeyRotationDuration = encryptionConfig.KeyRotationInterval
-		opts.IndexCacheSize = 100 << 20 // @@TODO: make configurable
-	}
-	opts.KeepL0InMemory = true // @@TODO: make configurable
-
-	db, err := badger.Open(opts)
+func NewVersionedDBTree(badgerOpts badger.Options) (*VersionedDBTree, error) {
+	db, err := badger.Open(badgerOpts)
 	if err != nil {
 		return nil, err
 	}
-	return &VersionedDBTree{db, dbFilename, log.NewLogger("db tree")}, nil
+	return &VersionedDBTree{db, badgerOpts.Dir, log.NewLogger("db tree")}, nil
 }
 
 func (t *VersionedDBTree) Close() error {

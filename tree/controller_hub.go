@@ -11,6 +11,7 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/state"
+	"redwood.dev/utils/badgerutils"
 )
 
 type ControllerHub interface {
@@ -36,12 +37,12 @@ type controllerHub struct {
 	log.Logger
 	chStop chan struct{}
 
-	controllers      map[string]Controller
-	controllersMu    sync.RWMutex
-	txStore          TxStore
-	blobStore        blob.Store
-	dbRootPath       string
-	encryptionConfig *state.EncryptionConfig
+	controllers   map[string]Controller
+	controllersMu sync.RWMutex
+	txStore       TxStore
+	blobStore     blob.Store
+	dbRootPath    string
+	badgerOpts    badgerutils.OptsBuilder
 
 	newStateListeners   []NewStateCallback
 	newStateListenersMu sync.RWMutex
@@ -51,13 +52,14 @@ var (
 	ErrNoController = errors.New("no controller for that stateURI")
 )
 
-func NewControllerHub(dbRootPath string, txStore TxStore, blobStore blob.Store, encryptionConfig *state.EncryptionConfig) ControllerHub {
+func NewControllerHub(dbRootPath string, txStore TxStore, blobStore blob.Store, badgerOpts badgerutils.OptsBuilder) ControllerHub {
 	return &controllerHub{
 		Process:     *process.New("controller hub"),
 		Logger:      log.NewLogger("controller hub"),
 		chStop:      make(chan struct{}),
 		controllers: make(map[string]Controller),
 		dbRootPath:  dbRootPath,
+		badgerOpts:  badgerOpts,
 		txStore:     txStore,
 		blobStore:   blobStore,
 	}
@@ -98,7 +100,7 @@ func (m *controllerHub) EnsureController(stateURI string) (Controller, error) {
 	if ctrl == nil {
 		// Set up the controller
 		var err error
-		ctrl, err = NewController(stateURI, m.dbRootPath, m.encryptionConfig, m, m.txStore, m.blobStore)
+		ctrl, err = NewController(stateURI, m.dbRootPath, m.badgerOpts, m, m.txStore, m.blobStore)
 		if err != nil {
 			return nil, err
 		}
