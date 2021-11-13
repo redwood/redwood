@@ -8740,6 +8740,17 @@ react-emoji-render-redwood@^1.2.4:
     prop-types "^15.5.8"
     string-replace-to-array "^1.0.1"
 
+react-emoji-render-redwood@^2.0.1:
+  version "2.0.1"
+  resolved "https://registry.yarnpkg.com/react-emoji-render-redwood/-/react-emoji-render-redwood-2.0.1.tgz#56ca7a3474f7bc0a594c8ba9f0b86a3856589311"
+  dependencies:
+    classnames "^2.2.5"
+    emoji-regex "^8.0.0"
+    lodash.flatten "^4.4.0"
+    prop-types "^15.5.8"
+    react-emoji-render-redwood "^1.2.4"
+    string-replace-to-array "^1.0.1"
+
 react-emoji-render@^1.2.4:
   version "1.2.4"
   resolved "https://registry.yarnpkg.com/react-emoji-render/-/react-emoji-render-1.2.4.tgz#fa3542a692e1eed3236f0f12b8e3a61b2818e2c2"
