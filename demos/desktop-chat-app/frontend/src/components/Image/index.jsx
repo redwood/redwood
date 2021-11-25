@@ -43,7 +43,7 @@ function Image({
     onClick,
     ...props
 }) {
-    const [ready, setReady] = useState(true)
+    const [ready, setReady] = useState(false)
     const [nativeRetry, setNativeRetry] = useState(false)
     const { selectedStateURI } = useNavigation()
 
@@ -58,48 +58,46 @@ function Image({
         }
     }, [nativeRetry, setLoadFailed, setNativeRetry])
 
-    // const fetchImage = useCallback(async () => {
-    //     let failedIntervals = 0
-    //     let cancelRequest = false
-    //     setLoadFailed('retrying')
-    //     setReady(false)
-    //     /* eslint-disable no-await-in-loop */
-    //     while (true) {
-    //         console.log('running')
-    //         if (cancelRequest) {
-    //             break
-    //         }
+    const fetchImage = useCallback(async () => {
+        let failedIntervals = 0
+        let cancelRequest = false
+        setLoadFailed('retrying')
+        setReady(false)
+        /* eslint-disable no-await-in-loop */
+        while (true) {
+            console.log('running')
+            if (cancelRequest) {
+                break
+            }
 
-    //         const resp = await fetch(src)
-    //         console.log(resp)
-    //         if (resp.status === 200) {
-    //             failedIntervals = 0
-    //             setReady(true)
-    //             break
-    //         }
-    //         if (failedIntervals >= 7) {
-    //             setLoadFailed('failed')
-    //             break
-    //         }
-    //         setLoadFailed('retrying')
-    //         await sleep(1000)
-    //         failedIntervals += 1
-    //     }
-    //     /* eslint-enable no-await-in-loop */
+            const resp = await fetch(src)
+            if (resp.status === 200) {
+                failedIntervals = 0
+                setReady(true)
+                break
+            }
+            if (failedIntervals >= 7) {
+                setLoadFailed('failed')
+                break
+            }
+            setLoadFailed('retrying')
+            await sleep(1000)
+            failedIntervals += 1
+        }
+        /* eslint-enable no-await-in-loop */
 
-    //     return () => {
-    //         cancelRequest = true
-    //     }
-    // }, [src, setLoadFailed, setReady])
+        return () => {
+            cancelRequest = true
+        }
+    }, [src, setLoadFailed, setReady])
 
-    // useEffect(() => {
-    //     console.log(loadFailed)
-    //     if (loadFailed === 'retry') {
-    //         fetchImage()
-    //     }
-    // }, [loadFailed, fetchImage, setLoadFailed])
+    useEffect(() => {
+        if (loadFailed === 'retry') {
+            fetchImage()
+        }
+    }, [loadFailed, fetchImage, setLoadFailed])
 
-    // useEffect(fetchImage, [src, fetchImage])
+    useEffect(fetchImage, [src, fetchImage])
 
     if (loadFailed === 'failed') {
         return (

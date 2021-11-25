@@ -250,6 +250,7 @@ function Chat({ className }) {
     const [showEmojiKeyboard, setShowEmojiKeyboard] = useState(false)
     const [emojiSearchWord, setEmojiSearchWord] = useState('')
 
+    const mainContainerRef = useRef()
     const attachmentsInput = useRef()
     const attachmentForm = useRef()
     const newAttachmentsInput = useRef()
@@ -446,8 +447,12 @@ function Chat({ className }) {
     }
 
     return (
-        <Container className={className}>
-            <MessageList messages={messages} nodeIdentities={nodeIdentities} />
+        <Container ref={mainContainerRef} className={className}>
+            <MessageList
+                mainContainerRef={mainContainerRef}
+                messages={messages}
+                nodeIdentities={nodeIdentities}
+            />
             <ImgPreviewContainer show={previews.length > 0}>
                 {previews.map((dataURL, idx) =>
                     dataURL ? (

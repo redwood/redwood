@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import styled from 'styled-components'
 import * as tinycolor from 'tinycolor2'
+import { createAvatar } from '@dicebear/avatars'
+import * as style from '@dicebear/avatars-bottts-sprites'
+
 import useRedwood from '../../hooks/useRedwood'
 import strToColor from '../../utils/strToColor'
 import Image from '../Image'
@@ -29,6 +32,9 @@ const TextAvatar = styled.div`
     font-size: 1.1rem;
     line-height: 1rem;
     user-select: none;
+    > img {
+        height: 32px;
+    }
 `
 
 function UserAvatar({ address, className, ...props }) {
@@ -55,15 +61,30 @@ function UserAvatar({ address, className, ...props }) {
         }
     }, [users, httpHost, address, usersStateURI])
 
+    const defaultAvatar = useMemo(
+        () =>
+            createAvatar(style, {
+                seed: address,
+                base64: true,
+                // ... and other options
+            }),
+        [address],
+    )
+
     if (photoURL) {
         return <Avatar className={className} src={photoURL} {...props} />
     }
     const text = addressBook[address] || username || address || ''
     return (
         <TextAvatar className={className} text={text} {...props}>
-            <div>{(text || '').slice(0, 1).toUpperCase()}</div>
+            <img alt="Avatar" src={defaultAvatar} />
         </TextAvatar>
     )
+    // return (
+    //     <TextAvatar className={className} text={text} {...props}>
+    //         <div>{(text || '').slice(0, 1).toUpperCase()}</div>
+    //     </TextAvatar>
+    // )
 }
 
 export default UserAvatar

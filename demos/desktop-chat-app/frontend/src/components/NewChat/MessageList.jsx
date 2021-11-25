@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState, useCallback, useEffect } from 'react'
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import styled from 'styled-components'
 import Message from './Message'
 import AttachmentPreviewModal from '../Modal/AttachmentPreviewModal'
@@ -19,7 +19,7 @@ const MessageContainer = styled.div`
     scrollbar-width: none; /* Firefox */
 `
 /* eslint-disable */
-const MessageList = ({ messages = [], nodeIdentities }) => {
+const MessageList = ({ messages = [], nodeIdentities, mainContainerRef }) => {
     const messageTextContainer = useRef()
 
     const { onPresent: onPresentPreviewModal } = useModal('attachment preview')
