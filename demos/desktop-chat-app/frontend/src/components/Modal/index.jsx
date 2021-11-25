@@ -4,7 +4,7 @@ import styled, { keyframes } from 'styled-components'
 import * as tinycolor from 'tinycolor2'
 import CloseIcon from '@material-ui/icons/Close'
 
-import { Context } from '../../contexts/Modals'
+import { ModalsContext } from '../../contexts/Modals'
 import useModal from '../../hooks/useModal'
 import Spacer from '../Spacer'
 
@@ -16,7 +16,7 @@ function Modal({
     closeModal: paramCloseModal,
 }) {
     const modalRoot = document.getElementById('modal-root')
-    const { activeModalKey } = useContext(Context)
+    const { activeModalKey } = useContext(ModalsContext)
     const { onDismiss } = useModal(modalKey)
     let closeModal = paramCloseModal
 
@@ -111,12 +111,16 @@ const StyledModal = styled.div`
     min-height: 0;
 `
 
+const SCloseIcon = styled(CloseIcon)`
+    color: 'white';
+`
+
 function ModalTitle({ children, closeModal }) {
     return (
         <StyledModalTitle>
             {children}
             <StyledModalClose onClick={closeModal}>
-                <CloseIcon style={{ color: 'white' }} />
+                <SCloseIcon />
             </StyledModalClose>
         </StyledModalTitle>
     )

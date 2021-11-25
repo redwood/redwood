@@ -1,8 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
-import {
-    useRedwood,
-    useStateTree,
-} from '../components/redwood.js/dist/main/react'
+import useRedwood from './useRedwood'
+import useStateTree from './useStateTree'
 import useAddressBook from './useAddressBook'
 import useUsers from './useUsers'
 

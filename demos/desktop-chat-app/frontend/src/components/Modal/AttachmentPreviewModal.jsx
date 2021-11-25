@@ -9,14 +9,14 @@ import useModal from '../../hooks/useModal'
 import downloadIcon from '../../assets/download.svg'
 import cancelIcon from '../../assets/cancel-2.svg'
 
-const SModalContent = memo(styled(memo(ModalContent))`
+const SModalContent = styled(ModalContent)`
     width: 600px;
     flex-direction: column;
     align-items: center;
     padding: 24px;
-`)
+`
 
-const FileActionWrapper = memo(styled.div`
+const FileActionWrapper = styled.div`
     display: flex;
     justify-content: flex-end;
     transform: translateY(-12px);
@@ -32,20 +32,20 @@ const FileActionWrapper = memo(styled.div`
             transform: scale(1.1);
         }
     }
-`)
+`
 
-const Metadata = memo(styled.div`
+const Metadata = styled.div`
     padding-top: 8px;
-`)
+`
 
-const Filename = memo(styled.span`
+const Filename = styled.span`
     font-size: 1rem;
-`)
+`
 
-const Filesize = memo(styled.span`
+const Filesize = styled.span`
     font-size: 1rem;
     color: ${(props) => props.theme.color.grey[100]};
-`)
+`
 
 const downloadImage = async (url, fileName) => {
     const image = await fetch(url)

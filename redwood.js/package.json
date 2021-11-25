@@ -127,11 +127,13 @@
         "react-dom": "^17.0.1"
     },
     "dependencies": {
+        "@reduxjs/toolkit": "^1.6.1",
         "@types/json-stable-stringify": "^1.0.32",
         "@types/react": "^17.0.2",
         "ethers": "^5.0.31",
         "json-stable-stringify": "^1.0.1",
-        "node-fetch": "^2.6.1"
+        "node-fetch": "^2.6.1",
+        "react-use": "^17.3.1"
     }
 >>>>>>> ada975c1 (Optimized redwood.js hooks, optimized main.js, added useSWR for better requests and retries)
 }

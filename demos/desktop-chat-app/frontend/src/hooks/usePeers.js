@@ -1,8 +1,8 @@
 import { useMemo, useContext } from 'react'
-import { Context } from '../contexts/Peers'
+import { PeersContext } from '../contexts/Peers'
 
 function usePeers() {
-    const peers = useContext(Context)
+    const peers = useContext(PeersContext)
     return useMemo(() => peers, [peers])
 }
 

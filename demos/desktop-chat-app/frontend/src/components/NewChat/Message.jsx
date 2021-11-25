@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, memo } from 'react'
 import styled from 'styled-components'
 import moment from 'moment'
-import { useRedwood } from '../redwood.js/dist/main/react'
+import useRedwood from '../../hooks/useRedwood'
 
 import NormalizeMessage from '../Chat/NormalizeMessage'
 import UserAvatar from '../UserAvatar'
@@ -155,4 +155,6 @@ function Message({ msg = {}, onClickAttachment, ownAddress, messageIndex }) {
     /* eslint-enable */
 }
 
-export default memo(Message)
+Message.whyDidIRender = true
+
+export default Message

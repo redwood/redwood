@@ -1,5 +1,11 @@
-import { useEffect, useState, useCallback, useContext, useDebugValue } from 'react'
-import useRedwood from './useRedwood'
+import {
+    useEffect,
+    useState,
+    useCallback,
+    useContext,
+    useDebugValue,
+} from "react";
+import useRedwood from "./useRedwood";
 
 function useStateTree(stateURI: string | null | undefined, keypath?: string) {
     const {
@@ -7,55 +13,48 @@ function useStateTree(stateURI: string | null | undefined, keypath?: string) {
         httpHost,
         useWebsocket,
         subscribe,
-        subscribedStateURIs,
+        subscribedStateURIs = {},
         stateTrees,
+        leaves,
         privateTreeMembers,
         updatePrivateTreeMembers,
         updateStateTree,
-    } = useRedwood()
+        getStateTree,
+    } = useRedwood();
 
-    const keypath_ = (keypath || '').length === 0 ? '/' : keypath
-
-    useDebugValue({
-        redwoodClient,
-        httpHost,
-        useWebsocket,
-        subscribedStateURIs,
-        stateTrees,
-        privateTreeMembers,
-        updatePrivateTreeMembers,
-        updateStateTree,
-    })
+    const keypath_ = (keypath || "").length === 0 ? "/" : keypath;
 
     useEffect(() => {
-        ;(async function() {
+        (async function () {
             if (!redwoodClient || !stateURI || !updatePrivateTreeMembers) {
-                return
+                return;
             }
             // @@TODO: just read from the `.Members` keypath
             if (!!redwoodClient.rpc) {
-                const members = await redwoodClient.rpc.privateTreeMembers(stateURI)
-                updatePrivateTreeMembers(stateURI, members)
+                const rpc = redwoodClient.rpc;
+                getStateTree("privateTreeMembers", (currPTMembers: any) => {
+                    // If stateURI do not exist on privateTreeMembers fetch members and add to state
+                    if (!currPTMembers.hasOwnProperty(stateURI)) {
+                        rpc.privateTreeMembers(stateURI).then((members) => {
+                            updatePrivateTreeMembers(stateURI, members);
+                        });
+                    }
+                });
             }
-        })()
-    }, [redwoodClient, stateURI, updatePrivateTreeMembers])
+        })();
+    }, [redwoodClient, stateURI]);
 
     useEffect(() => {
         if (!stateURI) {
-            return
-        }
-        const unsubscribePromise = subscribe(stateURI)
-
-        return () => {
-            // (async function() {
-            //     const unsubscribe = await unsubscribePromise
-            //     unsubscribe()
-            // })()
+            return;
         }
 
-    }, [subscribe, stateURI])
+        subscribe(stateURI, (err, data) => {
+            console.log(err, data);
+        });
+    }, [subscribe, stateURI, leaves, stateTrees]);
 
-    return !!stateURI ? stateTrees[stateURI] : null
+    return !!stateURI ? stateTrees[stateURI] : null;
 }
 
-export default useStateTree
+export default useStateTree;

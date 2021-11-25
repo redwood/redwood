@@ -1,81 +1,106 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { BrowserRouter as Router, Switch, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Route, Switch } from 'react-router-dom'
 import { ThemeProvider } from 'styled-components'
-import { RedwoodProvider } from './components/redwood.js/dist/main/react'
 
-import ModalsProvider from './contexts/Modals'
-import APIProvider from './contexts/API'
-import NavigationProvider from './contexts/Navigation'
-import PeersProvider from './contexts/Peers'
-import ServerAndRoomInfoProvider from './contexts/ServerAndRoomInfo'
-import useLoginStatus from './hooks/useLoginStatus'
-import theme from './theme'
+import { ComposeComponents, MainProviders, mainProviderProps } from './contexts'
+import LoginStatusProvider, { LoginStatusContext } from './contexts/LoginStatus'
 
-import Main from './Main'
 import SignIn from './components/Account/SignIn'
 import SignUp from './components/Account/SignUp'
 import Profiles from './components/Account/Profiles'
+import Main from './Main'
+import theme from './theme'
+
+// @NOTE: Need to add this ConnectionError component somewhere universal
+import FullLoading from './components/FullLoading'
+import ConnectionError from './components/Error/Connection'
+
+function Routes({
+    isLoggedIn,
+    signup,
+    profileNames = [],
+    login,
+    profilesFetched,
+    connectionError,
+    checkLogin,
+    checkingLogin,
+}) {
+    return (
+        <>
+            <Route path="/connection-error">
+                <ConnectionError
+                    isLoggedIn={isLoggedIn}
+                    connectionError={connectionError}
+                    checkLogin={checkLogin}
+                    checkingLogin={checkingLogin}
+                />
+            </Route>
+            <Route path="/loading">
+                <FullLoading
+                    isLoading={checkingLogin}
+                    isLoggedIn={isLoggedIn}
+                />
+            </Route>
+            <Route path="/signin">
+                <SignIn
+                    profileNames={profileNames}
+                    login={login}
+                    connectionError={connectionError}
+                    isLoggedIn={isLoggedIn}
+                    checkingLogin={checkingLogin}
+                />
+            </Route>
+            <Route path="/signup">
+                <SignUp
+                    isLoggedIn={isLoggedIn}
+                    signup={signup}
+                    login={login}
+                    connectionError={connectionError}
+                    profileNames={profileNames}
+                    checkingLogin={checkingLogin}
+                />
+            </Route>
+            <Route path="/profiles">
+                <Profiles
+                    isLoggedIn={isLoggedIn}
+                    signup={signup}
+                    login={login}
+                    connectionError={connectionError}
+                    profileNames={profileNames}
+                    checkingLogin={checkingLogin}
+                />
+            </Route>
+            <Route exact path="/">
+                <ComposeComponents
+                    components={Object.values(MainProviders)}
+                    componentProps={mainProviderProps}
+                >
+                    <Main
+                        isLoggedIn={isLoggedIn}
+                        profilesFetched={profilesFetched}
+                        connectionError={connectionError}
+                        profileNames={profileNames}
+                    />
+                </ComposeComponents>
+            </Route>
+        </>
+    )
+}
 
 function App() {
-    const [httpHost, setHttpHost] = useState()
-    const [rpcEndpoint, setRpcEndpoint] = useState()
-    const { isLoggedIn, profileNames } = useLoginStatus()
-    const renderCountRef = useRef(1)
-
-    useEffect(() => {
-        if (isLoggedIn) {
-            setHttpHost('http://localhost:8080')
-            setRpcEndpoint('http://localhost:8081')
-        } else {
-            setHttpHost()
-            setRpcEndpoint()
-        }
-    }, [isLoggedIn, setHttpHost, setRpcEndpoint])
-
     return (
-        <ThemeProvider theme={theme}>
-            <RedwoodProvider
-                httpHost={httpHost}
-                rpcEndpoint={rpcEndpoint}
-                useWebsocket
-            >
-                <APIProvider>
-                    <NavigationProvider>
-                        <ServerAndRoomInfoProvider>
-                            <PeersProvider>
-                                <ModalsProvider>
-                                    <Router>
-                                        <Switch>
-                                            <Route path="/signin">
-                                                <SignIn
-                                                    profileNames={profileNames}
-                                                />
-                                            </Route>
-                                            <Route path="/signup">
-                                                <SignUp
-                                                    profileNames={profileNames}
-                                                />
-                                            </Route>
-                                            <Route path="/profiles">
-                                                <Profiles />
-                                            </Route>
-                                            <Route>
-                                                <Main
-                                                    profileNames={profileNames}
-                                                    renderCountRef={
-                                                        renderCountRef
-                                                    }
-                                                />
-                                            </Route>
-                                        </Switch>
-                                    </Router>
-                                </ModalsProvider>
-                            </PeersProvider>
-                        </ServerAndRoomInfoProvider>
-                    </NavigationProvider>
-                </APIProvider>
-            </RedwoodProvider>
-        </ThemeProvider>
+        <Router>
+            <LoginStatusProvider apiEndpoint="http://localhost:54231">
+                <ThemeProvider theme={theme}>
+                    <LoginStatusContext.Consumer>
+                        {(loginStatus) => (
+                            <Switch>
+                                <Routes {...loginStatus} />
+                            </Switch>
+                        )}
+                    </LoginStatusContext.Consumer>
+                </ThemeProvider>
+            </LoginStatusProvider>
+        </Router>
     )
 }
 

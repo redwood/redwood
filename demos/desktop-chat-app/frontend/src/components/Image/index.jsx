@@ -7,13 +7,13 @@ import gooLoading from '../Account/assets/loading-goo.svg'
 import failedSvg from '../../assets/failed-image.svg'
 import Button from '../Button'
 
-const LoadingIconWrapper = memo(styled.div`
+const LoadingIconWrapper = styled.div`
     max-width: 100px;
     width: 40px;
     height: 40px;
-`)
+`
 
-const FailedImageWrapper = memo(styled.div`
+const FailedImageWrapper = styled.div`
     display: flex;
     flex-direction: column;
     width: 120px;
@@ -27,7 +27,7 @@ const FailedImageWrapper = memo(styled.div`
     img {
         height: 72px;
     }
-`)
+`
 
 function sleep(ms) {
     return new Promise((resolve) => {
@@ -43,15 +43,13 @@ function Image({
     onClick,
     ...props
 }) {
-    console.log('rerendered')
     const [ready, setReady] = useState(true)
     const [nativeRetry, setNativeRetry] = useState(false)
     const { selectedStateURI } = useNavigation()
 
-    const { data, error, isValidating, mutate } = useSWR(src)
+    // const { data, error, isValidating, mutate } = useSWR(src)
 
-    // console.log(data, error, isValidating, mutate)
-    // console.log('rerendered')
+    // console.log(data)
 
     const nativeImgRetry = useCallback(() => {
         if (!nativeRetry) {
@@ -285,4 +283,6 @@ function Image({
     )
 }
 
-export default memo(Image)
+Image.whyDidIRender = true
+
+export default Image

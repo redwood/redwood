@@ -92,9 +92,8 @@ function SignUp({
     setLoadingText,
     errorMessage,
     setErrorMessage,
+    signup,
 }) {
-    const { signup } = useLoginStatus()
-
     const onSubmitSignUp = useCallback(
         async (event) => {
             event.preventDefault()
@@ -181,9 +180,8 @@ function ConfirmDisplay({
     setLoadingText,
     errorMessage,
     setErrorMessage,
+    login,
 }) {
-    const { login } = useLoginStatus()
-
     const onClickLogin = useCallback(async () => {
         try {
             setErrorMessage('')
@@ -236,9 +234,14 @@ function ConfirmDisplay({
     )
 }
 
-function Account(props) {
-    const { isLoggedIn } = useLoginStatus()
-
+function Account({
+    isLoggedIn,
+    signup,
+    profileNames,
+    login,
+    connectionError,
+    checkingLogin,
+}) {
     const [profileName, setProfileName] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
@@ -246,8 +249,16 @@ function Account(props) {
     const [loadingText, setLoadingText] = useState('')
     const [errorMessage, setErrorMessage] = useState('')
 
+    if (checkingLogin) {
+        return <Redirect to="/loading" />
+    }
+
+    if (connectionError) {
+        return <Redirect to="/connection-error" />
+    }
+
     if (isLoggedIn) {
-        return <Redirect to="/" />
+        return <Redirect exact to="/" />
     }
 
     return (
@@ -268,6 +279,7 @@ function Account(props) {
                         setLoadingText={setLoadingText}
                         errorMessage={errorMessage}
                         setErrorMessage={setErrorMessage}
+                        login={login}
                     />
                 ) : (
                     <SignUp
@@ -281,7 +293,8 @@ function Account(props) {
                         setLoadingText={setLoadingText}
                         errorMessage={errorMessage}
                         setErrorMessage={setErrorMessage}
-                        profileNames={props.profileNames || []}
+                        profileNames={profileNames || []}
+                        signup={signup}
                     />
                 )}
                 {loadingText ? <Loading text={loadingText} /> : null}
@@ -289,5 +302,6 @@ function Account(props) {
         </SAccount>
     )
 }
+Account.whyDidIRender = true
 
 export default Account

@@ -1,8 +1,8 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import styled, { useTheme } from 'styled-components'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import styled from 'styled-components'
 
 import { toast } from 'react-toastify'
-import { useStateTree } from '../redwood.js/dist/main/react'
+import useStateTree from '../../hooks/useStateTree'
 
 import ToastCloseBtn from '../Toast/ToastCloseBtn'
 import ToastContent from '../Toast/ToastContent'
@@ -12,16 +12,13 @@ import NormalizeMessage from '../Chat/NormalizeMessage'
 import notificationSound from '../../assets/notification-sound.mp3'
 import notificationGilfoyle from '../../assets/notification-gilfoyle.mp3'
 import useUsers from '../../hooks/useUsers'
-import useAddressBook from '../../hooks/useAddressBook'
-import useNavigation from '../../hooks/useNavigation'
-import useServerAndRoomInfo from '../../hooks/useServerAndRoomInfo'
 
 const SToastRoom = styled.div`
     font-size: 10px;
     color: rgba(255, 255, 255, 0.6);
     span {
         font-size: 12px;
-        color: ${(props) => props.themePrimaryColor};
+        color: ${({ theme }) => theme.color.indigo[500]};
         text-decoration: underline;
     }
 `
@@ -45,12 +42,15 @@ const ToastRight = styled.div`
     padding-bottom: 4px;
 `
 
-function Mounter() {
+function Mounter({
+    rooms,
+    selectedStateURI,
+    navigate,
+    addressBook,
+    nodeIdentities,
+}) {
     const [changeNotificationSound, setChangeNotificationSound] =
         useState(false)
-    const { selectedStateURI, navigate } = useNavigation()
-    const { rooms } = useServerAndRoomInfo()
-    const theme = useTheme()
 
     const roomKeys = useMemo(
         () =>
@@ -83,16 +83,17 @@ function Mounter() {
 
     return (
         <>
-            {roomKeys.map((room) => (
-                <NotificationMount
-                    changeNotificationSound={changeNotificationSound}
-                    navigate={navigate}
-                    selectedStateURI={selectedStateURI}
-                    roomPath={room}
-                    key={room}
-                    theme={theme}
-                />
-            ))}
+            {nodeIdentities &&
+                roomKeys.map((room) => (
+                    <NotificationMount
+                        changeNotificationSound={changeNotificationSound}
+                        navigate={navigate}
+                        selectedStateURI={selectedStateURI}
+                        roomPath={room}
+                        key={room}
+                        addressBook={addressBook}
+                    />
+                ))}
         </>
     )
 }
@@ -103,11 +104,10 @@ function NotificationMount({
     navigate,
     selectedStateURI,
     changeNotificationSound,
-    theme,
+    addressBook,
 }) {
     const roomState = useStateTree(roomPath)
     const { users } = useUsers(roomPath)
-    const addressBook = useAddressBook()
     const [toastId, setToastId] = useState(null)
     const [isLoading, setIsLoading] = useState(true)
     const prevMessageCountRef = useRef()
@@ -151,7 +151,7 @@ function NotificationMount({
                     <UserAvatar address={displayName} />
                 </ToastLeft>
                 <ToastRight>
-                    <SToastRoom themePrimaryColor={theme.color.indigo[500]}>
+                    <SToastRoom>
                         New message in <span>{roomPath}</span>!
                     </SToastRoom>
                     <NormalizeMessage
@@ -193,7 +193,6 @@ function NotificationMount({
         navigateToMessage,
         latestMessage.text,
         roomPath,
-        theme.color.indigo,
         displayName,
     ])
 

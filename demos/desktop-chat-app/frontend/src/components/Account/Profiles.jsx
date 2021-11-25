@@ -118,9 +118,8 @@ function SignIn({
     errorMessage,
     setErrorMessage,
     setLoadingText,
+    login,
 }) {
-    const { login } = useLoginStatus()
-
     const onSubmitLogin = useCallback(
         async (event) => {
             try {
@@ -193,15 +192,28 @@ function SelectProfile(props) {
     )
 }
 
-function Account() {
+function Account({
+    login,
+    isLoggedIn,
+    profileNames,
+    connectionError,
+    checkingLogin,
+}) {
     const [selectedProfile, setSelectedProfile] = useState('')
     const [password, setPassword] = useState('')
     const [errorMessage, setErrorMessage] = useState('')
     const [loadingText, setLoadingText] = useState('')
-    const { isLoggedIn, profileNames } = useLoginStatus()
+
+    if (checkingLogin) {
+        return <Redirect to="/loading" />
+    }
+
+    if (connectionError) {
+        return <Redirect to="/connection-error" />
+    }
 
     if (isLoggedIn) {
-        return <Redirect to="/" />
+        return <Redirect exact to="/" />
     }
 
     return (
@@ -222,6 +234,7 @@ function Account() {
                         setErrorMessage={setErrorMessage}
                         loadingText={loadingText}
                         setLoadingText={setLoadingText}
+                        login={login}
                     />
                 ) : (
                     <SelectProfile

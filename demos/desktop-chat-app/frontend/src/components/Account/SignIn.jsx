@@ -70,9 +70,8 @@ function SignIn({
     errorMessage,
     setErrorMessage,
     setLoadingText,
+    login,
 }) {
-    const { login } = useLoginStatus()
-
     const onSubmitLogin = useCallback(
         async (event) => {
             event.preventDefault()
@@ -141,16 +140,29 @@ function SignIn({
     )
 }
 
-function Account(props) {
+function Account({
+    profileNames,
+    login,
+    isLoggedIn,
+    connectionError,
+    checkingLogin,
+}) {
     const [mnemonic, setMnemonic] = useState('')
     const [profileName, setProfileName] = useState('')
     const [password, setPassword] = useState('')
     const [errorMessage, setErrorMessage] = useState('')
     const [loadingText, setLoadingText] = useState('')
-    const { isLoggedIn } = useLoginStatus()
+
+    if (checkingLogin) {
+        return <Redirect to="/loading" />
+    }
+
+    if (connectionError) {
+        return <Redirect to="/connection-error" />
+    }
 
     if (isLoggedIn) {
-        return <Redirect to="/" />
+        return <Redirect exact to="/" />
     }
 
     return (
@@ -170,12 +182,14 @@ function Account(props) {
                     errorMessage={errorMessage}
                     setErrorMessage={setErrorMessage}
                     setLoadingText={setLoadingText}
-                    profileNames={props.profileNames || []}
+                    profileNames={profileNames}
+                    login={login}
                 />
                 {loadingText ? <Loading text={loadingText} /> : null}
             </SAccountCard>
         </SAccount>
     )
 }
+Account.whyDidIRender = true
 
 export default Account

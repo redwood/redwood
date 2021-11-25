@@ -1,8 +1,8 @@
 import { useMemo, useContext } from 'react'
-import { Context } from '../contexts/LoginStatus'
+import { LoginStatusContext } from '../contexts/LoginStatus'
 
 function useLoginStatus() {
-    const loginStatus = useContext(Context)
+    const loginStatus = useContext(LoginStatusContext)
     return useMemo(() => loginStatus, [loginStatus])
 }
 

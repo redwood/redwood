@@ -1,10 +1,10 @@
-import React, { createContext, useState, useEffect } from 'react'
-import { useRedwood } from '../components/redwood.js/dist/main/react'
+import { createContext, useState, useEffect } from 'react'
+import useRedwood from '../hooks/useRedwood'
 import createAPI from '../api'
 
-export const Context = createContext(null)
+export const APIContext = createContext(null)
 
-function Provider({ children }) {
+function APIProvider({ children }) {
     const { redwoodClient, nodeIdentities } = useRedwood()
     const [api, setAPI] = useState(null)
 
@@ -21,7 +21,7 @@ function Provider({ children }) {
         setAPI(createAPI(redwoodClient, ownAddress))
     }, [redwoodClient, nodeIdentities])
 
-    return <Context.Provider value={api}>{children}</Context.Provider>
+    return <APIContext.Provider value={api}>{children}</APIContext.Provider>
 }
 
-export default Provider
+export default APIProvider
