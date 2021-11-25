@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect } from 'react'
-import { useRedwood } from '@redwood.dev/client/react'
+import { useRedwood } from '../components/redwood.js/dist/main/react'
 import useAddressBook from '../hooks/useAddressBook'
 import useAPI from '../hooks/useAPI'
 

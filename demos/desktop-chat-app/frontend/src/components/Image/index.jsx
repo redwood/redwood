@@ -1,17 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, memo } from 'react'
 import styled from 'styled-components'
+import useSWR from '../../hooks/useSWR'
+// import useSWR from 'swr'
 import useNavigation from '../../hooks/useNavigation'
 import gooLoading from '../Account/assets/loading-goo.svg'
 import failedSvg from '../../assets/failed-image.svg'
 import Button from '../Button'
 
-const LoadingIconWrapper = styled.div`
+const LoadingIconWrapper = memo(styled.div`
     max-width: 100px;
     width: 40px;
     height: 40px;
-`
+`)
 
-const FailedImageWrapper = styled.div`
+const FailedImageWrapper = memo(styled.div`
     display: flex;
     flex-direction: column;
     width: 120px;
@@ -25,7 +27,13 @@ const FailedImageWrapper = styled.div`
     img {
         height: 72px;
     }
-`
+`)
+
+function sleep(ms) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms)
+    })
+}
 
 function Image({
     src,
@@ -35,49 +43,65 @@ function Image({
     onClick,
     ...props
 }) {
+    console.log('rerendered')
     const [ready, setReady] = useState(true)
+    const [nativeRetry, setNativeRetry] = useState(false)
     const { selectedStateURI } = useNavigation()
 
-    const fetchImage = useCallback(async () => {
-        let failedIntervals = 0
-        let cancelRequest = false
-        /* eslint-disable no-await-in-loop */
-        while (true) {
-            if (cancelRequest) {
-                break
-            }
-            console.log('hit', src)
-            const resp = await fetch(
-                'http://localhost:8080/messages[27]/attachments[0]?state_uri=t%2Ft',
-            )
-            console.log(resp)
-            if (resp.status === 200) {
-                failedIntervals = 0
-                setReady(true)
-                break
-            }
-            if (failedIntervals >= 7) {
-                setLoadFailed(true)
-                break
-            }
-            await sleep(1000)
-            failedIntervals += 1
-        }
-        /* eslint-enable no-await-in-loop */
+    const { data, error, isValidating, mutate } = useSWR(src)
 
-        return () => {
-            cancelRequest = true
-        }
-    }, [src, setLoadFailed])
+    // console.log(data, error, isValidating, mutate)
+    // console.log('rerendered')
 
-    useEffect(() => {
-        if (loadFailed === 'retry') {
-            setLoadFailed(false)
-            fetchImage()
+    const nativeImgRetry = useCallback(() => {
+        if (!nativeRetry) {
+            setNativeRetry(true)
+            setLoadFailed('retry')
         }
-    }, [loadFailed, fetchImage, setLoadFailed])
+    }, [nativeRetry, setLoadFailed, setNativeRetry])
 
-    useEffect(fetchImage, [src, fetchImage])
+    // const fetchImage = useCallback(async () => {
+    //     let failedIntervals = 0
+    //     let cancelRequest = false
+    //     setLoadFailed('retrying')
+    //     setReady(false)
+    //     /* eslint-disable no-await-in-loop */
+    //     while (true) {
+    //         console.log('running')
+    //         if (cancelRequest) {
+    //             break
+    //         }
+
+    //         const resp = await fetch(src)
+    //         console.log(resp)
+    //         if (resp.status === 200) {
+    //             failedIntervals = 0
+    //             setReady(true)
+    //             break
+    //         }
+    //         if (failedIntervals >= 7) {
+    //             setLoadFailed('failed')
+    //             break
+    //         }
+    //         setLoadFailed('retrying')
+    //         await sleep(1000)
+    //         failedIntervals += 1
+    //     }
+    //     /* eslint-enable no-await-in-loop */
+
+    //     return () => {
+    //         cancelRequest = true
+    //     }
+    // }, [src, setLoadFailed, setReady])
+
+    // useEffect(() => {
+    //     console.log(loadFailed)
+    //     if (loadFailed === 'retry') {
+    //         fetchImage()
+    //     }
+    // }, [loadFailed, fetchImage, setLoadFailed])
+
+    // useEffect(fetchImage, [src, fetchImage])
 
     if (loadFailed === 'failed') {
         return (
@@ -255,15 +279,10 @@ function Image({
             src={src}
             className={className}
             alt="Preview"
+            onError={nativeImgRetry}
             {...props}
         />
     )
 }
 
-function sleep(ms) {
-    return new Promise((resolve) => {
-        setTimeout(resolve, ms)
-    })
-}
-
-export default Image
+export default memo(Image)

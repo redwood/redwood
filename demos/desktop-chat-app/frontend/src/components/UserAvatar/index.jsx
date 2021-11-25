@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import styled from 'styled-components'
 import * as tinycolor from 'tinycolor2'
-import { useRedwood } from '@redwood.dev/client/react'
+import { useRedwood } from '../redwood.js/dist/main/react'
 import strToColor from '../../utils/strToColor'
 import Image from '../Image'
 import useUsers from '../../hooks/useUsers'

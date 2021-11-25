@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { BrowserRouter as Router, Switch, Route } from 'react-router-dom'
 import { ThemeProvider } from 'styled-components'
-import { RedwoodProvider } from '@redwood.dev/client/react'
+import { RedwoodProvider } from './components/redwood.js/dist/main/react'
 
 import ModalsProvider from './contexts/Modals'
 import APIProvider from './contexts/API'
@@ -20,6 +20,7 @@ function App() {
     const [httpHost, setHttpHost] = useState()
     const [rpcEndpoint, setRpcEndpoint] = useState()
     const { isLoggedIn, profileNames } = useLoginStatus()
+    const renderCountRef = useRef(1)
 
     useEffect(() => {
         if (isLoggedIn) {
@@ -61,6 +62,9 @@ function App() {
                                             <Route>
                                                 <Main
                                                     profileNames={profileNames}
+                                                    renderCountRef={
+                                                        renderCountRef
+                                                    }
                                                 />
                                             </Route>
                                         </Switch>

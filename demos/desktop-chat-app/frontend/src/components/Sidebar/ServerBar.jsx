@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, memo } from 'react'
 import styled from 'styled-components'
 import { IconButton } from '@material-ui/core'
 import {
@@ -195,4 +195,4 @@ function ImportServerModal({ onDismiss }) {
     )
 }
 
-export default ServerBar
+export default memo(ServerBar)

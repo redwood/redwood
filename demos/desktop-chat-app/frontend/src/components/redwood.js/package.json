@@ -1,0 +1,94 @@
+{
+  "_from": "@redwood.dev/client@0.2.2",
+  "_id": "@redwood.dev/client@0.2.2",
+  "_inBundle": false,
+  "_integrity": "sha512-uohlK9O0iF7cZjiX/EpI5Ah57lHeAXZb2q7pJ1TPMN+gz/UyGdy//eqDF/Jmgzviche2E9rpAcP4nzjTDOT+9g==",
+  "_location": "/@redwood.dev/client",
+  "_phantomChildren": {},
+  "_requested": {
+    "type": "version",
+    "registry": true,
+    "raw": "@redwood.dev/client@0.2.2",
+    "name": "@redwood.dev/client",
+    "escapedName": "@redwood.dev%2fclient",
+    "scope": "@redwood.dev",
+    "rawSpec": "0.2.2",
+    "saveSpec": null,
+    "fetchSpec": "0.2.2"
+  },
+  "_requiredBy": [
+    "/"
+  ],
+  "_resolved": "https://registry.npmjs.org/@redwood.dev/client/-/client-0.2.2.tgz",
+  "_shasum": "5a68df18f652e57eb7440341721171dff0424f54",
+  "_spec": "@redwood.dev/client@0.2.2",
+  "_where": "/Users/chrispena/Documents/red/redwood/demos/desktop-chat-app/frontend",
+  "author": {
+    "name": "Bryn Bellomy"
+  },
+  "bugs": {
+    "url": "https://github.com/redwood/redwood/issues"
+  },
+  "bundleDependencies": false,
+  "dependencies": {
+    "@types/json-stable-stringify": "^1.0.32",
+    "@types/react": "^17.0.2",
+    "ethers": "^5.0.31",
+    "json-stable-stringify": "^1.0.1",
+    "node-fetch": "^2.6.1"
+  },
+  "deprecated": false,
+  "description": "Client for interacting with Redwood nodes",
+  "devDependencies": {
+    "@babel/cli": "7.12.10",
+    "@babel/core": "7.12.10",
+    "@babel/plugin-proposal-class-properties": "7.12.1",
+    "@babel/preset-env": "7.12.11",
+    "@babel/preset-react": "7.12.10",
+    "@babel/preset-typescript": "7.12.7",
+    "babel-jest": "26.6.3",
+    "babel-loader": "^8.0.0-beta.4",
+    "babel-plugin-add-module-exports": "1.0.4",
+    "babel-plugin-transform-class-properties": "6.24.1",
+    "babel-polyfill": "^6.26.0",
+    "browserify": "^17.0.0",
+    "cross-env": "7.0.3",
+    "esmify": "^2.1.1",
+    "jest": "26.6.3",
+    "mocha": "^4.0.1",
+    "react": "^17.0.1",
+    "react-dom": "^17.0.1",
+    "typescript": "^4.2.2",
+    "vite": "^2.0.4",
+    "webpack": "5.11.0",
+    "webpack-cli": "4.2.0",
+    "yargs": "^10.0.3"
+  },
+  "homepage": "https://github.com/redwood/redwood",
+  "keywords": [
+    "p2p"
+  ],
+  "license": "MIT",
+  "main": "dist/main/index.js",
+  "module": "dist/module/index.js",
+  "name": "@redwood.dev/client",
+  "peerDependencies": {
+    "react": "^17.0.1",
+    "react-dom": "^17.0.1"
+  },
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redwood/redwood.git"
+  },
+  "scripts": {
+    "build": "yarn build:main && yarn build:module",
+    "build:main": "tsc -p tsconfig.json && browserify ./dist/main/browser.js > ./dist/browser.js && browserify --external react ./dist/main/react/index.js > ./dist/react.js && browserify ./dist/main/resolver.sync9.redwood.js > ./dist/resolver.sync9.redwood.js && cp dist/browser.js embed/redwoodjs/browser.js && cp dist/resolver.sync9.redwood.js embed/sync9/redwood.js",
+    "build:module": "tsc -p tsconfig.module.json",
+    "dev": "webpack --progress --watch --env dev",
+    "dev-amd": "webpack --progress --watch --env dev --amd",
+    "test": "jest",
+    "test-watch": "jest --watch"
+  },
+  "version": "0.2.2"
+}

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import styled, { useTheme } from 'styled-components'
 
 import { toast } from 'react-toastify'
-import { useStateTree } from '@redwood.dev/client/react'
+import { useStateTree } from '../redwood.js/dist/main/react'
 
 import ToastCloseBtn from '../Toast/ToastCloseBtn'
 import ToastContent from '../Toast/ToastContent'

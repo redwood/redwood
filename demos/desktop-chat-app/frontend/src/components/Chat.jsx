@@ -4,7 +4,8 @@ import React, {
     useCallback,
     useRef,
     useEffect,
-    Fragment,
+    useMemo,
+    memo,
 } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { IconButton, Tooltip } from '@material-ui/core'
@@ -13,7 +14,6 @@ import {
     AddCircleRounded as AddIcon,
 } from '@material-ui/icons'
 import * as tinycolor from 'tinycolor2'
-import filesize from 'filesize.js'
 import moment from 'moment'
 import CloseIcon from '@material-ui/icons/Close'
 import EmojiEmotionsIcon from '@material-ui/icons/EmojiEmotions'
@@ -22,15 +22,15 @@ import data from 'emoji-mart/data/all.json'
 import { Node, createEditor, Editor, Transforms, Range } from 'slate'
 import { withReact, ReactEditor } from 'slate-react'
 import { withHistory } from 'slate-history'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from './redwood.js/dist/main/react'
 
 import Button from './Button'
 import Input from './Input'
-import Embed from './Embed'
 import EmojiQuickSearch from './EmojiQuickSearch'
 import TextBox from './TextBox'
+import Message from './NewChat/Message'
 import NormalizeMessage from './Chat/NormalizeMessage'
-import Modal, { ModalTitle, ModalContent, ModalActions } from './Modal'
+import AttachmentPreviewModal from './Modal/AttachmentPreviewModal'
 import UserAvatar from './UserAvatar'
 import Attachment from './Attachment'
 import useModal from '../hooks/useModal'
@@ -41,8 +41,6 @@ import useNavigation from '../hooks/useNavigation'
 import useAddressBook from '../hooks/useAddressBook'
 import useUsers from '../hooks/useUsers'
 import emojiSheet from '../assets/emoji-mart-twitter-images.png'
-import downloadIcon from '../assets/download.svg'
-import cancelIcon from '../assets/cancel-2.svg'
 import uploadIcon from '../assets/upload.svg'
 import fileIcon from './Attachment/file.svg'
 // import strToColor from '../utils/strToColor'
@@ -297,6 +295,14 @@ function Chat({ className }) {
 
     const numMessages = ((roomState || {}).messages || []).length
     const [messages, setMessages] = useState([])
+
+    const ownAddress = useMemo(
+        () =>
+            nodeIdentities && nodeIdentities[0]
+                ? nodeIdentities[0].address
+                : null,
+        [nodeIdentities],
+    )
 
     // Init Slate Editor
     // const editor = useMemo(() => withMentions(withHistory(withReact(createEditor()))), [])
@@ -834,8 +840,6 @@ function Chat({ className }) {
         )
     }
 
-    const ownAddress =
-        nodeIdentities && nodeIdentities[0] ? nodeIdentities[0].address : null
     /* eslint-disable */
     return (
         <Container className={className}>
@@ -843,18 +847,18 @@ function Chat({ className }) {
                 {messages.map((msg, i) => (
                     <Message
                         msg={msg}
-                        isOwnMessage={msg.sender === ownAddress}
+                        ownAddress={ownAddress}
                         onClickAttachment={onClickAttachment}
                         messageIndex={i}
-                        key={msg.sender + msg.timestamp + i}
+                        key={i}
                     />
                 ))}
             </MessageContainer>
 
-            <AttachmentPreviewModal
+            {/* <AttachmentPreviewModal
                 attachment={previewedAttachment.attachment}
                 url={previewedAttachment.url}
-            />
+            /> */}
 
             <ImgPreviewContainer show={previews.length > 0}>
                 {previews.map((dataURL, idx) =>
@@ -1043,75 +1047,74 @@ const SAttachment = styled(Attachment)`
     max-width: 500px;
 `
 
-function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
-    const { selectedServer, selectedStateURI } = useNavigation()
-    const { users, usersStateURI } = useUsers(selectedStateURI)
-    const addressBook = useAddressBook()
-    const userAddress = msg.sender.toLowerCase()
-    const user = (users && users[userAddress]) || {}
-    const displayName = addressBook[userAddress] || user.username || msg.sender
-    const { dayDisplay, displayTime } = getTimestampDisplay(msg.timestamp)
-    const { onPresent: onPresentContactsModal } = useModal('contacts')
-    const { onPresent: onPresentUserProfileModal } = useModal('user profile')
-    const { httpHost } = useRedwood()
+// function Message({ msg = {}, isOwnMessage, onClickAttachment, messageIndex }) {
+//     const { selectedServer, selectedStateURI } = useNavigation()
+//     const { users, usersStateURI } = useUsers(selectedStateURI)
+//     const addressBook = useAddressBook()
+//     const userAddress = msg.sender.toLowerCase()
+//     const user = (users && users[userAddress]) || {}
+//     const displayName = addressBook[userAddress] || user.username || msg.sender
+//     const { dayDisplay, displayTime } = getTimestampDisplay(msg.timestamp)
+//     const { onPresent: onPresentContactsModal } = useModal('contacts')
+//     const { onPresent: onPresentUserProfileModal } = useModal('user profile')
+//     const { httpHost } = useRedwood()
 
-    const showContactsModal = useCallback(() => {
-        if (isOwnMessage) {
-            onPresentUserProfileModal()
-        } else {
-            onPresentContactsModal({ initiallyFocusedContact: msg.sender })
-        }
-    }, [
-        onPresentContactsModal,
-        onPresentUserProfileModal,
-        msg,
-        msg && msg.sender,
-        isOwnMessage,
-    ])
+//     const showContactsModal = useCallback(() => {
+//         if (isOwnMessage) {
+//             onPresentUserProfileModal()
+//         } else {
+//             onPresentContactsModal({ initiallyFocusedContact: msg.sender })
+//         }
+//     }, [
+//         onPresentContactsModal,
+//         onPresentUserProfileModal,
+//         msg.sender,
+//         isOwnMessage,
+//     ])
 
-    /* eslint-disable */
-    return (
-        <MessageWrapper
-            firstByUser={msg.firstByUser}
-            key={selectedStateURI + messageIndex}
-        >
-            {msg.firstByUser ? (
-                <SUserAvatar
-                    address={userAddress}
-                    onClick={showContactsModal}
-                />
-            ) : (
-                <UserAvatarPlaceholder />
-            )}
-            <MessageDetails>
-                {msg.firstByUser && (
-                    <MessageSender>
-                        {displayName}{' '}
-                        <MessageTimestamp
-                            dayDisplay={dayDisplay}
-                            displayTime={displayTime}
-                        />
-                    </MessageSender>
-                )}
+//     /* eslint-disable */
+//     return (
+//         <MessageWrapper
+//             firstByUser={msg.firstByUser}
+//             key={selectedStateURI + messageIndex}
+//         >
+//             {msg.firstByUser ? (
+//                 <SUserAvatar
+//                     address={userAddress}
+//                     onClick={showContactsModal}
+//                 />
+//             ) : (
+//                 <UserAvatarPlaceholder />
+//             )}
+//             <MessageDetails>
+//                 {msg.firstByUser && (
+//                     <MessageSender>
+//                         {displayName}{' '}
+//                         <MessageTimestamp
+//                             dayDisplay={dayDisplay}
+//                             displayTime={displayTime}
+//                         />
+//                     </MessageSender>
+//                 )}
 
-                {/* <MessageText>{msg.text}</MessageText> */}
-                {/* <MessageParse msgText={msg.text} /> */}
-                <NormalizeMessage msgText={msg.text} />
-                {(msg.attachments || []).map((attachment, j) => (
-                    <SAttachment
-                        key={`${selectedStateURI}${messageIndex},${j}`}
-                        attachment={attachment}
-                        url={`${httpHost}/messages[${messageIndex}]/attachments[${j}]?state_uri=${encodeURIComponent(
-                            selectedStateURI,
-                        )}`}
-                        onClick={onClickAttachment}
-                    />
-                ))}
-            </MessageDetails>
-        </MessageWrapper>
-    )
-    /* eslint-enable */
-}
+//                 {/* <MessageText>{msg.text}</MessageText> */}
+//                 {/* <MessageParse msgText={msg.text} /> */}
+//                 <NormalizeMessage msgText={msg.text} />
+//                 {(msg.attachments || []).map((attachment, j) => (
+//                     <SAttachment
+//                         key={`${selectedStateURI}${messageIndex},${j}`}
+//                         attachment={attachment}
+//                         url={`${httpHost}/messages[${messageIndex}]/attachments[${j}]?state_uri=${encodeURIComponent(
+//                             selectedStateURI,
+//                         )}`}
+//                         onClick={onClickAttachment}
+//                     />
+//                 ))}
+//             </MessageDetails>
+//         </MessageWrapper>
+//     )
+//     /* eslint-enable */
+// }
 
 function MessageParse({ msgText }) {
     const colons = `:[a-zA-Z0-9-_+]+:`
@@ -1158,90 +1161,4 @@ const EmojiWrapper = styled.div`
     right: 20px;
 `
 
-const SModalContent = styled(ModalContent)`
-    width: 600px;
-    flex-direction: column;
-    align-items: center;
-    padding: 24px;
-`
-
-const Metadata = styled.div`
-    padding-top: 8px;
-`
-
-const Filename = styled.span`
-    font-size: 1rem;
-`
-
-const Filesize = styled.span`
-    font-size: 1rem;
-    color: ${(props) => props.theme.color.grey[100]};
-`
-
-const FileActionWrapper = styled.div`
-    display: flex;
-    justify-content: flex-end;
-    transform: translateY(-12px);
-    width: 100%;
-    img {
-        cursor: pointer;
-        transition: all 0.1s ease-in-out;
-        height: 28px;
-        &:first-child {
-            margin-right: 18px;
-        }
-        &:hover {
-            transform: scale(1.1);
-        }
-    }
-`
-
-const downloadImage = async (url, fileName) => {
-    const image = await fetch(url)
-    const imageBlog = await image.blob()
-    const imageURL = URL.createObjectURL(imageBlog)
-    const link = document.createElement('a')
-    link.href = imageURL
-    link.download = fileName
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-}
-
-function AttachmentPreviewModal({ attachment, url }) {
-    const [loadFailed, setLoadFailed] = useState(false)
-    const { onDismiss } = useModal('attachment preview')
-
-    if (!attachment) {
-        return null
-    }
-    return (
-        <Modal modalKey="attachment preview">
-            <SModalContent>
-                <FileActionWrapper>
-                    <img
-                        alt="Download"
-                        src={downloadIcon}
-                        onClick={() => downloadImage(url, attachment.filename)}
-                    />
-                    <img alt="Close" src={cancelIcon} onClick={onDismiss} />
-                </FileActionWrapper>
-                <Embed
-                    contentType={attachment['Content-Type']}
-                    url={url}
-                    height="350px"
-                    loadFailed={loadFailed}
-                    setLoadFailed={setLoadFailed}
-                />
-                <Metadata>
-                    <Filename>{attachment.filename} </Filename>
-                    <Filesize>
-                        ({filesize(attachment['Content-Length'])})
-                    </Filesize>
-                </Metadata>
-            </SModalContent>
-        </Modal>
-    )
-}
-
-export default Chat
+export default memo(Chat)

@@ -7,7 +7,7 @@ import moment from 'moment'
 import Redwood from '@redwood.dev/client'
 import { sortBy } from 'lodash'
 
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '../redwood.js/dist/main/react'
 import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
