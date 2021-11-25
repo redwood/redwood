@@ -624,6 +624,13 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	keypathStrs := utils.FilterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
+	keys := r.URL.Query()
+	fileName := keys.Get("filename")
+
+	if len(fileName) != 0 {
+		w.Header().Set("Content-Disposition", "attachment; filename="+fileName)
+	}
+
 	keypathStr := strings.Join(keypathStrs, string(state.KeypathSeparator))
 	keypath := state.Keypath(keypathStr)
 	parts := keypath.Parts()
@@ -644,7 +651,8 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	keypath = state.JoinKeypaths(newParts, []byte("/"))
 
 	var rng *state.Range
-	if rstr := r.Header.Get("Range"); rstr != "" {
+	fmt.Println(r.Header.Get("Range"))
+	if rstr := r.Header.Get("Range"); rstr != "" && rstr != "bytes=0-" {
 		// Range: -10:-5
 		// @@TODO: real json Range parsing
 		parts := strings.SplitN(rstr, "=", 2)
@@ -718,9 +726,8 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		if indexArg != "*" {
 			indexArgKeypath = state.Keypath(indexArg)
 		}
-
-		node, err = t.controllerHub.QueryIndex(req.StateURI, req.Version, keypath, state.Keypath(indexName), indexArgKeypath, rng)
-		if errors.Cause(err) == errors.Err404 {
+		node, err = t.controllerHub.QueryIndex(stateURI, version, keypath, state.Keypath(indexName), indexArgKeypath, rng)
+		if errors.Cause(err) == types.Err404 {
 			http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
 			return
 		} else if err != nil {
@@ -739,7 +746,6 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 		if raw {
 			node = node.NodeAt(keypath, rng)
-
 		} else {
 			var exists bool
 			node, exists, err = nelson.Seek(node, keypath, t.controllerHub, t.blobStore)

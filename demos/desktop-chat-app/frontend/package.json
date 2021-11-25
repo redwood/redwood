@@ -37,6 +37,7 @@
     "slate-react": "^0.62.0",
     "styled-components": "^5.2.1",
     "tinycolor2": "^1.4.2",
+    "video.js": "^7.15.4",
     "web-vitals": "^0.2.4"
   },
   "scripts": {
