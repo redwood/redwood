@@ -29,9 +29,10 @@ import Input from './Input'
 import Embed from './Embed'
 import EmojiQuickSearch from './EmojiQuickSearch'
 import TextBox from './TextBox'
-import NormalizeMessage from './ChatHelpers/NormalizeMessage'
+import NormalizeMessage from './Chat/NormalizeMessage'
 import Modal, { ModalTitle, ModalContent, ModalActions } from './Modal'
 import UserAvatar from './UserAvatar'
+import Attachment from './Attachment'
 import useModal from '../hooks/useModal'
 import useServerRegistry from '../hooks/useServerRegistry'
 import useAPI from '../hooks/useAPI'
@@ -213,7 +214,7 @@ const SAddNewAttachment = styled.div`
         transform: scale(1.1);
     }
 `
-
+/* eslint-disable */
 const withMentions = (editor) => {
     const { isInline, isVoid } = editor
 
@@ -237,6 +238,7 @@ const withEmojis = (editor) => {
 
     return editor
 }
+/* eslint-enable */
 
 const EmptyChatContainer = styled(Container)`
     display: flex;
@@ -337,6 +339,8 @@ function Chat({ className }) {
                         .toLowerCase()
                         .includes(searchMention.toLowerCase())
                 }
+
+                return false
             })
             .slice(0, 10)
     }
@@ -375,6 +379,7 @@ function Chat({ className }) {
         targetMention,
     ])
 
+    /* eslint-disable */
     useEffect(() => {
         let previousSender
         const messages = ((roomState || {}).messages || []).map((msg) => {
@@ -388,6 +393,7 @@ function Chat({ className }) {
         })
         setMessages(messages)
     }, [numMessages])
+    /* eslint-enable */
 
     const onOpenEmojis = (event) => {
         if (showEmojiKeyboard) {
@@ -443,6 +449,7 @@ function Chat({ className }) {
         }
     }
 
+    /* eslint-disable */
     function getCurrentEmojiWord(startPos, text) {
         if (text[startPos] === ' ' || text[startPos] === ':' || startPos < 2) {
             setEmojiSearchWord('')
@@ -485,7 +492,9 @@ function Chat({ className }) {
 
         return searchWord
     }
+    /* eslint-enable */
 
+    /* eslint-disable */
     const insertMention = (editor, selectedUser) => {
         const mention = {
             type: 'mention',
@@ -501,6 +510,7 @@ function Chat({ className }) {
         Transforms.move(editor, { distance: 2 })
         setMessageText(editor.children)
     }
+    /* eslint-enable */
 
     const onClickSend = useCallback(async () => {
         const plainMessage = serializeMessageText()
@@ -648,7 +658,7 @@ function Chat({ className }) {
         (event) => {
             if (targetMention && mentionUsers.length > 0) {
                 switch (event.key) {
-                    case 'ArrowDown':
+                    case 'ArrowDown': {
                         event.preventDefault()
                         const prevIndex =
                             indexMention >= mentionUsers.length - 1
@@ -656,7 +666,8 @@ function Chat({ className }) {
                                 : indexMention + 1
                         setIndexMention(prevIndex)
                         break
-                    case 'ArrowUp':
+                    }
+                    case 'ArrowUp': {
                         event.preventDefault()
                         const nextIndex =
                             indexMention <= 0
@@ -664,8 +675,9 @@ function Chat({ className }) {
                                 : indexMention - 1
                         setIndexMention(nextIndex)
                         break
+                    }
                     case 'Tab':
-                    case 'Enter':
+                    case 'Enter': {
                         const selectedUser = mentionUsers[indexMention]
                         if (selectedUser) {
                             event.preventDefault()
@@ -676,20 +688,22 @@ function Chat({ className }) {
                             setTargetMention(null)
                         }
                         break
-                    case 'Escape':
+                    }
+                    case 'Escape': {
                         event.preventDefault()
                         setTargetMention(null)
                         break
-                }
-            } else {
-                // Emoji Handling
-                if (event.code === 'Enter' && !event.shiftKey) {
-                    if (!emojisFound || (!emojisFound && emojiSearchWord)) {
-                        event.preventDefault()
-                        event.stopPropagation()
-
-                        onClickSend()
                     }
+                    default:
+                        return
+                }
+            } else if (event.code === 'Enter' && !event.shiftKey) {
+                // Emoji Handling
+                if (!emojisFound || (!emojisFound && emojiSearchWord)) {
+                    event.preventDefault()
+                    event.stopPropagation()
+
+                    onClickSend()
                 }
             }
 
@@ -710,6 +724,7 @@ function Chat({ className }) {
         ],
     )
 
+    /* eslint-disable */
     function onClickAddAttachment() {
         if (previews.length === 0) {
             attachmentsInput.current.value === ''
@@ -717,11 +732,13 @@ function Chat({ className }) {
         }
         attachmentsInput.current.click()
     }
+    /* eslint-enable */
 
     function onClickAddNewAttachment() {
         newAttachmentsInput.current.click()
     }
 
+    /* eslint-disable */
     function removePreview(itemIdx) {
         const clonedPreviews = [...previews]
         const clonedAttachments = [...attachments]
@@ -734,6 +751,7 @@ function Chat({ className }) {
             attachmentForm.current.reset()
         }
     }
+    /* eslint-enable */
 
     function onChangeAttachments(event) {
         console.log('onChangeAttachments')
@@ -754,7 +772,7 @@ function Chat({ className }) {
         )
         setAttachments(files)
         setPreviews(new Array(files.length))
-
+        /* eslint-disable */
         for (let i = 0; i < files.length; i++) {
             ;(function (i) {
                 const file = files[i]
@@ -780,6 +798,7 @@ function Chat({ className }) {
             })(i)
         }
     }
+    /* eslint-enable */
 
     function addNewAttachment(event) {
         console.log('addNewAttachment')
@@ -788,7 +807,7 @@ function Chat({ className }) {
             (x) => x,
         )
         setAttachments([...attachments, ...files])
-
+        /* eslint-disable */
         for (let i = 0; i < files.length; i++) {
             ;(function (i) {
                 const file = files[i]
@@ -804,6 +823,7 @@ function Chat({ className }) {
                 reader.readAsDataURL(file)
             })(i)
         }
+        /* eslint-enable */
     }
 
     if (!selectedStateURI) {
@@ -816,7 +836,7 @@ function Chat({ className }) {
 
     const ownAddress =
         nodeIdentities && nodeIdentities[0] ? nodeIdentities[0].address : null
-
+    /* eslint-disable */
     return (
         <Container className={className}>
             <MessageContainer ref={messageTextContainer}>
@@ -962,16 +982,174 @@ function Chat({ className }) {
             </ControlsContainer>
         </Container>
     )
+    /* eslint-enable */
 }
 
+function getTimestampDisplay(timestamp) {
+    const momentDate = moment.unix(timestamp)
+    let dayDisplay = momentDate.format('MM/DD')
+    const displayTime = momentDate.format('h:mm A')
+
+    if (
+        momentDate.format('MM/DD') === moment.unix(Date.now()).format('MM/DD')
+    ) {
+        dayDisplay = 'Today'
+    } else if (
+        momentDate.subtract(1, 'day') ===
+        moment.unix(Date.now()).subtract(1, 'day')
+    ) {
+        dayDisplay = 'Yesterday'
+    }
+    return {
+        dayDisplay,
+        displayTime,
+    }
+}
+
+const MessageWrapper = styled.div`
+    display: flex;
+    padding: ${(props) => (props.firstByUser ? '20px 0 0' : '0')};
+    border-radius: 8px;
+    transition: 50ms all ease-in-out;
+    // &:hover {
+    //   background: ${(props) => props.theme.color.grey[300]};
+    // }
+`
+
+const SUserAvatar = styled(UserAvatar)`
+    cursor: pointer;
+`
+
+const MessageSender = styled.div`
+    font-weight: 500;
+`
+
+const SMessageTimestamp = styled.span`
+    font-size: 10px;
+    font-weight: 300;
+    color: rgba(255, 255, 255, 0.4);
+    margin-left: 4px;
+`
+
+function MessageTimestamp({ dayDisplay, displayTime }) {
+    return (
+        <SMessageTimestamp>
+            {dayDisplay} {displayTime}
+        </SMessageTimestamp>
+    )
+}
+
+const SAttachment = styled(Attachment)`
+    max-width: 500px;
+`
+
+function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
+    const { selectedServer, selectedStateURI } = useNavigation()
+    const { users, usersStateURI } = useUsers(selectedStateURI)
+    const addressBook = useAddressBook()
+    const userAddress = msg.sender.toLowerCase()
+    const user = (users && users[userAddress]) || {}
+    const displayName = addressBook[userAddress] || user.username || msg.sender
+    const { dayDisplay, displayTime } = getTimestampDisplay(msg.timestamp)
+    const { onPresent: onPresentContactsModal } = useModal('contacts')
+    const { onPresent: onPresentUserProfileModal } = useModal('user profile')
+    const { httpHost } = useRedwood()
+
+    const showContactsModal = useCallback(() => {
+        if (isOwnMessage) {
+            onPresentUserProfileModal()
+        } else {
+            onPresentContactsModal({ initiallyFocusedContact: msg.sender })
+        }
+    }, [
+        onPresentContactsModal,
+        onPresentUserProfileModal,
+        msg,
+        msg && msg.sender,
+        isOwnMessage,
+    ])
+
+    /* eslint-disable */
+    return (
+        <MessageWrapper
+            firstByUser={msg.firstByUser}
+            key={selectedStateURI + messageIndex}
+        >
+            {msg.firstByUser ? (
+                <SUserAvatar
+                    address={userAddress}
+                    onClick={showContactsModal}
+                />
+            ) : (
+                <UserAvatarPlaceholder />
+            )}
+            <MessageDetails>
+                {msg.firstByUser && (
+                    <MessageSender>
+                        {displayName}{' '}
+                        <MessageTimestamp
+                            dayDisplay={dayDisplay}
+                            displayTime={displayTime}
+                        />
+                    </MessageSender>
+                )}
+
+                {/* <MessageText>{msg.text}</MessageText> */}
+                {/* <MessageParse msgText={msg.text} /> */}
+                <NormalizeMessage msgText={msg.text} />
+                {(msg.attachments || []).map((attachment, j) => (
+                    <SAttachment
+                        key={`${selectedStateURI}${messageIndex},${j}`}
+                        attachment={attachment}
+                        url={`${httpHost}/messages[${messageIndex}]/attachments[${j}]?state_uri=${encodeURIComponent(
+                            selectedStateURI,
+                        )}`}
+                        onClick={onClickAttachment}
+                    />
+                ))}
+            </MessageDetails>
+        </MessageWrapper>
+    )
+    /* eslint-enable */
+}
+
+function MessageParse({ msgText }) {
+    const colons = `:[a-zA-Z0-9-_+]+:`
+    const skin = `:skin-tone-[2-6]:`
+    const colonsRegex = new RegExp(`(${colons}${skin}|${colons})`, 'g')
+    /* eslint-disable */
+    const msgBlock = msgText
+        .split(colonsRegex)
+        .filter((block) => !!block)
+        .map((block, idx) => {
+            if (data.emojis[block.replace(':', '').replace(':', '')]) {
+                if (block[0] === ':' && block[block.length - 1] === ':') {
+                    return <Emoji key={idx} emoji={block} size={21} />
+                }
+            }
+
+            return block
+        })
+    /* eslint-enable */
+
+    return <SMessageParseContainer>{msgBlock}</SMessageParseContainer>
+}
+
+const SMessageParseContainer = styled.div`
+    white-space: pre-wrap;
+    span.emoji-mart-emoji {
+        top: 4px;
+    }
+`
+
 const TextBoxButtonWrapper = styled.div`
-  position: absolute;
-  right: 20px;
-  bottom: 18px;
-  display: flex;
-  align-items: center;
-  justify-content;
-  height: 32px;
+    position: absolute;
+    right: 20px;
+    bottom: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
 `
 
 const EmojiWrapper = styled.div`
@@ -1031,6 +1209,7 @@ const downloadImage = async (url, fileName) => {
 }
 
 function AttachmentPreviewModal({ attachment, url }) {
+    const [loadFailed, setLoadFailed] = useState(false)
     const { onDismiss } = useModal('attachment preview')
 
     if (!attachment) {
@@ -1051,6 +1230,8 @@ function AttachmentPreviewModal({ attachment, url }) {
                     contentType={attachment['Content-Type']}
                     url={url}
                     height="350px"
+                    loadFailed={loadFailed}
+                    setLoadFailed={setLoadFailed}
                 />
                 <Metadata>
                     <Filename>{attachment.filename} </Filename>

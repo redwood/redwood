@@ -15,6 +15,20 @@ function Provider({ apiEndpoint, children }) {
     const [profileNames, setProfileNames] = useState([])
     const [profilesFetched, setProfilesFetched] = useState(false)
 
+    const getProfileNames = useCallback(async () => {
+        try {
+            const resp = await (
+                await fetch(`${apiEndpoint}/api/profile-names`, {
+                    method: 'GET',
+                })
+            ).json()
+            setProfileNames(resp.profileNames || [])
+            setProfilesFetched(true)
+        } catch (err) {
+            setProfileNames([])
+        }
+    }, [apiEndpoint])
+
     const signup = useCallback(
         async ({ profileName }) => {
             const resp = await fetch(`${apiEndpoint}/api/confirm-profile`, {
@@ -30,7 +44,7 @@ function Provider({ apiEndpoint, children }) {
             await getProfileNames()
             return createdMnemonic
         },
-        [apiEndpoint],
+        [apiEndpoint, getProfileNames],
     )
 
     const login = useCallback(
@@ -50,7 +64,7 @@ function Provider({ apiEndpoint, children }) {
             await getProfileNames()
             setIsLoggedIn(true)
         },
-        [apiEndpoint, isLoggedIn, setIsLoggedIn],
+        [apiEndpoint, isLoggedIn, setIsLoggedIn, getProfileNames],
     )
 
     const logout = useCallback(async () => {
@@ -68,7 +82,7 @@ function Provider({ apiEndpoint, children }) {
         setProfilesFetched(false)
         await getProfileNames()
         setIsLoggedIn(false)
-    }, [apiEndpoint, isLoggedIn, setIsLoggedIn])
+    }, [apiEndpoint, isLoggedIn, setIsLoggedIn, getProfileNames])
 
     const checkLogin = useCallback(async () => {
         try {
@@ -82,25 +96,11 @@ function Provider({ apiEndpoint, children }) {
         } catch (err) {
             return err
         }
-    }, [apiEndpoint])
-
-    async function getProfileNames() {
-        try {
-            const resp = await (
-                await fetch(`${apiEndpoint}/api/profile-names`, {
-                    method: 'GET',
-                })
-            ).json()
-            setProfileNames(resp.profileNames || [])
-            setProfilesFetched(true)
-        } catch (err) {
-            setProfileNames([])
-        }
-    }
+    }, [apiEndpoint, getProfileNames])
 
     useEffect(() => {
         checkLogin()
-    }, [apiEndpoint])
+    }, [apiEndpoint, checkLogin])
 
     return (
         <Context.Provider

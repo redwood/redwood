@@ -118,7 +118,7 @@ function PeerRow({ address, editable, showLastSeen, boldName, onClick }) {
                 setNewNickname(addressBook[address])
             }
         },
-        [onClickSetNickname],
+        [onClickSetNickname, address, addressBook],
     )
 
     const onMouseDown = useCallback(() => {

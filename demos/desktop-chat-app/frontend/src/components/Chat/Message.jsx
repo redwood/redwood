@@ -16,11 +16,11 @@ import UserAvatar from './UserAvatar'
 
 const MessageWrapper = styled.div`
     display: flex;
-    padding: ${props => props.firstByUser ? '20px 0 0' : '0'};
+    padding: ${(props) => (props.firstByUser ? '20px 0 0' : '0')};
     border-radius: 8px;
     transition: 50ms all ease-in-out;
     // &:hover {
-    //   background: ${props => props.theme.color.grey[300]};
+    //   background: ${(props) => props.theme.color.grey[300]};
     // }
 `
 
@@ -29,24 +29,33 @@ const MessageSender = styled.div`
 `
 
 const SMessageTimestamp = styled.span`
-  font-size: 10px;
-  font-weight: 300;
-  color: rgba(255,255,255, .4);
-  margin-left: 4px;
+    font-size: 10px;
+    font-weight: 300;
+    color: rgba(255, 255, 255, 0.4);
+    margin-left: 4px;
 `
 
 function MessageTimestamp({ dayDisplay, displayTime }) {
-    return <SMessageTimestamp>{dayDisplay} {displayTime}</SMessageTimestamp>
+    return (
+        <SMessageTimestamp>
+            {dayDisplay} {displayTime}
+        </SMessageTimestamp>
+    )
 }
 
 function getTimestampDisplay(timestamp) {
     const momentDate = moment.unix(timestamp)
     let dayDisplay = momentDate.format('MM/DD')
-    let displayTime = momentDate.format('h:mm A')
+    const displayTime = momentDate.format('h:mm A')
 
-    if (momentDate.format('MM/DD') === moment.unix(Date.now()).format('MM/DD')){
+    if (
+        momentDate.format('MM/DD') === moment.unix(Date.now()).format('MM/DD')
+    ) {
         dayDisplay = 'Today'
-    } else if (momentDate.subtract(1, 'day') === moment.unix(Date.now()).subtract(1, 'day')) {
+    } else if (
+        momentDate.subtract(1, 'day') ===
+        moment.unix(Date.now()).subtract(1, 'day')
+    ) {
         dayDisplay = 'Yesterday'
     }
     return {
@@ -64,76 +73,97 @@ const SAttachment = styled(Attachment)`
 `
 
 function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
-    let { selectedServer, selectedStateURI } = useNavigation()
-    let { users, usersStateURI } = useUsers(selectedStateURI)
-    let addressBook = useAddressBook()
-    let userAddress = msg.sender.toLowerCase()
-    let user = (users && users[userAddress]) || {}
-    let displayName = addressBook[userAddress] || user.username || msg.sender
-    let { dayDisplay, displayTime } = getTimestampDisplay(msg.timestamp)
-    let { onPresent: onPresentContactsModal } = useModal('contacts')
-    let { onPresent: onPresentUserProfileModal } = useModal('user profile')
-    let { httpHost } = useRedwood()
+    const { selectedServer, selectedStateURI } = useNavigation()
+    const { users, usersStateURI } = useUsers(selectedStateURI)
+    const addressBook = useAddressBook()
+    const userAddress = msg.sender.toLowerCase()
+    const user = (users && users[userAddress]) || {}
+    const displayName = addressBook[userAddress] || user.username || msg.sender
+    const { dayDisplay, displayTime } = getTimestampDisplay(msg.timestamp)
+    const { onPresent: onPresentContactsModal } = useModal('contacts')
+    const { onPresent: onPresentUserProfileModal } = useModal('user profile')
+    const { httpHost } = useRedwood()
 
-    let showContactsModal = useCallback(() => {
+    const showContactsModal = useCallback(() => {
         if (isOwnMessage) {
             onPresentUserProfileModal()
         } else {
             onPresentContactsModal({ initiallyFocusedContact: msg.sender })
         }
-    }, [onPresentContactsModal, onPresentUserProfileModal, msg, msg && msg.sender, isOwnMessage])
+    }, [
+        onPresentContactsModal,
+        onPresentUserProfileModal,
+        msg,
+        msg && msg.sender,
+        isOwnMessage,
+    ])
 
     return (
-        <MessageWrapper firstByUser={msg.firstByUser} key={selectedStateURI + messageIndex}>
-          {msg.firstByUser
-              ? <SUserAvatar address={userAddress} onClick={showContactsModal} />
-              : <UserAvatarPlaceholder />
-          }
-          <MessageDetails>
-            {msg.firstByUser &&
-              <MessageSender>{displayName} <MessageTimestamp dayDisplay={dayDisplay} displayTime={displayTime} /></MessageSender>
-            }
+        <MessageWrapper
+            firstByUser={msg.firstByUser}
+            key={selectedStateURI + messageIndex}
+        >
+            {msg.firstByUser ? (
+                <SUserAvatar
+                    address={userAddress}
+                    onClick={showContactsModal}
+                />
+            ) : (
+                <UserAvatarPlaceholder />
+            )}
+            <MessageDetails>
+                {msg.firstByUser && (
+                    <MessageSender>
+                        {displayName}{' '}
+                        <MessageTimestamp
+                            dayDisplay={dayDisplay}
+                            displayTime={displayTime}
+                        />
+                    </MessageSender>
+                )}
 
-            {/* <MessageText>{msg.text}</MessageText> */}
-            {/* <MessageParse msgText={msg.text} /> */}
-            <NormalizeMessage msgText={msg.text} />
-            {(msg.attachments || []).map((attachment, j) => (
-              <SAttachment
-                key={`${selectedStateURI}${messageIndex},${j}`}
-                attachment={attachment}
-                url={`${httpHost}/messages[${messageIndex}]/attachments[${j}]?state_uri=${encodeURIComponent(selectedStateURI)}`}
-                onClick={onClickAttachment}
-              />
-            ))}
-          </MessageDetails>
+                {/* <MessageText>{msg.text}</MessageText> */}
+                {/* <MessageParse msgText={msg.text} /> */}
+                <NormalizeMessage msgText={msg.text} />
+                {(msg.attachments || []).map((attachment, j) => (
+                    <SAttachment
+                        key={`${selectedStateURI}${messageIndex},${j}`}
+                        attachment={attachment}
+                        url={`${httpHost}/messages[${messageIndex}]/attachments[${j}]?state_uri=${encodeURIComponent(
+                            selectedStateURI,
+                        )}`}
+                        onClick={onClickAttachment}
+                    />
+                ))}
+            </MessageDetails>
         </MessageWrapper>
     )
 }
 
-
 function MessageParse({ msgText }) {
-  const colons = `:[a-zA-Z0-9-_+]+:`;
-  const skin = `:skin-tone-[2-6]:`;
-  const colonsRegex = new RegExp(`(${colons}${skin}|${colons})`, 'g');
+    const colons = `:[a-zA-Z0-9-_+]+:`
+    const skin = `:skin-tone-[2-6]:`
+    const colonsRegex = new RegExp(`(${colons}${skin}|${colons})`, 'g')
 
-  let msgBlock = msgText.split(colonsRegex).filter((block) => !!block).map((block, idx) => {
-    if (data.emojis[block.replace(':', '').replace(':', '')]) {
-      if (block[0] === ':' && block[block.length - 1] === ':') {
-        return <Emoji key={idx} emoji={block} size={21} />
-      }
-    }
+    const msgBlock = msgText
+        .split(colonsRegex)
+        .filter((block) => !!block)
+        .map((block, idx) => {
+            if (data.emojis[block.replace(':', '').replace(':', '')]) {
+                if (block[0] === ':' && block[block.length - 1] === ':') {
+                    return <Emoji key={idx} emoji={block} size={21} />
+                }
+            }
 
-    return block
-  })
+            return block
+        })
 
-  return (
-    <SMessageParseContainer>{msgBlock}</SMessageParseContainer>
-  )
+    return <SMessageParseContainer>{msgBlock}</SMessageParseContainer>
 }
 
 const SMessageParseContainer = styled.div`
-  white-space: pre-wrap;
-  span.emoji-mart-emoji {
-    top: 4px;
-  }
+    white-space: pre-wrap;
+    span.emoji-mart-emoji {
+        top: 4px;
+    }
 `

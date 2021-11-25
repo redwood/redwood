@@ -90,7 +90,7 @@ function ServerBar({ className, verticalPadding }) {
             setIsLoaded(true)
             navigate(joinedServers[0], null)
         }
-    }, [joinedServers])
+    }, [joinedServers, isLoaded, navigate])
 
     return (
         <Container className={className} verticalPadding={verticalPadding}>
@@ -163,7 +163,7 @@ function ImportServerModal({ onDismiss }) {
             // NOTE: Add proper error catching here
             throw new Error(err)
         }
-    }, [api, serverName])
+    }, [api, serverName, onDismiss, navigate])
 
     const onChangeServerName = (e) => {
         if (e.code === 'Enter') {

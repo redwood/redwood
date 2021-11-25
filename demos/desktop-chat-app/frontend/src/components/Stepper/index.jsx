@@ -1,16 +1,7 @@
-import React, { useState, useCallback, useEffect } from 'react'
-import styled, { useTheme } from 'styled-components'
+import React from 'react'
+import styled from 'styled-components'
 import clsx from 'clsx'
-import {
-    Stepper,
-    Step,
-    StepLabel,
-    StepConnector,
-    Avatar,
-    Fab,
-    IconButton,
-    TextField,
-} from '@material-ui/core'
+import { Stepper, Step, StepLabel, StepConnector } from '@material-ui/core'
 import { Check as CheckIcon } from '@material-ui/icons'
 import { makeStyles } from '@material-ui/core/styles'
 import theme from '../../theme'

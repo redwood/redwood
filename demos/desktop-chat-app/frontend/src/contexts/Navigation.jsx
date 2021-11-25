@@ -1,4 +1,10 @@
-import React, { createContext, useState, useDebugValue } from 'react'
+import React, {
+    createContext,
+    useState,
+    useDebugValue,
+    useMemo,
+    useCallback,
+} from 'react'
 
 export const Context = createContext({
     selectedStateURI: null,
@@ -11,10 +17,13 @@ function Provider({ children }) {
     const [selectedServer, setServer] = useState(null)
     const [selectedRoom, setRoom] = useState(null)
 
-    const selectedStateURI =
-        selectedServer && selectedRoom
-            ? `${selectedServer}/${selectedRoom}`
-            : null
+    const selectedStateURI = useMemo(
+        () =>
+            selectedServer && selectedRoom
+                ? `${selectedServer}/${selectedRoom}`
+                : null,
+        [selectedRoom, selectedServer],
+    )
 
     useDebugValue({ selectedServer, selectedRoom, selectedStateURI })
 
