@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import styled, { useTheme } from 'styled-components'
+import styled from 'styled-components'
 import * as tinycolor from 'tinycolor2'
+import { useRedwood } from '@redwood.dev/client/react'
 import strToColor from '../../utils/strToColor'
 import Image from '../Image'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 import useUsers from '../../hooks/useUsers'
-import useServerAndRoomInfo from '../../hooks/useServerAndRoomInfo'
 import useAddressBook from '../../hooks/useAddressBook'
 import useNavigation from '../../hooks/useNavigation'
 
@@ -21,7 +20,8 @@ const TextAvatar = styled.div`
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: ${props => tinycolor(strToColor(props.text)).darken(10).desaturate(25)} !important;
+    background-color: ${(props) =>
+        tinycolor(strToColor(props.text)).darken(10).desaturate(25)} !important;
     font-weight: 700;
     border-radius: 9999px;
     width: 40px;
@@ -32,18 +32,20 @@ const TextAvatar = styled.div`
 `
 
 function UserAvatar({ address, className, ...props }) {
-    let [username, setUsername] = useState(null)
-    let [photoURL, setPhotoURL] = useState(null)
-    let { selectedStateURI } = useNavigation()
-    let { users, usersStateURI } = useUsers(selectedStateURI)
-    let addressBook = useAddressBook()
-    let { httpHost } = useRedwood()
+    const [username, setUsername] = useState(null)
+    const [photoURL, setPhotoURL] = useState(null)
+    const { selectedStateURI } = useNavigation()
+    const { users, usersStateURI } = useUsers(selectedStateURI)
+    const addressBook = useAddressBook()
+    const { httpHost } = useRedwood()
 
     useEffect(() => {
         if (users && users[address]) {
             setUsername(users[address].username)
             if (users[address].photo) {
-                setPhotoURL(`${httpHost}/users/${address}/photo?state_uri=${usersStateURI}&${Date.now()}`)
+                setPhotoURL(
+                    `${httpHost}/users/${address}/photo?state_uri=${usersStateURI}&${Date.now()}`,
+                )
             } else {
                 setPhotoURL(null)
             }
@@ -56,7 +58,7 @@ function UserAvatar({ address, className, ...props }) {
     if (photoURL) {
         return <Avatar className={className} src={photoURL} {...props} />
     }
-    let text = addressBook[address] || username || address || ''
+    const text = addressBook[address] || username || address || ''
     return (
         <TextAvatar className={className} text={text} {...props}>
             <div>{(text || '').slice(0, 1).toUpperCase()}</div>

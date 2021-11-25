@@ -1,31 +1,36 @@
 @font-face {
-  font-family: 'Noto Sans KR';
-  src: local('Noto Sans KR'), url(./assets/NotoSansKR-Medium.otf) format('opentype');
-  font-weight: 500;
+    font-family: 'Noto Sans KR';
+    src: local('Noto Sans KR'),
+        url(./assets/NotoSansKR-Medium.otf) format('opentype');
+    font-weight: 500;
 }
 
 @font-face {
-  font-family: 'Noto Sans KR';
-  src: local('Noto Sans KR'), url(./assets/NotoSansKR-Light.otf) format('opentype');
-  font-weight: 300;
+    font-family: 'Noto Sans KR';
+    src: local('Noto Sans KR'),
+        url(./assets/NotoSansKR-Light.otf) format('opentype');
+    font-weight: 300;
 }
 
 @font-face {
-  font-family: 'Noto Sans KR';
-  src: local('Noto Sans KR'), url(./assets/NotoSansKR-Thin.otf) format('opentype');
-  font-weight: 100;
+    font-family: 'Noto Sans KR';
+    src: local('Noto Sans KR'),
+        url(./assets/NotoSansKR-Thin.otf) format('opentype');
+    font-weight: 100;
 }
 
 @font-face {
-  font-family: 'Noto Sans KR';
-  src: local('Noto Sans KR'), url(./assets/NotoSansKR-Regular.otf) format('opentype');
-  font-weight: 400;
+    font-family: 'Noto Sans KR';
+    src: local('Noto Sans KR'),
+        url(./assets/NotoSansKR-Regular.otf) format('opentype');
+    font-weight: 400;
 }
 
 @font-face {
-  font-family: 'Noto Sans KR';
-  src: local('Noto Sans KR'), url(./assets/NotoSansKR-Bold.otf) format('opentype');
-  font-weight: 700;
+    font-family: 'Noto Sans KR';
+    src: local('Noto Sans KR'),
+        url(./assets/NotoSansKR-Bold.otf) format('opentype');
+    font-weight: 700;
 }
 
 body {
@@ -33,4 +38,3 @@ body {
     font-family: 'Noto Sans KR';
     font-size: 0.9rem;
 }
-

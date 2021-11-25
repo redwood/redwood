@@ -1,17 +1,16 @@
-import { useRef, useState, useMemo, useContext, useEffect } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useStateTree } from '@redwood.dev/client/react'
-import useNavigation from './useNavigation'
 import useServerAndRoomInfo from './useServerAndRoomInfo'
 import useAddressBook from './useAddressBook'
 
 function useUsers(stateURI) {
-    const { servers, rooms } = useServerAndRoomInfo()
+    const { rooms } = useServerAndRoomInfo()
     const defaultValue = useRef({})
     const [retval, setRetval] = useState({})
     const addressBook = useAddressBook()
 
-    const [server, room] = (stateURI || '').split('/')
-    const isDirectMessage = (rooms[stateURI] || {}).isDirectMessage
+    const [server] = (stateURI || '').split('/')
+    const { isDirectMessage } = rooms[stateURI] || {}
 
     let usersStateURI
     if (isDirectMessage && !!stateURI) {
@@ -20,12 +19,11 @@ function useUsers(stateURI) {
         usersStateURI = `${server}/registry`
     }
     const usersTree = useStateTree(usersStateURI)
-    const users = (usersTree || {}).users || defaultValue.current
-    console.log('users', users)
+    const users = usersTree ? usersTree.users : defaultValue.current
 
     useEffect(() => {
-        let newUsers = {}
-        for (let key of Object.keys(users)) {
+        const newUsers = {}
+        for (const key of Object.keys(users)) {
             newUsers[key] = {
                 ...users[key],
                 nickname: addressBook[key],
@@ -39,5 +37,3 @@ function useUsers(stateURI) {
 }
 
 export default useUsers
-
-

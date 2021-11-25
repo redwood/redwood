@@ -1,28 +1,21 @@
-import React, { Fragment, useState, useEffect, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import styled from 'styled-components'
-import { Link, Redirect, useHistory } from 'react-router-dom'
-import { useRedwood } from '@redwood.dev/client/react'
+import { Link, Redirect } from 'react-router-dom'
 
-import Input, { InputLabel } from './../Input'
-import Button from './../Button'
-import UserAvatar from './../UserAvatar'
+import Input, { InputLabel } from '../Input'
+import Button from '../Button'
+import UserAvatar from '../UserAvatar'
 import Loading from './Loading'
 import useLoginStatus from '../../hooks/useLoginStatus'
 
 const SAccount = styled.section`
-    background-color: ${props => props.theme.color.grey[500]};
+    background-color: ${(props) => props.theme.color.grey[500]};
     height: 100vh;
     width: 100vw;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-`
-
-const SAccountHeader = styled.div`
-    height: 250px;
-    background: transparent;
-    width: 100%;
 `
 
 const SAccountCard = styled.div`
@@ -42,7 +35,7 @@ const SAccountCardHeader = styled.h2`
 `
 
 const SAccountCardDesc = styled.p`
-    color: rgba(255, 255, 255, .8);
+    color: rgba(255, 255, 255, 0.8);
     font-size: 12px;
     text-align: center;
 `
@@ -91,13 +84,13 @@ const SProfile = styled.div`
     margin: 12px;
     margin-top: 0px;
     cursor: pointer;
-    transition: .15s ease-in-out all;
+    transition: 0.15s ease-in-out all;
     &:hover {
         transform: scale(1.1);
     }
     > span {
         margin-top: 4px;
-        color: rgba(255, 255, 255, .8);
+        color: rgba(255, 255, 255, 0.8);
         font-size: 10px;
     }
 `
@@ -116,67 +109,91 @@ function Profile(props) {
     )
 }
 
-function SignIn({ password, setPassword, profileNames, selectedProfile, setSelectedProfile, errorMessage, setErrorMessage, loadingText, setLoadingText }) {
-    let { login } = useLoginStatus()
+function SignIn({
+    password,
+    setPassword,
+    profileNames,
+    selectedProfile,
+    setSelectedProfile,
+    errorMessage,
+    setErrorMessage,
+    setLoadingText,
+}) {
+    const { login } = useLoginStatus()
 
-    let onSubmitLogin = useCallback(async (event) => {
-        try {
-			event.preventDefault()
-            setErrorMessage('')
-            setLoadingText('Signing into profile...')
-            await login({ profileName: selectedProfile, password })
-        } catch (err) {
-            setLoadingText('')
-            setErrorMessage(err.toString())
-        }
-    }, [selectedProfile, password, setErrorMessage, setLoadingText, login])
+    const onSubmitLogin = useCallback(
+        async (event) => {
+            try {
+                event.preventDefault()
+                setErrorMessage('')
+                setLoadingText('Signing into profile...')
+                await login({ profileName: selectedProfile, password })
+            } catch (err) {
+                setLoadingText('')
+                setErrorMessage(err.toString())
+            }
+        },
+        [selectedProfile, password, setErrorMessage, setLoadingText, login],
+    )
 
     return (
         <SAccountCardContent onSubmit={onSubmitLogin}>
-            { errorMessage ? <SErrorMessage>{errorMessage}</SErrorMessage> : null}
-            <InputLabel label={'Password'}>
+            {errorMessage ? (
+                <SErrorMessage>{errorMessage}</SErrorMessage>
+            ) : null}
+            <InputLabel label="Password">
                 <Input
                     autoFocus
                     value={password}
                     onChange={(event) => setPassword(event.currentTarget.value)}
-                    type={'password'}
+                    type="password"
                 />
             </InputLabel>
-            <SBackProfiles onClick={() => setSelectedProfile('')}>Select another profile ({profileNames.length})</SBackProfiles>
-            <SLink to={'/signin'}>Leave</SLink>
+            <SBackProfiles onClick={() => setSelectedProfile('')}>
+                Select another profile ({profileNames.length})
+            </SBackProfiles>
+            <SLink to="/signin">Leave</SLink>
             <Button
-				type="submit"
+                type="submit"
                 primary
                 style={{ width: '100%', marginTop: 12 }}
                 disabled={!password}
-            >Sign In</Button>
+            >
+                Sign In
+            </Button>
         </SAccountCardContent>
     )
 }
 
 function SelectProfile(props) {
     return (
-		<SAccountCardContent>
-			<SSelectProfile>
-				<SProfileWrapper>
-					{props.profileNames.length > 0 ? props.profileNames.map((profileName, key) => {
-						return (
-							<Profile
-								key={key}
-								onClick={() => props.setSelectedProfile(profileName)}
-								profileName={profileName}
-							/>
-						)
-					}) : <SAccountCardDesc>No profiles to display.</SAccountCardDesc>}
-				</SProfileWrapper>
-				<SLink to={'/signin'}>Import existing profile.</SLink>
-				<SLink to={'/signup'}>Create a profile.</SLink>
-			</SSelectProfile>
-		</SAccountCardContent>
+        <SAccountCardContent>
+            <SSelectProfile>
+                <SProfileWrapper>
+                    {props.profileNames.length > 0 ? (
+                        props.profileNames.map((profileName) => (
+                            <Profile
+                                key={profileName}
+                                onClick={() =>
+                                    props.setSelectedProfile(profileName)
+                                }
+                                profileName={profileName}
+                            />
+                        ))
+                    ) : (
+                        <SAccountCardDesc>
+                            No profiles to display.
+                        </SAccountCardDesc>
+                    )}
+                </SProfileWrapper>
+                <SLink to="/signin">Import existing profile.</SLink>
+                <SLink to="/signup">Create a profile.</SLink>
+            </SSelectProfile>
+        </SAccountCardContent>
     )
 }
 
-function Account(props) {
+function Account() {
     const [selectedProfile, setSelectedProfile] = useState('')
     const [password, setPassword] = useState('')
     const [errorMessage, setErrorMessage] = useState('')
@@ -191,24 +208,28 @@ function Account(props) {
         <SAccount>
             <SAccountCard>
                 <SAccountCardHeader>Profiles</SAccountCardHeader>
-                <SAccountCardDesc>{ `Profile Name: ${selectedProfile}` || '---'}</SAccountCardDesc>
-                    { selectedProfile ?
-                        <SignIn
-                            password={password}
-                            setPassword={setPassword}
-                            selectedProfile={selectedProfile}
-                            profileNames={profileNames}
-                            setSelectedProfile={setSelectedProfile}
-                            errorMessage={errorMessage}
-                            setErrorMessage={setErrorMessage}
-                            loadingText={loadingText}
-                            setLoadingText={setLoadingText}
-                        />
-                    : <SelectProfile
-                            profileNames={profileNames}
-                            setSelectedProfile={setSelectedProfile}
-                    />}
-                { loadingText ? <Loading text={loadingText} /> : null }
+                <SAccountCardDesc>
+                    {`Profile Name: ${selectedProfile}` || '---'}
+                </SAccountCardDesc>
+                {selectedProfile ? (
+                    <SignIn
+                        password={password}
+                        setPassword={setPassword}
+                        selectedProfile={selectedProfile}
+                        profileNames={profileNames}
+                        setSelectedProfile={setSelectedProfile}
+                        errorMessage={errorMessage}
+                        setErrorMessage={setErrorMessage}
+                        loadingText={loadingText}
+                        setLoadingText={setLoadingText}
+                    />
+                ) : (
+                    <SelectProfile
+                        profileNames={profileNames}
+                        setSelectedProfile={setSelectedProfile}
+                    />
+                )}
+                {loadingText ? <Loading text={loadingText} /> : null}
             </SAccountCard>
         </SAccount>
     )

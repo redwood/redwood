@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useState, useEffect, useDebugValue } from 'react'
+import React, { createContext, useState, useDebugValue } from 'react'
 
 export const Context = createContext({
     selectedStateURI: null,
@@ -11,24 +11,29 @@ function Provider({ children }) {
     const [selectedServer, setServer] = useState(null)
     const [selectedRoom, setRoom] = useState(null)
 
-    let selectedStateURI = (selectedServer && selectedRoom) ? `${selectedServer}/${selectedRoom}` : null
+    const selectedStateURI =
+        selectedServer && selectedRoom
+            ? `${selectedServer}/${selectedRoom}`
+            : null
 
     useDebugValue({ selectedServer, selectedRoom, selectedStateURI })
 
-    function navigate(selectedServer, selectedRoom) {
-        setServer(selectedServer)
-        setRoom(selectedRoom)
+    const navigate = (server, room) => {
+        setServer(server)
+        setRoom(room)
     }
 
     return (
-      <Context.Provider value={{
-          selectedStateURI,
-          selectedServer,
-          selectedRoom,
-          navigate,
-      }}>
-          {children}
-      </Context.Provider>
+        <Context.Provider
+            value={{
+                selectedStateURI,
+                selectedServer,
+                selectedRoom,
+                navigate,
+            }}
+        >
+            {children}
+        </Context.Provider>
     )
 }
 

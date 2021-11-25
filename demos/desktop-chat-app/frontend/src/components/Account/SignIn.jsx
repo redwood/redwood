@@ -1,26 +1,20 @@
-import React, { Fragment, useState, useEffect, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import styled from 'styled-components'
 import { Link, Redirect } from 'react-router-dom'
 
-import Input, { InputLabel } from './../Input'
-import Button from './../Button'
+import Input, { InputLabel } from '../Input'
+import Button from '../Button'
 import Loading from './Loading'
 import useLoginStatus from '../../hooks/useLoginStatus'
 
 const SAccount = styled.section`
-    background-color: ${props => props.theme.color.grey[500]};
+    background-color: ${(props) => props.theme.color.grey[500]};
     height: 100vh;
     width: 100vw;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-`
-
-const SAccountHeader = styled.div`
-    height: 250px;
-    background: transparent;
-    width: 100%;
 `
 
 const SAccountCard = styled.div`
@@ -41,7 +35,7 @@ const SAccountCardHeader = styled.h2`
 `
 
 const SAccountCardDesc = styled.p`
-    color: rgba(255, 255, 255, .8);
+    color: rgba(255, 255, 255, 0.8);
     font-size: 12px;
     text-align: center;
 `
@@ -65,56 +59,85 @@ const SErrorMessage = styled.div`
     color: red;
 `
 
-function SignIn({ profileNames, mnemonic, setMnemonic, profileName, setProfileName, password, setPassword, errorMessage, setErrorMessage, setLoadingText }) {
-	let { login } = useLoginStatus()
+function SignIn({
+    profileNames,
+    mnemonic,
+    setMnemonic,
+    profileName,
+    setProfileName,
+    password,
+    setPassword,
+    errorMessage,
+    setErrorMessage,
+    setLoadingText,
+}) {
+    const { login } = useLoginStatus()
 
-    let onSubmitLogin = useCallback(async (event) => {
-		event.preventDefault()
-        setErrorMessage('')
-        setLoadingText('Validating and generating mnemonic...')
-        try {
-            await login({ profileName, mnemonic, password })
-            setLoadingText('')
-        } catch (err) {
-            setLoadingText('')
-            setErrorMessage(err.toString())
-        }
-    }, [profileName, mnemonic, password, setErrorMessage, setLoadingText, login])
+    const onSubmitLogin = useCallback(
+        async (event) => {
+            event.preventDefault()
+            setErrorMessage('')
+            setLoadingText('Validating and generating mnemonic...')
+            try {
+                await login({ profileName, mnemonic, password })
+                setLoadingText('')
+            } catch (err) {
+                setLoadingText('')
+                setErrorMessage(err.toString())
+            }
+        },
+        [
+            profileName,
+            mnemonic,
+            password,
+            setErrorMessage,
+            setLoadingText,
+            login,
+        ],
+    )
 
     return (
-		<SAccountCardContent onSubmit={onSubmitLogin}>
-            {errorMessage ? <SErrorMessage>{errorMessage}</SErrorMessage> : null}
-            <InputLabel label={'Profile Name'}>
+        <SAccountCardContent onSubmit={onSubmitLogin}>
+            {errorMessage ? (
+                <SErrorMessage>{errorMessage}</SErrorMessage>
+            ) : null}
+            <InputLabel label="Profile Name">
                 <Input
                     value={profileName}
-                    onChange={(event) => setProfileName(event.currentTarget.value)}
-                    type={'text'}
+                    onChange={(event) =>
+                        setProfileName(event.currentTarget.value)
+                    }
+                    type="text"
                     autoFocus
                 />
             </InputLabel>
-            <InputLabel label={'Mnemonic'}>
+            <InputLabel label="Mnemonic">
                 <Input
                     value={mnemonic}
                     onChange={(event) => setMnemonic(event.currentTarget.value)}
-                    type={'password'}
+                    type="password"
                 />
             </InputLabel>
-            <InputLabel label={'Password'}>
+            <InputLabel label="Password">
                 <Input
                     value={password}
                     onChange={(event) => setPassword(event.currentTarget.value)}
-                    type={'password'}
+                    type="password"
                 />
             </InputLabel>
-            <SLink to={'/profiles'}>Existing Profiles ({profileNames.length}).</SLink>
-            <SLink to={'/signup'}>Create a profile.</SLink>
+            <SLink to="/profiles">
+                Existing Profiles ({profileNames.length}).
+            </SLink>
+            <SLink to="/signup">Create a profile.</SLink>
             <Button
-				primary
-				style={{ width: '100%', marginTop: 12 }}
-				disabled={!(!!mnemonic && !!profileName && !!password)}
-				type="submit"
-			>Sign In</Button>
-		</SAccountCardContent>
+                primary
+                style={{ width: '100%', marginTop: 12 }}
+                disabled={!(!!mnemonic && !!profileName && !!password)}
+                type="submit"
+            >
+                Sign In
+            </Button>
+        </SAccountCardContent>
     )
 }
 
@@ -132,23 +155,24 @@ function Account(props) {
 
     return (
         <SAccount>
-            {/* <SAccountHeader /> */}
             <SAccountCard>
                 <SAccountCardHeader>Import Existing Profile</SAccountCardHeader>
-                <SAccountCardDesc>Always keep your mnemonic safe.</SAccountCardDesc>
-                    <SignIn
-                        mnemonic={mnemonic}
-                        setMnemonic={setMnemonic}
-                        profileName={profileName}
-                        setProfileName={setProfileName}
-                        password={password}
-                        setPassword={setPassword}
-                        errorMessage={errorMessage}
-                        setErrorMessage={setErrorMessage}
-						setLoadingText={setLoadingText}
-						profileNames={props.profileNames || []}
-                    />
-                { loadingText ? <Loading text={loadingText} /> : null }
+                <SAccountCardDesc>
+                    Always keep your mnemonic safe.
+                </SAccountCardDesc>
+                <SignIn
+                    mnemonic={mnemonic}
+                    setMnemonic={setMnemonic}
+                    profileName={profileName}
+                    setProfileName={setProfileName}
+                    password={password}
+                    setPassword={setPassword}
+                    errorMessage={errorMessage}
+                    setErrorMessage={setErrorMessage}
+                    setLoadingText={setLoadingText}
+                    profileNames={props.profileNames || []}
+                />
+                {loadingText ? <Loading text={loadingText} /> : null}
             </SAccountCard>
         </SAccount>
     )

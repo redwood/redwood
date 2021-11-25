@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 
+/* eslint-disable */
 function useTraceUpdate(props) {
     const prev = useRef(props)
     useEffect(() => {
@@ -15,5 +16,6 @@ function useTraceUpdate(props) {
         prev.current = props
     })
 }
+/* eslint-enable */
 
 export default useTraceUpdate

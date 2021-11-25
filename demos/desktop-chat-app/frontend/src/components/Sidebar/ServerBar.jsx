@@ -1,37 +1,36 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react'
-import styled, { useTheme } from 'styled-components'
-import { Avatar, IconButton, TextField } from '@material-ui/core'
-import { Add as AddIcon, CloudDownloadRounded as ImportIcon, Face as FaceIcon } from '@material-ui/icons'
-import moment from 'moment'
+import React, { useState, useCallback, useEffect } from 'react'
+import styled from 'styled-components'
+import { IconButton } from '@material-ui/core'
+import {
+    Add as AddIcon,
+    CloudDownloadRounded as ImportIcon,
+    Face as FaceIcon,
+} from '@material-ui/icons'
 
 import Tooltip from '../Tooltip'
-import GroupItem from './GroupItem'
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
 import Input, { InputLabel } from '../Input'
-import { ServerFab, DMButton } from '../ServerFab'
+import { ServerFab } from '../ServerFab'
 import AddServerModal from './AddServerModal'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
-import usePeers from '../../hooks/usePeers'
-import useAddressBook from '../../hooks/useAddressBook'
 import useJoinedServers from '../../hooks/useJoinedServers'
-import theme from '../../theme'
+import mTheme from '../../theme'
 
 const Container = styled.div`
     display: flex;
     flex-direction: column;
-    padding: ${props => props.verticalPadding} 0;
+    padding: ${(props) => props.verticalPadding} 0;
 
     overflow-y: scroll;
     /* Chrome, Safari, Opera */
     &::-webkit-scrollbar {
         display: none;
     }
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
 `
 
 const ServerIconWrapper = styled.div`
@@ -41,7 +40,7 @@ const ServerIconWrapper = styled.div`
     padding: 8px 0;
     cursor: pointer;
     text-transform: uppercase;
-    transition: .12s ease-in-out all;
+    transition: 0.12s ease-in-out all;
 
     &:hover {
         img {
@@ -52,7 +51,7 @@ const ServerIconWrapper = styled.div`
 
 const CircularButton = styled(IconButton)`
     border-radius: 9999;
-    background-color: ${props => props.theme.color.grey[200]} !important;
+    background-color: ${(props) => props.theme.color.grey[200]} !important;
 `
 
 const Spacer = styled.div`
@@ -62,12 +61,17 @@ const Spacer = styled.div`
 function ServerBar({ className, verticalPadding }) {
     const { selectedServer, navigate } = useNavigation()
     const [isLoaded, setIsLoaded] = useState(false)
-	const joinedServers = useJoinedServers()
+    const joinedServers = useJoinedServers()
 
     const { onPresent: onPresentContactsModal } = useModal('contacts')
-    const { onPresent: onPresentAddServerModal, onDismiss: onDismissAddServerModal } = useModal('add server')
-    const { onPresent: onPresentImportServerModal, onDismiss: onDismissImportServerModal } = useModal('import server')
-    const theme = useTheme()
+    const {
+        onPresent: onPresentAddServerModal,
+        onDismiss: onDismissAddServerModal,
+    } = useModal('add server')
+    const {
+        onPresent: onPresentImportServerModal,
+        onDismiss: onDismissImportServerModal,
+    } = useModal('import server')
 
     const onClickContacts = useCallback(() => {
         onPresentContactsModal()
@@ -96,7 +100,7 @@ function ServerBar({ className, verticalPadding }) {
                 </ServerIconWrapper>
             </Tooltip>
 
-            {joinedServers.map(server => (
+            {joinedServers.map((server) => (
                 <Tooltip title={server} placement="right" arrow key={server}>
                     <ServerIconWrapper selected={server === selectedServer}>
                         <ServerFab serverName={server} navigateOnClick />
@@ -108,19 +112,27 @@ function ServerBar({ className, verticalPadding }) {
 
             <Tooltip title="Contacts" placement="right" arrow>
                 <ServerIconWrapper onClick={onClickContacts}>
-                    <CircularButton><FaceIcon style={{ color: theme.color.indigo[500] }} /></CircularButton>
+                    <CircularButton>
+                        <FaceIcon style={{ color: mTheme.color.indigo[500] }} />
+                    </CircularButton>
                 </ServerIconWrapper>
             </Tooltip>
 
             <Tooltip title="Join existing server" placement="right" arrow>
                 <ServerIconWrapper onClick={onClickImportServer}>
-                    <CircularButton><ImportIcon style={{ color: theme.color.indigo[500] }} /></CircularButton>
+                    <CircularButton>
+                        <ImportIcon
+                            style={{ color: mTheme.color.indigo[500] }}
+                        />
+                    </CircularButton>
                 </ServerIconWrapper>
             </Tooltip>
 
             <Tooltip title="Create new server" placement="right" arrow>
                 <ServerIconWrapper onClick={onClickAddServer}>
-                    <CircularButton><AddIcon style={{ color: theme.color.indigo[500] }} /></CircularButton>
+                    <CircularButton>
+                        <AddIcon style={{ color: mTheme.color.indigo[500] }} />
+                    </CircularButton>
                 </ServerIconWrapper>
             </Tooltip>
 
@@ -129,7 +141,6 @@ function ServerBar({ className, verticalPadding }) {
         </Container>
     )
 }
-
 
 const SInput = styled(Input)`
     width: 460px;
@@ -141,17 +152,20 @@ function ImportServerModal({ onDismiss }) {
     const api = useAPI()
 
     const onClickImport = useCallback(async () => {
-        if (!api) { return }
+        if (!api) {
+            return
+        }
         try {
             await api.importServer(serverName)
             onDismiss()
             navigate(serverName, null)
         } catch (err) {
-            console.error(err)
+            // NOTE: Add proper error catching here
+            throw new Error(err)
         }
     }, [api, serverName])
 
-    function onChangeServerName(e) {
+    const onChangeServerName = (e) => {
         if (e.code === 'Enter') {
             onClickImport()
         } else {
@@ -163,17 +177,19 @@ function ImportServerModal({ onDismiss }) {
         <Modal modalKey="import server">
             <ModalTitle closeModal={onDismiss}>Join a Server</ModalTitle>
             <ModalContent>
-				<InputLabel label={'Server Name'}>
-					<SInput
-						value={serverName}
-						onChange={onChangeServerName}
-						label={'Server Name'}
-						width={'460px'}
-					/>
-				</InputLabel>
+                <InputLabel label="Server Name">
+                    <SInput
+                        value={serverName}
+                        onChange={onChangeServerName}
+                        label="Server Name"
+                        width="460px"
+                    />
+                </InputLabel>
             </ModalContent>
             <ModalActions>
-                <Button onClick={onClickImport} primary>Join</Button>
+                <Button onClick={onClickImport} primary>
+                    Join
+                </Button>
             </ModalActions>
         </Modal>
     )

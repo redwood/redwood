@@ -1,7 +1,6 @@
-import React, { createContext, useCallback, useState, useEffect, useDebugValue } from 'react'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import React, { createContext, useState, useEffect } from 'react'
+import { useRedwood } from '@redwood.dev/client/react'
 import useAddressBook from '../hooks/useAddressBook'
-import useNavigation from '../hooks/useNavigation'
 import useAPI from '../hooks/useAPI'
 
 export const Context = createContext({
@@ -18,7 +17,13 @@ function Provider({ children }) {
     const [servers, setServers] = useState({})
     const [rooms, setRooms] = useState({})
 
-    const { nodeIdentities, privateTreeMembers, subscribe, stateTrees, subscribedStateURIs } = useRedwood()
+    const {
+        nodeIdentities,
+        privateTreeMembers,
+        subscribe,
+        stateTrees,
+        subscribedStateURIs,
+    } = useRedwood()
     const addressBook = useAddressBook()
     const api = useAPI()
 
@@ -27,14 +32,16 @@ function Provider({ children }) {
             return
         }
 
-        let newServers = {}
-        let newRooms = {}
+        const newServers = {}
+        const newRooms = {}
 
-        for (let stateURI of Object.keys(stateTrees)) {
+        for (const stateURI of Object.keys(stateTrees)) {
             if (stateURI === 'chat.local/servers') {
-                for (let server of Object.keys(stateTrees['chat.local/servers'].value || {})) {
-                    let registry = `${server}/registry`
-                    if (subscribedStateURIs[registry]) {
+                for (const server of Object.keys(
+                    stateTrees['chat.local/servers'].value || {},
+                )) {
+                    const registry = `${server}/registry`
+                    if (subscribedStateURIs.current[registry]) {
                         continue
                     }
                     subscribe(registry)
@@ -42,35 +49,41 @@ function Provider({ children }) {
                 continue
             }
 
-            let [ server, room ] = stateURI.split('/')
+            const [server, room] = stateURI.split('/')
 
-            let isDirectMessage = server === 'chat.p2p'
+            const isDirectMessage = server === 'chat.p2p'
             let registryStateURI
             if (isDirectMessage) {
                 registryStateURI = 'chat.local/dms'
             } else {
-                registryStateURI = !!server ? `${server}/registry` : null
+                registryStateURI = server ? `${server}/registry` : null
             }
 
             newServers[server] = {
-                name:    server,
+                name: server,
                 rawName: server,
                 isDirectMessage,
                 registryStateURI,
             }
 
-            if (room === "registry" || stateURI === "chat.local/dms") {
-                for (let room of Object.keys((stateTrees[stateURI] || {}).rooms || {})) {
-                    let roomStateURI = `${stateURI === "chat.local/dms" ? "chat.p2p" : server}/${room}`;
-                    if (!subscribedStateURIs[roomStateURI]) {
-                        subscribe(roomStateURI);
-                        api.subscribe(roomStateURI);
+            if (room === 'registry' || stateURI === 'chat.local/dms') {
+                for (const lRoom of Object.keys(
+                    (stateTrees[stateURI] || {}).rooms || {},
+                )) {
+                    const roomStateURI = `${
+                        stateURI === 'chat.local/dms' ? 'chat.p2p' : server
+                    }/${lRoom}`
+                    if (subscribedStateURIs.current[roomStateURI]) {
+                        continue
                     }
-                    newRooms[roomStateURI] = {
-                        rawName: room,
-                        members: privateTreeMembers[roomStateURI] || [],
-                        isDirectMessage: true,
-                    };
+                    subscribe(roomStateURI)
+                    api.subscribe(roomStateURI)
+                }
+            } else {
+                newRooms[stateURI] = {
+                    rawName: room,
+                    members: privateTreeMembers[stateURI] || [],
+                    isDirectMessage: stateURI.indexOf('chat.p2p/') === 0,
                 }
             }
         }
@@ -87,9 +100,9 @@ function Provider({ children }) {
     }, [stateTrees, privateTreeMembers, nodeIdentities, addressBook, subscribedStateURIs])
 
     return (
-      <Context.Provider value={{ servers, rooms }}>
-          {children}
-      </Context.Provider>
+        <Context.Provider value={{ servers, rooms }}>
+            {children}
+        </Context.Provider>
     )
 }
 

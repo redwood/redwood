@@ -1,33 +1,37 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
-import styled, { useTheme } from 'styled-components'
-import filesize from 'filesize.js'
+import React, { useState, useRef, useEffect } from 'react'
+import styled from 'styled-components'
 import { usePdf } from '@mikecousins/react-pdf'
-import { IconButton, Avatar } from '@material-ui/core'
 import Image from '../Image'
 import { isImage, isPDF } from '../../utils/contentTypes'
 
-const Wrapper = styled.div`
-	width: ${props => props.width}px;
-	cursor: pointer;
-`
-
 const SImage = styled(Image)`
-	height: ${props => props.height || 'auto'};
-    width: ${props => props.height ? 'auto' : '100%'};
+    height: ${(props) => props.height || 'auto'};
+    width: ${(props) => (props.height ? 'auto' : '100%')};
 `
 
-function Embed({ contentType, url, height, width, className, loadFailed, setLoadFailed, onClick }) {
-    let content
+function Embed({
+    contentType,
+    url,
+    height,
+    width,
+    className,
+    loadFailed,
+    setLoadFailed,
+    onClick,
+}) {
     if (isImage(contentType)) {
-		return <SImage
-			loadFailed={loadFailed}
-			setLoadFailed={setLoadFailed}
-			onClick={onClick}
-			src={url}
-			height={height}
-			className={className}
-		/>
-    } else if (isPDF(contentType)) {
+        return (
+            <SImage
+                loadFailed={loadFailed}
+                setLoadFailed={setLoadFailed}
+                onClick={onClick}
+                src={url}
+                height={height}
+                className={className}
+            />
+        )
+    }
+    if (isPDF(contentType)) {
         return <PDF url={url} width={width} className={className} />
     }
     return null
@@ -36,7 +40,12 @@ function Embed({ contentType, url, height, width, className, loadFailed, setLoad
 function PDF({ url, width }) {
     const canvasRef = useRef(null)
     const [scale, setScale] = useState(1)
-    const { pdfDocument, pdfPage } = usePdf({ file: url, page: 1, canvasRef, scale })
+    const { pdfPage } = usePdf({
+        file: url,
+        page: 1,
+        canvasRef,
+        scale,
+    })
 
     useEffect(() => {
         if (!pdfPage) {
@@ -52,17 +61,20 @@ function PDF({ url, width }) {
     }, [url, pdfPage, setScale])
 
     let height = 0
-    if (!!pdfPage) {
+    if (pdfPage) {
         const x = pdfPage.getViewport()
         const { viewBox } = x
         if (!viewBox) {
-            return
+            return null
         }
         height = viewBox[3] * scale
     }
 
     return (
-        <canvas style={{ width: width, maxWidth: width, height, maxHeight: height }} ref={canvasRef} />
+        <canvas
+            style={{ width, maxWidth: width, height, maxHeight: height }}
+            ref={canvasRef}
+        />
     )
 }
 

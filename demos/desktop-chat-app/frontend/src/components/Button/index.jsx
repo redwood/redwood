@@ -1,5 +1,4 @@
-import React, { useState } from 'react'
-import styled from 'styled-components'
+import React from 'react'
 import { makeStyles } from '@material-ui/core/styles'
 import { Button as MUIButton } from '@material-ui/core'
 import theme from '../../theme'
@@ -7,11 +6,11 @@ import theme from '../../theme'
 const usePrimaryButtonStyles = makeStyles({
     root: {
         backgroundColor: theme.color.indigo[500],
-		color: theme.color.white,
-		'&&:hover': {
-			backgroundColor: theme.color.indigo[700],
-		},
-	},
+        color: theme.color.white,
+        '&&:hover': {
+            backgroundColor: theme.color.indigo[700],
+        },
+    },
     disabled: {
         '&&': {
             backgroundColor: theme.color.grey[100],
@@ -24,12 +23,12 @@ const usePrimaryButtonStyles = makeStyles({
 
 const useNonPrimaryButtonStyles = makeStyles({
     root: {
-		backgroundColor: theme.color.grey[100],
-		color: theme.color.white,
-		'&&:hover': {
-			backgroundColor: theme.color.grey[200],
-			color: theme.color.grey[50],
-		},
+        backgroundColor: theme.color.grey[100],
+        color: theme.color.white,
+        '&&:hover': {
+            backgroundColor: theme.color.grey[200],
+            color: theme.color.grey[50],
+        },
     },
     disabled: {
         '&&': {
@@ -43,9 +42,21 @@ function Button({ primary, ...props }) {
     const primaryButtonStyles = usePrimaryButtonStyles()
     const nonPrimaryButtonStyles = useNonPrimaryButtonStyles()
     if (primary) {
-        return <MUIButton variant="contained" {...props} classes={primaryButtonStyles} />
+        return (
+            <MUIButton
+                variant="contained"
+                {...props}
+                classes={primaryButtonStyles}
+            />
+        )
     }
-    return <MUIButton variant="contained" {...props} classes={nonPrimaryButtonStyles} />
+    return (
+        <MUIButton
+            variant="contained"
+            {...props}
+            classes={nonPrimaryButtonStyles}
+        />
+    )
 }
 
 export default Button

@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import styled, { useTheme } from 'styled-components'
-import { Redirect, useHistory } from 'react-router-dom'
+import { Redirect } from 'react-router-dom'
 import { Code as CodeIcon } from '@material-ui/icons'
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
@@ -18,7 +18,6 @@ import Sidebar from './components/Sidebar'
 import Chat from './components/NewChat'
 import StateTreeDebugView from './components/StateTreeDebugView'
 import ContactsModal from './components/ContactsModal'
-import Spacer from './components/Spacer'
 import useNavigation from './hooks/useNavigation'
 import useCurrentServerAndRoom from './hooks/useCurrentServerAndRoom'
 import useModal from './hooks/useModal'
@@ -34,8 +33,8 @@ const serverBarVerticalPadding = '12px'
 
 const Layout = styled.div`
     display: flex;
-	height: 100vh;
-	overflow: hidden;
+    height: 100vh;
+    overflow: hidden;
 `
 
 const HeaderAndContent = styled.div`
@@ -51,18 +50,14 @@ const Content = styled.div`
     flex-grow: 1;
     font-family: 'Noto Sans KR';
     font-weight: 300;
-    color: ${props => props.theme.color.white};
-`
-
-const SSidebar = styled(Sidebar)`
-    height: 100%;
+    color: ${(props) => props.theme.color.white};
 `
 
 const SServerBar = styled(ServerBar)`
     width: 72px;
     min-width: 72px;
-    height: calc(100% - 2 * ${props => serverBarVerticalPadding});
-    background: ${props => props.theme.color.grey[600]};
+    height: calc(100% - 2 * ${() => serverBarVerticalPadding});
+    background: ${(props) => props.theme.color.grey[600]};
 `
 
 const SChat = styled(Chat)`
@@ -74,80 +69,75 @@ const SStateTreeDebugView = styled(StateTreeDebugView)`
     width: 600px;
 `
 
-const MainContentArea = styled.div`
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-`
-
 const SHeaderBar = styled(HeaderBar)`
-    background-color: ${props => props.theme.color.grey[200]};
-    border-bottom: 2px solid ${props => props.theme.color.grey[300]};
+    background-color: ${(props) => props.theme.color.grey[200]};
+    border-bottom: 2px solid ${(props) => props.theme.color.grey[300]};
     height: 48px;
     width: 100%;
 `
 
 function Main(props) {
-	const { onDismiss: onDismissContactsModal } = useModal('contacts')
-	const { selectedStateURI, navigate } = useNavigation()
-	const { servers, rooms } = useServerAndRoomInfo()
-	const [isLoading, setIsLoading] = useState(true)
-	const [shouldRedirect, setShouldRedirect] = useState(false)
-	const [changeNotificationSound, setChangeNotificationSound] = useState(false)
-	let { nodeIdentities } = useRedwood()
+    const { onDismiss: onDismissContactsModal } = useModal('contacts')
+    const { selectedStateURI, navigate } = useNavigation()
+    const { rooms } = useServerAndRoomInfo()
+    const [isLoading, setIsLoading] = useState(true)
+    const [shouldRedirect, setShouldRedirect] = useState(false)
+    const [changeNotificationSound, setChangeNotificationSound] =
+        useState(false)
+    const { nodeIdentities } = useRedwood()
 
-	const roomKeys = Object.keys(rooms || {}).filter((key) => key !== 'chat.local/address-book')
+    const roomKeys = Object.keys(rooms || {}).filter(
+        (key) => key !== 'chat.local/address-book',
+    )
 
-	useEffect(() => {
-		function switchNotificationSound(event) {
-			if (event.ctrlKey && event.key === '2') {
-				setChangeNotificationSound(!changeNotificationSound)
-				if (!changeNotificationSound) {
-					const audio = new Audio(notificationGilfoyle)
-					audio.play()
-				} else {
-					const audio = new Audio(notificationSound)
-					audio.play()
-				}
-			}
+    useEffect(() => {
+        function switchNotificationSound(event) {
+            if (event.ctrlKey && event.key === '2') {
+                setChangeNotificationSound(!changeNotificationSound)
+                if (!changeNotificationSound) {
+                    const audio = new Audio(notificationGilfoyle)
+                    audio.play()
+                } else {
+                    const audio = new Audio(notificationSound)
+                    audio.play()
+                }
+            }
+        }
 
-		}
+        document.addEventListener('keypress', switchNotificationSound)
 
-		document.addEventListener('keypress', switchNotificationSound)
+        return () => {
+            document.removeEventListener('keypress', switchNotificationSound)
+        }
+    })
 
-		return () => {
-			document.removeEventListener('keypress', switchNotificationSound)
-		}
-	})
+    useEffect(() => {
+        if (nodeIdentities) {
+            setIsLoading(false)
+        }
+    }, [nodeIdentities])
 
-	useEffect(() => {
-		if (nodeIdentities) {
-			setIsLoading(false)
-		}
-	}, [nodeIdentities])
+    const { isLoggedIn, profilesFetched } = useLoginStatus()
 
-	let { isLoggedIn, profilesFetched } = useLoginStatus()
+    useEffect(() => {
+        if (profilesFetched) {
+            if (!isLoggedIn) {
+                setShouldRedirect(true)
+            }
+        }
+    }, [profilesFetched])
 
-	useEffect(() => {
-		if (profilesFetched) {
-			if (!isLoggedIn) {
-				setShouldRedirect(true)
-			}
-		}
-	}, [profilesFetched])
-
-
-    let [showDebugView, setShowDebugView] = useState(false)
-    let onClickShowDebugView = useCallback(() => {
+    const [showDebugView, setShowDebugView] = useState(false)
+    const onClickShowDebugView = useCallback(() => {
         setShowDebugView(!showDebugView)
-	}, [showDebugView, setShowDebugView])
+    }, [showDebugView, setShowDebugView])
 
-	if (shouldRedirect) {
-		if ((props.profileNames || []).length === 0) {
-			return <Redirect to={'/signup'} />
-		}
-		return <Redirect to={'/profiles'} />
-	}
+    if (shouldRedirect) {
+        if ((props.profileNames || []).length === 0) {
+            return <Redirect to="/signup" />
+        }
+        return <Redirect to="/profiles" />
+    }
 
     return (
         <Layout>
@@ -159,146 +149,155 @@ function Main(props) {
                     <SChat />
                     {showDebugView && <SStateTreeDebugView />}
                 </Content>
-				{ roomKeys.map((key) => <NotificationMount
-											changeNotificationSound={changeNotificationSound}
-											navigate={navigate}
-											selectedStateURI={selectedStateURI}
-											roomPath={key}
-											key={key}
-										/>) }
+                {roomKeys.map((key) => (
+                    <NotificationMount
+                        changeNotificationSound={changeNotificationSound}
+                        navigate={navigate}
+                        selectedStateURI={selectedStateURI}
+                        roomPath={key}
+                        key={key}
+                    />
+                ))}
             </HeaderAndContent>
 
             <ContactsModal onDismiss={onDismissContactsModal} />
-			<ToastContainer />
-			{ isLoading ? <Loading text={'Loading account and chats...'} /> : null }
+            <ToastContainer />
+            {isLoading ? <Loading text="Loading account and chats..." /> : null}
         </Layout>
     )
 }
 
-const SToastContent = styled(ToastContent)`
-
-`
 const ToastLeft = styled.div`
-	display: flex;
-	align-items: center;
-	justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 `
 
 const ToastRight = styled.div`
-	display: flex;
-	flex-direction: column;
-	padding-left: 12px;
-	width: 217px;
-	padding-bottom: 4px;
+    display: flex;
+    flex-direction: column;
+    padding-left: 12px;
+    width: 217px;
+    padding-bottom: 4px;
 `
 
 const SToastRoom = styled.div`
-	font-size: 10px;
-	color: rgba(255,255,255, .6);
-	span {
-		font-size: 12px;
-		color: ${props => props.themePrimaryColor};
-		text-decoration: underline;
-	}
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.6);
+    span {
+        font-size: 12px;
+        color: ${(props) => props.themePrimaryColor};
+        text-decoration: underline;
+    }
 `
 const SToastUser = styled.div`
-	padding-top: 4px;
-	font-size: 10px;
+    padding-top: 4px;
+    font-size: 10px;
 `
 
 function fireNotificationAlert({
-	roomPath,
-	messageText,
-	displayName,
-	themePrimaryColor,
-	navigateToMessage,
-	setToastId,
-	changeNotificationSound,
+    roomPath,
+    messageText,
+    displayName,
+    themePrimaryColor,
+    navigateToMessage,
+    setToastId,
+    changeNotificationSound,
 }) {
-	let parsedDisplayName = displayName
+    let parsedDisplayName = displayName
 
-	if (displayName.length > 25) {
-		parsedDisplayName = `${displayName.substring(0, 25)}...`
-	}
+    if (displayName.length > 25) {
+        parsedDisplayName = `${displayName.substring(0, 25)}...`
+    }
 
-	let toastId = toast(<SToastContent onClick={navigateToMessage}>
-		<ToastLeft>
-			<UserAvatar address={displayName} />
-		</ToastLeft>
-		<ToastRight>
-			<SToastRoom themePrimaryColor={themePrimaryColor}>New message in <span>{roomPath}</span>!</SToastRoom>
-			<NormalizeMessage isNotification style={{ fontSize: 14 }} msgText={messageText} />
-			<SToastUser>Sent by {parsedDisplayName}</SToastUser>
-		</ToastRight>
-	</SToastContent>, {
-		autoClose: 4500,
-		style: {
-			background: '#2a2d32',
-		},
-		closeButton: ToastCloseBtn,
-	})
+    const toastId = toast(
+        <ToastContent onClick={navigateToMessage}>
+            <ToastLeft>
+                <UserAvatar address={displayName} />
+            </ToastLeft>
+            <ToastRight>
+                <SToastRoom themePrimaryColor={themePrimaryColor}>
+                    New message in <span>{roomPath}</span>!
+                </SToastRoom>
+                <NormalizeMessage
+                    isNotification
+                    style={{ fontSize: 14 }}
+                    msgText={messageText}
+                />
+                <SToastUser>Sent by {parsedDisplayName}</SToastUser>
+            </ToastRight>
+        </ToastContent>,
+        {
+            autoClose: 4500,
+            style: {
+                background: '#2a2d32',
+            },
+            closeButton: ToastCloseBtn,
+        },
+    )
 
-	setToastId(toastId)
+    setToastId(toastId)
 
-	if (changeNotificationSound) {
-		const audio = new Audio(notificationGilfoyle)
-		audio.play()
-	} else {
-		const audio = new Audio(notificationSound)
-		audio.play()
-	}
+    if (changeNotificationSound) {
+        const audio = new Audio(notificationGilfoyle)
+        audio.play()
+    } else {
+        const audio = new Audio(notificationSound)
+        audio.play()
+    }
 }
 
 // Used to mount the room state and notify users when new messages come in
 function NotificationMount(props) {
-	const roomState = useStateTree(props.roomPath)
-	let { users } = useUsers(props.roomPath)
-	const messages = (roomState || {}).messages || []
-	const numMessages = messages.length
-	const latestMessage = messages[messages.length - 1] || {}
-	const addressBook = useAddressBook()
-	const theme = useTheme()
-	const [toastId, setToastId] = useState(null)
+    const roomState = useStateTree(props.roomPath)
+    const { users } = useUsers(props.roomPath)
+    const messages = (roomState || {}).messages || []
+    const numMessages = messages.length
+    const latestMessage = messages[messages.length - 1] || {}
+    const addressBook = useAddressBook()
+    const theme = useTheme()
+    const [toastId, setToastId] = useState(null)
 
-	const [isLoading, setIsLoading ] = useState(true)
+    const [isLoading, setIsLoading] = useState(true)
 
-	const [server, room] = props.roomPath.split('/')
+    const [server, room] = props.roomPath.split('/')
 
-	const navigateToMessage = () => {
-		props.navigate(server, room)
-		toast.dismiss(toastId)
-	}
-	
-	useEffect(() => {
-		if (props.roomPath === props.selectedStateURI && document.hasFocus()) {
-			return
-		}
+    const navigateToMessage = () => {
+        props.navigate(server, room)
+        toast.dismiss(toastId)
+    }
 
-		if (isLoading) {
-			setIsLoading(false)
-			return
-		}
+    useEffect(() => {
+        if (props.roomPath === props.selectedStateURI && document.hasFocus()) {
+            return
+        }
 
-		if (messages.length === 0) {
-			return
-		}
+        if (isLoading) {
+            setIsLoading(false)
+            return
+        }
 
-		let userAddress = (latestMessage.sender || "").toLowerCase()
-		let user = (users && users[userAddress]) || {}
-		let displayName = addressBook[userAddress] || user.username || latestMessage.sender
-		
-		fireNotificationAlert({
-			roomPath: props.roomPath,
-			messageText: latestMessage.text,
-			displayName,
-			themePrimaryColor: theme.color.indigo[500],
-			navigateToMessage,
-			setToastId,
-			changeNotificationSound: props.changeNotificationSound,
-		})
-	}, [numMessages])
+        if (messages.length === 0) {
+            return
+        }
 
-	return <div style={{ display: 'none' }}></div>
+        const userAddress = (latestMessage.sender || '').toLowerCase()
+        const user = (users && users[userAddress]) || {}
+        const displayName =
+            addressBook[userAddress] || user.username || latestMessage.sender
+
+        fireNotificationAlert({
+            roomPath: props.roomPath,
+            messageText: latestMessage.text,
+            displayName,
+            themePrimaryColor: theme.color.indigo[500],
+            navigateToMessage,
+            setToastId,
+            changeNotificationSound: props.changeNotificationSound,
+        })
+    }, [numMessages])
+
+    return <div style={{ display: 'none' }}></div>
 }
 
 const HeaderBarContainer = styled.div`
@@ -310,9 +309,9 @@ const ServerTitle = styled.div`
     font-weight: 500;
     padding-top: 12px;
     padding-left: 18px;
-    color: ${props => props.theme.color.white};
-    background-color: ${props => props.theme.color.grey[400]};
-    width: calc(${props => props.theme.chatSidebarWidth} - 18px);
+    color: ${(props) => props.theme.color.white};
+    background-color: ${(props) => props.theme.color.grey[400]};
+    width: calc(${(props) => props.theme.chatSidebarWidth} - 18px);
     height: calc(100% - 12px);
 `
 
@@ -321,11 +320,10 @@ const ChatTitle = styled.div`
     font-weight: 500;
     padding-top: 12px;
     padding-left: 18px;
-    color: ${props => props.theme.color.white};
-	// width: calc(${props => props.theme.chatSidebarWidth} - 18px);
-	white-space: nowrap;
-	text-overflow: none;
-	height: calc(100% - 12px);
+    color: ${(props) => props.theme.color.white};
+    white-space: nowrap;
+    text-overflow: none;
+    height: calc(100% - 12px);
 `
 
 const SCodeIcon = styled(CodeIcon)`
@@ -341,8 +339,10 @@ function HeaderBar({ onClickShowDebugView, className }) {
         <HeaderBarContainer className={className}>
             <ServerTitle>{currentServer && currentServer.name} /</ServerTitle>
             <ChatTitle>{currentRoom && roomName}</ChatTitle>
-            {/* <Spacer size="flex" /> */}
-            <SCodeIcon style={{ color: 'white', marginLeft: 'auto' }} onClick={onClickShowDebugView} />
+            <SCodeIcon
+                style={{ color: 'white', marginLeft: 'auto' }}
+                onClick={onClickShowDebugView}
+            />
         </HeaderBarContainer>
     )
 }

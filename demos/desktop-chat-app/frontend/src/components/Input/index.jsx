@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import styled from 'styled-components'
 
 const SInput = styled.input`
@@ -6,8 +6,8 @@ const SInput = styled.input`
     border: none;
     font-size: 16px;
     border-radius: 12px;
-    background-color: ${props => props.theme.color.grey[100]};
-    color: ${props => props.theme.color.white};
+    background-color: ${(props) => props.theme.color.grey[100]};
+    color: ${(props) => props.theme.color.white};
     padding: 6px 12px;
     &:focus {
         outline: none;
@@ -15,21 +15,19 @@ const SInput = styled.input`
 `
 
 function Input(props, ref) {
-    return (
-        <SInput {...props} ref={ref} />
-    )
+    return <SInput {...props} ref={ref} />
 }
 
 const SInputWrapper = styled.div`
     display: flex;
     flex-direction: column;
-    width: ${props => props.width ? props.width : '100%'};
+    width: ${(props) => (props.width ? props.width : '100%')};
 `
 
 const SInputLabel = styled.label`
     font-size: 10px;
     margin-bottom: 6px;
-    color: rgba(255, 255, 255, .8);
+    color: rgba(255, 255, 255, 0.8);
 `
 
 export function InputLabel(props) {

@@ -1,16 +1,14 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react'
-import styled, { useTheme } from 'styled-components'
+import React, { useState, useCallback, useRef } from 'react'
+import styled from 'styled-components'
 import filesize from 'filesize.js'
 import UploadAvatar from '../UploadAvatar'
-import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
+import Modal, { ModalTitle, ModalContent } from '../Modal'
 import Button from '../Button'
 import Input, { InputLabel } from '../Input'
 import Stepper from '../Stepper'
 import SlidingPane, { Pane, PaneContent, PaneActions } from '../SlidingPane'
 import Select from '../Select'
-import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
-import { useStateTree } from '@redwood.dev/client/react'
 import useNavigation from '../../hooks/useNavigation'
 import useCreateCloudStackOptions from '../../hooks/useCreateCloudStackOptions'
 import theme from '../../theme'
@@ -60,8 +58,7 @@ const InstanceStatLabel = styled.div`
     font-weight: 700;
 `
 
-const InstanceStatValue = styled.div`
-`
+const InstanceStatValue = styled.div``
 
 const PaneTitle = styled.div`
     font-size: 1.1rem;
@@ -71,60 +68,94 @@ const PaneTitle = styled.div`
 `
 
 const PaneSubtitle = styled.div`
-    // font-size: 1.4rem;
-    // font-weight: 700;
-    // text-align: center;
     margin-bottom: 12px;
 `
 
-
 function AddServerModal({ onDismiss }) {
-    const api = useAPI()
-    const theme = useTheme()
-    let [activeStep, setActiveStep] = useState(0)
-    let [requestValues, setRequestValues] = useState({})
-    let [provider, setProvider] = useState()
+    const [activeStep, setActiveStep] = useState(0)
+    const [requestValues, setRequestValues] = useState({})
+    const [provider, setProvider] = useState()
 
-    let steps = !!provider && provider !== 'none'
-                    ? ['Name and icon', 'Hosting', 'Configure hosting', 'Confirmation']
-                    : ['Name and icon', 'Hosting', 'Confirmation']
+    const steps =
+        !!provider && provider !== 'none'
+            ? ['Name and icon', 'Hosting', 'Configure hosting', 'Confirmation']
+            : ['Name and icon', 'Hosting', 'Confirmation']
 
-    function closeModal() {
+    const closeModal = () => {
         onDismiss()
         setActiveStep(0)
     }
 
-    function onClickNext() {
-        if (activeStep === steps.length - 1) { return }
+    const onClickNext = () => {
+        if (activeStep === steps.length - 1) {
+            return
+        }
         setActiveStep(activeStep + 1)
     }
 
-    function onClickBack() {
-        if (activeStep === 0) { return }
+    const onClickBack = () => {
+        if (activeStep === 0) {
+            return
+        }
         setActiveStep(activeStep - 1)
     }
 
-    let panes = [{
-        title: 'Name and icon',
-        width: 500,
-        height: 190,
-        content: <NameAndIconPane key="one" setRequestValues={setRequestValues} onClickBack={onClickBack} onClickNext={onClickNext} />,
-    }, {
-        title: 'Hosting',
-        width: 640,
-        height: 390,
-        content: <ChooseHostingPane key="two" provider={provider} setProvider={setProvider} onClickBack={onClickBack} onClickNext={onClickNext} />,
-    }, {
-        title: 'Configure hosting',
-        width: 600,
-        height: 690,
-        content: <ConfigureHostingPane key="three" setRequestValues={setRequestValues} onClickBack={onClickBack} onClickNext={onClickNext} />,
-    }, {
-        title: 'Confirmation',
-        width: 600,
-        height: 510,
-        content: <ConfirmationPane key="four" provider={provider} requestValues={requestValues} onClickBack={onClickBack} closeModal={closeModal} />,
-    }].filter(p => steps.includes(p.title))
+    const panes = [
+        {
+            title: 'Name and icon',
+            width: 500,
+            height: 190,
+            content: (
+                <NameAndIconPane
+                    key="one"
+                    setRequestValues={setRequestValues}
+                    onClickBack={onClickBack}
+                    onClickNext={onClickNext}
+                />
+            ),
+        },
+        {
+            title: 'Hosting',
+            width: 640,
+            height: 390,
+            content: (
+                <ChooseHostingPane
+                    key="two"
+                    provider={provider}
+                    setProvider={setProvider}
+                    onClickBack={onClickBack}
+                    onClickNext={onClickNext}
+                />
+            ),
+        },
+        {
+            title: 'Configure hosting',
+            width: 600,
+            height: 690,
+            content: (
+                <ConfigureHostingPane
+                    key="three"
+                    setRequestValues={setRequestValues}
+                    onClickBack={onClickBack}
+                    onClickNext={onClickNext}
+                />
+            ),
+        },
+        {
+            title: 'Confirmation',
+            width: 600,
+            height: 510,
+            content: (
+                <ConfirmationPane
+                    key="four"
+                    provider={provider}
+                    requestValues={requestValues}
+                    onClickBack={onClickBack}
+                    closeModal={closeModal}
+                />
+            ),
+        },
+    ].filter((p) => steps.includes(p.title))
 
     return (
         <Modal modalKey="add server" closeModal={closeModal}>
@@ -137,22 +168,30 @@ function AddServerModal({ onDismiss }) {
     )
 }
 
-function NameAndIconPane({ setRequestValues, onClickBack, onClickNext, ...props }) {
+function NameAndIconPane({
+    setRequestValues,
+    onClickBack,
+    onClickNext,
+    ...props
+}) {
     const [serverName, setServerName] = useState('')
     const [iconImg, setIconImg] = useState(null)
     const [iconFile, setIconFile] = useState(null)
 
-    const onChangeServerName = useCallback(e => {
-        setServerName(e.target.value)
-    }, [setServerName])
+    const onChangeServerName = useCallback(
+        (e) => {
+            setServerName(e.target.value)
+        },
+        [setServerName],
+    )
 
     const handleBack = useCallback(() => {
-        setRequestValues(prev => ({ ...prev, serverName, iconImg, iconFile }))
+        setRequestValues((prev) => ({ ...prev, serverName, iconImg, iconFile }))
         onClickBack()
     }, [setRequestValues, onClickBack, serverName, iconImg, iconFile])
 
     const handleNext = useCallback(() => {
-        setRequestValues(prev => ({ ...prev, serverName, iconImg, iconFile }))
+        setRequestValues((prev) => ({ ...prev, serverName, iconImg, iconFile }))
         onClickNext()
     }, [setRequestValues, onClickNext, serverName, iconImg, iconFile])
 
@@ -167,14 +206,20 @@ function NameAndIconPane({ setRequestValues, onClickBack, onClickNext, ...props 
                 <Input
                     value={serverName}
                     onChange={onChangeServerName}
-                    label={'Server Name'}
-                    width={'100%'}
+                    label="Server Name"
+                    width="100%"
                 />
             </PaneContent>
 
             <PaneActions>
                 <Button onClick={handleBack}>Back</Button>
-                <Button onClick={handleNext} primary disabled={(serverName || '').trim().length === 0}>Next</Button>
+                <Button
+                    onClick={handleNext}
+                    primary
+                    disabled={(serverName || '').trim().length === 0}
+                >
+                    Next
+                </Button>
             </PaneActions>
         </Pane>
     )
@@ -195,12 +240,13 @@ const HostingProviderBox = styled.div`
     align-items: center;
     border-radius: 12px;
     cursor: pointer;
-    border: ${props => !!props.highlighted ? `4px solid ${theme.color.indigo[500]}` : 'unset'};
-    background-color: ${props => theme.color.grey[200]};
+    border: ${(props) =>
+        props.highlighted ? `4px solid ${theme.color.indigo[500]}` : 'unset'};
+    background-color: ${() => theme.color.grey[200]};
     transition: background-color 0.1s ease-in-out;
 
     &:hover {
-        background-color: ${props => theme.color.grey[100]};
+        background-color: ${() => theme.color.grey[100]};
 
         a {
             color: ${theme.color.white};
@@ -227,7 +273,13 @@ const ProviderLink = styled.a`
     }
 `
 
-function ChooseHostingPane({ provider, setProvider, onClickBack, onClickNext, ...props }) {
+function ChooseHostingPane({
+    provider,
+    setProvider,
+    onClickBack,
+    onClickNext,
+    ...props
+}) {
     const onClickNone = useCallback(() => {
         setProvider('none')
     }, [setProvider])
@@ -246,99 +298,185 @@ function ChooseHostingPane({ provider, setProvider, onClickBack, onClickNext, ..
             <PaneContent>
                 <PaneTitle>Do you need help hosting a public node?</PaneTitle>
                 <PaneSubtitle>
-                    Even though Redwood is fully peer-to-peer, it's usually necessary to host a node on a publicly-accessible cloud so that other users can find you. Advanced users who are familiar with setting up infrastructure can skip this step.
+                    Even though Redwood is fully peer-to-peer, it is usually
+                    necessary to host a node on a publicly-accessible cloud so
+                    that other users can find you. Advanced users who are
+                    familiar with setting up infrastructure can skip this step.
                 </PaneSubtitle>
 
                 <HostingProviderContainer>
-                    <HostingProviderBox onClick={onClickNone} highlighted={!provider || provider === 'none'}>
-                        I don't need hosting
+                    <HostingProviderBox
+                        onClick={onClickNone}
+                        highlighted={!provider || provider === 'none'}
+                    >
+                        I do not need hosting
                     </HostingProviderBox>
 
-                    <HostingProviderBox onClick={onClickLinode} highlighted={provider === 'linode'}>
+                    <HostingProviderBox
+                        onClick={onClickLinode}
+                        highlighted={provider === 'linode'}
+                    >
                         <ProviderLogo src={linodeLogo} />
-                        <ProviderLink href="https://linode.com" target="_blank">linode.com</ProviderLink>
+                        <ProviderLink href="https://linode.com" target="_blank">
+                            linode.com
+                        </ProviderLink>
                     </HostingProviderBox>
                 </HostingProviderContainer>
             </PaneContent>
 
             <PaneActions>
                 <Button onClick={handleBack}>Back</Button>
-                <Button onClick={onClickNext} primary disabled={(provider || '').trim().length === 0}>Next</Button>
+                <Button
+                    onClick={onClickNext}
+                    primary
+                    disabled={(provider || '').trim().length === 0}
+                >
+                    Next
+                </Button>
             </PaneActions>
         </Pane>
     )
 }
 
-function ConfigureHostingPane({ setRequestValues, onClickBack, onClickNext, ...props }) {
+function ConfigureHostingPane({
+    setRequestValues,
+    onClickBack,
+    onClickNext,
+    ...props
+}) {
     const inputAPIKeyRef = useRef()
     const [apiKey, setAPIKey] = useState()
-    function onClickSetAPIKey(event) {
-        if (!inputAPIKeyRef || !inputAPIKeyRef.current) { return }
+    const onClickSetAPIKey = () => {
+        if (!inputAPIKeyRef || !inputAPIKeyRef.current) {
+            return
+        }
         setAPIKey(inputAPIKeyRef.current.value)
     }
 
     const cloudStackOpts = useCreateCloudStackOptions('linode', apiKey)
 
     const [sshKey, setSSHKey] = useState()
-    const onChangeSSHKey = useCallback(event => {
-        setSSHKey(event.target.value)
-    }, [setSSHKey])
+    const onChangeSSHKey = useCallback(
+        (event) => {
+            setSSHKey(event.target.value)
+        },
+        [setSSHKey],
+    )
 
     const [region, setRegion] = useState()
-    const onChangeRegion = useCallback(event => {
-        setRegion(event.target.value)
-    }, [setRegion])
+    const onChangeRegion = useCallback(
+        (event) => {
+            setRegion(event.target.value)
+        },
+        [setRegion],
+    )
 
     const [instanceType, setInstanceType] = useState()
-    const onChangeInstanceType = useCallback(event => {
-        setInstanceType(event.target.value)
-    }, [setInstanceType])
-    let chosenInstanceType = cloudStackOpts.instanceTypesMap[instanceType]
+    const onChangeInstanceType = useCallback(
+        (event) => {
+            setInstanceType(event.target.value)
+        },
+        [setInstanceType],
+    )
+    const chosenInstanceType = cloudStackOpts.instanceTypesMap[instanceType]
 
     const [image, setImage] = useState()
-    const onChangeImage = useCallback(event => {
-        setImage(event.target.value)
-    }, [setImage])
+    const onChangeImage = useCallback(
+        (event) => {
+            setImage(event.target.value)
+        },
+        [setImage],
+    )
 
     const [email, setEmail] = useState()
-    const onChangeEmail = useCallback(event => {
-        setEmail(event.target.value)
-    }, [setEmail])
+    const onChangeEmail = useCallback(
+        (event) => {
+            setEmail(event.target.value)
+        },
+        [setEmail],
+    )
 
     const [password, setPassword] = useState()
-    const onChangePassword = useCallback(event => {
-        setPassword(event.target.value)
-    }, [setPassword])
+    const onChangePassword = useCallback(
+        (event) => {
+            setPassword(event.target.value)
+        },
+        [setPassword],
+    )
 
     const [label, setLabel] = useState()
-    const onChangeLabel = useCallback(event => {
-        setLabel(event.target.value)
-    }, [setLabel])
+    const onChangeLabel = useCallback(
+        (event) => {
+            setLabel(event.target.value)
+        },
+        [setLabel],
+    )
 
     const handleBack = useCallback(() => {
-        setRequestValues(prev => ({ ...prev, apiKey, sshKey, region, instanceType, image, password, label, email }))
+        setRequestValues((prev) => ({
+            ...prev,
+            apiKey,
+            sshKey,
+            region,
+            instanceType,
+            image,
+            password,
+            label,
+            email,
+        }))
         onClickBack()
-    }, [setRequestValues, onClickBack, apiKey, sshKey, region, instanceType, image, password, label, email])
+    }, [
+        setRequestValues,
+        onClickBack,
+        apiKey,
+        sshKey,
+        region,
+        instanceType,
+        image,
+        password,
+        label,
+        email,
+    ])
 
     const handleNext = useCallback(() => {
-        setRequestValues(prev => ({ ...prev, apiKey, sshKey, region, instanceType, image, password, label, email }))
+        setRequestValues((prev) => ({
+            ...prev,
+            apiKey,
+            sshKey,
+            region,
+            instanceType,
+            image,
+            password,
+            label,
+            email,
+        }))
         onClickNext()
-    }, [setRequestValues, onClickNext, apiKey, sshKey, region, instanceType, image, password, label, email])
+    }, [
+        setRequestValues,
+        onClickNext,
+        apiKey,
+        sshKey,
+        region,
+        instanceType,
+        image,
+        password,
+        label,
+        email,
+    ])
 
     return (
         <Pane {...props}>
             <PaneContent>
                 <InputWithButton>
                     <InputLabel label="API key">
-                        <SInput
-                            width="100%"
-                            ref={inputAPIKeyRef}
-                        />
+                        <SInput width="100%" ref={inputAPIKeyRef} />
                     </InputLabel>
-                    <SButton primary onClick={onClickSetAPIKey}>Set API key</SButton>
+                    <SButton primary onClick={onClickSetAPIKey}>
+                        Set API key
+                    </SButton>
                 </InputWithButton>
 
-                {apiKey &&
+                {apiKey && (
                     <div>
                         <InputLabel label="Email to associate with domain name">
                             <SInput
@@ -369,19 +507,28 @@ function ConfigureHostingPane({ setRequestValues, onClickBack, onClickNext, ...p
                             label="SSH key"
                             value={sshKey}
                             onChange={onChangeSSHKey}
-                            items={cloudStackOpts.sshKeys.map(x => ({ value: x.label, text: x.label }))}
+                            items={cloudStackOpts.sshKeys.map((x) => ({
+                                value: x.label,
+                                text: x.label,
+                            }))}
                         />
                         <SSelect
                             label="Region"
                             value={region}
                             onChange={onChangeRegion}
-                            items={cloudStackOpts.regions.map(x => ({ value: x.id, text: x.id }))}
+                            items={cloudStackOpts.regions.map((x) => ({
+                                value: x.id,
+                                text: x.id,
+                            }))}
                         />
                         <SSelect
                             label="Image"
                             value={image}
                             onChange={onChangeImage}
-                            items={cloudStackOpts.images.map(x => ({ value: x.id, text: `${x.label} (${x.size}MB required)` }))}
+                            items={cloudStackOpts.images.map((x) => ({
+                                value: x.id,
+                                text: `${x.label} (${x.size}MB required)`,
+                            }))}
                         />
 
                         <div>
@@ -389,53 +536,117 @@ function ConfigureHostingPane({ setRequestValues, onClickBack, onClickNext, ...p
                                 label="Instance type"
                                 value={instanceType}
                                 onChange={onChangeInstanceType}
-                                items={cloudStackOpts.instanceTypes.map(x => ({ value: x.id, text: `${x.id} ($${cloudStackOpts.instanceTypesMap[x.id].monthlyPrice} / month)` }))}
+                                items={cloudStackOpts.instanceTypes.map(
+                                    (x) => ({
+                                        value: x.id,
+                                        text: `${x.id} ($${
+                                            cloudStackOpts.instanceTypesMap[
+                                                x.id
+                                            ].monthlyPrice
+                                        } / month)`,
+                                    }),
+                                )}
                             />
-                            {chosenInstanceType &&
+                            {chosenInstanceType && (
                                 <InstanceStats>
                                     <InstanceStat>
-                                        <InstanceStatLabel>CPUs:</InstanceStatLabel>
-                                        <InstanceStatValue>{chosenInstanceType.numCPUs}</InstanceStatValue>
+                                        <InstanceStatLabel>
+                                            CPUs:
+                                        </InstanceStatLabel>
+                                        <InstanceStatValue>
+                                            {chosenInstanceType.numCPUs}
+                                        </InstanceStatValue>
                                     </InstanceStat>
                                     <InstanceStat>
-                                        <InstanceStatLabel>Disk:</InstanceStatLabel>
-                                        <InstanceStatValue>{filesize(chosenInstanceType.diskSpaceMB * 1024 * 1024)}</InstanceStatValue>
+                                        <InstanceStatLabel>
+                                            Disk:
+                                        </InstanceStatLabel>
+                                        <InstanceStatValue>
+                                            {filesize(
+                                                chosenInstanceType.diskSpaceMB *
+                                                    1024 *
+                                                    1024,
+                                            )}
+                                        </InstanceStatValue>
                                     </InstanceStat>
                                     <InstanceStat>
-                                        <InstanceStatLabel>Memory:</InstanceStatLabel>
-                                        <InstanceStatValue>{filesize(chosenInstanceType.memoryMB * 1024 * 1024)}</InstanceStatValue>
+                                        <InstanceStatLabel>
+                                            Memory:
+                                        </InstanceStatLabel>
+                                        <InstanceStatValue>
+                                            {filesize(
+                                                chosenInstanceType.memoryMB *
+                                                    1024 *
+                                                    1024,
+                                            )}
+                                        </InstanceStatValue>
                                     </InstanceStat>
                                     <InstanceStat>
-                                        <InstanceStatLabel>Hourly:</InstanceStatLabel>
-                                        <InstanceStatValue>${chosenInstanceType.hourlyPrice}</InstanceStatValue>
+                                        <InstanceStatLabel>
+                                            Hourly:
+                                        </InstanceStatLabel>
+                                        <InstanceStatValue>
+                                            ${chosenInstanceType.hourlyPrice}
+                                        </InstanceStatValue>
                                     </InstanceStat>
                                     <InstanceStat>
-                                        <InstanceStatLabel>Monthly:</InstanceStatLabel>
-                                        <InstanceStatValue>${chosenInstanceType.monthlyPrice}</InstanceStatValue>
+                                        <InstanceStatLabel>
+                                            Monthly:
+                                        </InstanceStatLabel>
+                                        <InstanceStatValue>
+                                            ${chosenInstanceType.monthlyPrice}
+                                        </InstanceStatValue>
                                     </InstanceStat>
                                 </InstanceStats>
-                            }
+                            )}
                         </div>
                     </div>
-                }
+                )}
             </PaneContent>
 
             <PaneActions>
                 <Button onClick={handleBack}>Back</Button>
-                <Button onClick={handleNext} primary disabled={!sshKey || !region || !image || !chosenInstanceType}>Next</Button>
+                <Button
+                    onClick={handleNext}
+                    primary
+                    disabled={
+                        !sshKey || !region || !image || !chosenInstanceType
+                    }
+                >
+                    Next
+                </Button>
             </PaneActions>
         </Pane>
     )
 }
 
-function ConfirmationPane({ provider, requestValues, onClickBack, closeModal, ...props }) {
+function ConfirmationPane({
+    provider,
+    requestValues,
+    onClickBack,
+    closeModal,
+    ...props
+}) {
     const api = useAPI()
     const { navigate } = useNavigation()
 
     const onClickAdd = useCallback(async () => {
-        if (!api) { return }
+        if (!api) {
+            return
+        }
         try {
-            let { apiKey, iconFile, iconImg, image, instanceType, region, serverName, sshKey, label, password, email } = requestValues
+            const {
+                apiKey,
+                iconFile,
+                image,
+                instanceType,
+                region,
+                serverName,
+                sshKey,
+                label,
+                password,
+                email,
+            } = requestValues
             await api.addServer(serverName, iconFile, provider, {
                 apiKey,
                 domainName: serverName,
@@ -443,14 +654,15 @@ function ConfirmationPane({ provider, requestValues, onClickBack, closeModal, ..
                 instanceLabel: label,
                 instanceRegion: region,
                 instancePassword: password,
-                instanceType: instanceType,
+                instanceType,
                 instanceImage: image,
                 instanceSSHKey: sshKey,
             })
             closeModal()
             navigate(serverName, null)
         } catch (err) {
-            console.error(err)
+            // NOTE: Add error catching here
+            throw new Error(err)
         }
     }, [api, requestValues, closeModal, requestValues, navigate])
 
@@ -462,7 +674,13 @@ function ConfirmationPane({ provider, requestValues, onClickBack, closeModal, ..
 
             <PaneActions>
                 <Button onClick={onClickBack}>Back</Button>
-                <Button onClick={onClickAdd} primary disabled={(provider || '').trim().length === 0}>Add server</Button>
+                <Button
+                    onClick={onClickAdd}
+                    primary
+                    disabled={(provider || '').trim().length === 0}
+                >
+                    Add server
+                </Button>
             </PaneActions>
         </Pane>
     )

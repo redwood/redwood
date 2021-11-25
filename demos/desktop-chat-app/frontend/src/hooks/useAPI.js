@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useContext } from 'react'
+import { useMemo, useContext } from 'react'
 import { Context } from '../contexts/API'
 
 function useAPI() {

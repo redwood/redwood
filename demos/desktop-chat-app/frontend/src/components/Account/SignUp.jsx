@@ -1,27 +1,20 @@
-import React, { Fragment, useState, useEffect, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import styled from 'styled-components'
-import { Link, useHistory, Redirect } from 'react-router-dom'
-import { useRedwood } from '@redwood.dev/client/react'
+import { Link, Redirect } from 'react-router-dom'
 
-import Input, { InputLabel } from './../Input'
-import Button from './../Button'
+import Input, { InputLabel } from '../Input'
+import Button from '../Button'
 import Loading from './Loading'
 import useLoginStatus from '../../hooks/useLoginStatus'
 
 const SAccount = styled.section`
-    background-color: ${props => props.theme.color.grey[500]};
+    background-color: ${(props) => props.theme.color.grey[500]};
     height: 100vh;
     width: 100vw;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-`
-
-const SAccountHeader = styled.div`
-    height: 250px;
-    background: transparent;
-    width: 100%;
 `
 
 const SAccountCard = styled.div`
@@ -41,7 +34,7 @@ const SAccountCardHeader = styled.h2`
 `
 
 const SAccountCardDesc = styled.p`
-    color: rgba(255, 255, 255, .8);
+    color: rgba(255, 255, 255, 0.8);
     font-size: 12px;
     text-align: center;
 `
@@ -67,9 +60,9 @@ const ConfirmButtonWrapper = styled.div`
 `
 
 const ConfirmValueWrapper = styled.div`
-    border: 1px solid rgba(255, 255, 255, .18);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     font-size: 12px;
-    color: rgba(255, 255, 255, .8);
+    color: rgba(255, 255, 255, 0.8);
     line-height: 1.75;
     padding: 6px;
     background: #2f3135;
@@ -87,70 +80,110 @@ const SErrorMessage = styled.div`
     color: red;
 `
 
-function SignUp({ profileNames, setMnemonic, profileName, setProfileName, password, setPassword, confirmPassword, setConfirmPassword, setLoadingText, errorMessage, setErrorMessage }) {
-    let { signup } = useLoginStatus()
+function SignUp({
+    profileNames,
+    setMnemonic,
+    profileName,
+    setProfileName,
+    password,
+    setPassword,
+    confirmPassword,
+    setConfirmPassword,
+    setLoadingText,
+    errorMessage,
+    setErrorMessage,
+}) {
+    const { signup } = useLoginStatus()
 
-    let onSubmitSignUp = useCallback(async (event) => {
-		event.preventDefault()
-        setErrorMessage('')
-        setLoadingText('Creating profile...')
-        try {
-            if (password !== confirmPassword) {
-                setErrorMessage('Passwords do not match.')
-                setLoadingText('')
-                return
-            }
-            let mnemonic = await signup({ profileName })
-            setMnemonic(mnemonic)
-            setLoadingText('')
+    const onSubmitSignUp = useCallback(
+        async (event) => {
+            event.preventDefault()
             setErrorMessage('')
-        } catch (err) {
-            setLoadingText('')
-            setErrorMessage(err.toString())
-        }
-    }, [profileName, password, confirmPassword, setMnemonic, setErrorMessage, setLoadingText])
+            setLoadingText('Creating profile...')
+            try {
+                if (password !== confirmPassword) {
+                    setErrorMessage('Passwords do not match.')
+                    setLoadingText('')
+                    return
+                }
+                const mnemonic = await signup({ profileName })
+                setMnemonic(mnemonic)
+                setLoadingText('')
+                setErrorMessage('')
+            } catch (err) {
+                setLoadingText('')
+                setErrorMessage(err.toString())
+            }
+        },
+        [
+            profileName,
+            password,
+            confirmPassword,
+            setMnemonic,
+            setErrorMessage,
+            setLoadingText,
+        ],
+    )
 
     return (
         <SAccountCardContent onSubmit={onSubmitSignUp}>
-            { errorMessage ? <SErrorMessage>{errorMessage}</SErrorMessage> : null}
-            <InputLabel label={'Profile Name'}>
+            {errorMessage ? (
+                <SErrorMessage>{errorMessage}</SErrorMessage>
+            ) : null}
+            <InputLabel label="Profile Name">
                 <Input
                     value={profileName}
-                    onChange={(event) => setProfileName(event.currentTarget.value)}
-                    type={'text'}
+                    onChange={(event) =>
+                        setProfileName(event.currentTarget.value)
+                    }
+                    type="text"
                     autoFocus
                 />
             </InputLabel>
-            <InputLabel label={'Password'}>
+            <InputLabel label="Password">
                 <Input
                     value={password}
                     onChange={(event) => setPassword(event.currentTarget.value)}
-                    type={'password'}
+                    type="password"
                 />
             </InputLabel>
-            <InputLabel label={'Confirm Password'}>
+            <InputLabel label="Confirm Password">
                 <Input
                     value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.currentTarget.value)}
-                    type={'password'}
+                    onChange={(event) =>
+                        setConfirmPassword(event.currentTarget.value)
+                    }
+                    type="password"
                 />
             </InputLabel>
-            <SLink to={'/profiles'}>Existing Profiles ({profileNames.length}).</SLink>
-            <SLink to={'/signin'}>Import existing profile.</SLink>
+            <SLink to="/profiles">
+                Existing Profiles ({profileNames.length}).
+            </SLink>
+            <SLink to="/signin">Import existing profile.</SLink>
             <Button
-				type="submit"
-				primary
+                type="submit"
+                primary
                 style={{ width: '100%', marginTop: 12 }}
                 disabled={!(!!profileName && !!password && !!confirmPassword)}
-            >Sign Up</Button>
+            >
+                Sign Up
+            </Button>
         </SAccountCardContent>
     )
 }
 
-function ConfirmDisplay({ mnemonic, setMnemonic, profileName, password, setLoadingText, errorMessage, setErrorMessage }) {
-    let { login } = useLoginStatus()
+function ConfirmDisplay({
+    mnemonic,
+    setMnemonic,
+    profileName,
+    password,
+    setLoadingText,
+    errorMessage,
+    setErrorMessage,
+}) {
+    const { login } = useLoginStatus()
 
-    let onClickLogin = useCallback(async () => {
+    const onClickLogin = useCallback(async () => {
         try {
             setErrorMessage('')
             setLoadingText('Validating and generating mnemonic...')
@@ -160,11 +193,20 @@ function ConfirmDisplay({ mnemonic, setMnemonic, profileName, password, setLoadi
             setLoadingText('')
             setErrorMessage(err.toString())
         }
-    }, [profileName, mnemonic, password, setErrorMessage, setLoadingText, login])
+    }, [
+        profileName,
+        mnemonic,
+        password,
+        setErrorMessage,
+        setLoadingText,
+        login,
+    ])
 
     return (
         <SAccountCardContent>
-            { errorMessage ? <SErrorMessage>{errorMessage}</SErrorMessage> : null}
+            {errorMessage ? (
+                <SErrorMessage>{errorMessage}</SErrorMessage>
+            ) : null}
             <ConfirmValueWrapper style={{ marginBottom: 24 }}>
                 <span>Profile Name:</span>
                 {profileName}
@@ -174,8 +216,20 @@ function ConfirmDisplay({ mnemonic, setMnemonic, profileName, password, setLoadi
                 {mnemonic}
             </ConfirmValueWrapper>
             <ConfirmButtonWrapper>
-                <Button onClick={() => setMnemonic('')} primary style={{ width: '45%', marginTop: 12 }}>Cancel</Button>
-                <Button onClick={onClickLogin} primary style={{ width: '45%', marginTop: 12 }}>Create</Button>
+                <Button
+                    onClick={() => setMnemonic('')}
+                    primary
+                    style={{ width: '45%', marginTop: 12 }}
+                >
+                    Cancel
+                </Button>
+                <Button
+                    onClick={onClickLogin}
+                    primary
+                    style={{ width: '45%', marginTop: 12 }}
+                >
+                    Create
+                </Button>
             </ConfirmButtonWrapper>
         </SAccountCardContent>
     )
@@ -197,35 +251,39 @@ function Account(props) {
 
     return (
         <SAccount>
-            {/* <SAccountHeader /> */}
             <SAccountCard>
-				<SAccountCardHeader>Sign Up</SAccountCardHeader>
-				<SAccountCardDesc>{mnemonic ? 'Please save your mnemonic and keep it secure.' : 'Create a profile.'}</SAccountCardDesc>
-				{mnemonic ?
-					<ConfirmDisplay
-						mnemonic={mnemonic}
-						setMnemonic={setMnemonic}
-						profileName={profileName}
-						password={password}
-						setLoadingText={setLoadingText}
-						errorMessage={errorMessage}
-						setErrorMessage={setErrorMessage}
-					/>
-					: <SignUp
-						setMnemonic={setMnemonic}
-						profileName={profileName}
-						setProfileName={setProfileName}
-						password={password}
-						setPassword={setPassword}
-						confirmPassword={confirmPassword}
-						setConfirmPassword={setConfirmPassword}
-						setLoadingText={setLoadingText}
-						errorMessage={errorMessage}
-						setErrorMessage={setErrorMessage}
-						profileNames={props.profileNames || []}
-					/>
-				}
-                { loadingText ? <Loading text={loadingText} /> : null }
+                <SAccountCardHeader>Sign Up</SAccountCardHeader>
+                <SAccountCardDesc>
+                    {mnemonic
+                        ? 'Please save your mnemonic and keep it secure.'
+                        : 'Create a profile.'}
+                </SAccountCardDesc>
+                {mnemonic ? (
+                    <ConfirmDisplay
+                        mnemonic={mnemonic}
+                        setMnemonic={setMnemonic}
+                        profileName={profileName}
+                        password={password}
+                        setLoadingText={setLoadingText}
+                        errorMessage={errorMessage}
+                        setErrorMessage={setErrorMessage}
+                    />
+                ) : (
+                    <SignUp
+                        setMnemonic={setMnemonic}
+                        profileName={profileName}
+                        setProfileName={setProfileName}
+                        password={password}
+                        setPassword={setPassword}
+                        confirmPassword={confirmPassword}
+                        setConfirmPassword={setConfirmPassword}
+                        setLoadingText={setLoadingText}
+                        errorMessage={errorMessage}
+                        setErrorMessage={setErrorMessage}
+                        profileNames={props.profileNames || []}
+                    />
+                )}
+                {loadingText ? <Loading text={loadingText} /> : null}
             </SAccountCard>
         </SAccount>
     )
