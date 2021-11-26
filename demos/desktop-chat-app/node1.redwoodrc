@@ -1,20 +1,42 @@
 BootstrapPeers: []
 DataRoot: node1_data/tim
 DNSOverHTTPSURL: ""
+JWTSecret: ghrgHE7wBkC6ApgAlDHIICyGfvHavuHa
+Nurse:
+    Enabled: true
+    ProfileRoot: /var/folders/gy/3yx6gfz91tq6n61jp_d770700000gn/T/redwood-pprof
+    PollInterval: 10s
+    GatherDuration: 10s
+    MaxProfileSize: 100.00mb
+    CPUProfileRate: 1
+    MemProfileRate: 1
+    BlockProfileRate: 1
+    MutexProfileFraction: 1
+    MemThreshold: 5.00gb
+    GoroutineThreshold: 10000
 Libp2pTransport:
     Enabled: true
     ListenAddr: 0.0.0.0
     ListenPort: 21231
+    Reachability: ""
     ReachableAt: ""
-    StaticRelays: []
+    StaticRelays:
+        - /ip4/69.164.206.204/tcp/21231/p2p/12D3KooWA1UxxSiQLVGzjkdQReCD3mT8zCN4fGYr5uYzdGqt1BPX
+        - /ip4/65.21.226.225/tcp/21231/p2p/12D3KooWJkdrYH9SgockS9NsUHMdgc212cewFEUeoWHNQyaeyeQ7
+        - /ip4/192.81.133.207/tcp/21231/p2p/12D3KooWD9RbdYFdWQHBRmFN5q2bCgPFiYeAnbTs1fmBAzVujpWL
 BraidHTTPTransport:
     Enabled: true
     ListenHost: :8080
+    ListenHostSSL: :8082
+    TLSCertFile: ""
+    TLSKeyFile: ""
     DefaultStateURI: ""
     ReachableAt: ""
 AuthProtocol:
     Enabled: true
 BlobProtocol:
+    Enabled: true
+HushProtocol:
     Enabled: true
 TreeProtocol:
     Enabled: true
@@ -22,7 +44,8 @@ TreeProtocol:
 HTTPRPC:
     Enabled: true
     ListenHost: :8081
+    TLSCertFile: ""
+    TLSKeyFile: ""
     Whitelist:
         Enabled: false
         PermittedAddrs: []
-        JWTSecret: ""

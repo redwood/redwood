@@ -27,30 +27,30 @@ const api = (redwoodClient) => {
             }
         }
 
+        const patch = ` = ${Redwood.utils.JSON.stringify({
+            'Merge-Type': {
+                'Content-Type': 'resolver/dumb',
+                value: {},
+            },
+            Validator: {
+                'Content-Type': 'validator/permissions',
+                value: {
+                    '*': {
+                        '^.*$': {
+                            write: true,
+                        },
+                    },
+                },
+            },
+            rooms: {},
+            users: {},
+            iconImg: iconImgPatch,
+        })}`
+
         let tx = {
             stateURI,
             id: Redwood.utils.genesisTxID,
-            patches: [
-                ` = ${Redwood.utils.JSON.stringify({
-                    'Merge-Type': {
-                        'Content-Type': 'resolver/dumb',
-                        value: {},
-                    },
-                    Validator: {
-                        'Content-Type': 'validator/permissions',
-                        value: {
-                            '*': {
-                                '^.*$': {
-                                    write: true,
-                                },
-                            },
-                        },
-                    },
-                    rooms: {},
-                    users: {},
-                    iconImg: iconImgPatch,
-                })}`,
-            ],
+            patches: [patch],
         }
 
         await redwoodClient.rpc.subscribe({

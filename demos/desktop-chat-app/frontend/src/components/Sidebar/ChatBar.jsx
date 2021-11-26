@@ -379,7 +379,7 @@ function NewDMModal({ serverRooms, onDismiss, navigate }) {
                 Redwood.utils.privateTxRootForRecipients([
                     sender,
                     /* eslint-disable */
-                    recipientAddr, // NOTE: I believe this should be ...recipients
+                    recipients, // NOTE: I believe this should be ...recipients
                     /* eslint-enable */
                 ]),
             )
