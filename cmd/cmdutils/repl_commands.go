@@ -166,6 +166,12 @@ var defaultREPLCommands = REPLCommands{
 		},
 	},
 	"ps": CmdProcessTree,
+	"shared": REPLCommand{
+		HelpText: "",
+		Subcommands: REPLCommands{
+			"dumpstore": CmdSharedStateStoreDebugPrint,
+		},
+	},
 }
 
 var (
@@ -584,6 +590,16 @@ var (
 				return err
 			}
 			return app.BlobStore.SetMaxFetchConns(n)
+		},
+	}
+
+	CmdSharedStateStoreDebugPrint = REPLCommand{
+		HelpText: "print the contents of the shared state store",
+		Handler: func(args []string, app *App) error {
+			node := app.SharedStateDB.State(false)
+			defer node.Close()
+			node.DebugPrint(func(msg string, args ...interface{}) { fmt.Printf(msg, args...) }, true, 0)
+			return nil
 		},
 	}
 )

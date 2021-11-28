@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"redwood.dev/blob"
 	"redwood.dev/crypto"
@@ -115,6 +116,33 @@ func (c *controller) Start() (err error) {
 	if err != nil {
 		return err
 	}
+
+	stateURIs, err := c.txStore.KnownStateURIs()
+	if err != nil {
+		return err
+	}
+
+	// @@TODO: this is idiotic, fix it
+	go func() {
+		select {
+		case <-c.Process.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
+
+		for _, stateURI := range stateURIs {
+			iter := c.txStore.AllTxsForStateURI(stateURI, GenesisTxID)
+			for {
+				tx := iter.Next()
+				if tx == nil {
+					break
+				}
+				if tx.Status == TxStatusInMempool {
+					c.mempool.Add(*tx)
+				}
+			}
+		}
+	}()
 
 	// Listen for new blobs
 	c.blobStore.OnBlobsSaved(c.mempool.ForceReprocess)

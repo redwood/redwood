@@ -166,7 +166,7 @@ func (tp *treeProtocol) Start() error {
 }
 
 func (tp *treeProtocol) SendTx(ctx context.Context, tx tree.Tx) (err error) {
-	tp.Infof(0, "adding tx (%v) %v", tx.StateURI, tx.ID.Pretty())
+	tp.Infof(0, "adding tx (%v) %v %v", tx.StateURI, tx.ID.Pretty(), utils.PrettyJSON(tx))
 
 	defer func() {
 		if err != nil {

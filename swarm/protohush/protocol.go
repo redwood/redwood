@@ -187,6 +187,58 @@ func (hp *hushProtocol) Start() error {
 		hp.poolWorker.Add(exchangeDHPubkeys{peer.DeviceUniqueID(), hp})
 	}
 
+	// Add unfulfilled outgoing individual session proposals to the pool worker queue
+	proposalHashes, err := hp.store.OutgoingIndividualSessionProposalHashes()
+	if err != nil {
+		return err
+	}
+	for proposalHash := range proposalHashes {
+		hp.poolWorker.Add(proposeIndividualSession{proposalHash, hp})
+	}
+
+	approvals, err := hp.store.OutgoingIndividualSessionApprovals()
+	if err != nil {
+		return err
+	}
+	for addr, x := range approvals {
+		for proposalHash := range x {
+			hp.poolWorker.Add(approveIndividualSession{addr, proposalHash, hp})
+		}
+	}
+
+	// Add unfulfilled incoming individual session proposals to the pool worker queue
+	proposals, err := hp.store.IncomingIndividualSessionProposals()
+	if err != nil {
+		return err
+	}
+	for _, proposal := range proposals {
+		hp.poolWorker.Add(handleIncomingIndividualSession{proposal.Hash(), hp})
+	}
+
+	// Add unsent outgoing individual messages to the pool worker queue
+	messageIntents, err := hp.store.OutgoingIndividualMessageIntents()
+	if err != nil {
+		return err
+	}
+	for _, intent := range messageIntents {
+		hp.poolWorker.Add(sendIndividualMessage{intent.SessionType, intent.Recipient, intent.ID, hp})
+	}
+
+	// Add unsent outgoing group messages to the pool worker queue
+	sessionTypes, err := hp.store.OutgoingGroupMessageSessionTypes()
+	if err != nil {
+		return err
+	}
+	for sessionType := range sessionTypes {
+		ids, err := hp.store.OutgoingGroupMessageIntentIDsForSessionType(sessionType)
+		if err != nil {
+			return err
+		}
+		for id := range ids {
+			hp.poolWorker.Add(encryptGroupMessage{sessionType, id, hp})
+		}
+	}
+
 	return nil
 }
 
@@ -1576,7 +1628,7 @@ func (hp *hushProtocol) onSessionOpened(proposalHash types.Hash, peerAddr types.
 	}
 
 	// Outgoing group messages
-	gids, err := hp.store.OutgoingGroupMessageIntentIDs(sessionID.SessionType)
+	gids, err := hp.store.OutgoingGroupMessageIntentIDsForSessionType(sessionID.SessionType)
 	if err != nil {
 		hp.Errorf("while fetching group message IDs from database: %v", err)
 		return
