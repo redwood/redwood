@@ -367,15 +367,15 @@ func BenchmarkIndividualSessionProposalProtoUnmarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func TestIndividualSessionApprovalProto(t *testing.T) {
+func TestIndividualSessionResponseProto(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedIndividualSessionApproval(popr, false)
+	p := NewPopulatedIndividualSessionResponse(popr, false)
 	dAtA, err := github_com_gogo_protobuf_proto.Marshal(p)
 	if err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
-	msg := &IndividualSessionApproval{}
+	msg := &IndividualSessionResponse{}
 	if err := github_com_gogo_protobuf_proto.Unmarshal(dAtA, msg); err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
@@ -401,10 +401,10 @@ func TestIndividualSessionApprovalProto(t *testing.T) {
 	}
 }
 
-func TestIndividualSessionApprovalMarshalTo(t *testing.T) {
+func TestIndividualSessionResponseMarshalTo(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedIndividualSessionApproval(popr, false)
+	p := NewPopulatedIndividualSessionResponse(popr, false)
 	size := p.Size()
 	dAtA := make([]byte, size)
 	for i := range dAtA {
@@ -414,7 +414,7 @@ func TestIndividualSessionApprovalMarshalTo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
-	msg := &IndividualSessionApproval{}
+	msg := &IndividualSessionResponse{}
 	if err := github_com_gogo_protobuf_proto.Unmarshal(dAtA, msg); err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
@@ -429,12 +429,12 @@ func TestIndividualSessionApprovalMarshalTo(t *testing.T) {
 	}
 }
 
-func BenchmarkIndividualSessionApprovalProtoMarshal(b *testing.B) {
+func BenchmarkIndividualSessionResponseProtoMarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*IndividualSessionApproval, 10000)
+	pops := make([]*IndividualSessionResponse, 10000)
 	for i := 0; i < 10000; i++ {
-		pops[i] = NewPopulatedIndividualSessionApproval(popr, false)
+		pops[i] = NewPopulatedIndividualSessionResponse(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -447,18 +447,18 @@ func BenchmarkIndividualSessionApprovalProtoMarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkIndividualSessionApprovalProtoUnmarshal(b *testing.B) {
+func BenchmarkIndividualSessionResponseProtoUnmarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
 	datas := make([][]byte, 10000)
 	for i := 0; i < 10000; i++ {
-		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedIndividualSessionApproval(popr, false))
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedIndividualSessionResponse(popr, false))
 		if err != nil {
 			panic(err)
 		}
 		datas[i] = dAtA
 	}
-	msg := &IndividualSessionApproval{}
+	msg := &IndividualSessionResponse{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		total += len(datas[i%10000])
@@ -940,16 +940,16 @@ func TestIndividualSessionIDJSON(t *testing.T) {
 		t.Fatalf("seed = %d, %#v !Json Equal %#v", seed, msg, p)
 	}
 }
-func TestIndividualSessionApprovalJSON(t *testing.T) {
+func TestIndividualSessionResponseJSON(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedIndividualSessionApproval(popr, true)
+	p := NewPopulatedIndividualSessionResponse(popr, true)
 	marshaler := github_com_gogo_protobuf_jsonpb.Marshaler{}
 	jsondata, err := marshaler.MarshalToString(p)
 	if err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
-	msg := &IndividualSessionApproval{}
+	msg := &IndividualSessionResponse{}
 	err = github_com_gogo_protobuf_jsonpb.UnmarshalString(jsondata, msg)
 	if err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
@@ -1147,12 +1147,12 @@ func TestIndividualSessionIDProtoCompactText(t *testing.T) {
 	}
 }
 
-func TestIndividualSessionApprovalProtoText(t *testing.T) {
+func TestIndividualSessionResponseProtoText(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedIndividualSessionApproval(popr, true)
+	p := NewPopulatedIndividualSessionResponse(popr, true)
 	dAtA := github_com_gogo_protobuf_proto.MarshalTextString(p)
-	msg := &IndividualSessionApproval{}
+	msg := &IndividualSessionResponse{}
 	if err := github_com_gogo_protobuf_proto.UnmarshalText(dAtA, msg); err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
@@ -1164,12 +1164,12 @@ func TestIndividualSessionApprovalProtoText(t *testing.T) {
 	}
 }
 
-func TestIndividualSessionApprovalProtoCompactText(t *testing.T) {
+func TestIndividualSessionResponseProtoCompactText(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedIndividualSessionApproval(popr, true)
+	p := NewPopulatedIndividualSessionResponse(popr, true)
 	dAtA := github_com_gogo_protobuf_proto.CompactTextString(p)
-	msg := &IndividualSessionApproval{}
+	msg := &IndividualSessionResponse{}
 	if err := github_com_gogo_protobuf_proto.UnmarshalText(dAtA, msg); err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
@@ -1362,14 +1362,14 @@ func TestIndividualSessionIDVerboseEqual(t *testing.T) {
 		t.Fatalf("%#v !VerboseEqual %#v, since %v", msg, p, err)
 	}
 }
-func TestIndividualSessionApprovalVerboseEqual(t *testing.T) {
+func TestIndividualSessionResponseVerboseEqual(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedIndividualSessionApproval(popr, false)
+	p := NewPopulatedIndividualSessionResponse(popr, false)
 	dAtA, err := github_com_gogo_protobuf_proto.Marshal(p)
 	if err != nil {
 		panic(err)
 	}
-	msg := &IndividualSessionApproval{}
+	msg := &IndividualSessionResponse{}
 	if err := github_com_gogo_protobuf_proto.Unmarshal(dAtA, msg); err != nil {
 		panic(err)
 	}
@@ -1476,9 +1476,9 @@ func TestIndividualSessionIDGoString(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-func TestIndividualSessionApprovalGoString(t *testing.T) {
+func TestIndividualSessionResponseGoString(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedIndividualSessionApproval(popr, false)
+	p := NewPopulatedIndividualSessionResponse(popr, false)
 	s1 := p.GoString()
 	s2 := fmt.Sprintf("%#v", p)
 	if s1 != s2 {
@@ -1663,10 +1663,10 @@ func BenchmarkIndividualSessionProposalSize(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func TestIndividualSessionApprovalSize(t *testing.T) {
+func TestIndividualSessionResponseSize(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedIndividualSessionApproval(popr, true)
+	p := NewPopulatedIndividualSessionResponse(popr, true)
 	size2 := github_com_gogo_protobuf_proto.Size(p)
 	dAtA, err := github_com_gogo_protobuf_proto.Marshal(p)
 	if err != nil {
@@ -1685,12 +1685,12 @@ func TestIndividualSessionApprovalSize(t *testing.T) {
 	}
 }
 
-func BenchmarkIndividualSessionApprovalSize(b *testing.B) {
+func BenchmarkIndividualSessionResponseSize(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*IndividualSessionApproval, 1000)
+	pops := make([]*IndividualSessionResponse, 1000)
 	for i := 0; i < 1000; i++ {
-		pops[i] = NewPopulatedIndividualSessionApproval(popr, false)
+		pops[i] = NewPopulatedIndividualSessionResponse(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -1861,9 +1861,9 @@ func TestDHPubkeyAttestationStringer(t *testing.T) {
 		t.Fatalf("String want %v got %v", s1, s2)
 	}
 }
-func TestIndividualSessionApprovalStringer(t *testing.T) {
+func TestIndividualSessionResponseStringer(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedIndividualSessionApproval(popr, false)
+	p := NewPopulatedIndividualSessionResponse(popr, false)
 	s1 := p.String()
 	s2 := fmt.Sprintf("%v", p)
 	if s1 != s2 {

@@ -6,15 +6,16 @@ package pb
 import (
 	bytes "bytes"
 	fmt "fmt"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
-	pb "redwood.dev/blob/pb"
-	pb1 "redwood.dev/swarm/protohush/pb"
 	reflect "reflect"
 	strings "strings"
+
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	pb "redwood.dev/blob/pb"
+	pb1 "redwood.dev/swarm/protohush/pb"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -332,7 +333,7 @@ type HushMessage struct {
 	// Types that are valid to be assigned to Payload:
 	//	*HushMessage_DhPubkeyAttestations
 	//	*HushMessage_ProposeIndividualSession_
-	//	*HushMessage_ApproveIndividualSession_
+	//	*HushMessage_RespondToIndividualSession_
 	//	*HushMessage_SendIndividualMessage_
 	//	*HushMessage_SendGroupMessage_
 	Payload isHushMessage_Payload `protobuf_oneof:"payload"`
@@ -384,8 +385,8 @@ type HushMessage_DhPubkeyAttestations struct {
 type HushMessage_ProposeIndividualSession_ struct {
 	ProposeIndividualSession *HushMessage_ProposeIndividualSession `protobuf:"bytes,2,opt,name=proposeIndividualSession,proto3,oneof" json:"proposeIndividualSession,omitempty"`
 }
-type HushMessage_ApproveIndividualSession_ struct {
-	ApproveIndividualSession *HushMessage_ApproveIndividualSession `protobuf:"bytes,3,opt,name=approveIndividualSession,proto3,oneof" json:"approveIndividualSession,omitempty"`
+type HushMessage_RespondToIndividualSession_ struct {
+	RespondToIndividualSession *HushMessage_RespondToIndividualSession `protobuf:"bytes,3,opt,name=approveIndividualSession,proto3,oneof" json:"approveIndividualSession,omitempty"`
 }
 type HushMessage_SendIndividualMessage_ struct {
 	SendIndividualMessage *HushMessage_SendIndividualMessage `protobuf:"bytes,4,opt,name=sendIndividualMessage,proto3,oneof" json:"sendIndividualMessage,omitempty"`
@@ -394,11 +395,11 @@ type HushMessage_SendGroupMessage_ struct {
 	SendGroupMessage *HushMessage_SendGroupMessage `protobuf:"bytes,5,opt,name=sendGroupMessage,proto3,oneof" json:"sendGroupMessage,omitempty"`
 }
 
-func (*HushMessage_DhPubkeyAttestations) isHushMessage_Payload()      {}
-func (*HushMessage_ProposeIndividualSession_) isHushMessage_Payload() {}
-func (*HushMessage_ApproveIndividualSession_) isHushMessage_Payload() {}
-func (*HushMessage_SendIndividualMessage_) isHushMessage_Payload()    {}
-func (*HushMessage_SendGroupMessage_) isHushMessage_Payload()         {}
+func (*HushMessage_DhPubkeyAttestations) isHushMessage_Payload()        {}
+func (*HushMessage_ProposeIndividualSession_) isHushMessage_Payload()   {}
+func (*HushMessage_RespondToIndividualSession_) isHushMessage_Payload() {}
+func (*HushMessage_SendIndividualMessage_) isHushMessage_Payload()      {}
+func (*HushMessage_SendGroupMessage_) isHushMessage_Payload()           {}
 
 func (m *HushMessage) GetPayload() isHushMessage_Payload {
 	if m != nil {
@@ -421,9 +422,9 @@ func (m *HushMessage) GetProposeIndividualSession() *HushMessage_ProposeIndividu
 	return nil
 }
 
-func (m *HushMessage) GetApproveIndividualSession() *HushMessage_ApproveIndividualSession {
-	if x, ok := m.GetPayload().(*HushMessage_ApproveIndividualSession_); ok {
-		return x.ApproveIndividualSession
+func (m *HushMessage) GetRespondToIndividualSession() *HushMessage_RespondToIndividualSession {
+	if x, ok := m.GetPayload().(*HushMessage_RespondToIndividualSession_); ok {
+		return x.RespondToIndividualSession
 	}
 	return nil
 }
@@ -447,7 +448,7 @@ func (*HushMessage) XXX_OneofWrappers() []interface{} {
 	return []interface{}{
 		(*HushMessage_DhPubkeyAttestations)(nil),
 		(*HushMessage_ProposeIndividualSession_)(nil),
-		(*HushMessage_ApproveIndividualSession_)(nil),
+		(*HushMessage_RespondToIndividualSession_)(nil),
 		(*HushMessage_SendIndividualMessage_)(nil),
 		(*HushMessage_SendGroupMessage_)(nil),
 	}
@@ -539,21 +540,23 @@ func (m *HushMessage_ProposeIndividualSession) GetEncryptedProposal() []byte {
 	return nil
 }
 
-type HushMessage_ApproveIndividualSession struct {
-	Approval *pb1.IndividualSessionApproval `protobuf:"bytes,1,opt,name=approval,proto3" json:"approval,omitempty"`
+type HushMessage_RespondToIndividualSession struct {
+	Approval *pb1.IndividualSessionResponse `protobuf:"bytes,1,opt,name=approval,proto3" json:"approval,omitempty"`
 }
 
-func (m *HushMessage_ApproveIndividualSession) Reset()      { *m = HushMessage_ApproveIndividualSession{} }
-func (*HushMessage_ApproveIndividualSession) ProtoMessage() {}
-func (*HushMessage_ApproveIndividualSession) Descriptor() ([]byte, []int) {
+func (m *HushMessage_RespondToIndividualSession) Reset() {
+	*m = HushMessage_RespondToIndividualSession{}
+}
+func (*HushMessage_RespondToIndividualSession) ProtoMessage() {}
+func (*HushMessage_RespondToIndividualSession) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cad2813fa2bf04bd, []int{1, 2}
 }
-func (m *HushMessage_ApproveIndividualSession) XXX_Unmarshal(b []byte) error {
+func (m *HushMessage_RespondToIndividualSession) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *HushMessage_ApproveIndividualSession) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *HushMessage_RespondToIndividualSession) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_HushMessage_ApproveIndividualSession.Marshal(b, m, deterministic)
+		return xxx_messageInfo_HushMessage_RespondToIndividualSession.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -563,19 +566,19 @@ func (m *HushMessage_ApproveIndividualSession) XXX_Marshal(b []byte, determinist
 		return b[:n], nil
 	}
 }
-func (m *HushMessage_ApproveIndividualSession) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_HushMessage_ApproveIndividualSession.Merge(m, src)
+func (m *HushMessage_RespondToIndividualSession) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HushMessage_RespondToIndividualSession.Merge(m, src)
 }
-func (m *HushMessage_ApproveIndividualSession) XXX_Size() int {
+func (m *HushMessage_RespondToIndividualSession) XXX_Size() int {
 	return m.Size()
 }
-func (m *HushMessage_ApproveIndividualSession) XXX_DiscardUnknown() {
-	xxx_messageInfo_HushMessage_ApproveIndividualSession.DiscardUnknown(m)
+func (m *HushMessage_RespondToIndividualSession) XXX_DiscardUnknown() {
+	xxx_messageInfo_HushMessage_RespondToIndividualSession.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_HushMessage_ApproveIndividualSession proto.InternalMessageInfo
+var xxx_messageInfo_HushMessage_RespondToIndividualSession proto.InternalMessageInfo
 
-func (m *HushMessage_ApproveIndividualSession) GetApproval() *pb1.IndividualSessionApproval {
+func (m *HushMessage_RespondToIndividualSession) GetApproval() *pb1.IndividualSessionResponse {
 	if m != nil {
 		return m.Approval
 	}
@@ -677,7 +680,7 @@ func init() {
 	proto.RegisterType((*HushMessage)(nil), "Redwood.swarm.libp2p.HushMessage")
 	proto.RegisterType((*HushMessage_DHPubkeyAttestations)(nil), "Redwood.swarm.libp2p.HushMessage.DHPubkeyAttestations")
 	proto.RegisterType((*HushMessage_ProposeIndividualSession)(nil), "Redwood.swarm.libp2p.HushMessage.ProposeIndividualSession")
-	proto.RegisterType((*HushMessage_ApproveIndividualSession)(nil), "Redwood.swarm.libp2p.HushMessage.ApproveIndividualSession")
+	proto.RegisterType((*HushMessage_RespondToIndividualSession)(nil), "Redwood.swarm.libp2p.HushMessage.RespondToIndividualSession")
 	proto.RegisterType((*HushMessage_SendIndividualMessage)(nil), "Redwood.swarm.libp2p.HushMessage.SendIndividualMessage")
 	proto.RegisterType((*HushMessage_SendGroupMessage)(nil), "Redwood.swarm.libp2p.HushMessage.SendGroupMessage")
 }
@@ -1339,7 +1342,7 @@ func (this *HushMessage_ProposeIndividualSession_) VerboseEqual(that interface{}
 	}
 	return nil
 }
-func (this *HushMessage_ApproveIndividualSession_) VerboseEqual(that interface{}) error {
+func (this *HushMessage_RespondToIndividualSession_) VerboseEqual(that interface{}) error {
 	if that == nil {
 		if this == nil {
 			return nil
@@ -1347,25 +1350,25 @@ func (this *HushMessage_ApproveIndividualSession_) VerboseEqual(that interface{}
 		return fmt.Errorf("that == nil && this != nil")
 	}
 
-	that1, ok := that.(*HushMessage_ApproveIndividualSession_)
+	that1, ok := that.(*HushMessage_RespondToIndividualSession_)
 	if !ok {
-		that2, ok := that.(HushMessage_ApproveIndividualSession_)
+		that2, ok := that.(HushMessage_RespondToIndividualSession_)
 		if ok {
 			that1 = &that2
 		} else {
-			return fmt.Errorf("that is not of type *HushMessage_ApproveIndividualSession_")
+			return fmt.Errorf("that is not of type *HushMessage_RespondToIndividualSession_")
 		}
 	}
 	if that1 == nil {
 		if this == nil {
 			return nil
 		}
-		return fmt.Errorf("that is type *HushMessage_ApproveIndividualSession_ but is nil && this != nil")
+		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSession_ but is nil && this != nil")
 	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_ApproveIndividualSession_ but is not nil && this == nil")
+		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSession_ but is not nil && this == nil")
 	}
-	if !this.ApproveIndividualSession.Equal(that1.ApproveIndividualSession) {
-		return fmt.Errorf("ApproveIndividualSession this(%v) Not Equal that(%v)", this.ApproveIndividualSession, that1.ApproveIndividualSession)
+	if !this.RespondToIndividualSession.Equal(that1.RespondToIndividualSession) {
+		return fmt.Errorf("RespondToIndividualSession this(%v) Not Equal that(%v)", this.RespondToIndividualSession, that1.RespondToIndividualSession)
 	}
 	return nil
 }
@@ -1507,14 +1510,14 @@ func (this *HushMessage_ProposeIndividualSession_) Equal(that interface{}) bool 
 	}
 	return true
 }
-func (this *HushMessage_ApproveIndividualSession_) Equal(that interface{}) bool {
+func (this *HushMessage_RespondToIndividualSession_) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*HushMessage_ApproveIndividualSession_)
+	that1, ok := that.(*HushMessage_RespondToIndividualSession_)
 	if !ok {
-		that2, ok := that.(HushMessage_ApproveIndividualSession_)
+		that2, ok := that.(HushMessage_RespondToIndividualSession_)
 		if ok {
 			that1 = &that2
 		} else {
@@ -1526,7 +1529,7 @@ func (this *HushMessage_ApproveIndividualSession_) Equal(that interface{}) bool 
 	} else if this == nil {
 		return false
 	}
-	if !this.ApproveIndividualSession.Equal(that1.ApproveIndividualSession) {
+	if !this.RespondToIndividualSession.Equal(that1.RespondToIndividualSession) {
 		return false
 	}
 	return true
@@ -1697,7 +1700,7 @@ func (this *HushMessage_ProposeIndividualSession) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *HushMessage_ApproveIndividualSession) VerboseEqual(that interface{}) error {
+func (this *HushMessage_RespondToIndividualSession) VerboseEqual(that interface{}) error {
 	if that == nil {
 		if this == nil {
 			return nil
@@ -1705,36 +1708,36 @@ func (this *HushMessage_ApproveIndividualSession) VerboseEqual(that interface{})
 		return fmt.Errorf("that == nil && this != nil")
 	}
 
-	that1, ok := that.(*HushMessage_ApproveIndividualSession)
+	that1, ok := that.(*HushMessage_RespondToIndividualSession)
 	if !ok {
-		that2, ok := that.(HushMessage_ApproveIndividualSession)
+		that2, ok := that.(HushMessage_RespondToIndividualSession)
 		if ok {
 			that1 = &that2
 		} else {
-			return fmt.Errorf("that is not of type *HushMessage_ApproveIndividualSession")
+			return fmt.Errorf("that is not of type *HushMessage_RespondToIndividualSession")
 		}
 	}
 	if that1 == nil {
 		if this == nil {
 			return nil
 		}
-		return fmt.Errorf("that is type *HushMessage_ApproveIndividualSession but is nil && this != nil")
+		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSession but is nil && this != nil")
 	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_ApproveIndividualSession but is not nil && this == nil")
+		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSession but is not nil && this == nil")
 	}
 	if !this.Approval.Equal(that1.Approval) {
 		return fmt.Errorf("Approval this(%v) Not Equal that(%v)", this.Approval, that1.Approval)
 	}
 	return nil
 }
-func (this *HushMessage_ApproveIndividualSession) Equal(that interface{}) bool {
+func (this *HushMessage_RespondToIndividualSession) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*HushMessage_ApproveIndividualSession)
+	that1, ok := that.(*HushMessage_RespondToIndividualSession)
 	if !ok {
-		that2, ok := that.(HushMessage_ApproveIndividualSession)
+		that2, ok := that.(HushMessage_RespondToIndividualSession)
 		if ok {
 			that1 = &that2
 		} else {
@@ -1977,12 +1980,12 @@ func (this *HushMessage_ProposeIndividualSession_) GoString() string {
 		`ProposeIndividualSession:` + fmt.Sprintf("%#v", this.ProposeIndividualSession) + `}`}, ", ")
 	return s
 }
-func (this *HushMessage_ApproveIndividualSession_) GoString() string {
+func (this *HushMessage_RespondToIndividualSession_) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&pb.HushMessage_ApproveIndividualSession_{` +
-		`ApproveIndividualSession:` + fmt.Sprintf("%#v", this.ApproveIndividualSession) + `}`}, ", ")
+	s := strings.Join([]string{`&pb.HushMessage_RespondToIndividualSession_{` +
+		`RespondToIndividualSession:` + fmt.Sprintf("%#v", this.RespondToIndividualSession) + `}`}, ", ")
 	return s
 }
 func (this *HushMessage_SendIndividualMessage_) GoString() string {
@@ -2027,12 +2030,12 @@ func (this *HushMessage_ProposeIndividualSession) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *HushMessage_ApproveIndividualSession) GoString() string {
+func (this *HushMessage_RespondToIndividualSession) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 5)
-	s = append(s, "&pb.HushMessage_ApproveIndividualSession{")
+	s = append(s, "&pb.HushMessage_RespondToIndividualSession{")
 	if this.Approval != nil {
 		s = append(s, "Approval: "+fmt.Sprintf("%#v", this.Approval)+",\n")
 	}
@@ -2411,16 +2414,16 @@ func (m *HushMessage_ProposeIndividualSession_) MarshalToSizedBuffer(dAtA []byte
 	}
 	return len(dAtA) - i, nil
 }
-func (m *HushMessage_ApproveIndividualSession_) MarshalTo(dAtA []byte) (int, error) {
+func (m *HushMessage_RespondToIndividualSession_) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HushMessage_ApproveIndividualSession_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *HushMessage_RespondToIndividualSession_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
-	if m.ApproveIndividualSession != nil {
+	if m.RespondToIndividualSession != nil {
 		{
-			size, err := m.ApproveIndividualSession.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.RespondToIndividualSession.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -2541,7 +2544,7 @@ func (m *HushMessage_ProposeIndividualSession) MarshalToSizedBuffer(dAtA []byte)
 	return len(dAtA) - i, nil
 }
 
-func (m *HushMessage_ApproveIndividualSession) Marshal() (dAtA []byte, err error) {
+func (m *HushMessage_RespondToIndividualSession) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2551,12 +2554,12 @@ func (m *HushMessage_ApproveIndividualSession) Marshal() (dAtA []byte, err error
 	return dAtA[:n], nil
 }
 
-func (m *HushMessage_ApproveIndividualSession) MarshalTo(dAtA []byte) (int, error) {
+func (m *HushMessage_RespondToIndividualSession) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HushMessage_ApproveIndividualSession) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *HushMessage_RespondToIndividualSession) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2750,7 +2753,7 @@ func NewPopulatedHushMessage(r randyLibp2P, easy bool) *HushMessage {
 	case 2:
 		this.Payload = NewPopulatedHushMessage_ProposeIndividualSession_(r, easy)
 	case 3:
-		this.Payload = NewPopulatedHushMessage_ApproveIndividualSession_(r, easy)
+		this.Payload = NewPopulatedHushMessage_RespondToIndividualSession_(r, easy)
 	case 4:
 		this.Payload = NewPopulatedHushMessage_SendIndividualMessage_(r, easy)
 	case 5:
@@ -2771,9 +2774,9 @@ func NewPopulatedHushMessage_ProposeIndividualSession_(r randyLibp2P, easy bool)
 	this.ProposeIndividualSession = NewPopulatedHushMessage_ProposeIndividualSession(r, easy)
 	return this
 }
-func NewPopulatedHushMessage_ApproveIndividualSession_(r randyLibp2P, easy bool) *HushMessage_ApproveIndividualSession_ {
-	this := &HushMessage_ApproveIndividualSession_{}
-	this.ApproveIndividualSession = NewPopulatedHushMessage_ApproveIndividualSession(r, easy)
+func NewPopulatedHushMessage_RespondToIndividualSession_(r randyLibp2P, easy bool) *HushMessage_RespondToIndividualSession_ {
+	this := &HushMessage_RespondToIndividualSession_{}
+	this.RespondToIndividualSession = NewPopulatedHushMessage_RespondToIndividualSession(r, easy)
 	return this
 }
 func NewPopulatedHushMessage_SendIndividualMessage_(r randyLibp2P, easy bool) *HushMessage_SendIndividualMessage_ {
@@ -2813,10 +2816,10 @@ func NewPopulatedHushMessage_ProposeIndividualSession(r randyLibp2P, easy bool) 
 	return this
 }
 
-func NewPopulatedHushMessage_ApproveIndividualSession(r randyLibp2P, easy bool) *HushMessage_ApproveIndividualSession {
-	this := &HushMessage_ApproveIndividualSession{}
+func NewPopulatedHushMessage_RespondToIndividualSession(r randyLibp2P, easy bool) *HushMessage_RespondToIndividualSession {
+	this := &HushMessage_RespondToIndividualSession{}
 	if r.Intn(5) != 0 {
-		this.Approval = pb1.NewPopulatedIndividualSessionApproval(r, easy)
+		this.Approval = pb1.NewPopulatedIndividualSessionResponse(r, easy)
 	}
 	if !easy && r.Intn(10) != 0 {
 	}
@@ -3069,14 +3072,14 @@ func (m *HushMessage_ProposeIndividualSession_) Size() (n int) {
 	}
 	return n
 }
-func (m *HushMessage_ApproveIndividualSession_) Size() (n int) {
+func (m *HushMessage_RespondToIndividualSession_) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.ApproveIndividualSession != nil {
-		l = m.ApproveIndividualSession.Size()
+	if m.RespondToIndividualSession != nil {
+		l = m.RespondToIndividualSession.Size()
 		n += 1 + l + sovLibp2P(uint64(l))
 	}
 	return n
@@ -3133,7 +3136,7 @@ func (m *HushMessage_ProposeIndividualSession) Size() (n int) {
 	return n
 }
 
-func (m *HushMessage_ApproveIndividualSession) Size() (n int) {
+func (m *HushMessage_RespondToIndividualSession) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -3300,12 +3303,12 @@ func (this *HushMessage_ProposeIndividualSession_) String() string {
 	}, "")
 	return s
 }
-func (this *HushMessage_ApproveIndividualSession_) String() string {
+func (this *HushMessage_RespondToIndividualSession_) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_ApproveIndividualSession_{`,
-		`ApproveIndividualSession:` + strings.Replace(fmt.Sprintf("%v", this.ApproveIndividualSession), "HushMessage_ApproveIndividualSession", "HushMessage_ApproveIndividualSession", 1) + `,`,
+	s := strings.Join([]string{`&HushMessage_RespondToIndividualSession_{`,
+		`RespondToIndividualSession:` + strings.Replace(fmt.Sprintf("%v", this.RespondToIndividualSession), "HushMessage_RespondToIndividualSession", "HushMessage_RespondToIndividualSession", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -3355,12 +3358,12 @@ func (this *HushMessage_ProposeIndividualSession) String() string {
 	}, "")
 	return s
 }
-func (this *HushMessage_ApproveIndividualSession) String() string {
+func (this *HushMessage_RespondToIndividualSession) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_ApproveIndividualSession{`,
-		`Approval:` + strings.Replace(fmt.Sprintf("%v", this.Approval), "IndividualSessionApproval", "pb1.IndividualSessionApproval", 1) + `,`,
+	s := strings.Join([]string{`&HushMessage_RespondToIndividualSession{`,
+		`Approval:` + strings.Replace(fmt.Sprintf("%v", this.Approval), "IndividualSessionResponse", "pb1.IndividualSessionResponse", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -4064,7 +4067,7 @@ func (m *HushMessage) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ApproveIndividualSession", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RespondToIndividualSession", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4091,11 +4094,11 @@ func (m *HushMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &HushMessage_ApproveIndividualSession{}
+			v := &HushMessage_RespondToIndividualSession{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Payload = &HushMessage_ApproveIndividualSession_{v}
+			m.Payload = &HushMessage_RespondToIndividualSession_{v}
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -4356,7 +4359,7 @@ func (m *HushMessage_ProposeIndividualSession) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *HushMessage_ApproveIndividualSession) Unmarshal(dAtA []byte) error {
+func (m *HushMessage_RespondToIndividualSession) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -4379,10 +4382,10 @@ func (m *HushMessage_ApproveIndividualSession) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: ApproveIndividualSession: wiretype end group for non-group")
+			return fmt.Errorf("proto: RespondToIndividualSession: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ApproveIndividualSession: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: RespondToIndividualSession: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -4415,7 +4418,7 @@ func (m *HushMessage_ApproveIndividualSession) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Approval == nil {
-				m.Approval = &pb1.IndividualSessionApproval{}
+				m.Approval = &pb1.IndividualSessionResponse{}
 			}
 			if err := m.Approval.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

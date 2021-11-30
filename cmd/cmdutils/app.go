@@ -62,6 +62,10 @@ type App struct {
 	HTTPRPCServerConfig rpc.HTTPConfig
 	SharedStateDB       *state.DBTree
 
+	PeerDB *state.DBTree
+	HushDB *state.DBTree
+	TreeDB *state.DBTree
+
 	Nurse *health.Nurse
 }
 
@@ -162,7 +166,31 @@ func (app *App) Start() error {
 	defer closeIfError(&err, db)
 	app.SharedStateDB = db
 
-	app.PeerStore = swarm.NewPeerStore(app.SharedStateDB)
+	peerdb, err := state.NewDBTree(badgerOpts.ForPath(filepath.Join(cfg.DataRoot, "peers")))
+	if err != nil {
+		app.Errorf("while opening shared db: %+v", err)
+		return err
+	}
+	defer closeIfError(&err, peerdb)
+	app.PeerDB = peerdb
+
+	hushdb, err := state.NewDBTree(badgerOpts.ForPath(filepath.Join(cfg.DataRoot, "hush")))
+	if err != nil {
+		app.Errorf("while opening shared db: %+v", err)
+		return err
+	}
+	defer closeIfError(&err, hushdb)
+	app.HushDB = hushdb
+
+	treedb, err := state.NewDBTree(badgerOpts.ForPath(filepath.Join(cfg.DataRoot, "tree")))
+	if err != nil {
+		app.Errorf("while opening shared db: %+v", err)
+		return err
+	}
+	defer closeIfError(&err, treedb)
+	app.TreeDB = treedb
+
+	app.PeerStore = swarm.NewPeerStore(app.PeerDB)
 
 	app.BlobStore = blob.NewBadgerStore(badgerOpts.ForPath(cfg.BlobDataRoot()))
 	err = app.BlobStore.Start()
@@ -272,13 +300,13 @@ func (app *App) Start() error {
 	}
 
 	if cfg.HushProtocol.Enabled {
-		app.HushProtoStore = protohush.NewStore(app.SharedStateDB)
+		app.HushProtoStore = protohush.NewStore(app.HushDB)
 		app.HushProto = protohush.NewHushProtocol(transports, app.HushProtoStore, app.KeyStore, app.PeerStore)
 		protocols = append(protocols, app.HushProto)
 	}
 
 	if cfg.TreeProtocol.Enabled {
-		app.TreeProtoStore, err = prototree.NewStore(app.SharedStateDB)
+		app.TreeProtoStore, err = prototree.NewStore(app.TreeDB)
 		if err != nil {
 			app.Errorf("while opening prototree store: %+v", err)
 			return err
@@ -447,6 +475,19 @@ func (app *App) Close() error {
 	if app.SharedStateDB != nil {
 		app.SharedStateDB.Close()
 		app.SharedStateDB = nil
+	}
+
+	if app.TreeDB != nil {
+		app.TreeDB.Close()
+		app.TreeDB = nil
+	}
+	if app.HushDB != nil {
+		app.HushDB.Close()
+		app.HushDB = nil
+	}
+	if app.PeerDB != nil {
+		app.PeerDB.Close()
+		app.PeerDB = nil
 	}
 
 	return app.Process.Close()

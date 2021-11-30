@@ -11,7 +11,7 @@ import (
 type SharedKey = pb.SharedKey
 type IndividualSessionID = pb.IndividualSessionID
 type IndividualSessionProposal = pb.IndividualSessionProposal
-type IndividualSessionApproval = pb.IndividualSessionApproval
+type IndividualSessionResponse = pb.IndividualSessionResponse
 type DHPair = pb.DHPair
 type DHPubkeyAttestation = pb.DHPubkeyAttestation
 type IndividualMessage = pb.IndividualMessage

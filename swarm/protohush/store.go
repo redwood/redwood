@@ -26,11 +26,11 @@ type Store interface {
 	SaveIncomingIndividualSessionProposal(proposal EncryptedIndividualSessionProposal) error
 	DeleteIncomingIndividualSessionProposal(proposal EncryptedIndividualSessionProposal) error
 
-	OutgoingIndividualSessionApprovals() (map[types.Address]map[types.Hash]IndividualSessionApproval, error)
-	OutgoingIndividualSessionApprovalsForUser(aliceAddr types.Address) ([]IndividualSessionApproval, error)
-	OutgoingIndividualSessionApproval(aliceAddr types.Address, proposalHash types.Hash) (IndividualSessionApproval, error)
-	SaveOutgoingIndividualSessionApproval(sender types.Address, approval IndividualSessionApproval) error
-	DeleteOutgoingIndividualSessionApproval(aliceAddr types.Address, proposalHash types.Hash) error
+	OutgoingIndividualSessionResponses() (map[types.Address]map[types.Hash]IndividualSessionResponse, error)
+	OutgoingIndividualSessionResponsesForUser(aliceAddr types.Address) ([]IndividualSessionResponse, error)
+	OutgoingIndividualSessionResponse(aliceAddr types.Address, proposalHash types.Hash) (IndividualSessionResponse, error)
+	SaveOutgoingIndividualSessionResponse(sender types.Address, approval IndividualSessionResponse) error
+	DeleteOutgoingIndividualSessionResponse(aliceAddr types.Address, proposalHash types.Hash) error
 
 	// Established individual sessions
 	LatestIndividualSessionWithUsers(sessionType string, aliceAddr, bobAddr types.Address) (IndividualSessionProposal, error)

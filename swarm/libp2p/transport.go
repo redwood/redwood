@@ -475,10 +475,10 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	ctx, cancel := utils.CombinedContext(t.Process.Ctx(), 10*time.Second)
 	defer cancel()
 
-	err = peer.EnsureConnected(ctx)
-	if err != nil {
-		t.Errorf("error connecting to %v peer %v: %v", via, pinfo, err)
-	}
+	_ = peer.EnsureConnected(ctx)
+	// if err != nil {
+	// 	t.Errorf("error connecting to %v peer %v: %v", via, pinfo, err)
+	// }
 }
 
 func (t *transport) handleBlobStream(stream netp2p.Stream) {
@@ -532,8 +532,8 @@ func (t *transport) handleHushStream(stream netp2p.Stream) {
 	} else if msg := proto.GetProposeIndividualSession(); msg != nil {
 		t.HandleIncomingIndividualSessionProposal(ctx, msg.EncryptedProposal, peerConn)
 
-	} else if msg := proto.GetApproveIndividualSession(); msg != nil {
-		t.HandleIncomingIndividualSessionApproval(ctx, *msg.Approval, peerConn)
+	} else if msg := proto.GetRespondToIndividualSession(); msg != nil {
+		t.HandleIncomingIndividualSessionResponse(ctx, *msg.Approval, peerConn)
 
 	} else if msg := proto.GetSendIndividualMessage(); msg != nil {
 		t.HandleIncomingIndividualMessage(ctx, *msg.Message, peerConn)
@@ -676,12 +676,9 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<
 		return nil, errors.WithStack(err)
 	}
 
-	ctx, cancel := utils.CombinedContext(ctx, t.Process.Ctx())
-
 	ch := make(chan prototree.TreePeerConn)
-	go func() {
+	t.Process.Go(ctx, "ProvidersOfStateURI "+stateURI, func(ctx context.Context) {
 		defer close(ch)
-		defer cancel()
 		for {
 			select {
 			case <-ctx.Done():
@@ -718,7 +715,7 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<
 			}
 			time.Sleep(1 * time.Second) // @@TODO: make configurable?
 		}
-	}()
+	})
 	return ch, nil
 }
 

@@ -158,13 +158,13 @@ func (_m *HushTransport) OnIncomingIndividualMessage(handler protohush.IncomingI
 	_m.Called(handler)
 }
 
-// OnIncomingIndividualSessionApproval provides a mock function with given fields: handler
-func (_m *HushTransport) OnIncomingIndividualSessionApproval(handler protohush.IncomingIndividualSessionApprovalCallback) {
+// OnIncomingIndividualSessionProposal provides a mock function with given fields: handler
+func (_m *HushTransport) OnIncomingIndividualSessionProposal(handler protohush.IncomingIndividualSessionProposalCallback) {
 	_m.Called(handler)
 }
 
-// OnIncomingIndividualSessionProposal provides a mock function with given fields: handler
-func (_m *HushTransport) OnIncomingIndividualSessionProposal(handler protohush.IncomingIndividualSessionProposalCallback) {
+// OnIncomingIndividualSessionResponse provides a mock function with given fields: handler
+func (_m *HushTransport) OnIncomingIndividualSessionResponse(handler protohush.IncomingIndividualSessionResponseCallback) {
 	_m.Called(handler)
 }
 

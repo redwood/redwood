@@ -165,7 +165,12 @@ var defaultREPLCommands = REPLCommands{
 			"id": CmdLibp2pPeerID,
 		},
 	},
-	"ps": CmdProcessTree,
+	"ps": REPLCommand{
+		HelpText: "view information about the current tree of goroutines",
+		Subcommands: REPLCommands{
+			"tree": CmdProcessTree,
+		},
+	},
 	"shared": REPLCommand{
 		HelpText: "",
 		Subcommands: REPLCommands{

@@ -242,13 +242,13 @@ func (peer *peerConn) ProposeIndividualSession(ctx context.Context, encryptedPro
 	return peer.writeProtobuf(pb.MakeHushProtobuf_ProposeIndividualSession(encryptedProposal))
 }
 
-func (peer *peerConn) ApproveIndividualSession(ctx context.Context, approval protohush.IndividualSessionApproval) error {
+func (peer *peerConn) RespondToIndividualSession(ctx context.Context, response protohush.IndividualSessionResponse) error {
 	err := peer.ensureStreamWithProtocol(ctx, PROTO_HUSH)
 	if err != nil {
 		return err
 	}
 	defer peer.Close()
-	return peer.writeProtobuf(pb.MakeHushProtobuf_ApproveIndividualSession(approval))
+	return peer.writeProtobuf(pb.MakeHushProtobuf_RespondToIndividualSession(response))
 }
 
 func (peer *peerConn) SendHushIndividualMessage(ctx context.Context, msg protohush.IndividualMessage) error {

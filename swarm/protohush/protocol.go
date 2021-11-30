@@ -30,8 +30,9 @@ import (
 type HushProtocol interface {
 	process.Interface
 
-	ProposeIndividualSession(ctx context.Context, sessionType string, recipient types.Address, epoch uint64) error
-	ProposeNextIndividualSession(ctx context.Context, sessionType string, recipient types.Address) error
+	EnsureIndividualSession(ctx context.Context, sessionType string, recipient types.Address) (IndividualSessionProposal, bool, error)
+	ProposeIndividualSession(ctx context.Context, sessionType string, recipient types.Address, epoch uint64) (IndividualSessionProposal, error)
+	ProposeNextIndividualSession(ctx context.Context, sessionType string, recipient types.Address) (IndividualSessionProposal, error)
 
 	EncryptIndividualMessage(sessionType string, recipient types.Address, plaintext []byte) error
 	OnIndividualMessageDecrypted(sessionType string, handler IndividualMessageDecryptedCallback)
@@ -47,7 +48,7 @@ type HushTransport interface {
 	swarm.Transport
 	OnIncomingDHPubkeyAttestations(handler IncomingDHPubkeyAttestationsCallback)
 	OnIncomingIndividualSessionProposal(handler IncomingIndividualSessionProposalCallback)
-	OnIncomingIndividualSessionApproval(handler IncomingIndividualSessionApprovalCallback)
+	OnIncomingIndividualSessionResponse(handler IncomingIndividualSessionResponseCallback)
 	OnIncomingIndividualMessage(handler IncomingIndividualMessageCallback)
 	OnIncomingGroupMessage(handler IncomingGroupMessageCallback)
 }
@@ -57,7 +58,7 @@ type HushPeerConn interface {
 	swarm.PeerConn
 	SendDHPubkeyAttestations(ctx context.Context, attestations []DHPubkeyAttestation) error
 	ProposeIndividualSession(ctx context.Context, encryptedProposal []byte) error
-	ApproveIndividualSession(ctx context.Context, approval IndividualSessionApproval) error
+	RespondToIndividualSession(ctx context.Context, approval IndividualSessionResponse) error
 	SendHushIndividualMessage(ctx context.Context, msg IndividualMessage) error
 	SendHushGroupMessage(ctx context.Context, msg GroupMessage) error
 }
@@ -170,7 +171,7 @@ func (hp *hushProtocol) Start() error {
 		hp.Infof(0, "registering %v", tpt.Name())
 		tpt.OnIncomingDHPubkeyAttestations(hp.handleIncomingDHPubkeyAttestations)
 		tpt.OnIncomingIndividualSessionProposal(hp.handleIncomingIndividualSessionProposal)
-		tpt.OnIncomingIndividualSessionApproval(hp.handleIncomingIndividualSessionApproval)
+		tpt.OnIncomingIndividualSessionResponse(hp.handleIncomingIndividualSessionResponse)
 		tpt.OnIncomingIndividualMessage(hp.handleIncomingIndividualMessage)
 		tpt.OnIncomingGroupMessage(hp.handleIncomingGroupMessage)
 	}
@@ -196,13 +197,13 @@ func (hp *hushProtocol) Start() error {
 		hp.poolWorker.Add(proposeIndividualSession{proposalHash, hp})
 	}
 
-	approvals, err := hp.store.OutgoingIndividualSessionApprovals()
+	responses, err := hp.store.OutgoingIndividualSessionResponses()
 	if err != nil {
 		return err
 	}
-	for addr, x := range approvals {
+	for addr, x := range responses {
 		for proposalHash := range x {
-			hp.poolWorker.Add(approveIndividualSession{addr, proposalHash, hp})
+			hp.poolWorker.Add(respondToIndividualSession{addr, proposalHash, hp})
 		}
 	}
 
@@ -336,32 +337,51 @@ func (hp *hushProtocol) ensureSessionWithSelf(sessionType string) error {
 	return nil
 }
 
-func (hp *hushProtocol) ProposeNextIndividualSession(ctx context.Context, sessionType string, recipient types.Address) error {
+func (hp *hushProtocol) EnsureIndividualSession(ctx context.Context, sessionType string, recipient types.Address) (_ IndividualSessionProposal, exists bool, _ error) {
 	identity, err := hp.keyStore.DefaultPublicIdentity()
 	if err != nil {
-		return errors.Wrapf(err, "while fetching default public identity")
+		return IndividualSessionProposal{}, false, errors.Wrapf(err, "while fetching default public identity")
+	}
+
+	session, err := hp.store.LatestIndividualSessionWithUsers(sessionType, identity.Address(), recipient)
+	if errors.Cause(err) == errors.Err404 {
+		session, err := hp.ProposeIndividualSession(ctx, sessionType, recipient, 0)
+		if err != nil {
+			return IndividualSessionProposal{}, false, err
+		}
+		return session, false, nil
+	} else if err != nil {
+		return IndividualSessionProposal{}, false, errors.Wrapf(err, "while fetching latest individual session ID with %v", recipient)
+	}
+	return session, true, nil
+}
+
+func (hp *hushProtocol) ProposeNextIndividualSession(ctx context.Context, sessionType string, recipient types.Address) (IndividualSessionProposal, error) {
+	identity, err := hp.keyStore.DefaultPublicIdentity()
+	if err != nil {
+		return IndividualSessionProposal{}, errors.Wrapf(err, "while fetching default public identity")
 	}
 
 	session, err := hp.store.LatestIndividualSessionWithUsers(sessionType, identity.Address(), recipient)
 	if errors.Cause(err) == errors.Err404 {
 		return hp.ProposeIndividualSession(ctx, sessionType, recipient, 0)
 	} else if err != nil {
-		return errors.Wrapf(err, "while fetching latest individual session ID with %v", recipient)
+		return IndividualSessionProposal{}, errors.Wrapf(err, "while fetching latest individual session ID with %v", recipient)
 	}
 	return hp.ProposeIndividualSession(ctx, sessionType, recipient, session.SessionID.Epoch+1)
 }
 
-func (hp *hushProtocol) ProposeIndividualSession(ctx context.Context, sessionType string, recipient types.Address, epoch uint64) error {
+func (hp *hushProtocol) ProposeIndividualSession(ctx context.Context, sessionType string, recipient types.Address, epoch uint64) (IndividualSessionProposal, error) {
 	identity, err := hp.keyStore.DefaultPublicIdentity()
 	if err != nil {
-		return errors.Wrapf(err, "while fetching default public identity")
+		return IndividualSessionProposal{}, errors.Wrapf(err, "while fetching default public identity")
 	} else if recipient == identity.Address() {
-		return ErrRecipientIsSelf
+		return IndividualSessionProposal{}, ErrRecipientIsSelf
 	}
 
 	sk, err := GenerateSharedKey()
 	if err != nil {
-		return errors.Wrapf(err, "while generating shared key for session %v-%v-%v", sessionType, recipient.Hex(), epoch)
+		return IndividualSessionProposal{}, errors.Wrapf(err, "while generating shared key for session %v-%v-%v", sessionType, recipient.Hex(), epoch)
 	}
 
 	sessionID := IndividualSessionID{
@@ -378,17 +398,17 @@ func (hp *hushProtocol) ProposeIndividualSession(ctx context.Context, sessionTyp
 
 	err = hp.store.SaveOutgoingIndividualSessionProposal(proposal)
 	if err != nil {
-		return err
+		return IndividualSessionProposal{}, err
 	}
 
 	proposalHash, err := proposal.Hash()
 	if err != nil {
-		return err
+		return IndividualSessionProposal{}, err
 	}
 
 	hp.Debugf("Add proposeIndividualSession")
 	hp.poolWorker.Add(proposeIndividualSession{proposalHash, hp})
-	return nil
+	return proposal, nil
 }
 
 func (hp *hushProtocol) EncryptIndividualMessage(sessionType string, recipient types.Address, plaintext []byte) error {
@@ -498,14 +518,14 @@ func (hp *hushProtocol) handleIncomingDHPubkeyAttestations(ctx context.Context, 
 				hp.poolWorker.ForceRetry(proposeIndividualSession{proposalHash, hp})
 			}
 
-			approvals, err := hp.store.OutgoingIndividualSessionApprovalsForUser(addr)
+			responses, err := hp.store.OutgoingIndividualSessionResponsesForUser(addr)
 			if err != nil {
-				hp.Errorf("while fetching outgoing individual session approvals for %v and %v: %v", myAddr, addr, err)
+				hp.Errorf("while fetching outgoing individual session responses for %v and %v: %v", myAddr, addr, err)
 				continue
 			}
-			for _, a := range approvals {
-				hp.Successf("retrying outgoing session approval %v", a.ProposalHash)
-				hp.poolWorker.ForceRetry(approveIndividualSession{addr, a.ProposalHash, hp})
+			for _, a := range responses {
+				hp.Successf("retrying outgoing session response %v", a.ProposalHash)
+				hp.poolWorker.ForceRetry(respondToIndividualSession{addr, a.ProposalHash, hp})
 			}
 		}
 	}
@@ -529,15 +549,32 @@ func (hp *hushProtocol) handleIncomingIndividualSessionProposal(ctx context.Cont
 	hp.poolWorker.Add(handleIncomingIndividualSession{proposal.Hash(), hp})
 }
 
-func (hp *hushProtocol) handleIncomingIndividualSessionApproval(ctx context.Context, approval IndividualSessionApproval, bob HushPeerConn) {
-	hp.Warnf("incoming individual session approval")
+func (hp *hushProtocol) handleIncomingIndividualSessionResponse(ctx context.Context, response IndividualSessionResponse, bob HushPeerConn) {
+	hp.Warnf("incoming individual session response (hash=%v approved=%v)", response.ProposalHash, response.Approved)
 
-	proposal, err := hp.store.OutgoingIndividualSessionProposalByHash(approval.ProposalHash)
+	proposal, err := hp.store.OutgoingIndividualSessionProposalByHash(response.ProposalHash)
 	if errors.Cause(err) == errors.Err404 {
-		hp.Errorf("proposal hash does not match any known proposal (hash: %v)", approval.ProposalHash)
+		hp.Errorf("proposal hash does not match any known proposal (hash: %v)", response.ProposalHash)
 		return
 	} else if err != nil {
 		hp.Errorf("while fetching outgoing shared key proposal: %v", err)
+		return
+	}
+
+	pubkey, err := crypto.RecoverSigningPubkey(response.ProposalHash, response.BobSig)
+	if err != nil {
+		hp.Errorf("while verifying incoming individual session response signature: %v", err)
+		return
+	} else if pubkey.Address() != proposal.SessionID.BobAddr {
+		hp.Errorf("while verifying incoming individual session response signature: response is not signed by intended recipient", err)
+		return
+	}
+
+	if !response.Approved {
+		err := hp.store.DeleteOutgoingIndividualSessionProposal(response.ProposalHash)
+		if err != nil {
+			hp.Errorf("while deleting outgoing individual session proposal: %v", err)
+		}
 		return
 	}
 
@@ -560,11 +597,11 @@ func (hp *hushProtocol) handleIncomingIndividualSessionApproval(ctx context.Cont
 		return
 	}
 
-	hp.onSessionOpened(approval.ProposalHash, proposal.SessionID.BobAddr)
+	hp.onSessionOpened(response.ProposalHash, proposal.SessionID.BobAddr)
 
-	err = hp.store.DeleteOutgoingIndividualSessionProposal(approval.ProposalHash)
+	err = hp.store.DeleteOutgoingIndividualSessionProposal(response.ProposalHash)
 	if err != nil {
-		hp.Errorf("while deleting incoming individual session approval: %v", err)
+		hp.Errorf("while deleting outgoing individual session proposal: %v", err)
 		return
 	}
 }
@@ -743,6 +780,8 @@ func (t proposeIndividualSession) Work(ctx context.Context) (retry bool) {
 		return true
 	}
 
+	t.hushProto.Debugf("propose individual session: %v", utils.PrettyJSON(session))
+
 	bobAddr := session.SessionID.BobAddr
 
 	if len(t.hushProto.peerStore.PeersWithAddress(bobAddr)) == 0 {
@@ -791,6 +830,9 @@ func (t proposeIndividualSession) Work(ctx context.Context) (retry bool) {
 		t.hushProto.Errorf("while marshaling outgoing individual session proposal: %v", err)
 		return true
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
 	t.hushProto.withPeers(ctx, 3*time.Second, t.hushProto.peerStore.PeersWithAddress(bobAddr), func(ctx context.Context, peerConn HushPeerConn) error {
 		t.hushProto.Debugf("proposeIndividualSession WITH PEERS %v", peerConn.DialInfo())
@@ -856,21 +898,17 @@ func (t handleIncomingIndividualSession) Work(ctx context.Context) (retry bool) 
 	switch errors.Cause(err) {
 	case ErrInvalidSignature:
 		t.hushProto.Errorf("invalid signature on incoming individual session proposal")
-		err := t.hushProto.store.DeleteIncomingIndividualSessionProposal(proposal)
-		if err != nil {
-			t.hushProto.Errorf("while deleting incoming individual session proposal: %v", err)
-			return false
-		}
+		t.handleInvalidProposal(proposal, proposedSession)
 		return false
+
 	case ErrEpochTooLow:
+		t.hushProto.Errorf("epoch too low on incoming individual session proposal")
+		t.handleInvalidProposal(proposal, proposedSession)
 		return false
 
 	case ErrInvalidDHPubkey:
 		t.hushProto.Debugf("ignoring session proposal: DH pubkey %v does not match our latest", proposedSession.RemoteDHPubkey)
-		err := t.hushProto.store.DeleteIncomingIndividualSessionProposal(proposal)
-		if err != nil {
-			t.hushProto.Errorf("while deleting incoming individual session proposal: %v", err)
-		}
+		t.handleInvalidProposal(proposal, proposedSession)
 		// t.proposeReplacementSession(myAddr, proposal, proposedSession)
 		return false
 
@@ -928,13 +966,14 @@ func (t handleIncomingIndividualSession) Work(ctx context.Context) (retry bool) 
 		t.hushProto.Errorf("while signing individual session proposal hash: %v", err)
 		return true
 	}
-	approval := IndividualSessionApproval{
+	response := IndividualSessionResponse{
 		ProposalHash: proposalHash,
 		BobSig:       sig,
+		Approved:     true,
 	}
-	err = t.hushProto.store.SaveOutgoingIndividualSessionApproval(proposedSession.SessionID.AliceAddr, approval)
+	err = t.hushProto.store.SaveOutgoingIndividualSessionResponse(proposedSession.SessionID.AliceAddr, response)
 	if err != nil {
-		t.hushProto.Errorf("while saving outgoing individual session approval: %v", err)
+		t.hushProto.Errorf("while saving outgoing individual session response: %v", err)
 		return true
 	}
 
@@ -945,8 +984,8 @@ func (t handleIncomingIndividualSession) Work(ctx context.Context) (retry bool) 
 		return true
 	}
 
-	t.hushProto.Debugf("Add approveIndividualSession")
-	t.hushProto.poolWorker.Add(approveIndividualSession{proposedSession.SessionID.AliceAddr, proposalHash, t.hushProto})
+	t.hushProto.Debugf("Add respondToIndividualSession")
+	t.hushProto.poolWorker.Add(respondToIndividualSession{proposedSession.SessionID.AliceAddr, proposalHash, t.hushProto})
 	return false
 }
 
@@ -1042,6 +1081,42 @@ func (t handleIncomingIndividualSession) validateProposal(sender types.Address, 
 	return nil
 }
 
+func (t handleIncomingIndividualSession) handleInvalidProposal(proposal EncryptedIndividualSessionProposal, proposedSession IndividualSessionProposal) {
+	proposalHash, err := proposedSession.Hash()
+	if err != nil {
+		t.hushProto.Errorf("while hashing incoming individual session proposal: %v", err)
+		return
+	}
+
+	identity, err := t.hushProto.keyStore.DefaultPublicIdentity()
+	if err != nil {
+		t.hushProto.Errorf("while fetching default public identity: %v", err)
+		return
+	}
+
+	sig, err := t.hushProto.keyStore.SignHash(identity.Address(), proposalHash)
+	if err != nil {
+		t.hushProto.Errorf("while signing outgoing individual session response: %v", err)
+		return
+	}
+
+	err = t.hushProto.store.SaveOutgoingIndividualSessionResponse(proposedSession.SessionID.AliceAddr, IndividualSessionResponse{
+		ProposalHash: proposalHash,
+		BobSig:       sig,
+		Approved:     false,
+	})
+	if err != nil {
+		t.hushProto.Errorf("while saving outgoing individual session response: %v", err)
+	}
+
+	err = t.hushProto.store.DeleteIncomingIndividualSessionProposal(proposal)
+	if err != nil {
+		t.hushProto.Errorf("while deleting incoming individual session proposal: %v", err)
+	}
+
+	t.hushProto.poolWorker.Add(respondToIndividualSession{proposal.AliceAddr, proposalHash, t.hushProto})
+}
+
 func (t handleIncomingIndividualSession) proposeReplacementSession(myAddr types.Address, proposal EncryptedIndividualSessionProposal, proposedSession IndividualSessionProposal) {
 	var replacementSessionID IndividualSessionID
 	_, err := t.hushProto.store.LatestIndividualSessionWithUsers(proposedSession.SessionID.SessionType, myAddr, proposal.AliceAddr)
@@ -1112,23 +1187,23 @@ func (t handleIncomingIndividualSession) proposeReplacementSession(myAddr types.
 	}
 }
 
-type approveIndividualSession struct {
+type respondToIndividualSession struct {
 	aliceAddr    types.Address
 	proposalHash types.Hash
 	hushProto    *hushProtocol
 }
 
-var _ process.PoolWorkerItem = approveIndividualSession{}
+var _ process.PoolWorkerItem = respondToIndividualSession{}
 
-func (t approveIndividualSession) ID() process.PoolUniqueID { return t }
+func (t respondToIndividualSession) ID() process.PoolUniqueID { return t }
 
-func (t approveIndividualSession) Work(ctx context.Context) (retry bool) {
-	approval, err := t.hushProto.store.OutgoingIndividualSessionApproval(t.aliceAddr, t.proposalHash)
+func (t respondToIndividualSession) Work(ctx context.Context) (retry bool) {
+	response, err := t.hushProto.store.OutgoingIndividualSessionResponse(t.aliceAddr, t.proposalHash)
 	if errors.Cause(err) == errors.Err404 {
 		// Done
 		return false
 	} else if err != nil {
-		t.hushProto.Errorf("while fetching incoming individual session approval from database: %v", err)
+		t.hushProto.Errorf("while fetching incoming individual session response from database: %v", err)
 		return true
 	}
 
@@ -1142,11 +1217,11 @@ func (t approveIndividualSession) Work(ctx context.Context) (retry bool) {
 	}()
 
 	t.hushProto.withPeers(ctx, 3*time.Second, t.hushProto.peerStore.PeersWithAddress(t.aliceAddr), func(ctx context.Context, alice HushPeerConn) error {
-		err = alice.ApproveIndividualSession(ctx, approval)
+		err = alice.RespondToIndividualSession(ctx, response)
 		if err != nil {
 			return err
 		}
-		err = t.hushProto.store.DeleteOutgoingIndividualSessionApproval(t.aliceAddr, approval.ProposalHash)
+		err = t.hushProto.store.DeleteOutgoingIndividualSessionResponse(t.aliceAddr, response.ProposalHash)
 		if err != nil {
 			return err
 		}
@@ -1184,34 +1259,11 @@ func (t sendIndividualMessage) Work(ctx context.Context) (retry bool) {
 		return true
 	}
 
-	identity, err := t.hushProto.keyStore.DefaultPublicIdentity()
+	session, exists, err := t.hushProto.EnsureIndividualSession(ctx, intent.SessionType, intent.Recipient)
 	if err != nil {
-		t.hushProto.Errorf("while fetching default public identity from database: %v", err)
+		t.hushProto.Errorf("while proposing next individual session with %v: %v", intent.Recipient, err)
 		return true
-	}
-
-	session, err := t.hushProto.store.LatestIndividualSessionWithUsers(intent.SessionType, identity.Address(), intent.Recipient)
-	if errors.Cause(err) == errors.Err404 {
-		// No established session, now check if we have a proposed session
-		_, err = t.hushProto.store.OutgoingIndividualSessionProposalByUsersAndType(intent.SessionType, identity.Address(), intent.Recipient)
-		if errors.Cause(err) == errors.Err404 {
-			t.hushProto.Debugf("no individual session exists with %v, proposing epoch 0", intent.Recipient)
-
-			err := t.hushProto.ProposeNextIndividualSession(ctx, intent.SessionType, intent.Recipient)
-			if err != nil {
-				t.hushProto.Errorf("while proposing next individual session with %v: %v", intent.Recipient, err)
-				return true
-			}
-
-		} else if err != nil {
-			t.hushProto.Errorf("while looking up session with ID: %v", err)
-			return true
-		}
-		// Retry later once we have an established session
-		return true
-
-	} else if err != nil {
-		t.hushProto.Errorf("while looking up session with ID: %v", err)
+	} else if !exists {
 		return true
 	}
 
@@ -1476,20 +1528,11 @@ func (t encryptGroupMessage) ensureAllIndividualSessions(ctx context.Context, id
 				panic(err)
 			}
 		} else {
-			_, err := t.hushProto.store.LatestIndividualSessionWithUsers(intent.SessionType, identity.Address(), recipient)
-			if errors.Cause(err) == errors.Err404 {
-				err = t.hushProto.ProposeIndividualSession(ctx, intent.SessionType, recipient, 0)
-				if err != nil {
-					t.hushProto.Errorf("while proposing individual session: %v", err)
-				}
-				retry = true
-				continue
-
-			} else if err != nil {
-				t.hushProto.Errorf("while fetching group session for group message: %v", err)
-				retry = true
-				continue
+			_, exists, err := t.hushProto.EnsureIndividualSession(ctx, intent.SessionType, recipient)
+			if err != nil {
+				t.hushProto.Errorf("while proposing individual session: %v", err)
 			}
+			retry = !exists || retry
 		}
 	}
 	return
@@ -1653,28 +1696,38 @@ func (hp *hushProtocol) withPeers(
 		tpts[k] = v
 	}
 
-	var pools []*swarm.EndpointPool
+	var chDones []<-chan struct{}
 	for _, peer := range peers {
-		pool := swarm.NewEndpointPool("", peer, tpts, attemptTimeout, 3*time.Second, func(ctx context.Context, peerConn swarm.PeerConn) error {
+
+		chDone := swarm.TryEndpoints(ctx, tpts, peer.Endpoints(), func(ctx context.Context, peerConn swarm.PeerConn) error {
 			return fn(ctx, peerConn.(HushPeerConn))
 		})
+		chDones = append(chDones, chDone)
 
-		err := hp.SpawnChild(ctx, pool)
-		if err != nil {
-			hp.Errorf("while spawning endpoint pool: %v", err)
-			continue
-		}
-		pools = append(pools, pool)
+		// pool := swarm.NewEndpointPool("", peer, tpts, attemptTimeout, 3*time.Second, func(ctx context.Context, peerConn swarm.PeerConn) error {
+		// 	return fn(ctx, peerConn.(HushPeerConn))
+		// })
+
+		// err := hp.SpawnChild(ctx, pool)
+		// if err != nil {
+		// 	hp.Errorf("while spawning endpoint pool: %v", err)
+		// 	continue
+		// }
+		// pools = append(pools, pool)
 	}
 
-	go func() {
-		<-ctx.Done()
-		for _, pool := range pools {
-			pool.Close()
-		}
-
-	}()
-	for _, pool := range pools {
-		<-pool.Done()
+	for _, chDone := range chDones {
+		<-chDone
 	}
+
+	// go func() {
+	// 	<-ctx.Done()
+	// 	for _, pool := range pools {
+	// 		pool.Close()
+	// 	}
+
+	// }()
+	// for _, pool := range pools {
+	// 	<-pool.Done()
+	// }
 }
