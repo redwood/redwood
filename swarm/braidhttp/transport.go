@@ -651,26 +651,37 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		if len(parts) != 2 {
 			http.Error(w, "bad Range header", http.StatusBadRequest)
 			return
-		} else if parts[0] != "json" {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
 		}
-		parts = strings.SplitN(parts[1], ":", 2)
-		if len(parts) != 2 {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
+
+		switch parts[0] {
+		case "json":
+			parts = strings.SplitN(parts[1], ":", 2)
+			if len(parts) != 2 {
+				http.Error(w, "bad Range header", http.StatusBadRequest)
+				return
+			}
+		case "bytes":
+			parts = strings.SplitN(parts[1], "-", 2)
+			if len(parts) != 2 {
+				http.Error(w, "bad Range header", http.StatusBadRequest)
+				return
+			}
 		}
 		start, err := strconv.ParseInt(parts[0], 10, 64)
 		if err != nil {
 			http.Error(w, "bad Range header", http.StatusBadRequest)
 			return
 		}
-		end, err := strconv.ParseInt(parts[1], 10, 64)
-		if err != nil {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
+		if parts[1] == "" {
+			rng = &state.Range{start, -1}
+		} else {
+			end, err := strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				http.Error(w, "bad Range header", http.StatusBadRequest)
+				return
+			}
+			rng = &state.Range{start, end}
 		}
-		rng = &state.Range{start, end}
 	}
 
 	// Add the "Parents" header
