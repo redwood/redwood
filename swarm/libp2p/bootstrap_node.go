@@ -149,6 +149,7 @@ func (bn *bootstrapNode) Start() error {
 				dht.BootstrapPeers(bootstrapPeers...),
 				dht.Mode(dht.ModeServer),
 				dht.Datastore(datastore),
+				dht.MaxRecordAge(5*time.Minute),
 				// dht.Validator(blankValidator{}), // Set a pass-through validator
 			)
 			if err != nil {
