@@ -84,6 +84,8 @@ func NewBootstrapNode(
 	}
 }
 
+const dhtTTL = 5 * time.Minute
+
 func (bn *bootstrapNode) Start() error {
 	err := bn.Process.Start()
 	if err != nil {
@@ -149,7 +151,7 @@ func (bn *bootstrapNode) Start() error {
 				dht.BootstrapPeers(bootstrapPeers...),
 				dht.Mode(dht.ModeServer),
 				dht.Datastore(datastore),
-				dht.MaxRecordAge(5*time.Minute),
+				dht.MaxRecordAge(dhtTTL),
 				// dht.Validator(blankValidator{}), // Set a pass-through validator
 			)
 			if err != nil {
@@ -174,7 +176,11 @@ func (bn *bootstrapNode) Start() error {
 	routingDiscovery := discovery.NewRoutingDiscovery(bn.dht)
 	discovery.Advertise(bn.Process.Ctx(), routingDiscovery, "redwood")
 
+	// Attempt to connect to peers we find through the DHT. The bootstrap node will only log that
+	// it has found a peer once per `dhtTTL` (to avoid log spam). However, it will repeatedly attempt
+	// to connect until `dhtTTL` elapses (silently).
 	bn.Process.Go(nil, "find peers", func(ctx context.Context) {
+		lastLogged := make(map[peer.ID]time.Time)
 		for {
 			select {
 			case <-ctx.Done():
@@ -198,10 +204,14 @@ func (bn *bootstrapNode) Start() error {
 						continue
 					}
 
+					// Try to avoid log spam after a peer disconnects. Only log once during the DHT entry TTL window.
+					if time.Now().Sub(lastLogged[pinfo.ID]) > dhtTTL {
+						bn.Debugf("DHT peer found: %v", pinfo.ID.Pretty())
+						lastLogged[pinfo.ID] = time.Now()
+					}
+
 					pinfo := pinfo
 					bn.Process.Go(nil, fmt.Sprintf("connect to %v", pinfo.ID.Pretty()), func(ctx context.Context) {
-						bn.Debugf("DHT peer found: %v", pinfo.ID.Pretty())
-
 						err := bn.libp2pHost.Connect(ctx, pinfo)
 						if err != nil {
 							// bn.Errorf("could not connect to %v: %v", pinfo.ID, err)
