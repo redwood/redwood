@@ -48,6 +48,10 @@ func main() {
 			Name:  "p, password-file",
 			Usage: "location of password file",
 		},
+		cli.StringFlag{
+			Name:  "k, libp2p-key-file",
+			Usage: "location of libp2p key file",
+		},
 		cli.BoolFlag{
 			Name:  "gui",
 			Usage: "enable CLI GUI",
@@ -62,14 +66,7 @@ func main() {
 		},
 	}
 
-	cliApp.Action = func(c *cli.Context) error {
-		passwordFile := c.String("password-file")
-		configPath := c.String("config")
-		gui := c.Bool("gui")
-		dev := c.Bool("dev")
-		stateURIs := c.StringSlice("subscribe")
-		return run(configPath, passwordFile, gui, dev, stateURIs)
-	}
+	cliApp.Action = run
 
 	err = cliApp.Run(os.Args)
 	if err != nil {
@@ -80,13 +77,20 @@ func main() {
 
 const AppName = "redwood"
 
-func run(configPath, passwordFile string, gui, dev bool, stateURIs []string) (err error) {
+func run(c *cli.Context) (err error) {
 	defer errors.AddStack(&err)
+
+	var (
+		passwordFile = c.String("password-file")
+		configPath   = c.String("config")
+		gui          = c.Bool("gui")
+		dev          = c.Bool("dev")
+		stateURIs    = c.StringSlice("subscribe")
+	)
 
 	if passwordFile == "" {
 		return errors.New("must specify --password-file flag")
 	}
-
 	passwordBytes, err := ioutil.ReadFile(passwordFile)
 	if err != nil {
 		return err

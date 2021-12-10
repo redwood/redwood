@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	cid "github.com/ipfs/go-cid"
+	cryptop2p "github.com/libp2p/go-libp2p-core/crypto"
 	corepeer "github.com/libp2p/go-libp2p-core/peer"
 	peer "github.com/libp2p/go-libp2p-peer"
 	peerstoreaddr "github.com/libp2p/go-libp2p-peerstore/addr"
@@ -15,6 +16,11 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/swarm"
 )
+
+func IsValidKey(key []byte) bool {
+	_, err := cryptop2p.UnmarshalPrivateKey(key)
+	return err == nil
+}
 
 func cidForString(s string) (cid.Cid, error) {
 	pref := cid.NewPrefixV1(cid.Raw, multihash.SHA2_256)

@@ -1035,20 +1035,15 @@ func (tp *treeProtocol) withPeers(
 		tpts[k] = v
 	}
 
-	var pools []*swarm.EndpointPool
+	var chDones []<-chan struct{}
 	for _, peer := range peers {
-		pool := swarm.NewEndpointPool("", peer, tpts, attemptTimeout, 3*time.Second, func(ctx context.Context, peerConn swarm.PeerConn) error {
+		chDone := swarm.TryEndpoints(ctx, tpts, peer.Endpoints(), func(ctx context.Context, peerConn swarm.PeerConn) error {
 			return fn(ctx, peerConn.(TreePeerConn))
 		})
-
-		err := tp.SpawnChild(ctx, pool)
-		if err != nil {
-			tp.Errorf("while spawning endpoint pool: %v", err)
-			continue
-		}
-		pools = append(pools, pool)
+		chDones = append(chDones, chDone)
 	}
-	for _, pool := range pools {
-		<-pool.Done()
+
+	for _, chDone := range chDones {
+		<-chDone
 	}
 }

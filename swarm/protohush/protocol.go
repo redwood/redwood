@@ -1698,36 +1698,13 @@ func (hp *hushProtocol) withPeers(
 
 	var chDones []<-chan struct{}
 	for _, peer := range peers {
-
 		chDone := swarm.TryEndpoints(ctx, tpts, peer.Endpoints(), func(ctx context.Context, peerConn swarm.PeerConn) error {
 			return fn(ctx, peerConn.(HushPeerConn))
 		})
 		chDones = append(chDones, chDone)
-
-		// pool := swarm.NewEndpointPool("", peer, tpts, attemptTimeout, 3*time.Second, func(ctx context.Context, peerConn swarm.PeerConn) error {
-		// 	return fn(ctx, peerConn.(HushPeerConn))
-		// })
-
-		// err := hp.SpawnChild(ctx, pool)
-		// if err != nil {
-		// 	hp.Errorf("while spawning endpoint pool: %v", err)
-		// 	continue
-		// }
-		// pools = append(pools, pool)
 	}
 
 	for _, chDone := range chDones {
 		<-chDone
 	}
-
-	// go func() {
-	// 	<-ctx.Done()
-	// 	for _, pool := range pools {
-	// 		pool.Close()
-	// 	}
-
-	// }()
-	// for _, pool := range pools {
-	// 	<-pool.Done()
-	// }
 }

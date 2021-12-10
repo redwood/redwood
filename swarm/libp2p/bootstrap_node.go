@@ -203,7 +203,7 @@ func (bn *bootstrapNode) Start() error {
 
 						err := bn.libp2pHost.Connect(ctx, pinfo)
 						if err != nil {
-							bn.Errorf("could not connect to %v: %v", pinfo.ID, err)
+							// bn.Errorf("could not connect to %v: %v", pinfo.ID, err)
 						}
 					})
 				}
@@ -296,6 +296,6 @@ func (bn *bootstrapNode) HandlePeerFound(pinfo corepeer.AddrInfo) {
 
 	err := bn.libp2pHost.Connect(bn.Process.Ctx(), pinfo)
 	if err != nil {
-		bn.Errorf("could not connect to %v: %v", pinfo.ID, err)
+		// bn.Errorf("could not connect to %v: %v", pinfo.ID, err)
 	}
 }

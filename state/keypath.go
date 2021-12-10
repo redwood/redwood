@@ -2,7 +2,10 @@ package state
 
 import (
 	"bytes"
-	"crypto/rand"
+	"math/rand"
+	"strings"
+
+	"redwood.dev/utils"
 )
 
 type Keypath []byte
@@ -357,12 +360,6 @@ func JoinKeypaths(s []Keypath, sep []byte) Keypath {
 	return b
 }
 
-func randomBytes(length int) []byte {
-	bs := make([]byte, length)
-	rand.Read(bs)
-	return bs
-}
-
 type gogoprotobufTest interface {
 	Float32() float32
 	Float64() float64
@@ -373,6 +370,10 @@ type gogoprotobufTest interface {
 }
 
 func NewPopulatedKeypath(_ gogoprotobufTest) *Keypath {
-	k := Keypath(randomBytes(32))
+	parts := make([]string, rand.Intn(5))
+	for i := range parts {
+		parts[i] = utils.RandomString(rand.Intn(10))
+	}
+	k := Keypath([]byte(strings.Join(parts, string(KeypathSeparator))))
 	return &k
 }

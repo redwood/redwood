@@ -72,6 +72,7 @@ type Libp2pTransportConfig struct {
 	Enabled      bool     `yaml:"Enabled"`
 	ListenAddr   string   `yaml:"ListenAddr"`
 	ListenPort   uint     `yaml:"ListenPort"`
+	Key          string   `yaml:"Key"`
 	Reachability string   `yaml:"Reachability"`
 	ReachableAt  string   `yaml:"ReachableAt"`
 	StaticRelays []string `yaml:"StaticRelays"`
@@ -225,6 +226,9 @@ func FindOrCreateConfigAtPath(dst *Config, appName, configPath string) error {
 		configPath = filepath.Join(configPath, ".redwoodrc")
 	}
 
+	_, err := os.Stat(configPath)
+	exists := !os.IsNotExist(err)
+
 	bs, err := ioutil.ReadFile(configPath)
 	// If the file can't be found, we ignore the error.  Otherwise, return it.
 	if err != nil && !os.IsNotExist(err) {
@@ -239,9 +243,12 @@ func FindOrCreateConfigAtPath(dst *Config, appName, configPath string) error {
 
 	// Save the file again in case it didn't exist or was missing fields
 	dst.configPath = configPath
-	err = dst.Save()
-	if err != nil {
-		return err
+
+	if !exists {
+		err = dst.Save()
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

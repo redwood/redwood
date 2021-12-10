@@ -52,12 +52,15 @@ func ParsePatch(s []byte) (Patch, error) {
 				}
 			}
 			i++
+			for s[i] != ' ' {
+				i++
+				if i == len(s) {
+					return Patch{}, ErrBadPatch
+				}
+			}
+			i++
 			patch.ValueJSON = make([]byte, len(s[i:]))
 			copy(patch.ValueJSON, s[i:])
-			// err := json.Unmarshal([]byte(s[i:]), &patch.Val)
-			// if err != nil {
-			// 	return Patch{}, errors.Wrapf(ErrBadPatch, err.Error())
-			// }
 			return patch, nil
 		}
 	}
