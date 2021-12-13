@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -320,6 +321,31 @@ func (t *transport) Start() error {
 	connectToStaticRelaysTask := NewConnectToStaticRelaysTask(8*time.Second, staticRelays, t.libp2pHost)
 	connectToStaticRelaysTask.Enqueue()
 	t.Process.SpawnChild(nil, connectToStaticRelaysTask)
+
+	t.peerStore.OnNewUnverifiedPeer(func(dialInfo swarm.PeerDialInfo) {
+		go func() {
+			if dialInfo.TransportName != TransportName {
+				return
+			} else if strings.Contains(dialInfo.DialAddr, "/p2p-circuit") {
+				return
+			}
+			for _, relayInfo := range staticRelays {
+				for _, relayAddr := range relayInfo.Addrs {
+					idx := strings.Index(dialInfo.DialAddr, "/p2p/")
+					if idx == -1 {
+						continue
+					}
+					relayPeerAddr := relayAddr.String() + "/p2p/" + relayInfo.ID.String() + "/p2p-circuit" + dialInfo.DialAddr[idx:]
+					// 					t.Successf(`YEET
+					//     - dialInfo: %v
+					//     - relayAddr: %v
+					//     - merged: %v
+					// `, dialInfo.DialAddr, relayAddr, relayPeerAddr)
+					t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: relayPeerAddr}, dialInfo.DialAddr[idx+len("/p2p/"):])
+				}
+			}
+		}()
+	})
 
 	t.Infof(0, "libp2p peer ID is %v", t.Libp2pPeerID())
 
@@ -949,6 +975,8 @@ func NewConnectToStaticRelaysTask(
 }
 
 func (t *connectToStaticRelaysTask) connectToStaticRelays(ctx context.Context) {
+	t.Debugf("connectToStaticRelaysTask")
+
 	var chDones []<-chan struct{}
 	for _, relay := range t.staticRelays {
 		if len(t.libp2pHost.Network().ConnsToPeer(relay.ID)) > 0 {
@@ -961,6 +989,7 @@ func (t *connectToStaticRelaysTask) connectToStaticRelays(ctx context.Context) {
 			if err != nil {
 				// t.Errorf("error connecting to static relay (%v): %v", relay.ID, err)
 			}
+			t.Successf("connected to static relay %v", relay)
 		})
 		chDones = append(chDones, chDone)
 	}

@@ -2,6 +2,7 @@ package protoauth
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"redwood.dev/crypto"
@@ -77,12 +78,19 @@ func (ap *authProtocol) Start() error {
 	if err != nil {
 		return err
 	}
-	for _, dialInfo := range ap.peerStore.UnverifiedPeers() {
-		ap.poolWorker.Add(verifyPeer{dialInfo, ap})
-	}
+
+	go func() {
+		for {
+			for _, dialInfo := range ap.peerStore.UnverifiedPeers() {
+				ap.poolWorker.Add(verifyPeer{dialInfo, ap})
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}()
 
 	announcePeersTask := NewAnnouncePeersTask(10*time.Second, ap, ap.peerStore, ap.transports)
 	ap.peerStore.OnNewUnverifiedPeer(func(dialInfo swarm.PeerDialInfo) {
+		ap.Debugf("new unverified peer: %+v", dialInfo)
 		// @@TODO: the following line causes some kind of infinite loop when > 1 peer is online
 		// announcePeersTask.Enqueue()
 		ap.poolWorker.Add(verifyPeer{dialInfo, ap})
@@ -256,34 +264,50 @@ func (t verifyPeer) DedupeActiveUniqueID() process.PoolUniqueID { return t }
 func (t verifyPeer) ID() process.PoolUniqueID                   { return t }
 
 func (t verifyPeer) Work(ctx context.Context) (retry bool) {
+	only := func(msg string, args ...interface{}) {
+		t.authProto.Debugf(msg, args...)
+	}
+
+	if strings.Contains(t.dialInfo.DialAddr, "/p2p-circuit") {
+		only("verifyPeer %v", t.dialInfo)
+	}
+
 	unverifiedPeer := t.authProto.peerStore.PeerEndpoint(t.dialInfo)
 	if unverifiedPeer == nil {
+		only("verifyPeer %v unverifiedPeer == nil", t.dialInfo)
 		return true
 	}
 
 	if !unverifiedPeer.Ready() {
+		only("verifyPeer %v !ready", t.dialInfo)
 		return true
 	} else if !unverifiedPeer.Dialable() {
+		only("verifyPeer %v !dialable", t.dialInfo)
 		return false
 	}
 
 	transport, exists := t.authProto.transports[unverifiedPeer.DialInfo().TransportName]
 	if !exists {
 		// Unsupported transport
+		only("verifyPeer %v transport !exists", t.dialInfo)
 		return false
 	}
 
 	peerConn, err := transport.NewPeerConn(ctx, unverifiedPeer.DialInfo().DialAddr)
 	if errors.Cause(err) == swarm.ErrPeerIsSelf {
+		only("verifyPeer %v peer is self", t.dialInfo)
 		return false
 	} else if errors.Cause(err) == errors.ErrConnection {
+		only("verifyPeer %v ErrConnection %+v", t.dialInfo, err)
 		return true
 	} else if err != nil {
+		only("verifyPeer %v err %+v", t.dialInfo, err)
 		return true
 	}
 
 	authPeerConn, is := peerConn.(AuthPeerConn)
 	if !is {
+		only("verifyPeer %v ! auth peer", t.dialInfo)
 		return false
 	}
 	defer authPeerConn.Close()
@@ -291,12 +315,14 @@ func (t verifyPeer) Work(ctx context.Context) (retry bool) {
 	err = t.authProto.ChallengePeerIdentity(ctx, authPeerConn)
 	if errors.Cause(err) == errors.ErrConnection {
 		// no-op
+		only("verifyPeer %v err connection 2 %v", t.dialInfo, err)
 		return true
 	} else if errors.Cause(err) == context.Canceled {
 		// no-op
+		only("verifyPeer %v ctx canceled %v", t.dialInfo, err)
 		return true
 	} else if err != nil {
-		t.authProto.Errorf("error verifying peerConn identity (%v): %v", authPeerConn.DialInfo(), err)
+		only("error verifying peerConn identity (%v): %v", authPeerConn.DialInfo(), err)
 		return true
 	}
 	t.authProto.Successf("authenticated with %v (addresses=%v)", t.dialInfo, authPeerConn.Addresses())

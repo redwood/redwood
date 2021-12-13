@@ -455,7 +455,7 @@ var (
 		HelpText: "add a peer",
 		Handler: func(args []string, app *App) error {
 			if len(args) < 2 {
-				return errors.New("requires 2 arguments: addpeer <transport> <dial addr>")
+				return errors.New("requires 2 arguments: peers add <transport> <dial addr>")
 			}
 			app.PeerStore.AddDialInfo(swarm.PeerDialInfo{args[0], args[1]}, "")
 			return nil

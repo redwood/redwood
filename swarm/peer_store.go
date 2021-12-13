@@ -193,7 +193,9 @@ func (s *peerStore) notifyNewVerifiedPeerListeners(peer PeerInfo) {
 }
 
 func (s *peerStore) AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) PeerEndpoint {
+	// s.Debugf("add dial info %+v %v", dialInfo, deviceUniqueID)
 	if deviceUniqueID == "" || dialInfo.DialAddr == "" {
+		// s.Debugf("add dial info 111 %+v %v", dialInfo, deviceUniqueID)
 		pd := newPeerDetails(s, "")
 		e := &endpoint{
 			peerDetails: pd,
@@ -203,18 +205,23 @@ func (s *peerStore) AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) Pe
 		return e
 	}
 
+	// s.Debugf("add dial info 222 %+v %v", dialInfo, deviceUniqueID)
 	var pd *peerDetails
 	var exists bool
 	func() {
+		// s.Debugf("add dial info TRY MUTEX %+v %v", dialInfo, deviceUniqueID)
 		s.muPeers.Lock()
 		defer s.muPeers.Unlock()
+		// s.Debugf("add dial info GOT MUTEX %+v %v", dialInfo, deviceUniqueID)
 
 		var needsSave bool
 		pd, exists, needsSave = s.ensurePeerDetails(dialInfo, deviceUniqueID)
 
 		if len(pd.Addrs) == 0 {
+			// s.Debugf("add dial info UNVERIFIED %+v %v", dialInfo, deviceUniqueID)
 			s.unverifiedPeers[dialInfo] = struct{}{}
 		}
+		// s.Debugf("add dial info 333 %+v %v exists=%v needsSave=%v", dialInfo, deviceUniqueID, exists, needsSave)
 
 		if needsSave && deviceUniqueID != "" {
 			err := s.savePeerDetails(pd)
