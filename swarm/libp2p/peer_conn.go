@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 	"sync"
+	"time"
 
 	netp2p "github.com/libp2p/go-libp2p-core/network"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
@@ -58,18 +60,39 @@ func (peer *peerConn) EnsureConnected(ctx context.Context) (err error) {
 }
 
 func (peer *peerConn) ensureStreamWithProtocol(ctx context.Context, p protocol.ID) (err error) {
+	if strings.Contains(peer.DialInfo().String(), "fkU") {
+		peer.t.Successf("ensureStreamWithProtocol 111")
+	}
 	if peer.stream != nil {
 		if peer.stream.Protocol() != p {
+			if strings.Contains(peer.DialInfo().String(), "fkU") {
+				peer.t.Successf("ensureStreamWithProtocol 222")
+			}
 			return errors.Wrapf(ErrWrongProtocol, "got %v", p)
 		}
+		if strings.Contains(peer.DialInfo().String(), "fkU") {
+			peer.t.Successf("ensureStreamWithProtocol 333")
+		}
 		return nil
+	}
+	if strings.Contains(peer.DialInfo().String(), "fkU") {
+		peer.t.Successf("ensureStreamWithProtocol 444")
 	}
 
 	defer func() { peer.UpdateConnStats(err == nil) }()
 
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	peer.stream, err = peer.t.libp2pHost.NewStream(ctx, peer.pinfo.ID, p)
 	if err != nil {
+		if strings.Contains(peer.DialInfo().String(), "fkU") {
+			peer.t.Successf("ensureStreamWithProtocol 555")
+		}
 		return errors.Wrapf(errors.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
+	}
+	if strings.Contains(peer.DialInfo().String(), "fkU") {
+		peer.t.Successf("ensureStreamWithProtocol 6")
 	}
 	return nil
 }
@@ -128,9 +151,20 @@ func (peer *peerConn) AnnounceP2PStateURI(ctx context.Context, stateURI string) 
 }
 
 func (peer *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) error {
+	defer func() {
+		if strings.Contains(peer.DialInfo().String(), "fkU") {
+			peer.t.Successf("ChallengeIdentity 333")
+		}
+	}()
+	if strings.Contains(peer.DialInfo().String(), "fkU") {
+		peer.t.Successf("ChallengeIdentity 111")
+	}
 	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_MAIN)
 	if err != nil {
 		return err
+	}
+	if strings.Contains(peer.DialInfo().String(), "fkU") {
+		peer.t.Successf("ChallengeIdentity 222")
 	}
 	return peer.writeMsg(Msg{Type: msgType_ChallengeIdentityRequest, Payload: challengeMsg})
 }

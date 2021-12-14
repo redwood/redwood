@@ -73,20 +73,11 @@ func (ap *authProtocol) Start() error {
 		return err
 	}
 
-	ap.poolWorker = process.NewPoolWorker("pool worker", 4, process.NewStaticScheduler(5*time.Second, 10*time.Second))
+	ap.poolWorker = process.NewPoolWorker("pool worker", 16, process.NewStaticScheduler(5*time.Second, 10*time.Second))
 	err = ap.Process.SpawnChild(nil, ap.poolWorker)
 	if err != nil {
 		return err
 	}
-
-	go func() {
-		for {
-			for _, dialInfo := range ap.peerStore.UnverifiedPeers() {
-				ap.poolWorker.Add(verifyPeer{dialInfo, ap})
-			}
-			time.Sleep(5 * time.Second)
-		}
-	}()
 
 	announcePeersTask := NewAnnouncePeersTask(10*time.Second, ap, ap.peerStore, ap.transports)
 	ap.peerStore.OnNewUnverifiedPeer(func(dialInfo swarm.PeerDialInfo) {
@@ -99,6 +90,15 @@ func (ap *authProtocol) Start() error {
 	if err != nil {
 		return err
 	}
+
+	go func() {
+		for {
+			for _, dialInfo := range ap.peerStore.UnverifiedPeers() {
+				ap.poolWorker.Add(verifyPeer{dialInfo, ap})
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}()
 
 	for _, tpt := range ap.transports {
 		ap.Infof(0, "registering %v", tpt.Name())
@@ -114,24 +114,40 @@ func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn Auth
 		return errors.Wrapf(swarm.ErrUnreachable, "peer: %v", peerConn.DialInfo())
 	}
 
+	if strings.Contains(peerConn.DialInfo().String(), "fkU") {
+		ap.Warnf("ChallengePeerIdentity 111")
+	}
+
 	err = peerConn.EnsureConnected(ctx)
 	if err != nil {
 		return err
+	}
+	if strings.Contains(peerConn.DialInfo().String(), "fkU") {
+		ap.Warnf("ChallengePeerIdentity 222")
 	}
 
 	challengeMsg, err := GenerateChallengeMsg()
 	if err != nil {
 		return err
 	}
+	if strings.Contains(peerConn.DialInfo().String(), "fkU") {
+		ap.Warnf("ChallengePeerIdentity 333")
+	}
 
 	err = peerConn.ChallengeIdentity(challengeMsg)
 	if err != nil {
 		return err
 	}
+	if strings.Contains(peerConn.DialInfo().String(), "fkU") {
+		ap.Warnf("ChallengePeerIdentity 444")
+	}
 
 	resp, err := peerConn.ReceiveChallengeIdentityResponse()
 	if err != nil {
 		return err
+	}
+	if strings.Contains(peerConn.DialInfo().String(), "fkU") {
+		ap.Warnf("ChallengePeerIdentity 555")
 	}
 
 	for _, proof := range resp {
@@ -141,7 +157,13 @@ func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn Auth
 		}
 		encpubkey := crypto.AsymEncPubkeyFromBytes(proof.AsymEncPubkey)
 
+		if strings.Contains(peerConn.DialInfo().String(), "fkU") {
+			ap.Warnf("ChallengePeerIdentity 6")
+		}
 		ap.peerStore.AddVerifiedCredentials(peerConn.DialInfo(), peerConn.DeviceUniqueID(), sigpubkey.Address(), sigpubkey, encpubkey)
+	}
+	if strings.Contains(peerConn.DialInfo().String(), "fkU") {
+		ap.Warnf("ChallengePeerIdentity 777")
 	}
 
 	return nil
@@ -241,7 +263,7 @@ func (t *announcePeersTask) announcePeers(ctx context.Context) {
 						return
 					}
 
-					peerConn.AnnouncePeers(ctx, allDialInfos)
+					err = peerConn.AnnouncePeers(ctx, allDialInfos)
 					if err != nil {
 						// t.Errorf("error writing to peerConn: %+v", err)
 					}
@@ -265,18 +287,19 @@ func (t verifyPeer) ID() process.PoolUniqueID                   { return t }
 
 func (t verifyPeer) Work(ctx context.Context) (retry bool) {
 	only := func(msg string, args ...interface{}) {
-		t.authProto.Debugf(msg, args...)
+		// if strings.Contains(t.dialInfo.DialAddr, "/p2p-circuit") {
+		// t.authProto.Debugf(msg, args...)
+		// }
 	}
 
-	if strings.Contains(t.dialInfo.DialAddr, "/p2p-circuit") {
-		only("verifyPeer %v", t.dialInfo)
-	}
+	only("verifyPeer %v", t.dialInfo)
 
 	unverifiedPeer := t.authProto.peerStore.PeerEndpoint(t.dialInfo)
 	if unverifiedPeer == nil {
 		only("verifyPeer %v unverifiedPeer == nil", t.dialInfo)
 		return true
 	}
+	only("verifyPeer %v 111", t.dialInfo)
 
 	if !unverifiedPeer.Ready() {
 		only("verifyPeer %v !ready", t.dialInfo)
@@ -292,6 +315,7 @@ func (t verifyPeer) Work(ctx context.Context) (retry bool) {
 		only("verifyPeer %v transport !exists", t.dialInfo)
 		return false
 	}
+	only("verifyPeer %v 222", t.dialInfo)
 
 	peerConn, err := transport.NewPeerConn(ctx, unverifiedPeer.DialInfo().DialAddr)
 	if errors.Cause(err) == swarm.ErrPeerIsSelf {
@@ -304,6 +328,7 @@ func (t verifyPeer) Work(ctx context.Context) (retry bool) {
 		only("verifyPeer %v err %+v", t.dialInfo, err)
 		return true
 	}
+	only("verifyPeer %v 333", t.dialInfo)
 
 	authPeerConn, is := peerConn.(AuthPeerConn)
 	if !is {
@@ -311,6 +336,15 @@ func (t verifyPeer) Work(ctx context.Context) (retry bool) {
 		return false
 	}
 	defer authPeerConn.Close()
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	err = authPeerConn.EnsureConnected(ctx)
+	if err != nil {
+		only("error connecting to peerConn (%v): %v", authPeerConn.DialInfo(), err)
+		return true
+	}
 
 	err = t.authProto.ChallengePeerIdentity(ctx, authPeerConn)
 	if errors.Cause(err) == errors.ErrConnection {

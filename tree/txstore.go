@@ -8,6 +8,7 @@ type TxStore interface {
 	Start() error
 	Close()
 
+	AddStateURI(stateURI string) error
 	AddTx(tx Tx) error
 	RemoveTx(stateURI string, txID state.Version) error
 	TxExists(stateURI string, txID state.Version) (bool, error)

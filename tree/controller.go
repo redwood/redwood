@@ -94,6 +94,11 @@ func (c *controller) Start() (err error) {
 		return err
 	}
 
+	err = c.txStore.AddStateURI(c.stateURI)
+	if err != nil {
+		return err
+	}
+
 	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(c.stateURI)
 	states, err := state.NewVersionedDBTree(c.badgerOpts.ForPath(filepath.Join(c.stateDBRootPath, stateURIClean)))
 	if err != nil {
@@ -117,10 +122,10 @@ func (c *controller) Start() (err error) {
 		return err
 	}
 
-	stateURIs, err := c.txStore.KnownStateURIs()
-	if err != nil {
-		return err
-	}
+	// stateURIs, err := c.txStore.KnownStateURIs()
+	// if err != nil {
+	// 	return err
+	// }
 
 	// @@TODO: this is idiotic, fix it
 	go func() {
@@ -130,16 +135,14 @@ func (c *controller) Start() (err error) {
 		case <-time.After(5 * time.Second):
 		}
 
-		for _, stateURI := range stateURIs {
-			iter := c.txStore.AllTxsForStateURI(stateURI, GenesisTxID)
-			for {
-				tx := iter.Next()
-				if tx == nil {
-					break
-				}
-				if tx.Status == TxStatusInMempool {
-					c.mempool.Add(*tx)
-				}
+		iter := c.txStore.AllTxsForStateURI(c.stateURI, GenesisTxID)
+		for {
+			tx := iter.Next()
+			if tx == nil {
+				break
+			}
+			if tx.Status == TxStatusInMempool {
+				c.mempool.Add(*tx)
 			}
 		}
 	}()
