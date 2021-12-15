@@ -763,20 +763,20 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			}
 			keypath = nil
 
-			// node, err = node.CopyToMemory(keypath, rng)
-			// if errors.Cause(err) == errors.Err404 {
-			// 	http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
-			// 	return
-			// } else if err != nil {
-			// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-			// 	return
-			// }
+			node, err = node.CopyToMemory(keypath, rng)
+			if errors.Cause(err) == errors.Err404 {
+				http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+				return
+			} else if err != nil {
+				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+				return
+			}
 
-			// node, anyMissing, err = nelson.Resolve(node, t.controllerHub, t.blobStore)
-			// if err != nil {
-			// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-			// 	return
-			// }
+			node, anyMissing, err = nelson.Resolve(node, t.controllerHub, t.blobStore)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+				return
+			}
 
 			indexHTMLExists, err := node.Exists(keypath.Push(state.Keypath("index.html")))
 			if err != nil {

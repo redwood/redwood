@@ -160,7 +160,9 @@ func speakGit(r io.Reader, w io.Writer, client *braidhttp.LightClient) error {
 
 func getRefs(client *braidhttp.LightClient) ([]string, error) {
 	stateReader, _, _, err := client.Get(StateURI, nil, RootKeypath.Push(state.Keypath("refs/heads")), nil, true)
-	if err != nil {
+	if errors.Cause(err) == errors.Err404 {
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 	defer stateReader.Close()
@@ -293,7 +295,6 @@ func fetchCommit(commitHash string, commit Commit, client *braidhttp.LightClient
 				err = errors.WithStack(err)
 				return
 			}
-			logf("xyzzy: %v %v", filePath.String(), string(bs))
 
 			type refEntry struct {
 				oid  git.Oid
@@ -422,6 +423,8 @@ func fetchCommit(commitHash string, commit Commit, client *braidhttp.LightClient
 }
 
 func push(srcRefName string, destRefName string, client *braidhttp.LightClient) error {
+	logf("%v -> %v", srcRefName, destRefName)
+
 	force := strings.HasPrefix(srcRefName, "+")
 	if force {
 		srcRefName = srcRefName[1:]
@@ -431,17 +434,17 @@ func push(srcRefName string, destRefName string, client *braidhttp.LightClient) 
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	headCommitId := ref.Target()
+	headCommitID := ref.Target()
 
-	stack := []*git.Oid{headCommitId}
+	stack := []*git.Oid{headCommitID}
 	for len(stack) > 0 {
-		commitId := stack[0]
+		commitID := stack[0]
 		stack = stack[1:]
 
-		txID := state.VersionFromBytes(commitId[:])
+		txID := state.VersionFromBytes(commitID[:])
 		_, err := client.FetchTx(StateURI, txID)
 		if err == errors.Err404 {
-			err = pushCommit(commitId, destRefName, client)
+			err = pushCommit(commitID, destRefName, client)
 			if err != nil {
 				return err
 			}
@@ -449,7 +452,7 @@ func push(srcRefName string, destRefName string, client *braidhttp.LightClient) 
 			return err
 		}
 
-		commit, err := repo.LookupCommit(commitId)
+		commit, err := repo.LookupCommit(commitID)
 		if err != nil {
 			return err
 		}
@@ -460,13 +463,78 @@ func push(srcRefName string, destRefName string, client *braidhttp.LightClient) 
 		}
 	}
 
-	return pushRef(destRefName, headCommitId, client)
+	return pushRef(destRefName, headCommitID, client)
 }
 
-func pushRef(destRefName string, commitId *git.Oid, client *braidhttp.LightClient) error {
+func pushRef(destRefName string, commitID *git.Oid, client *braidhttp.LightClient) (err error) {
+	defer errors.AddStack(&err)
+
 	branchKeypath := RootKeypath.Push(state.Keypath(destRefName))
 
-	parentID, err := state.VersionFromHex(commitId.String())
+	_, _, _, err = client.Get(StateURI, nil, nil, nil, true)
+	if errors.Cause(err) == errors.Err404 {
+		// Create the initial state tree
+		tx := tree.Tx{
+			ID:       tree.GenesisTxID,
+			StateURI: StateURI,
+			From:     sigkeys.Address(),
+			Parents:  nil,
+			Patches: []tree.Patch{{
+				ValueJSON: mustJSON(M{
+					"Merge-Type": M{
+						"Content-Type": "resolver/dumb",
+						"value":        M{},
+					},
+					"Validator": M{
+						"Content-Type": "validator/permissions",
+						"value": M{
+							"*": M{
+								"^.*$": M{
+									"write": true,
+								},
+							},
+							// "*": M{
+							// 	"^\\.refs\\..*": M{
+							// 		"write": true,
+							// 	},
+							// 	"^\\.commits\\.[a-f0-9]+\\.parents": M{
+							// 		"write": true,
+							// 	},
+							// 	"^\\.commits\\.[a-f0-9]+\\.message": M{
+							// 		"write": true,
+							// 	},
+							// 	"^\\.commits\\.[a-f0-9]+\\.timestamp": M{
+							// 		"write": true,
+							// 	},
+							// 	"^\\.commits\\.[a-f0-9]+\\.author": M{
+							// 		"write": true,
+							// 	},
+							// 	"^\\.commits\\.[a-f0-9]+\\.committer": M{
+							// 		"write": true,
+							// 	},
+							// 	"^\\.commits\\.[a-f0-9]+\\.files": M{
+							// 		"write": true,
+							// 	},
+							// },
+						},
+					},
+					"refs": M{
+						"heads": M{},
+					},
+					"commits": M{},
+				}),
+			}},
+		}
+		err := client.Put(context.Background(), tx)
+		if err != nil {
+			return err
+		}
+
+	} else if err != nil {
+		return err
+	}
+
+	parentID, err := state.VersionFromHex(commitID.String())
 	if err != nil {
 		return err
 	}
@@ -478,21 +546,21 @@ func pushRef(destRefName string, commitId *git.Oid, client *braidhttp.LightClien
 		Parents:  []state.Version{parentID},
 		Patches: []tree.Patch{{
 			Keypath:   branchKeypath.Push(state.Keypath("HEAD")),
-			ValueJSON: mustJSON(commitId.String()),
+			ValueJSON: mustJSON(commitID.String()),
 		}, {
 			// 	Keypath: branchKeypath.Push(state.Keypath("reflog")),
 			// 	Range:   &state.Range{0, 0},
-			// 	ValueJSON: mustJSON(    commitId.String()),
+			// 	ValueJSON: mustJSON(    commitID.String()),
 			// }, {
 			Keypath: branchKeypath.Push(state.Keypath("worktree")),
 			ValueJSON: mustJSON(map[string]interface{}{
 				"Content-Type": "link",
-				"value":        "state:" + StateURI + "/commits/" + commitId.String() + "/files",
+				"value":        "state:" + StateURI + "/commits/" + commitID.String() + "/files",
 			}),
 		}},
 	}
 
-	return client.Put(context.Background(), tx, types.Address{}, nil)
+	return client.Put(context.Background(), tx)
 }
 
 func mustJSON(x interface{}) []byte {
@@ -503,8 +571,8 @@ func mustJSON(x interface{}) []byte {
 	return bs
 }
 
-func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightClient) error {
-	commit, err := repo.LookupCommit(commitId)
+func pushCommit(commitID *git.Oid, destRefName string, client *braidhttp.LightClient) error {
+	commit, err := repo.LookupCommit(commitID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -720,7 +788,7 @@ func pushCommit(commitId *git.Oid, destRefName string, client *braidhttp.LightCl
 			}),
 		})
 
-		err = client.Put(context.Background(), tx, types.Address{}, nil)
+		err = client.Put(context.Background(), tx)
 	}()
 
 	select {

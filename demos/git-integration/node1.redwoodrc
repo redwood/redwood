@@ -1,23 +1,48 @@
-Node:
-    BootstrapPeers: []
-    SubscribedStateURIs:
-      - somegitprovider.org/gitdemo
-    MaxPeersPerSubscription: 4
-    DataRoot: ./node1_data
-    DevMode: true
-P2PTransport:
+BootstrapPeers: []
+DataRoot: ./node1_data
+DNSOverHTTPSURL: ""
+JWTSecret: HtURP9CUSEvGAx7VlleXj3Ro1A94jXF4
+Nurse:
+    Enabled: true
+    ProfileRoot: /tmp/redwood-pprof
+    PollInterval: 10s
+    GatherDuration: 10s
+    MaxProfileSize: 100.00mb
+    CPUProfileRate: 1
+    MemProfileRate: 1
+    BlockProfileRate: 1
+    MutexProfileFraction: 1
+    MemThreshold: 5.00gb
+    GoroutineThreshold: 10000
+Libp2pTransport:
     Enabled: true
     ListenAddr: 0.0.0.0
     ListenPort: 21231
+    Reachability: ""
     ReachableAt: ""
-HTTPTransport:
+    StaticRelays: []
+BraidHTTPTransport:
     Enabled: true
     ListenHost: :8080
+    ListenHostSSL: :8082
+    TLSCertFile: ""
+    TLSKeyFile: ""
     DefaultStateURI: somegitprovider.org/gitdemo
-    ReachableAt: http://localhost:8080
+    ReachableAt: ""
+AuthProtocol:
+    Enabled: true
+BlobProtocol:
+    Enabled: true
+HushProtocol:
+    Enabled: true
+TreeProtocol:
+    Enabled: true
+    MaxPeersPerSubscription: 4
 HTTPRPC:
-    Enabled: false
+    Enabled: true
     ListenHost: :8081
+    TLSCertFile: ""
+    TLSKeyFile: ""
     Whitelist:
         Enabled: false
         PermittedAddrs: []

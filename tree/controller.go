@@ -27,6 +27,7 @@ type Controller interface {
 	QueryIndex(version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
 	Leaves() ([]state.Version, error)
 	OnNewState(fn NewStateCallback)
+	DebugPrint()
 }
 
 type controller struct {
@@ -786,4 +787,10 @@ func (c *controller) QueryIndex(version *state.Version, keypath state.Keypath, i
 	}
 
 	return indexNode.NodeAt(queryParam, rng), nil
+}
+
+func (c *controller) DebugPrint() {
+	node := c.states.StateAtVersion(nil, false)
+	defer node.Close()
+	node.DebugPrint(func(msg string, args ...interface{}) { fmt.Printf(msg, args...) }, true, 0)
 }

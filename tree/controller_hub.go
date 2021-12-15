@@ -30,6 +30,7 @@ type ControllerHub interface {
 	BlobReader(refID blob.ID) (io.ReadCloser, int64, error)
 
 	OnNewState(fn NewStateCallback)
+	DebugPrint(stateURI string)
 }
 
 type controllerHub struct {
@@ -189,4 +190,14 @@ func (m *controllerHub) notifyNewStateListeners(tx Tx, root state.Node, leaves [
 		}()
 	}
 	wg.Wait()
+}
+
+func (m *controllerHub) DebugPrint(stateURI string) {
+	m.controllersMu.RLock()
+	defer m.controllersMu.RUnlock()
+	if m.controllers[stateURI] == nil {
+		fmt.Println("no such controller")
+		return
+	}
+	m.controllers[stateURI].DebugPrint()
 }

@@ -214,6 +214,8 @@ func (c *LightClient) Get(stateURI string, version *state.Version, keypath state
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0, nil, errors.WithStack(err)
+	} else if resp.StatusCode == 404 {
+		return nil, 0, nil, errors.Err404
 	} else if resp.StatusCode != 200 {
 		if version != nil {
 			return nil, 0, nil, errors.Errorf("error getting state@%v: (%v) %v", version.Hex(), resp.StatusCode, resp.Status)
@@ -245,7 +247,7 @@ func (c *LightClient) Get(stateURI string, version *state.Version, keypath state
 	return resp.Body, int64(contentLength), parents, nil
 }
 
-func (c *LightClient) Put(ctx context.Context, tx tree.Tx, recipientAddress types.Address, recipientEncPubkey *crypto.AsymEncPubkey) error {
+func (c *LightClient) Put(ctx context.Context, tx tree.Tx) error {
 	if len(tx.Sig) == 0 {
 		sig, err := c.sigkeys.SignHash(tx.Hash())
 		if err != nil {
