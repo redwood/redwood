@@ -49,6 +49,8 @@ function Attachment({ attachment, url, onClick, className }) {
         Wrapper = ImageWrapper
     } else if (isPDF(attachment['Content-Type'])) {
         Wrapper = EmbedWrapper
+    } else {
+        return null
     }
 
     return (

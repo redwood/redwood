@@ -4,7 +4,7 @@ import filesize from 'filesize.js'
 import { usePdf } from '@mikecousins/react-pdf'
 import { IconButton, Avatar } from '@material-ui/core'
 import Image from '../Image'
-import { isImage, isPDF } from '../../utils/contentTypes'
+import { isImage, isVideo, isPDF } from '../../utils/contentTypes'
 
 const Wrapper = styled.div`
     width: ${props => props.width}px;
@@ -16,10 +16,13 @@ const SImage = styled(Image)`
 
 function Embed({ contentType, url, width, className }) {
     let content
+    console.log(contentType, isImage(contentType))
     if (isImage(contentType)) {
         return <SImage src={url} width={width} className={className} />
     } else if (isPDF(contentType)) {
         return <PDF url={url} width={width} className={className} />
+    } else if (isVideo(contentType)) {
+        return <video src={url} width={width} className={className} />
     }
     return null
 }

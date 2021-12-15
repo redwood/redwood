@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httputil"
@@ -673,7 +674,7 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if parts[1] == "" {
-			rng = &state.Range{start, -1}
+			rng = &state.Range{start, math.MaxInt64}
 		} else {
 			end, err := strconv.ParseInt(parts[1], 10, 64)
 			if err != nil {
@@ -682,6 +683,10 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			}
 			rng = &state.Range{start, end}
 		}
+	}
+
+	if rng != nil && rng.Start == 0 && rng.End == math.MaxInt64 {
+		rng = nil
 	}
 
 	// Add the "Parents" header

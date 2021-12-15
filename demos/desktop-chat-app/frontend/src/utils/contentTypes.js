@@ -22,3 +22,7 @@ export function isPDF(mimetype) {
         return false
     }
 }
+
+export function isVideo(mimetype) {
+    return mimetype.startsWith('video/')
+}
