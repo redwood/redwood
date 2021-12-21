@@ -15,7 +15,6 @@ import (
 	"redwood.dev/cmd/cmdutils"
 	"redwood.dev/errors"
 	"redwood.dev/log"
-	"redwood.dev/swarm/prototree"
 )
 
 var logger = log.NewLogger("redwood")
@@ -121,11 +120,10 @@ func run(c *cli.Context) (err error) {
 
 	// Subscribe to any state URIs passed on the command line (mainly for demos)
 	for _, stateURI := range stateURIs {
-		sub, err := app.TreeProto.Subscribe(context.Background(), stateURI, prototree.SubscriptionType_Txs, nil, nil)
+		err := app.TreeProto.Subscribe(context.Background(), stateURI)
 		if err != nil {
 			return err
 		}
-		sub.Close()
 	}
 
 	go func() {

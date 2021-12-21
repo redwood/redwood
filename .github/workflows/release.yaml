@@ -167,10 +167,15 @@ jobs:
 
             - uses: actions/setup-go@v2
               with:
-                go-version: '^1.16.7'
+                go-version: '^1.17.x'
 
             - name: Set GOPATH
-              run:  echo GOPATH=$(go env GOPATH) >> $GITHUB_ENV
+              run:  echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
+              if:   ${{ matrix.platform == 'ubuntu-latest' || matrix.platform == 'macos-10.15' || matrix.platform == 'macos-11' }}
+
+            - name: Set GOPATH
+              run:  echo "GOPATH=$(go env GOPATH)" >> $env:GITHUB_ENV
+              if:   ${{ matrix.platform == 'windows-latest' }}
 
             - name: Cache Go vendor packages
               uses: actions/cache@v2
