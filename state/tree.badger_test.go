@@ -14,7 +14,7 @@ import (
 
 func TestVersionedDBTree_Value_MapWithRange(t *testing.T) {
 	tests := []struct {
-		start, end int64
+		start, end float64
 		expected   interface{}
 	}{
 		{0, 1, M{
@@ -57,6 +57,13 @@ func TestVersionedDBTree_Value_MapWithRange(t *testing.T) {
 				"xyzzy": uint64(33),
 			},
 		}},
+		{-2, state.NegativeZero, M{
+			"floxxx": "asdf123",
+			"hello": M{
+				"xyzzy": uint64(33),
+			},
+		}},
+		{state.NegativeZero, state.NegativeZero, M{}},
 	}
 
 	rootKeypaths := []state.Keypath{state.Keypath(nil)}
@@ -89,7 +96,7 @@ func TestVersionedDBTree_Value_MapWithRange(t *testing.T) {
 
 func TestVersionedDBTree_Value_SliceWithRange(t *testing.T) {
 	tests := []struct {
-		start, end int64
+		start, end float64
 		expected   interface{}
 	}{
 		{0, 1, S{
@@ -539,6 +546,10 @@ func TestVersionedDBTree_Set_Range_Slice(t *testing.T) {
 		{"end shrink", state.Keypath("foo/slice"), &state.Range{1, 4}, S{testVal5},
 			S{testVal1, testVal5}},
 		{"end append", state.Keypath("foo/slice"), &state.Range{4, 4}, S{testVal5, testVal6, testVal7, testVal8},
+			S{testVal1, testVal2, testVal3, testVal4, testVal5, testVal6, testVal7, testVal8}},
+		{"end append (-0, one)", state.Keypath("foo/slice"), &state.Range{state.NegativeZero, state.NegativeZero}, S{testVal5},
+			S{testVal1, testVal2, testVal3, testVal4, testVal5}},
+		{"end append (-0, many)", state.Keypath("foo/slice"), &state.Range{state.NegativeZero, state.NegativeZero}, S{testVal5, testVal6, testVal7, testVal8},
 			S{testVal1, testVal2, testVal3, testVal4, testVal5, testVal6, testVal7, testVal8}},
 	}
 

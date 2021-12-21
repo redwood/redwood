@@ -16,13 +16,14 @@ const SImage = styled(Image)`
 
 function Embed({ contentType, url, width, className }) {
     let content
-    console.log(contentType, isImage(contentType))
     if (isImage(contentType)) {
         return <SImage src={url} width={width} className={className} />
     } else if (isPDF(contentType)) {
         return <PDF url={url} width={width} className={className} />
     } else if (isVideo(contentType)) {
         return <video src={url} width={width} className={className} />
+    } else if (contentType.startsWith('text/')) {
+        return <div>(text file)</div>
     }
     return null
 }

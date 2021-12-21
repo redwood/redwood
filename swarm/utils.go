@@ -11,15 +11,21 @@ func TryEndpoints(
 	endpoints map[PeerDialInfo]PeerEndpoint,
 	fn func(ctx context.Context, peerConn PeerConn) error,
 ) <-chan struct{} {
-	ctx, cancel := context.WithCancel(ctx)
-
 	var numDialable int
 	for _, endpoint := range endpoints {
 		if !endpoint.Dialable() {
 			continue
 		}
+	}
+	if numDialable == 0 {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
 
-		endpoint := endpoint
+	ctx, cancel := context.WithCancel(ctx)
+
+	for _, endpoint := range endpoints {
 		dialInfo := endpoint.DialInfo()
 
 		if _, exists := transports[dialInfo.TransportName]; !exists {
@@ -35,6 +41,10 @@ func TryEndpoints(
 			defer cancel()
 
 			for {
+				if !peerConn.Ready() {
+					wait(ctx, peerConn.RemainingBackoff())
+				}
+
 				select {
 				case <-ctx.Done():
 					return
@@ -49,9 +59,6 @@ func TryEndpoints(
 				return
 			}
 		}()
-	}
-	if numDialable == 0 {
-		cancel()
 	}
 	return ctx.Done()
 }

@@ -15,7 +15,6 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
-	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -226,17 +225,10 @@ var (
 
 			stateURI := args[0]
 
-			sub, err := app.TreeProto.Subscribe(
-				context.Background(),
-				stateURI,
-				prototree.SubscriptionType_Txs,
-				nil,
-				&prototree.FetchHistoryOpts{FromTxID: tree.GenesisTxID},
-			)
+			err := app.TreeProto.Subscribe(context.Background(), stateURI)
 			if err != nil {
 				return err
 			}
-			sub.Close()
 			return nil
 		},
 	}

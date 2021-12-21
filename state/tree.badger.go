@@ -26,6 +26,8 @@ type DBTree struct {
 	db       *badger.DB
 	filename string
 	log.Logger
+	chStop chan struct{}
+	wgDone *sync.WaitGroup
 }
 
 type EncryptionConfig struct {
@@ -38,10 +40,27 @@ func NewDBTree(badgerOpts badger.Options) (*DBTree, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DBTree{db, badgerOpts.Dir, log.NewLogger("db tree")}, nil
+	db.RunValueLogGC(0.5)
+	chStop := make(chan struct{})
+	var wgDone sync.WaitGroup
+	wgDone.Add(1)
+	go func() {
+		defer wgDone.Done()
+		for {
+			db.RunValueLogGC(0.5)
+			select {
+			case <-time.After(1 * time.Minute):
+			case <-chStop:
+				return
+			}
+		}
+	}()
+	return &DBTree{db, badgerOpts.Dir, log.NewLogger("db tree"), chStop, &wgDone}, nil
 }
 
 func (t *DBTree) Close() error {
+	close(t.chStop)
+	t.wgDone.Wait()
 	return t.db.Close()
 }
 
@@ -72,6 +91,8 @@ type VersionedDBTree struct {
 	db       *badger.DB
 	filename string
 	log.Logger
+	chStop chan struct{}
+	wgDone *sync.WaitGroup
 }
 
 func NewVersionedDBTree(badgerOpts badger.Options) (*VersionedDBTree, error) {
@@ -79,10 +100,27 @@ func NewVersionedDBTree(badgerOpts badger.Options) (*VersionedDBTree, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &VersionedDBTree{db, badgerOpts.Dir, log.NewLogger("db tree")}, nil
+	db.RunValueLogGC(0.5)
+	chStop := make(chan struct{})
+	var wgDone sync.WaitGroup
+	wgDone.Add(1)
+	go func() {
+		defer wgDone.Done()
+		for {
+			db.RunValueLogGC(0.5)
+			select {
+			case <-time.After(1 * time.Minute):
+			case <-chStop:
+				return
+			}
+		}
+	}()
+	return &VersionedDBTree{db, badgerOpts.Dir, log.NewLogger("db tree"), chStop, &wgDone}, nil
 }
 
 func (t *VersionedDBTree) Close() error {
+	close(t.chStop)
+	t.wgDone.Wait()
 	return t.db.Close()
 }
 
@@ -164,11 +202,8 @@ func (tx *DBNode) Close() {
 
 func (tx *DBNode) Save() error {
 	var err error
-	var wg sync.WaitGroup
-	wg.Add(1)
 	tx.tx.CommitWith(func(innerErr error) {
 		err = innerErr
-		wg.Done()
 	})
 	return err
 }
@@ -1123,9 +1158,6 @@ func (tx *DBNode) setNoRange(absKeypath Keypath, value interface{}) error {
 	}
 
 	numParts := absKeypath.NumParts()
-
-	// When setting a value in a map, we need to check to see if the key is new,
-	// and if so, increment the map's length by 1
 	if numParts > 0 {
 		absParentKeypath, _ := absKeypath.Pop()
 
@@ -1139,7 +1171,10 @@ func (tx *DBNode) setNoRange(absKeypath Keypath, value interface{}) error {
 			if err != nil {
 				return err
 			}
+
 			if nodeType == NodeTypeMap {
+				// When setting a value in a map, we need to check to see if the key is new,
+				// and if so, increment the map's length by 1
 				exists, err := tx.exists(absKeypath)
 				if err != nil {
 					return err
@@ -1359,14 +1394,14 @@ func (tx *DBNode) delete(absKeypath Keypath, rng *Range) (err error) {
 		if parentNodeType == NodeTypeMap {
 			idx, err := tx.indexOfMapSubkey(absParentKeypath, keypathToDelete)
 			if errors.Cause(err) == ErrNilKeypath {
-				rng = &Range{0, int64(length)}
+				rng = &Range{0, float64(length)}
 			} else if err != nil {
 				return err
 			}
-			rng = &Range{int64(idx), int64(idx) + 1}
+			rng = &Range{float64(idx), float64(idx) + 1}
 
 		} else if parentNodeType == NodeTypeSlice {
-			idx := int64(DecodeSliceIndex(keypathToDelete))
+			idx := float64(DecodeSliceIndex(keypathToDelete))
 			rng = &Range{idx, idx + 1}
 		}
 		return tx.delete(absParentKeypath, rng)
@@ -1395,7 +1430,7 @@ func (tx *DBNode) delete(absKeypath Keypath, rng *Range) (err error) {
 
 	// Re-number the trailing entries if the root node is a slice
 	if rootNodeType == NodeTypeSlice && endIdx < length {
-		renumberRange := &Range{int64(endIdx), int64(length)}
+		renumberRange := &Range{float64(endIdx), float64(length)}
 		delta := -int64(rng.Length())
 
 		err := tx.scanChildrenForward(NodeTypeSlice, absKeypath, renumberRange, length, true, func(absChildKeypath Keypath, item *badger.Item) error {

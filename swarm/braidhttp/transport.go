@@ -209,6 +209,7 @@ func (t *transport) Start() error {
 }
 
 func (t *transport) Close() error {
+	t.Infof(0, "braidhttp transport shutting down")
 	// Non-graceful
 	err := t.srv.Close()
 	if err != nil {
@@ -668,15 +669,15 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		start, err := strconv.ParseInt(parts[0], 10, 64)
+		start, err := strconv.ParseFloat(parts[0], 64)
 		if err != nil {
 			http.Error(w, "bad Range header", http.StatusBadRequest)
 			return
 		}
 		if parts[1] == "" {
-			rng = &state.Range{start, math.MaxInt64}
+			rng = &state.Range{start, math.MaxFloat64}
 		} else {
-			end, err := strconv.ParseInt(parts[1], 10, 64)
+			end, err := strconv.ParseFloat(parts[1], 64)
 			if err != nil {
 				http.Error(w, "bad Range header", http.StatusBadRequest)
 				return
@@ -685,7 +686,7 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if rng != nil && rng.Start == 0 && rng.End == math.MaxInt64 {
+	if rng != nil && rng.Start == 0 && rng.End == math.MaxFloat64 {
 		rng = nil
 	}
 
@@ -766,22 +767,26 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, fmt.Sprintf("not found: %v", keypath), http.StatusNotFound)
 				return
 			}
+			fmt.Printf("NODE %v (%T) %+v\n", keypath, node, node)
+			// kp := keypath
 			keypath = nil
 
-			node, err = node.CopyToMemory(keypath, rng)
-			if errors.Cause(err) == errors.Err404 {
-				http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
-				return
-			} else if err != nil {
-				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-				return
-			}
+			// node, err = node.CopyToMemory(keypath, rng)
+			// if errors.Cause(err) == errors.Err404 {
+			// 	http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+			// 	return
+			// } else if err != nil {
+			// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+			// 	return
+			// }
+			// fmt.Printf("NODE COPY %v (%T) %+v\n", kp, node, node)
 
-			node, anyMissing, err = nelson.Resolve(node, t.controllerHub, t.blobStore)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-				return
-			}
+			// node, anyMissing, err = nelson.Resolve(node, t.controllerHub, t.blobStore)
+			// if err != nil {
+			// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+			// 	return
+			// }
+			// fmt.Printf("NODE RESOLVE %v (%T) %+v\n", kp, node, node)
 
 			indexHTMLExists, err := node.Exists(keypath.Push(state.Keypath("index.html")))
 			if err != nil {

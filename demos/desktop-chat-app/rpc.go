@@ -80,7 +80,7 @@ func (s *HTTPRPCServer) CreateCloudStack(r *http.Request, args *CreateCloudStack
 		return err
 	}
 
-	identity, err := s.app.KeyStore.DefaultPublicIdentity()
+	identity, err := s.app.app.KeyStore.DefaultPublicIdentity()
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func (s *HTTPRPCServer) CloudNodeSubscribe(r *http.Request, args *CloudNodeSubsc
 	client := rpc.NewHTTPClient(args.RemoteRPCHost)
 	defer client.Close()
 
-	identity, err := s.app.KeyStore.DefaultPublicIdentity()
+	identity, err := s.app.app.KeyStore.DefaultPublicIdentity()
 	if err != nil {
 		return err
 	}

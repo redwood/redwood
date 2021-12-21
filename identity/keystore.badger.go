@@ -128,6 +128,7 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 }
 
 func (ks *BadgerKeyStore) Close() error {
+	ks.Infof(0, "keystore shutting down")
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 

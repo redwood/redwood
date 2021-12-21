@@ -4,5 +4,5 @@ import (
 	_ "embed"
 )
 
-//go:embed redwood.js
-var RedwoodResolverSrc []byte
+//go:embed v8.js
+var V8Src []byte

@@ -81,7 +81,6 @@ func (api *API) Start() error {
 		return err
 	}
 	defer api.Process.AutocloseWithCleanup(func() {
-		api.Debugf("api close")
 		_ = api.server.Shutdown(context.TODO())
 		api.app = nil
 	})
@@ -99,8 +98,9 @@ func (api *API) Start() error {
 
 func (api *API) Close() (err error) {
 	api.closeOnce.Do(func() {
-		api.Debugf("api close")
-		_ = api.server.Shutdown(context.TODO())
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = api.server.Shutdown(ctx)
 		err = api.Process.Close()
 		api.app = nil
 	})
@@ -110,6 +110,10 @@ func (api *API) Close() (err error) {
 func (api *API) loginUser(w http.ResponseWriter, r *http.Request) {
 	api.appMu.Lock()
 	defer api.appMu.Unlock()
+
+	if api.app != nil && api.app.State() == process.Started {
+		return
+	}
 
 	defer r.Body.Close()
 
@@ -121,6 +125,7 @@ func (api *API) loginUser(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&loginRequest)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("%v", err.Error()), http.StatusInternalServerError)
+		return
 	}
 
 	// Check if profileName exists
@@ -247,22 +252,26 @@ func (api *API) checkLogin(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if api.app != nil {
-		fmt.Fprintf(w, strconv.FormatBool(api.app.started))
+		fmt.Fprintf(w, strconv.FormatBool(api.app.State() == process.Started))
 	} else {
 		fmt.Fprintf(w, strconv.FormatBool(false))
 	}
 }
 
 func (api *API) logoutUser(w http.ResponseWriter, r *http.Request) {
+	api.appMu.Lock()
+	defer api.appMu.Unlock()
+
+	if api.app == nil || api.app.State() != process.Started {
+		return
+	}
+
 	api.app.Close()
 	api.app = nil
 	w.WriteHeader(200)
 }
 
 func (api *API) serveHome(w http.ResponseWriter, r *http.Request) {
-	api.appMu.Lock()
-	defer api.appMu.Unlock()
-
 	if r.URL.Path == "" || r.URL.Path == "/" {
 		w.Header().Add("Content-Type", "text/html")
 	} else {

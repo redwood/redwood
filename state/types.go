@@ -119,6 +119,9 @@ func (vt ValueType) String() string {
 
 type Range = pb.Range
 
+var NegativeZero = pb.NegativeZero
+var IsNegativeZero = pb.IsNegativeZero
+
 type Iterator interface {
 	RootKeypath() Keypath
 	Rewind()

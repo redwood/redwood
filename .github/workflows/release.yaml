@@ -29,7 +29,28 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                platform: [ubuntu-latest, macos-11, macos-10.15] #, windows-latest]
+                platform: [ubuntu-latest, macos-11, macos-10.15, windows-latest]
+                include:
+                    - platform:    ubuntu-latest
+                      app_name:    redwood
+                      zip_name:    redwood-ubuntu.zip
+                      go_exe:      go
+                      build_flags:
+                    - platform:    macos-11
+                      app_name:    redwood
+                      zip_name:    redwood-macos-11.zip
+                      go_exe:      go
+                      build_flags:
+                    - platform:    macos-10.15
+                      app_name:    redwood
+                      zip_name:    redwood-macos-10.15.zip
+                      go_exe:      go
+                      build_flags:
+                    - platform:    windows-latest
+                      app_name:    redwood.exe
+                      zip_name:    redwood-windows-latest.zip
+                      go_exe:      go
+                      build_flags: --tags otto
         runs-on: ${{ matrix.platform }}
         steps:
             - name: Checkout the repo
@@ -37,25 +58,28 @@ jobs:
 
             - uses: actions/setup-go@v2
               with:
-                go-version: '^1.16.7'
+                go-version: '^1.17.x'
 
             - name: Cache Go vendor packages
               uses: actions/cache@v2
               with:
-                  path: ~/go/pkg/mod
+                  path: ${{ env.GOPATH }}
                   key: go-mod-${{ env.CACHE_VERSION }}-${{ hashFiles('go.sum') }}
                   restore-keys: |
                     go-mod-${{ env.CACHE_VERSION }}
 
             - name: Download Go vendor packages
-              run:  go mod download
+              run:  ${{ matrix.go_exe }} mod download
+
+            - name: Download Go vendor packages
+              run:  ${{ matrix.go_exe }} mod download
 
             - name: Get Yarn cache directory path
               id:   yarn-cache-dir-path
               run:  echo "::set-output name=dir::$(yarn cache dir)"
 
             - name: Build redwood.js
-              run: make redwood.js/dist
+              run:  make redwood.js/dist
 
             - name: Cache redwood.js dependencies
               uses: actions/cache@v2
@@ -66,14 +90,34 @@ jobs:
                     yarn-redwood.js-${{ env.CACHE_VERSION }}
 
             - name: Build redwood
-              run:  go build -o ./redwood .
+              run:  ${{ matrix.go_exe }} build ${{ matrix.build_flags }} -o ./${{ matrix.app_name }} .
+              working-directory: cmd/redwood
+
+            # - name: Upload artifacts
+            #   uses: actions/upload-artifact@v2
+            #   with:
+            #       name: ${{ matrix.app_name }}
+            #       path: cmd/redwood/${{ matrix.app_name }}
+
+            # - name: Upload release assets
+            #   uses: actions/upload-release-asset@v1
+            #   env:
+            #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            #   with:
+            #       upload_url: ${{ needs.create_release.outputs.upload_url }}
+            #       asset_name: ${{ matrix.app_name }}
+            #       asset_path: ./cmd/redwood/redwood
+            #       asset_content_type: application/octet-stream
+            #######################################3
+            - name: Zip
+              run:  zip -qq -r ${{ matrix.zip_name }} ${{ matrix.app_name }}
               working-directory: cmd/redwood
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v2
               with:
-                  name: redwood-${{ matrix.platform }}
-                  path: cmd/redwood/redwood
+                  name: ${{ matrix.zip_name }}
+                  path: cmd/redwood/${{ matrix.zip_name }}
 
             - name: Upload release assets
               uses: actions/upload-release-asset@v1
@@ -81,27 +125,37 @@ jobs:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
                   upload_url: ${{ needs.create_release.outputs.upload_url }}
-                  asset_name: redwood-${{ matrix.platform }}
-                  asset_path: ./cmd/redwood/redwood
-                  asset_content_type: application/octet-stream
+                  asset_name: ${{ matrix.zip_name }}
+                  asset_path: cmd/redwood/${{ matrix.zip_name }}
+                  asset_content_type: application/zip
 
-    build_desktop_chat_app:
-        name: Build desktop-chat-app
+    build_hush:
+        name: Build Hush
         needs: create_release
         strategy:
             matrix:
-                platform: [ubuntu-latest, macos-11, macos-10.15]
+                platform: [ubuntu-latest, macos-11, macos-10.15, windows-latest]
                 include:
-                    - platform: ubuntu-latest
-                      app_name: hush
-                      zip_name: hush-ubuntu.zip
-                    - platform: macos-11
-                      app_name: Hush.app/
-                      zip_name: hush-macos-11.zip
-                    - platform: macos-10.15
-                      app_name: Hush.app/
-                      zip_name: hush-macos-10.15.zip
-
+                    - platform:    ubuntu-latest
+                      app_name:    hush
+                      zip_name:    hush-ubuntu.zip
+                      go_exe:      go
+                      build_flags:
+                    - platform:    macos-11
+                      app_name:    Hush.app/
+                      zip_name:    hush-macos-11.zip
+                      go_exe:      go
+                      build_flags:
+                    - platform:    macos-10.15
+                      app_name:    Hush.app/
+                      zip_name:    hush-macos-10.15.zip
+                      go_exe:      go
+                      build_flags:
+                    - platform:    windows-latest
+                      app_name:    Hush.exe
+                      zip_name:    hush-windows-latest.zip
+                      go_exe:      go
+                      build_flags: --tags otto -ldflags="-H windowsgui"
 
         runs-on: ${{ matrix.platform }}
         steps:
@@ -115,13 +169,13 @@ jobs:
             - name: Cache Go vendor packages
               uses: actions/cache@v2
               with:
-                  path: ~/go/pkg/mod
+                  path: ${{ env.GOPATH }}
                   key: go-mod-${{ env.CACHE_VERSION }}-${{ hashFiles('demos/desktop-chat-app/go.sum') }}
                   restore-keys: |
                     go-mod-${{ env.CACHE_VERSION }}
 
             - name: Download Go vendor packages
-              run:  go mod download
+              run:  ${{ matrix.go_exe }} mod download
               working-directory: demos/desktop-chat-app
 
             - name: Install system dependencies
@@ -159,8 +213,8 @@ jobs:
               run:  yarn build
               working-directory: demos/desktop-chat-app/frontend
 
-            - name: Build desktop-chat-app
-              run:  go build -o ./hush .
+            - name: Build Hush
+              run:  ${{ matrix.go_exe }} build ${{ matrix.build_flags }} -o ./${{ matrix.app_name }} .
               working-directory: demos/desktop-chat-app
 
             - name: Package macOS app
@@ -171,11 +225,6 @@ jobs:
             - name: Zip
               run:  zip -qq -r ${{ matrix.zip_name }} ${{ matrix.app_name }}
               working-directory: demos/desktop-chat-app
-              # uses: papeloto/action-zip@v1
-              # with:
-              #     files: demos/desktop-chat-app/${{ matrix.app_name }} demos/desktop-chat-app/README.md
-              #     dest:  demos/desktop-chat-app/${{ matrix.zip_name }}
-              #     recursive: false
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v2

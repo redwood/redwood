@@ -23,7 +23,8 @@ import (
 type TreeProtocol interface {
 	process.Interface
 	ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan TreePeerConn
-	Subscribe(ctx context.Context, stateURI string, subscriptionType SubscriptionType, keypath state.Keypath, fetchHistoryOpts *FetchHistoryOpts) (ReadableSubscription, error)
+	Subscribe(ctx context.Context, stateURI string) error
+	InProcessSubscription(ctx context.Context, stateURI string, subscriptionType SubscriptionType, keypath state.Keypath, fetchHistoryOpts *FetchHistoryOpts) (ReadableSubscription, error)
 	Unsubscribe(stateURI string) error
 	SubscribeStateURIs() (StateURISubscription, error)
 	SendTx(ctx context.Context, tx tree.Tx) error
@@ -141,12 +142,11 @@ func (tp *treeProtocol) Start() error {
 	tp.Process.Go(nil, "initial subscribe", func(ctx context.Context) {
 		for _, stateURI := range tp.store.SubscribedStateURIs().Slice() {
 			tp.Infof(0, "subscribing to %v", stateURI)
-			sub, err := tp.Subscribe(ctx, stateURI, SubscriptionType_Txs, nil, nil)
+			err := tp.Subscribe(ctx, stateURI)
 			if err != nil {
 				tp.Errorf("error subscribing to %v: %v", stateURI, err)
 				continue
 			}
-			sub.Close()
 		}
 	})
 
@@ -163,6 +163,11 @@ func (tp *treeProtocol) Start() error {
 	}
 
 	return nil
+}
+
+func (tp *treeProtocol) Close() error {
+	tp.Infof(0, "tree protocol shutting down")
+	return tp.Process.Close()
 }
 
 func (tp *treeProtocol) SendTx(ctx context.Context, tx tree.Tx) (err error) {
@@ -336,7 +341,7 @@ func (tp *treeProtocol) handleAckReceived(stateURI string, txID state.Version, p
 func (tp *treeProtocol) handleP2PStateURIReceived(stateURI string, peerConn TreePeerConn) {
 	peerConn.AddStateURI(stateURI)
 
-	err := tp.subscribe(context.TODO(), stateURI)
+	err := tp.Subscribe(context.TODO(), stateURI)
 	if err != nil {
 		tp.Errorf("while subscribing to p2p state URI %v: %v", stateURI, err)
 	}
@@ -506,7 +511,32 @@ func (tp *treeProtocol) handleWritableSubscriptionClosed(sub WritableSubscriptio
 	delete(tp.writableSubscriptions[sub.StateURI()], sub)
 }
 
-func (tp *treeProtocol) subscribe(ctx context.Context, stateURI string) error {
+func (tp *treeProtocol) openReadableSubscription(stateURI string) {
+	tp.readableSubscriptionsMu.Lock()
+	defer tp.readableSubscriptionsMu.Unlock()
+
+	if _, exists := tp.readableSubscriptions[stateURI]; !exists {
+		tp.Debugf("opening subscription to %v", stateURI)
+		multiSub := newMultiReaderSubscription(
+			stateURI,
+			tp.store.MaxPeersPerSubscription(),
+			func(msg SubscriptionMsg, peerConn TreePeerConn) {
+				if msg.EncryptedTx != nil {
+					tp.handlePrivateTxReceived(*msg.EncryptedTx, peerConn)
+				} else if msg.Tx != nil {
+					tp.handleTxReceived(*msg.Tx, peerConn)
+				} else {
+					panic("wat")
+				}
+			},
+			tp.ProvidersOfStateURI,
+		)
+		tp.Process.SpawnChild(nil, multiSub)
+		tp.readableSubscriptions[stateURI] = multiSub
+	}
+}
+
+func (tp *treeProtocol) Subscribe(ctx context.Context, stateURI string) error {
 	treeType := tp.acl.TypeOf(stateURI)
 	if treeType == StateURIType_Invalid {
 		return errors.Errorf("invalid state URI: %v", stateURI)
@@ -535,39 +565,14 @@ func (tp *treeProtocol) subscribe(ctx context.Context, stateURI string) error {
 	return nil
 }
 
-func (tp *treeProtocol) openReadableSubscription(stateURI string) {
-	tp.readableSubscriptionsMu.Lock()
-	defer tp.readableSubscriptionsMu.Unlock()
-
-	if _, exists := tp.readableSubscriptions[stateURI]; !exists {
-		tp.Debugf("opening subscription to %v", stateURI)
-		multiSub := newMultiReaderSubscription(
-			stateURI,
-			tp.store.MaxPeersPerSubscription(),
-			func(msg SubscriptionMsg, peerConn TreePeerConn) {
-				if msg.EncryptedTx != nil {
-					tp.handlePrivateTxReceived(*msg.EncryptedTx, peerConn)
-				} else if msg.Tx != nil {
-					tp.handleTxReceived(*msg.Tx, peerConn)
-				} else {
-					panic("wat")
-				}
-			},
-			tp.ProvidersOfStateURI,
-		)
-		tp.Process.SpawnChild(nil, multiSub)
-		tp.readableSubscriptions[stateURI] = multiSub
-	}
-}
-
-func (tp *treeProtocol) Subscribe(
+func (tp *treeProtocol) InProcessSubscription(
 	ctx context.Context,
 	stateURI string,
 	subscriptionType SubscriptionType,
 	keypath state.Keypath,
 	fetchHistoryOpts *FetchHistoryOpts,
 ) (ReadableSubscription, error) {
-	err := tp.subscribe(ctx, stateURI)
+	err := tp.Subscribe(ctx, stateURI)
 	if err != nil {
 		return nil, err
 	}
@@ -766,11 +771,10 @@ func (tp *treeProtocol) handleNewState(tx tree.Tx, node state.Node, leaves []sta
 				ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 				defer cancel()
 
-				sub, err := tp.Subscribe(ctx, tx.StateURI, 0, nil, nil)
+				err := tp.Subscribe(ctx, tx.StateURI)
 				if err != nil {
 					tp.Errorf("error subscribing to state URI %v: %v", tx.StateURI, err)
 				}
-				sub.Close() // We don't need the in-process subscription
 			})
 		}
 
@@ -794,8 +798,10 @@ func (tp *treeProtocol) handleNewState(tx tree.Tx, node state.Node, leaves []sta
 			for peerAddress := range members {
 				peerInfos = append(peerInfos, tp.peerStore.PeersWithAddress(peerAddress)...)
 			}
-			go tp.withPeers(context.TODO(), 3*time.Second, peerInfos, func(ctx context.Context, treePeerConn TreePeerConn) error {
-				return treePeerConn.Ack(tx.StateURI, tx.ID)
+			tp.Process.Go(nil, "ack "+tx.StateURI+" "+tx.ID.Hex(), func(ctx context.Context) {
+				tp.withPeers(ctx, peerInfos, func(ctx context.Context, treePeerConn TreePeerConn) error {
+					return treePeerConn.Ack(tx.StateURI, tx.ID)
+				})
 			})
 
 			tp.poolWorker.Add(broadcastPrivateTx{tx.StateURI, tx.ID, tp})
@@ -903,7 +909,7 @@ func (t *announceP2PStateURIsTask) announceP2PStateURIs(ctx context.Context) {
 		for peerAddress := range members {
 			peerInfos = append(peerInfos, t.treeProto.peerStore.PeersWithAddress(peerAddress)...)
 		}
-		t.treeProto.withPeers(ctx, 3*time.Second, peerInfos, func(ctx context.Context, treePeerConn TreePeerConn) error {
+		t.treeProto.withPeers(ctx, peerInfos, func(ctx context.Context, treePeerConn TreePeerConn) error {
 			return treePeerConn.AnnounceP2PStateURI(ctx, stateURI)
 		})
 	}
@@ -1026,7 +1032,6 @@ func (t broadcastPrivateTx) Work(ctx context.Context) (retry bool) {
 
 func (tp *treeProtocol) withPeers(
 	ctx context.Context,
-	attemptTimeout time.Duration,
 	peers []swarm.PeerInfo,
 	fn func(ctx context.Context, treePeerConn TreePeerConn) error,
 ) {
@@ -1044,6 +1049,10 @@ func (tp *treeProtocol) withPeers(
 	}
 
 	for _, chDone := range chDones {
-		<-chDone
+		select {
+		case <-chDone:
+		case <-ctx.Done():
+			return
+		}
 	}
 }

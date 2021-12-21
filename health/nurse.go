@@ -77,6 +77,7 @@ func (n *Nurse) Start() error {
 		return err
 	}
 
+	n.AddCheck("cpu", n.checkCPU)
 	n.AddCheck("mem", n.checkMem)
 	n.AddCheck("goroutines", n.checkGoroutines)
 
@@ -128,9 +129,30 @@ func (n *Nurse) GatherVitals(reason string, meta Meta) {
 	}
 }
 
+func (n *Nurse) checkCPU() (bool, Meta) {
+	// var buf bytes.Buffer
+	// // if err := pprof.Lookup("profile").WriteTo(&buf, 0); err != nil {
+	// // 	panic(err)
+	// // }
+	// pprof.StartCPUProfile(&buf)
+	// time.Sleep(3 * time.Second)
+	// pprof.StopCPUProfile()
+
+	// p, err := profile.Parse(&buf)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// n.Debugf("%v", p)
+	// // for _, s := range p.Sample {
+	// // 	n.Debugf("%v", s)
+	// // }
+	return false, nil
+}
+
 func (n *Nurse) checkMem() (bool, Meta) {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
+	n.Infof(0, "current memory usage: %v", memStats.Alloc)
 	unwell := memStats.Alloc >= uint64(n.cfg.MemThreshold)
 	if !unwell {
 		return false, nil
@@ -182,7 +204,7 @@ func (n *Nurse) gatherVitals(reason string, meta Meta) {
 	wg.Add(9)
 
 	go n.appendLog(now, reason, meta, &wg)
-	go n.gatherCPU(now, &wg)
+	// go n.gatherCPU(now, &wg)
 	go n.gatherTrace(now, &wg)
 	go n.gather("allocs", now, &wg)
 	go n.gather("block", now, &wg)

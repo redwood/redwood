@@ -405,9 +405,14 @@ func (app *App) Start() error {
 			if cfg.REPLConfig.Prompt != "" {
 				prompt = cfg.REPLConfig.Prompt
 			}
-			app.startREPL(prompt, cfg.REPLConfig.Commands)
-			<-AwaitInterrupt()
-			app.Process.Close()
+			go app.startREPL(prompt, cfg.REPLConfig.Commands)
+			select {
+			// case <-AwaitInterrupt():
+			// 	app.Infof(0, "CLOSE cmdutils interrupt")
+			// 	app.Process.Close()
+			case <-app.Process.Done():
+				app.Infof(0, "CLOSE cmdutils done")
+			}
 		}()
 
 		app.Process.Go(nil, "repl (await termination)", func(ctx context.Context) {
@@ -470,6 +475,9 @@ func closeIfError(err *error, x interface{}) {
 }
 
 func (app *App) Close() error {
+	app.Infof(0, "shutting down")
+
+	app.Infof(0, "killing rpc")
 	if app.HTTPRPCServer != nil {
 		err := app.HTTPRPCServer.Close()
 		if err != nil {
@@ -477,39 +485,47 @@ func (app *App) Close() error {
 		}
 	}
 
+	app.Infof(0, "killing keystore")
 	if app.KeyStore != nil {
 		app.KeyStore.Close()
 		app.KeyStore = nil
 	}
 
+	app.Infof(0, "killing blobstore")
 	if app.BlobStore != nil {
 		app.BlobStore.Close()
 		app.BlobStore = nil
 	}
 
+	app.Infof(0, "killing txstore")
 	if app.TxStore != nil {
 		app.TxStore.Close()
 		app.TxStore = nil
 	}
 
+	app.Infof(0, "killing shared state db")
 	if app.SharedStateDB != nil {
 		app.SharedStateDB.Close()
 		app.SharedStateDB = nil
 	}
 
+	app.Infof(0, "killing tree db")
 	if app.TreeDB != nil {
 		app.TreeDB.Close()
 		app.TreeDB = nil
 	}
+	app.Infof(0, "killing hush db")
 	if app.HushDB != nil {
 		app.HushDB.Close()
 		app.HushDB = nil
 	}
+	app.Infof(0, "killing peer db")
 	if app.PeerDB != nil {
 		app.PeerDB.Close()
 		app.PeerDB = nil
 	}
 
+	app.Infof(0, "killing process")
 	return app.Process.Close()
 }
 
@@ -601,15 +617,15 @@ func (app *App) startREPL(prompt string, replCommands REPLCommands) {
 func AwaitInterrupt() <-chan struct{} {
 	chDone := make(chan struct{})
 
+	sigInbox := make(chan os.Signal, 1)
+	signal.Notify(sigInbox, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+
 	go func() {
-		sigInbox := make(chan os.Signal, 1)
-
-		signal.Notify(sigInbox, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
-
 		count := 0
 		firstTime := int64(0)
 
 		for range sigInbox {
+			fmt.Println("received interrupt")
 			count++
 			curTime := time.Now().Unix()
 

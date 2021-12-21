@@ -35,7 +35,7 @@ func ParsePatch(s []byte) (Patch, error) {
 				patch.Keypath = patch.Keypath.Push(key)
 				i += len(key) + 4
 
-			case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 				rng, length, err := parseRange(s[i:])
 				if err != nil {
 					return Patch{}, err
@@ -147,7 +147,7 @@ func parseRange(s []byte) (*state.Range, int, error) {
 			if !haveStart {
 				return nil, 0, errors.WithStack(ErrBadPatch)
 			}
-			end, err := strconv.ParseInt(string(buf), 10, 64)
+			end, err := strconv.ParseFloat(string(buf), 64)
 			if err != nil {
 				return nil, 0, errors.WithStack(ErrBadPatch)
 			}
@@ -159,7 +159,7 @@ func parseRange(s []byte) (*state.Range, int, error) {
 				return nil, 0, errors.WithStack(ErrBadPatch)
 			}
 
-			start, err := strconv.ParseInt(string(buf), 10, 64)
+			start, err := strconv.ParseFloat(string(buf), 64)
 			if err != nil {
 				return nil, 0, errors.WithStack(ErrBadPatch)
 			}

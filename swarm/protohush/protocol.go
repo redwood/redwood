@@ -243,6 +243,11 @@ func (hp *hushProtocol) Start() error {
 	return nil
 }
 
+func (hp *hushProtocol) Close() error {
+	hp.Infof(0, "hush protocol shutting down")
+	return hp.Process.Close()
+}
+
 func (hp *hushProtocol) ensureSessionWithSelf(sessionType string) error {
 	identity, err := hp.keyStore.DefaultPublicIdentity()
 	if err != nil {
@@ -742,7 +747,7 @@ func (t exchangeDHPubkeys) Work(ctx context.Context) (retry bool) {
 		return true
 	}
 
-	t.hushProto.withPeers(ctx, 3*time.Second, []swarm.PeerInfo{peer}, func(ctx context.Context, peerConn HushPeerConn) error {
+	t.hushProto.withPeers(ctx, []swarm.PeerInfo{peer}, func(ctx context.Context, peerConn HushPeerConn) error {
 		err = peerConn.SendDHPubkeyAttestations(ctx, attestations)
 		if err != nil {
 			t.hushProto.Errorf("while exchanging DH pubkey: %v", err)
@@ -834,8 +839,7 @@ func (t proposeIndividualSession) Work(ctx context.Context) (retry bool) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	t.hushProto.withPeers(ctx, 3*time.Second, t.hushProto.peerStore.PeersWithAddress(bobAddr), func(ctx context.Context, peerConn HushPeerConn) error {
-		t.hushProto.Debugf("proposeIndividualSession WITH PEERS %v", peerConn.DialInfo())
+	t.hushProto.withPeers(ctx, t.hushProto.peerStore.PeersWithAddress(bobAddr), func(ctx context.Context, peerConn HushPeerConn) error {
 		_, bobAsymEncPubkey := peerConn.PublicKeys(session.SessionID.BobAddr)
 
 		encryptedProposalBytes, err := t.hushProto.keyStore.SealMessageFor(identity.Address(), bobAsymEncPubkey, sessionBytes)
@@ -1216,7 +1220,7 @@ func (t respondToIndividualSession) Work(ctx context.Context) (retry bool) {
 		}
 	}()
 
-	t.hushProto.withPeers(ctx, 3*time.Second, t.hushProto.peerStore.PeersWithAddress(t.aliceAddr), func(ctx context.Context, alice HushPeerConn) error {
+	t.hushProto.withPeers(ctx, t.hushProto.peerStore.PeersWithAddress(t.aliceAddr), func(ctx context.Context, alice HushPeerConn) error {
 		err = alice.RespondToIndividualSession(ctx, response)
 		if err != nil {
 			return err
@@ -1286,7 +1290,7 @@ func (t sendIndividualMessage) Work(ctx context.Context) (retry bool) {
 		return true
 	}
 
-	t.hushProto.withPeers(ctx, 3*time.Second, t.hushProto.peerStore.PeersWithAddress(intent.Recipient), func(ctx context.Context, recipient HushPeerConn) error {
+	t.hushProto.withPeers(ctx, t.hushProto.peerStore.PeersWithAddress(intent.Recipient), func(ctx context.Context, recipient HushPeerConn) error {
 		err = recipient.SendHushIndividualMessage(ctx, IndividualMessageFromDoubleRatchetMessage(msg, sessionHash))
 		if err != nil {
 			return err
@@ -1599,6 +1603,17 @@ func (t *decryptIncomingGroupMessagesTask) decryptIncomingGroupMessage(ctx conte
 		return
 	}
 
+	var shouldDelete bool
+	defer func() {
+		if shouldDelete {
+			err := t.hushProto.store.DeleteIncomingGroupMessage(msg)
+			if err != nil {
+				t.Errorf("while deleting incoming group message (sessionID=%v): %v", sessionID, err)
+				return
+			}
+		}
+	}()
+
 	sender, err := t.hushProto.otherPartyInIndividualSession(sessionID)
 	if err != nil {
 		t.hushProto.Errorf("while determining other party in individual session: %v", err)
@@ -1619,6 +1634,7 @@ func (t *decryptIncomingGroupMessagesTask) decryptIncomingGroupMessage(ctx conte
 	encKeyBytes, err := session.RatchetDecrypt(encEncKey.Key.ToDoubleRatchetMessage(), nil)
 	if err != nil {
 		t.hushProto.Errorf("while decrypting incoming group message (sessionID=%v): %v", sessionID, err)
+		shouldDelete = true
 		return
 	}
 
@@ -1628,18 +1644,14 @@ func (t *decryptIncomingGroupMessagesTask) decryptIncomingGroupMessage(ctx conte
 	plaintext, err := symEncKey.Decrypt(symEncMsg)
 	if err != nil {
 		t.hushProto.Errorf("while decrypting incoming group message (sessionID=%v): %v", sessionID, err)
+		shouldDelete = true
 		return
 	}
 
 	t.hushProto.notifyGroupMessageDecryptedListeners(sender, plaintext, msg)
 
 	t.Successf("decrypted incoming group message (sessionID=%v)", sessionID)
-
-	err = t.hushProto.store.DeleteIncomingGroupMessage(msg)
-	if err != nil {
-		t.Errorf("while deleting incoming group message (sessionID=%v): %v", sessionID, err)
-		return
-	}
+	shouldDelete = true
 }
 
 func (hp *hushProtocol) otherPartyInIndividualSession(sessionID IndividualSessionID) (types.Address, error) {
@@ -1687,7 +1699,6 @@ func (hp *hushProtocol) onSessionOpened(proposalHash types.Hash, peerAddr types.
 
 func (hp *hushProtocol) withPeers(
 	ctx context.Context,
-	attemptTimeout time.Duration,
 	peers []swarm.PeerInfo,
 	fn func(ctx context.Context, hushPeerConn HushPeerConn) error,
 ) {
@@ -1705,6 +1716,10 @@ func (hp *hushProtocol) withPeers(
 	}
 
 	for _, chDone := range chDones {
-		<-chDone
+		select {
+		case <-chDone:
+		case <-ctx.Done():
+			return
+		}
 	}
 }

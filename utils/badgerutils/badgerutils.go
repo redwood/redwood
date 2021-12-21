@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v2"
+
+	"redwood.dev/utils"
 )
 
 type OptsBuilder struct {
@@ -22,8 +24,14 @@ func (b OptsBuilder) ForPath(dbFilename string) badger.Options {
 	opts.Logger = nil
 	opts.EncryptionKey = b.encryptionKey
 	opts.EncryptionKeyRotationDuration = b.encryptionKeyRotationInterval
-	opts.IndexCacheSize = 100 << 20 // @@TODO: make configurable
-	opts.KeepL0InMemory = true      // @@TODO: make configurable
+	opts.IndexCacheSize = int64(100 * utils.MB) // @@TODO: make configurable
+	// opts.KeepL0InMemory = true                  // @@TODO: make configurable
+	opts.KeepL0InMemory = true // @@TODO: make configurable
+	opts.MaxTableSize = 1 << 20
+	opts.NumMemtables = 1
+	opts.NumLevelZeroTables = 1
+	opts.NumLevelZeroTablesStall = 5
+	opts.LevelOneSize = 256 << 10
 
 	return withPlatformSpecificOpts(opts)
 }

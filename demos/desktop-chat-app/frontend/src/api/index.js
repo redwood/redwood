@@ -97,13 +97,14 @@ export default function(redwoodClient, ownAddress) {
             patches: [
                 ' = ' + Redwood.utils.JSON.stringify({
                     'Merge-Type': {
-                        'Content-Type': 'resolver/js',
-                        'value': {
-                            'src': {
-                                'Content-Type': 'link',
-                                'value': `blob:sha3:${sync9JSSha3}`,
-                            }
-                        }
+                        'Content-Type': 'resolver/dumb',
+                        // 'Content-Type': 'resolver/js',
+                        // 'value': {
+                        //     'src': {
+                        //         'Content-Type': 'link',
+                        //         'value': `blob:sha3:${sync9JSSha3}`,
+                        //     }
+                        // }
                     },
                     'Validator': {
                         'Content-Type': 'validator/permissions',
@@ -148,13 +149,14 @@ export default function(redwoodClient, ownAddress) {
             patches: [
                 ' = ' + Redwood.utils.JSON.stringify({
                     'Merge-Type': {
-                        'Content-Type': 'resolver/js',
-                        'value': {
-                            'src': {
-                                'Content-Type': 'link',
-                                'value': `blob:sha3:${sync9JSSha3}`,
-                            }
-                        }
+                        'Content-Type': 'resolver/dumb',
+                        // 'Content-Type': 'resolver/js',
+                        // 'value': {
+                        //     'src': {
+                        //         'Content-Type': 'link',
+                        //         'value': `blob:sha3:${sync9JSSha3}`,
+                        //     }
+                        // }
                     },
                     'Validator': {
                         'Content-Type': 'validator/permissions',
@@ -203,7 +205,7 @@ export default function(redwoodClient, ownAddress) {
             }))
 
             for (let i = 0; i < attachments.length; i++) {
-                patches.push(`.files[${numFiles + i}:${numFiles + i}] = ` + Redwood.utils.JSON.stringify([{
+                patches.push(`.files[-0:-0] = ` + Redwood.utils.JSON.stringify([{
                     'Content-Type': attachments[i]['Content-Type'],
                     'Content-Length': attachments[i]['Content-Length'],
                     'filename': attachments[i]['filename'],
@@ -214,7 +216,7 @@ export default function(redwoodClient, ownAddress) {
             }
         }
 
-        patches.push('.messages[' + numMessages + ':' + numMessages + '] = ' + Redwood.utils.JSON.stringify([{
+        patches.push('.messages[-0:-0] = ' + Redwood.utils.JSON.stringify([{
             sender: nodeAddress.toLowerCase(),
             text: messageText,
             timestamp: now,

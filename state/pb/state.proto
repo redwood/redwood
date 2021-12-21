@@ -19,7 +19,7 @@ option (gogoproto.unmarshaler_all) = true;
 
 
 message Range {
-    int64 start = 1;
-    int64 end = 2;
+    double start = 1;
+    double end = 2;
 }
 

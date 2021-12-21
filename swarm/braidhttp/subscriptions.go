@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -156,7 +157,7 @@ type wsWritableSubscription struct {
 	addresses                  []types.Address
 	writableSubscriptionOpener writableSubscriptionOpener
 
-	stateURI  string
+	stateURIs types.StringSet
 	messages  *utils.Mailbox
 	writeMu   sync.Mutex
 	startOnce sync.Once
@@ -187,7 +188,7 @@ func newWSWritableSubscription(
 	return &wsWritableSubscription{
 		Process:                    *process.New("sub impl (ws) " + stateURI),
 		Logger:                     log.NewLogger(TransportName),
-		stateURI:                   stateURI,
+		stateURIs:                  types.NewStringSet([]string{stateURI}),
 		wsConn:                     wsConn,
 		addresses:                  addresses,
 		writableSubscriptionOpener: writableSubscriptionOpener,
@@ -272,6 +273,11 @@ func (sub *wsWritableSubscription) Start() (err error) {
 					continue
 				}
 				sub.Infof(0, "incoming websocket subscription (state uri: %v)", addSubMsg.Params.StateURI)
+
+				if sub.stateURIs.Contains(addSubMsg.Params.StateURI) {
+					continue
+				}
+				sub.stateURIs.Add(addSubMsg.Params.StateURI)
 
 				var fetchHistoryOpts prototree.FetchHistoryOpts
 				if addSubMsg.Params.FromTxID != "" {
@@ -411,5 +417,5 @@ func (sub *wsWritableSubscription) Put(ctx context.Context, msg prototree.Subscr
 }
 
 func (sub wsWritableSubscription) String() string {
-	return "websocket (" + sub.stateURI + ")"
+	return fmt.Sprintf("websocket %v", sub.stateURIs.Slice())
 }
