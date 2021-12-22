@@ -72,7 +72,7 @@ jobs:
               uses: actions/cache@v2
               with:
                   path: ${{ env.GOPATH }}
-                  key: go-mod-${{ hashFiles('go.mod') }}
+                  key: redwood-${{ matrix.platform }}-go-mod-${{ hashFiles('go.mod') }}
                   restore-keys: |
                     go-mod-${{ hashFiles('go.mod') }}
                     go-mod-
@@ -100,9 +100,15 @@ jobs:
               run:  ${{ matrix.go_exe }} build ${{ matrix.build_flags }} -o ./${{ matrix.app_name }} .
               working-directory: cmd/redwood
 
-            - name: Zip
+            - name: Zip (Linux + macOS)
               run:  zip -qq -r ${{ matrix.zip_name }} ${{ matrix.app_name }}
-              working-directory: cmd/redwood
+              if:   ${{ matrix.platform == 'macos-11' || matrix.platform == 'macos-10.15' || matrix.platform == 'ubuntu-latest' }}
+              working-directory: demos/desktop-chat-app
+
+            - name: Zip (Windows)
+              run:  Compress-Archive -LiteralPath ${{ matrix.app_name }} -DestinationPath ${{ matrix.zip_name }}
+              if:   ${{ matrix.platform == 'windows-latest' }}
+              working-directory: demos/desktop-chat-app
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v2
@@ -124,6 +130,7 @@ jobs:
         name: Build Hush
         needs: create_release
         strategy:
+            fail-fast: false
             matrix:
                 platform: [ubuntu-latest, macos-11, macos-10.15, windows-latest]
                 include:
@@ -232,6 +239,7 @@ jobs:
 
             - name: Zip (Linux + macOS)
               run:  zip -qq -r ${{ matrix.zip_name }} ${{ matrix.app_name }}
+              if:   ${{ matrix.platform == 'macos-11' || matrix.platform == 'macos-10.15' || matrix.platform == 'ubuntu-latest' }}
               working-directory: demos/desktop-chat-app
 
             - name: Zip (Windows)
