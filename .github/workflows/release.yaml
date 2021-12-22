@@ -74,6 +74,7 @@ jobs:
                   path: ${{ env.GOPATH }}
                   key: go-mod-${{ hashFiles('go.mod') }}
                   restore-keys: |
+                    go-mod-${{ hashFiles('go.mod') }}
                     go-mod-
 
             - name: Download Go vendor packages
@@ -89,6 +90,7 @@ jobs:
                   path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
                   key: yarn-redwood.js-${{ hashFiles('./redwood.js/yarn.lock') }}
                   restore-keys: |
+                    yarn-redwood.js-${{ hashFiles('./redwood.js/yarn.lock') }}
                     yarn-redwood.js-
 
             - name: Build redwood.js
@@ -169,6 +171,7 @@ jobs:
                   path: ${{ env.GOPATH }}
                   key: go-mod-${{ hashFiles('demos/desktop-chat-app/go.mod') }}
                   restore-keys: |
+                    go-mod-${{ hashFiles('demos/desktop-chat-app/go.mod') }}
                     go-mod-
 
             - name: Download Go vendor packages
@@ -189,6 +192,7 @@ jobs:
                   path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
                   key: yarn-redwood.js-${{ hashFiles('./redwood.js/yarn.lock') }}
                   restore-keys: |
+                    yarn-redwood.js-${{ hashFiles('./redwood.js/yarn.lock') }}
                     yarn-redwood.js-
 
             - name: Build redwood.js
@@ -200,6 +204,7 @@ jobs:
                   path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
                   key: yarn-hush-${{ hashFiles('./demos/desktop-chat-app/frontend/yarn.lock') }}
                   restore-keys: |
+                    yarn-hush-${{ hashFiles('./demos/desktop-chat-app/frontend/yarn.lock') }}
                     yarn-hush-
 
             - name: Install desktop-chat-app/frontend dependencies
@@ -211,7 +216,7 @@ jobs:
               working-directory: demos/desktop-chat-app/frontend
 
             - name: Build Hush
-              run:  ${{ matrix.go_exe }} build ${{ matrix.build_flags }} -o ./${{ matrix.app_name }} .
+              run:  ${{ matrix.go_exe }} build ${{ matrix.build_flags }} -o ./hush .
               working-directory: demos/desktop-chat-app
 
             - name: Package macOS app
@@ -219,13 +224,19 @@ jobs:
               if:   ${{ matrix.platform == 'macos-11' || matrix.platform == 'macos-10.15' }}
               working-directory: demos/desktop-chat-app
 
-            # - name: Package Windows app
-            #   run:  mv ${{ matrix.app_name }} ./packaging/windows && mv ./packaging/windows .
-            #   if:   ${{ matrix.platform == 'macos-11' || matrix.platform == 'macos-10.15' }}
-            #   working-directory: demos/desktop-chat-app
+            - name: Package Windows app
+              # run:  mv ${{ matrix.app_name }} ./packaging/windows && mv ./packaging/windows .
+              run:  mv hush ${{ matrix.app_name }}
+              if:   ${{ matrix.platform == 'windows-latest' }}
+              working-directory: demos/desktop-chat-app
 
-            - name: Zip
+            - name: Zip (Linux + macOS)
               run:  zip -qq -r ${{ matrix.zip_name }} ${{ matrix.app_name }}
+              working-directory: demos/desktop-chat-app
+
+            - name: Zip (Windows)
+              run: Compress-Archive -LiteralPath ${{ matrix.app_name }} -DestinationPath ${{ matrix.zip_name }}
+              if:   ${{ matrix.platform == 'windows-latest' }}
               working-directory: demos/desktop-chat-app
 
             - name: Upload artifacts
