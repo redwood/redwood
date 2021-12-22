@@ -61,18 +61,20 @@ jobs:
                 go-version: '^1.17.x'
 
             - name: Set GOPATH
-              run:  echo GOPATH=$(go env GOPATH) >> $GITHUB_ENV
+              run:  echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
+              if:   ${{ matrix.platform == 'ubuntu-latest' || matrix.platform == 'macos-10.15' || matrix.platform == 'macos-11' }}
+
+            - name: Set GOPATH
+              run:  echo "GOPATH=$(go env GOPATH)" >> $env:GITHUB_ENV
+              if:   ${{ matrix.platform == 'windows-latest' }}
 
             - name: Cache Go vendor packages
               uses: actions/cache@v2
               with:
                   path: ${{ env.GOPATH }}
-                  key: go-mod-${{ env.CACHE_VERSION }}-${{ hashFiles('go.sum') }}
+                  key: go-mod-${{ hashFiles('go.mod') }}
                   restore-keys: |
-                    go-mod-${{ env.CACHE_VERSION }}
-
-            - name: Download Go vendor packages
-              run:  ${{ matrix.go_exe }} mod download
+                    go-mod-
 
             - name: Download Go vendor packages
               run:  ${{ matrix.go_exe }} mod download
@@ -81,37 +83,21 @@ jobs:
               id:   yarn-cache-dir-path
               run:  echo "::set-output name=dir::$(yarn cache dir)"
 
-            - name: Build redwood.js
-              run:  make redwood.js/dist
-
             - name: Cache redwood.js dependencies
               uses: actions/cache@v2
               with:
                   path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-                  key: yarn-redwood.js-${{ env.CACHE_VERSION }}-${{ hashFiles('./redwood.js/yarn.lock') }}
+                  key: yarn-redwood.js-${{ hashFiles('./redwood.js/yarn.lock') }}
                   restore-keys: |
-                    yarn-redwood.js-${{ env.CACHE_VERSION }}
+                    yarn-redwood.js-
+
+            - name: Build redwood.js
+              run:  make redwood.js/dist
 
             - name: Build redwood
               run:  ${{ matrix.go_exe }} build ${{ matrix.build_flags }} -o ./${{ matrix.app_name }} .
               working-directory: cmd/redwood
 
-            # - name: Upload artifacts
-            #   uses: actions/upload-artifact@v2
-            #   with:
-            #       name: ${{ matrix.app_name }}
-            #       path: cmd/redwood/${{ matrix.app_name }}
-
-            # - name: Upload release assets
-            #   uses: actions/upload-release-asset@v1
-            #   env:
-            #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            #   with:
-            #       upload_url: ${{ needs.create_release.outputs.upload_url }}
-            #       asset_name: ${{ matrix.app_name }}
-            #       asset_path: ./cmd/redwood/redwood
-            #       asset_content_type: application/octet-stream
-            #######################################3
             - name: Zip
               run:  zip -qq -r ${{ matrix.zip_name }} ${{ matrix.app_name }}
               working-directory: cmd/redwood
@@ -181,9 +167,9 @@ jobs:
               uses: actions/cache@v2
               with:
                   path: ${{ env.GOPATH }}
-                  key: go-mod-${{ env.CACHE_VERSION }}-${{ hashFiles('demos/desktop-chat-app/go.sum') }}
+                  key: go-mod-${{ hashFiles('demos/desktop-chat-app/go.mod') }}
                   restore-keys: |
-                    go-mod-${{ env.CACHE_VERSION }}
+                    go-mod-
 
             - name: Download Go vendor packages
               run:  ${{ matrix.go_exe }} mod download
@@ -201,9 +187,9 @@ jobs:
               uses: actions/cache@v2
               with:
                   path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-                  key: yarn-redwood.js-${{ env.CACHE_VERSION }}-${{ hashFiles('./redwood.js/yarn.lock') }}
+                  key: yarn-redwood.js-${{ hashFiles('./redwood.js/yarn.lock') }}
                   restore-keys: |
-                    yarn-redwood.js-${{ env.CACHE_VERSION }}
+                    yarn-redwood.js-
 
             - name: Build redwood.js
               run: make redwood.js/dist
@@ -212,9 +198,9 @@ jobs:
               uses: actions/cache@v2
               with:
                   path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-                  key: yarn-desktop-chat-app-${{ env.CACHE_VERSION }}-${{ hashFiles('./demos/desktop-chat-app/frontend/yarn.lock') }}
+                  key: yarn-hush-${{ hashFiles('./demos/desktop-chat-app/frontend/yarn.lock') }}
                   restore-keys: |
-                    yarn-desktop-chat-app-${{ env.CACHE_VERSION }}
+                    yarn-hush-
 
             - name: Install desktop-chat-app/frontend dependencies
               run:  yarn install --frozen-lockfile --prefer-offline
@@ -232,6 +218,11 @@ jobs:
               run:  mkdir -p ./packaging/Hush.app/Contents/MacOS && mv ./hush ./packaging/Hush.app/Contents/MacOS/Hush && chmod +x ./packaging/Hush.app/Contents/MacOS/Hush && mv ./packaging/Hush.app .
               if:   ${{ matrix.platform == 'macos-11' || matrix.platform == 'macos-10.15' }}
               working-directory: demos/desktop-chat-app
+
+            # - name: Package Windows app
+            #   run:  mv ${{ matrix.app_name }} ./packaging/windows && mv ./packaging/windows .
+            #   if:   ${{ matrix.platform == 'macos-11' || matrix.platform == 'macos-10.15' }}
+            #   working-directory: demos/desktop-chat-app
 
             - name: Zip
               run:  zip -qq -r ${{ matrix.zip_name }} ${{ matrix.app_name }}
