@@ -1113,22 +1113,23 @@ func (tx *DBNode) setRangeSlice(absKeypath Keypath, rng *Range, encodedVal []byt
 		iter.Close()
 	}
 
+	// Set the new length
+	encoded, err := encodeNode(NodeTypeSlice, ValueTypeInvalid, newLen, nil)
+	if err != nil {
+		return err
+	}
+	err = tx.tx.Set(absKeypath, encoded)
+	if err != nil {
+		return err
+	}
+
 	// Finally, splice in the new values
 	err = walkGoValue(spliceVal, func(nodeKeypath Keypath, val interface{}) (keepRecursing bool, _ error) {
-		nodeKeypath = nodeKeypath.Copy()
 		if len(nodeKeypath) == 0 {
-			encoded, err := encodeNode(NodeTypeSlice, ValueTypeInvalid, newLen, nil)
-			if err != nil {
-				return false, err
-			}
-
-			err = tx.tx.Set(absKeypath, encoded)
-			if err != nil {
-				return false, err
-			}
 			return true, nil
 		}
 
+		nodeKeypath = nodeKeypath.Copy()
 		absNodeKeypath := absKeypath
 		oldIdx := DecodeSliceIndex(nodeKeypath[:8])
 		newIdx := oldIdx + startIdx

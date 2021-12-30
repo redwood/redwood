@@ -294,13 +294,13 @@ func (k Keypath) CommonAncestor(other Keypath) Keypath {
 
 func (k Keypath) Normalized() Keypath {
 	if len(k) == 0 {
-		return k
+		return nil
 	}
 	if k[0] == KeypathSeparator[0] {
 		k = k[1:]
 	}
 	if len(k) == 0 {
-		return k
+		return nil
 	}
 	if k[len(k)-1] == KeypathSeparator[0] {
 		k = k[:len(k)-1]
@@ -449,7 +449,7 @@ func ParseKeypathAndRange(s []byte, keypathSeparator byte) (Keypath, *Range, err
 			return nil, nil, errors.WithStack(ErrBadKeypath)
 		}
 	}
-	return keypath, rng, nil
+	return keypath.Normalized(), rng, nil
 }
 
 func parseKeypathPart(s []byte, keypathSeparator byte) ([]byte, error) {
