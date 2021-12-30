@@ -151,20 +151,9 @@ func (peer *peerConn) AnnounceP2PStateURI(ctx context.Context, stateURI string) 
 }
 
 func (peer *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) error {
-	defer func() {
-		if strings.Contains(peer.DialInfo().String(), "fkU") {
-			peer.t.Successf("ChallengeIdentity 333")
-		}
-	}()
-	if strings.Contains(peer.DialInfo().String(), "fkU") {
-		peer.t.Successf("ChallengeIdentity 111")
-	}
 	err := peer.ensureStreamWithProtocol(peer.t.Process.Ctx(), PROTO_MAIN)
 	if err != nil {
 		return err
-	}
-	if strings.Contains(peer.DialInfo().String(), "fkU") {
-		peer.t.Successf("ChallengeIdentity 222")
 	}
 	return peer.writeMsg(Msg{Type: msgType_ChallengeIdentityRequest, Payload: challengeMsg})
 }

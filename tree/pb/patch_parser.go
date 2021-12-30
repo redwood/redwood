@@ -36,12 +36,19 @@ func ParsePatch(s []byte) (Patch, error) {
 				i += len(key) + 4
 
 			case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-				rng, length, err := parseRange(s[i:])
+				rng, idx, length, err := parseRangeOrIndex(s[i:])
 				if err != nil {
 					return Patch{}, err
 				}
-				patch.Range = rng
+				if rng != nil {
+					patch.Range = rng
+				} else {
+					patch.Keypath = patch.Keypath.PushIndex(idx)
+				}
 				i += length
+
+			default:
+				return Patch{}, ErrBadPatch
 			}
 
 		case ' ', '=':
@@ -62,6 +69,9 @@ func ParsePatch(s []byte) (Patch, error) {
 			patch.ValueJSON = make([]byte, len(s[i:]))
 			copy(patch.ValueJSON, s[i:])
 			return patch, nil
+
+		default:
+			return Patch{}, ErrBadPatch
 		}
 	}
 	return Patch{}, errors.WithStack(ErrBadPatch)
@@ -92,11 +102,15 @@ func ParsePatchPath(s []byte) ([]byte, state.Keypath, *state.Range, error) {
 				i += len(key) + 4
 
 			case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+				var idx uint64
 				var length int
 				var err error
-				rng, length, err = parseRange(s[i:])
+				rng, idx, length, err = parseRangeOrIndex(s[i:])
 				if err != nil {
 					return nil, nil, nil, err
+				}
+				if rng == nil {
+					keypath = keypath.PushIndex(idx)
 				}
 				i += length
 			}
@@ -110,6 +124,9 @@ func parseDotKey(s []byte) ([]byte, error) {
 	// start at index 1, skip first dot
 	for i := 1; i < len(s); i++ {
 		if s[i] == '.' || s[i] == '[' || s[i] == ' ' {
+			if len(buf) == 0 {
+				return nil, nil
+			}
 			return buf, nil
 		} else {
 			buf = append(buf, s[i])
@@ -137,38 +154,65 @@ func parseBracketKey(s []byte) ([]byte, error) {
 	return nil, errors.WithStack(ErrBadPatch)
 }
 
-func parseRange(s []byte) (*state.Range, int, error) {
-	rng := &state.Range{}
-	haveStart := false
-	buf := []byte{}
-	// start at index 1, skip [
+func parseRangeOrIndex(s []byte) (*state.Range, uint64, int, error) {
+	var (
+		isRange = false
+		rng     = &state.Range{}
+		buf     = make([]byte, 0, 8) // Approximation/heuristic
+	)
+	// Start at index 1, skip [
 	for i := 1; i < len(s); i++ {
 		if s[i] == ']' {
-			if !haveStart {
-				return nil, 0, errors.WithStack(ErrBadPatch)
+			if len(buf) == 0 {
+				return nil, 0, 0, errors.WithStack(ErrBadPatch)
 			}
-			end, err := strconv.ParseFloat(string(buf), 64)
+			end, err := strconv.ParseInt(string(buf), 10, 64)
 			if err != nil {
-				return nil, 0, errors.WithStack(ErrBadPatch)
+				return nil, 0, 0, errors.WithStack(ErrBadPatch)
 			}
-			rng.End = end
-			return rng, i + 1, nil
+
+			if !isRange {
+				if end < 0 {
+					// Can't have negative indices (yet... @@TODO)
+					return nil, 0, 0, errors.WithStack(ErrBadPatch)
+				}
+				return nil, uint64(end), i + 1, nil
+			}
+
+			if end == 0 && buf[0] == '-' {
+				rng.Reverse = true
+			} else if end < 0 {
+				rng.End = uint64(-end)
+				rng.Reverse = true
+			} else {
+				rng.End = uint64(end)
+			}
+			return rng, 0, i + 1, nil
 
 		} else if s[i] == ':' {
-			if haveStart {
-				return nil, 0, errors.WithStack(ErrBadPatch)
+			if isRange {
+				// Disallow [x:y:z]
+				return nil, 0, 0, errors.WithStack(ErrBadPatch)
 			}
+			isRange = true
 
-			start, err := strconv.ParseFloat(string(buf), 64)
+			start, err := strconv.ParseInt(string(buf), 10, 64)
 			if err != nil {
-				return nil, 0, errors.WithStack(ErrBadPatch)
+				return nil, 0, 0, errors.WithStack(ErrBadPatch)
 			}
-			buf = []byte{}
-			rng.Start = start
-			haveStart = true
+			if start == 0 && buf[0] == '-' {
+				rng.Reverse = true
+			} else if start < 0 {
+				rng.Start = uint64(-start)
+				rng.Reverse = true
+			} else {
+				rng.Start = uint64(start)
+			}
+			isRange = true
+			buf = make([]byte, 0, 8)
 		} else {
 			buf = append(buf, s[i])
 		}
 	}
-	return nil, 0, errors.WithStack(ErrBadPatch)
+	return nil, 0, 0, errors.WithStack(ErrBadPatch)
 }

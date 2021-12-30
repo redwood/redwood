@@ -19,7 +19,8 @@ option (gogoproto.unmarshaler_all) = true;
 
 
 message Range {
-    double start = 1;
-    double end = 2;
+    uint64 start = 1;
+    uint64 end = 2;
+    bool   reverse = 3;
 }
 

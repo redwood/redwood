@@ -701,24 +701,24 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		start, err := strconv.ParseFloat(parts[0], 64)
+		start, err := strconv.ParseUint(parts[0], 10, 64)
 		if err != nil {
 			http.Error(w, "bad Range header", http.StatusBadRequest)
 			return
 		}
 		if parts[1] == "" {
-			rng = &state.Range{start, math.MaxFloat64}
+			rng = &state.Range{start, math.MaxUint64, false}
 		} else {
-			end, err := strconv.ParseFloat(parts[1], 64)
+			end, err := strconv.ParseUint(parts[1], 10, 64)
 			if err != nil {
 				http.Error(w, "bad Range header", http.StatusBadRequest)
 				return
 			}
-			rng = &state.Range{start, end}
+			rng = &state.Range{start, end, false}
 		}
 	}
 
-	if rng != nil && rng.Start == 0 && rng.End == math.MaxFloat64 {
+	if rng != nil && rng.Start == 0 && rng.End == math.MaxUint64 {
 		rng = nil
 	}
 
