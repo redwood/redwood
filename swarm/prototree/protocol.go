@@ -894,7 +894,7 @@ func (t *announceP2PStateURIsTask) announceP2PStateURIs(ctx context.Context) {
 		t.Errorf("while fetching state URIs from tx store: %v", err)
 		return
 	}
-	for _, stateURI := range stateURIs {
+	for stateURI := range stateURIs {
 		if t.treeProto.acl.TypeOf(stateURI) != StateURIType_Private {
 			continue
 		}

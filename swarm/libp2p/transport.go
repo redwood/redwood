@@ -946,7 +946,7 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 	}
 
 	var chDones []<-chan struct{}
-	for _, stateURI := range stateURIs {
+	for stateURI := range stateURIs {
 		stateURI := stateURI
 
 		chDone := t.Process.Go(nil, stateURI, func(ctx context.Context) {

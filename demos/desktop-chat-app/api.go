@@ -293,8 +293,11 @@ func (api *API) serveHome(w http.ResponseWriter, r *http.Request) {
 	if path == "" || path == "/" {
 		path = "index.html"
 	}
+	if path[0] == '/' {
+		path = path[1:]
+	}
 
-	file, err := staticAssets.Open(filepath.Join("frontend", "build", path))
+	file, err := staticAssets.Open("frontend/build/" + path) // go:embed paths use forward slashes regardless of OS
 	if err != nil {
 		http.Redirect(w, r, fmt.Sprintf("http://localhost:%v/index.html", api.port), http.StatusFound)
 		return

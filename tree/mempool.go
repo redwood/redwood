@@ -80,7 +80,6 @@ func (m *mempool) Get() *txSortedSet {
 }
 
 func (m *mempool) Add(tx Tx) {
-	m.Warnf("ADD TX %v %v", tx.StateURI, tx.ID)
 	m.processMempoolWorkQueue.Deliver(tx)
 }
 

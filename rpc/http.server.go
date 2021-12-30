@@ -243,7 +243,7 @@ func (s *HTTPServer) KnownStateURIs(r *http.Request, args *KnownStateURIsArgs, r
 	if err != nil {
 		return err
 	}
-	resp.StateURIs = stateURIs
+	resp.StateURIs = stateURIs.Slice()
 	return nil
 }
 

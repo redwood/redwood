@@ -6,6 +6,7 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/state"
+	"redwood.dev/types"
 )
 
 type badgerTxStore struct {
@@ -220,8 +221,8 @@ func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID state.Versio
 	return txIter
 }
 
-func (s *badgerTxStore) KnownStateURIs() ([]string, error) {
-	var stateURIs []string
+func (s *badgerTxStore) KnownStateURIs() (types.StringSet, error) {
+	stateURIs := types.NewStringSet(nil)
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
@@ -231,7 +232,7 @@ func (s *badgerTxStore) KnownStateURIs() ([]string, error) {
 		prefix := []byte("stateuri:")
 
 		for iter.Seek(prefix); iter.ValidForPrefix(prefix); iter.Next() {
-			stateURIs = append(stateURIs, string(iter.Item().Key()[len("stateuri:"):]))
+			stateURIs.Add(string(iter.Item().Key()[len("stateuri:"):]))
 		}
 		return nil
 	})
@@ -267,4 +268,34 @@ func (s *badgerTxStore) Leaves(stateURI string) ([]state.Version, error) {
 		return nil
 	})
 	return leaves, err
+}
+
+func (s *badgerTxStore) DebugPrint() {
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Reverse = false
+		opts.PrefetchValues = true
+		opts.PrefetchSize = 10
+		iter := txn.NewIterator(opts)
+		defer iter.Close()
+
+		for iter.Rewind(); iter.Valid(); iter.Next() {
+			key := iter.Item().KeyCopy(nil)
+			val, err := iter.Item().ValueCopy(nil)
+			if err != nil {
+				return err
+			}
+
+			// var tx Tx
+			// err = tx.Unmarshal(val)
+			// if err != nil {
+			// 	return err
+			// }
+			s.Debugf("%v: %0x", string(key), val)
+		}
+		return nil
+	})
+	if err != nil {
+		s.Errorf("error: %v", err)
+	}
 }

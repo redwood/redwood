@@ -138,10 +138,15 @@ var defaultREPLCommands = REPLCommands{
 	"tree": REPLCommand{
 		HelpText: "interact with the tree protocol",
 		Subcommands: REPLCommands{
-			"get":       CmdGetState,
-			"set":       CmdSetState,
-			"uris":      CmdStateURIs,
-			"txs":       CmdListTxs,
+			"get":  CmdGetState,
+			"set":  CmdSetState,
+			"uris": CmdStateURIs,
+			"txs": REPLCommand{
+				Subcommands: REPLCommands{
+					"list":      CmdListTxs,
+					"dumpstore": CmdTxStoreDebugPrint,
+				},
+			},
 			"subscribe": CmdSubscribe,
 			"dumpstore": CmdTreeStoreDebugPrint,
 			"dumptree":  CmdControllerDebugPrint,
@@ -243,7 +248,7 @@ var (
 			if len(stateURIs) == 0 {
 				fmt.Println("no known state URIs")
 			} else {
-				for _, stateURI := range stateURIs {
+				for stateURI := range stateURIs {
 					fmt.Println("- ", stateURI)
 				}
 			}
@@ -320,13 +325,35 @@ var (
 			iter := app.TxStore.AllTxsForStateURI(stateURI, tree.GenesisTxID)
 			defer iter.Close()
 
+			var rows [][]string
 			for {
 				tx := iter.Next()
 				if tx == nil {
 					break
 				}
-				app.Debugf("- %v", tx.ID)
+				var parents []string
+				for _, parent := range tx.Parents {
+					parents = append(parents, parent.Hex())
+				}
+				rows = append(rows, []string{tx.ID.Hex(), tx.Status.String(), strings.Join(parents, " ")})
 			}
+
+			table := tablewriter.NewWriter(os.Stdout)
+			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
+			table.SetCenterSeparator("|")
+			table.SetRowLine(true)
+			table.SetAutoMergeCellsByColumnIndex([]int{0, 1})
+			table.SetHeader([]string{"ID", "Status", "Parents"})
+			table.AppendBulk(rows)
+			table.Render()
+			return nil
+		},
+	}
+
+	CmdTxStoreDebugPrint = REPLCommand{
+		HelpText: "print the contents of the tx store",
+		Handler: func(args []string, app *App) error {
+			app.TxStore.DebugPrint()
 			return nil
 		},
 	}

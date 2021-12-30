@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,7 +66,7 @@ func (c HTTPClient) Close() {
 	close(c.chStop)
 }
 
-var unmarshalRequestRegexp = regexp.MustCompile(`(header|query):"([^"]+)"`)
+var unmarshalRequestRegexp = regexp.MustCompile(`(header|query|url):"([^"]+)"`)
 var stringType = reflect.TypeOf("")
 
 func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
@@ -77,7 +78,10 @@ func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
 		var found bool
 		for _, match := range matches {
 			source := match[1]
-			name := match[2]
+			var name string
+			if len(match) > 2 {
+				name = match[2]
+			}
 
 			var value string
 			switch source {
@@ -85,6 +89,8 @@ func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
 				value = r.Header.Get(name)
 			case "query":
 				value = r.URL.Query().Get(name)
+			case "url":
+				value = r.URL.Path
 			default:
 				panic("invariant violation")
 			}
@@ -97,9 +103,9 @@ func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
 
 			var err error
 			if fieldVal.Kind() == reflect.Ptr {
-				err = unmarshalHTTPRequestField(field.Name, value, fieldVal)
+				err = unmarshalHTTPField(field.Name, value, fieldVal)
 			} else if fieldVal.CanAddr() {
-				err = unmarshalHTTPRequestField(field.Name, value, fieldVal.Addr())
+				err = unmarshalHTTPField(field.Name, value, fieldVal.Addr())
 			} else {
 				return errors.Errorf("cannot unmarshal into struct field '%v'", field.Name)
 			}
@@ -118,14 +124,140 @@ func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
 	return nil
 }
 
-func unmarshalHTTPRequestField(name, value string, fieldVal reflect.Value) error {
+var unmarshalResponseRegexp = regexp.MustCompile(`(header):"([^"]+)"`)
+
+func UnmarshalHTTPResponse(into interface{}, r *http.Response) error {
+	rval := reflect.ValueOf(into).Elem()
+
+	for i := 0; i < rval.Type().NumField(); i++ {
+		field := rval.Type().Field(i)
+		matches := unmarshalRequestRegexp.FindAllStringSubmatch(string(field.Tag), -1)
+		var found bool
+		for _, match := range matches {
+			source := match[1]
+			name := match[2]
+
+			var value string
+			switch source {
+			case "header":
+				value = r.Header.Get(name)
+			default:
+				panic("invariant violation")
+			}
+
+			if value == "" {
+				continue
+			}
+
+			fieldVal := rval.Field(i)
+
+			var err error
+			if fieldVal.Kind() == reflect.Ptr {
+				err = unmarshalHTTPField(field.Name, value, fieldVal)
+			} else if fieldVal.CanAddr() {
+				err = unmarshalHTTPField(field.Name, value, fieldVal.Addr())
+			} else {
+				return errors.Errorf("cannot unmarshal into struct field '%v'", field.Name)
+			}
+			if err != nil {
+				return err
+			}
+			found = true
+			break
+		}
+		if !found {
+			if field.Tag.Get("required") != "" {
+				return errors.Errorf("missing request field '%v'", field.Name)
+			}
+		}
+	}
+	return nil
+}
+
+func unmarshalHTTPField(name, value string, fieldVal reflect.Value) error {
 	if as, is := fieldVal.Interface().(encoding.TextUnmarshaler); is {
 		return as.UnmarshalText([]byte(value))
+
 	} else if fieldVal.Type().Elem().ConvertibleTo(stringType) {
 		fieldVal.Elem().Set(reflect.ValueOf(value).Convert(fieldVal.Type().Elem()))
 		return nil
+
+	} else {
+		switch fieldVal.Kind() {
+		case reflect.Int:
+			n, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return err
+			}
+			fieldVal.Set(reflect.ValueOf(int(n)).Convert(fieldVal.Type().Elem()))
+		case reflect.Int8:
+			n, err := strconv.ParseInt(value, 10, 8)
+			if err != nil {
+				return err
+			}
+			fieldVal.Set(reflect.ValueOf(int8(n)).Convert(fieldVal.Type().Elem()))
+		case reflect.Int16:
+			n, err := strconv.ParseInt(value, 10, 16)
+			if err != nil {
+				return err
+			}
+			fieldVal.Set(reflect.ValueOf(int16(n)).Convert(fieldVal.Type().Elem()))
+		case reflect.Int32:
+			n, err := strconv.ParseInt(value, 10, 32)
+			if err != nil {
+				return err
+			}
+			fieldVal.Set(reflect.ValueOf(int32(n)).Convert(fieldVal.Type().Elem()))
+		case reflect.Int64:
+			n, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return err
+			}
+			fieldVal.Set(reflect.ValueOf(int64(n)).Convert(fieldVal.Type().Elem()))
+
+		case reflect.Uint:
+			n, err := strconv.ParseUint(value, 10, 64)
+			if err != nil {
+				return err
+			}
+			fieldVal.Set(reflect.ValueOf(uint(n)).Convert(fieldVal.Type().Elem()))
+		case reflect.Uint8:
+			n, err := strconv.ParseUint(value, 10, 8)
+			if err != nil {
+				return err
+			}
+			fieldVal.Set(reflect.ValueOf(uint8(n)).Convert(fieldVal.Type().Elem()))
+		case reflect.Uint16:
+			n, err := strconv.ParseUint(value, 10, 16)
+			if err != nil {
+				return err
+			}
+			fieldVal.Set(reflect.ValueOf(uint16(n)).Convert(fieldVal.Type().Elem()))
+		case reflect.Uint32:
+			n, err := strconv.ParseUint(value, 10, 32)
+			if err != nil {
+				return err
+			}
+			fieldVal.Set(reflect.ValueOf(uint32(n)).Convert(fieldVal.Type().Elem()))
+		case reflect.Uint64:
+			n, err := strconv.ParseUint(value, 10, 64)
+			if err != nil {
+				return err
+			}
+			fieldVal.Set(reflect.ValueOf(uint64(n)).Convert(fieldVal.Type().Elem()))
+
+		case reflect.Bool:
+			b, err := strconv.ParseBool(value)
+			if err != nil {
+				return err
+			}
+			fieldVal.Set(reflect.ValueOf(b).Convert(fieldVal.Type().Elem()))
+
+		default:
+			panic(fmt.Sprintf(`cannot unmarshal http.Request into struct field "%v" of type %T`, name, fieldVal.Type()))
+		}
 	}
-	panic(fmt.Sprintf(`cannot unmarshal http.Request into struct field "%v" of type %T`, name, fieldVal.Type()))
+	return nil
 }
 
 func ParseJWT(authHeader string, jwtSecret []byte) (jwt.MapClaims, bool, error) {

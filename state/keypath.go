@@ -3,8 +3,10 @@ package state
 import (
 	"bytes"
 	"math/rand"
+	"strconv"
 	"strings"
 
+	"redwood.dev/errors"
 	"redwood.dev/utils"
 )
 
@@ -323,22 +325,51 @@ func (k *Keypath) Unmarshal(data []byte) error {
 	return nil
 }
 
+func (k *Keypath) UnmarshalText(data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+	if data[0] == KeypathSeparator[0] {
+		data = data[1:]
+	}
+	keypathStrs := utils.FilterEmptyBytes(bytes.Split(data, KeypathSeparator))
+	keypathStr := bytes.Join(keypathStrs, KeypathSeparator)
+	keypath := Keypath(keypathStr)
+	parts := keypath.Parts()
+	newParts := make([]Keypath, 0, len(parts))
+	for _, part := range parts {
+		if idx := part.IndexByte('['); idx > -1 {
+			newParts = append(newParts, part[:idx])
+			x, err := strconv.ParseUint(string(part[idx+1:len(part)-1]), 10, 64)
+			if err != nil {
+				return errors.New("bad slice index")
+			}
+			newParts = append(newParts, EncodeSliceIndex(x))
+		} else {
+			newParts = append(newParts, part)
+		}
+	}
+	keypath = JoinKeypaths(newParts)
+	return nil
+}
+
 func (k *Keypath) Size() int { return len(*k) }
 func (k Keypath) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + string(k) + `"`), nil
 }
-func (k *Keypath) UnmarshalJSON(data []byte) error {
-	if len(data) < 3 {
-		*k = Keypath{}
-		return nil
-	}
-	*k = Keypath(data[1 : len(data)-1]).Normalized()
-	return nil
-}
+
+// func (k *Keypath) UnmarshalJSON(data []byte) error {
+// 	if len(data) < 3 {
+// 		*k = Keypath{}
+// 		return nil
+// 	}
+// 	*k = Keypath(data[1 : len(data)-1]).Normalized()
+// 	return nil
+// }
 func (k Keypath) Compare(other Keypath) int { return bytes.Compare(k[:], other[:]) }
 func (k Keypath) Equal(other Keypath) bool  { return bytes.Equal(k[:], other[:]) }
 
-func JoinKeypaths(s []Keypath, sep []byte) Keypath {
+func JoinKeypaths(s []Keypath) Keypath {
 	if len(s) == 0 {
 		return nil
 	}
@@ -346,7 +377,7 @@ func JoinKeypaths(s []Keypath, sep []byte) Keypath {
 		// Just return a copy.
 		return append([]byte(nil), s[0]...)
 	}
-	n := len(sep) * (len(s) - 1)
+	n := len(KeypathSeparator) * (len(s) - 1)
 	for _, v := range s {
 		n += len(v)
 	}
@@ -354,7 +385,7 @@ func JoinKeypaths(s []Keypath, sep []byte) Keypath {
 	b := make(Keypath, n)
 	bp := copy(b, s[0])
 	for _, v := range s[1:] {
-		bp += copy(b[bp:], sep)
+		bp += copy(b[bp:], KeypathSeparator)
 		bp += copy(b[bp:], v)
 	}
 	return b

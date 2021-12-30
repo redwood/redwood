@@ -434,9 +434,9 @@ func (app *App) Start() error {
 						continue
 					}
 
-					app.TermUI.Sidebar.SetStateURIs(stateURIs)
+					app.TermUI.Sidebar.SetStateURIs(stateURIs.Slice())
 					states := make(map[string]string)
-					for _, stateURI := range stateURIs {
+					for stateURI := range stateURIs {
 						node, err := app.ControllerHub.StateAtVersion(stateURI, nil)
 						if err != nil {
 							panic(err)
