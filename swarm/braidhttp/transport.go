@@ -405,7 +405,7 @@ func (t *transport) addressFromRequest(r *http.Request) (types.Address, error) {
 func (t *transport) serveHeadRequest(w http.ResponseWriter, r *http.Request) {
 	type request struct {
 		StateURI string        `header:"State-URI" query:"state_uri"`
-		Keypath  state.Keypath `header:"Keypath"   query:"keypath"`
+		Keypath  state.Keypath `header:"Keypath"   query:"keypath"   path:""`
 	}
 
 	var req request
@@ -596,7 +596,7 @@ func (t *transport) serveWSSubscription(w http.ResponseWriter, r *http.Request, 
 
 	subRequest := prototree.SubscriptionRequest{
 		StateURI:         req.StateURI,
-		Keypath:          state.Keypath(req.Keypath),
+		Keypath:          req.Keypath,
 		Type:             req.SubType,
 		FetchHistoryOpts: &fetchHistoryOpts,
 		Addresses:        types.NewAddressSet([]types.Address{address}),
@@ -662,7 +662,7 @@ func (t *transport) serveGetTx(w http.ResponseWriter, r *http.Request) {
 func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	type request struct {
 		StateURI string         `header:"State-URI" query:"state_uri"`
-		Keypath  state.Keypath  `url:""`
+		Keypath  state.Keypath  `path:""`
 		Version  *state.Version `header:"Version"`
 	}
 
@@ -672,6 +672,8 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	fmt.Printf("req %+v\n", req)
 
 	if req.StateURI == "" {
 		req.StateURI = t.defaultStateURI

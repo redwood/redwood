@@ -271,7 +271,7 @@ var (
 			var keypath state.Keypath
 			var rng *state.Range
 			if len(args) > 1 {
-				_, keypath, rng, err = tree.ParsePatchPath([]byte(args[1]))
+				keypath, rng, err = state.ParseKeypathAndRange([]byte(args[1]), byte('.'))
 				if err != nil {
 					return err
 				}

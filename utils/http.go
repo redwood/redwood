@@ -66,7 +66,7 @@ func (c HTTPClient) Close() {
 	close(c.chStop)
 }
 
-var unmarshalRequestRegexp = regexp.MustCompile(`(header|query|url):"([^"]+)"`)
+var unmarshalRequestRegexp = regexp.MustCompile(`(header|query|path):"([^"]*)"`)
 var stringType = reflect.TypeOf("")
 
 func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
@@ -83,32 +83,35 @@ func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
 				name = match[2]
 			}
 
+			fieldVal := rval.Field(i)
+			if fieldVal.Kind() == reflect.Ptr {
+				// no-op
+			} else if fieldVal.CanAddr() {
+				fieldVal = fieldVal.Addr()
+			} else {
+				return errors.Errorf("cannot unmarshal into unaddressable struct field '%v'", field.Name)
+			}
+
 			var value string
+			var unmarshal func(fieldName, value string, fieldVal reflect.Value) error
 			switch source {
 			case "header":
 				value = r.Header.Get(name)
+				unmarshal = unmarshalHTTPHeader
 			case "query":
 				value = r.URL.Query().Get(name)
-			case "url":
+				unmarshal = unmarshalURLQuery
+			case "path":
 				value = r.URL.Path
+				unmarshal = unmarshalURLPath
 			default:
 				panic("invariant violation")
 			}
-
 			if value == "" {
 				continue
 			}
 
-			fieldVal := rval.Field(i)
-
-			var err error
-			if fieldVal.Kind() == reflect.Ptr {
-				err = unmarshalHTTPField(field.Name, value, fieldVal)
-			} else if fieldVal.CanAddr() {
-				err = unmarshalHTTPField(field.Name, value, fieldVal.Addr())
-			} else {
-				return errors.Errorf("cannot unmarshal into struct field '%v'", field.Name)
-			}
+			err := unmarshal(name, value, fieldVal)
 			if err != nil {
 				return err
 			}
@@ -116,7 +119,7 @@ func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
 			break
 		}
 		if !found {
-			if field.Tag.Get("required") != "" {
+			if field.Tag.Get("required") == "true" {
 				return errors.Errorf("missing request field '%v'", field.Name)
 			}
 		}
@@ -124,7 +127,7 @@ func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
 	return nil
 }
 
-var unmarshalResponseRegexp = regexp.MustCompile(`(header):"([^"]+)"`)
+var unmarshalResponseRegexp = regexp.MustCompile(`(header):"([^"]*)"`)
 
 func UnmarshalHTTPResponse(into interface{}, r *http.Response) error {
 	rval := reflect.ValueOf(into).Elem()
@@ -137,28 +140,29 @@ func UnmarshalHTTPResponse(into interface{}, r *http.Response) error {
 			source := match[1]
 			name := match[2]
 
+			fieldVal := rval.Field(i)
+			if fieldVal.Kind() == reflect.Ptr {
+				// no-op
+			} else if fieldVal.CanAddr() {
+				fieldVal = fieldVal.Addr()
+			} else {
+				return errors.Errorf("cannot unmarshal into unaddressable struct field '%v'", field.Name)
+			}
+
 			var value string
+			var unmarshal func(fieldName, value string, fieldVal reflect.Value) error
 			switch source {
 			case "header":
 				value = r.Header.Get(name)
+				unmarshal = unmarshalHTTPHeader
 			default:
 				panic("invariant violation")
 			}
-
 			if value == "" {
 				continue
 			}
 
-			fieldVal := rval.Field(i)
-
-			var err error
-			if fieldVal.Kind() == reflect.Ptr {
-				err = unmarshalHTTPField(field.Name, value, fieldVal)
-			} else if fieldVal.CanAddr() {
-				err = unmarshalHTTPField(field.Name, value, fieldVal.Addr())
-			} else {
-				return errors.Errorf("cannot unmarshal into struct field '%v'", field.Name)
-			}
+			err := unmarshal(name, value, fieldVal)
 			if err != nil {
 				return err
 			}
@@ -174,7 +178,27 @@ func UnmarshalHTTPResponse(into interface{}, r *http.Response) error {
 	return nil
 }
 
-func unmarshalHTTPField(name, value string, fieldVal reflect.Value) error {
+type URLPathUnmarshaler interface {
+	UnmarshalURLPath(path string) error
+}
+
+func unmarshalURLPath(fieldName, path string, fieldVal reflect.Value) error {
+	val := fieldVal.Interface()
+	if as, is := val.(URLPathUnmarshaler); is {
+		return as.UnmarshalURLPath(path)
+	}
+	return unmarshalHTTPField(fieldName, path, fieldVal)
+}
+
+func unmarshalURLQuery(fieldName, query string, fieldVal reflect.Value) error {
+	return unmarshalHTTPField(fieldName, query, fieldVal)
+}
+
+func unmarshalHTTPHeader(fieldName, header string, fieldVal reflect.Value) error {
+	return unmarshalHTTPField(fieldName, header, fieldVal)
+}
+
+func unmarshalHTTPField(fieldName, value string, fieldVal reflect.Value) error {
 	if as, is := fieldVal.Interface().(encoding.TextUnmarshaler); is {
 		return as.UnmarshalText([]byte(value))
 
@@ -254,7 +278,7 @@ func unmarshalHTTPField(name, value string, fieldVal reflect.Value) error {
 			fieldVal.Set(reflect.ValueOf(b).Convert(fieldVal.Type().Elem()))
 
 		default:
-			panic(fmt.Sprintf(`cannot unmarshal http.Request into struct field "%v" of type %T`, name, fieldVal.Type()))
+			panic(fmt.Sprintf(`cannot unmarshal http.Request field "%v" into type %T`, fieldName, fieldVal.Type()))
 		}
 	}
 	return nil
