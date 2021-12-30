@@ -134,7 +134,7 @@ func (p *Patch) UnmarshalJSON(bs []byte) error {
 }
 
 func (p Patch) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + p.String() + `"`), nil
+	return json.Marshal(p.String())
 }
 
 // func (status TxStatus) Marshal() ([]byte, error) { return []byte(status), nil }
