@@ -101,7 +101,11 @@ func (p Patch) String() string {
 	s := strings.Join(keypathParts, "")
 
 	if p.Range != nil {
-		s += fmt.Sprintf("[%v:%v]", p.Range.Start, p.Range.End)
+		if p.Range.Reverse {
+			s += fmt.Sprintf("[-%v:-%v]", p.Range.Start, p.Range.End)
+		} else {
+			s += fmt.Sprintf("[%v:%v]", p.Range.Start, p.Range.End)
+		}
 	}
 
 	s += " = " + string(p.ValueJSON)
@@ -120,9 +124,8 @@ func (p Patch) Copy() Patch {
 }
 
 func (p *Patch) UnmarshalJSON(bs []byte) error {
-	var err error
 	var s string
-	err = json.Unmarshal(bs, &s)
+	err := json.Unmarshal(bs, &s)
 	if err != nil {
 		return err
 	}
@@ -131,7 +134,7 @@ func (p *Patch) UnmarshalJSON(bs []byte) error {
 }
 
 func (p Patch) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p.String())
+	return []byte(`"` + p.String() + `"`), nil
 }
 
 // func (status TxStatus) Marshal() ([]byte, error) { return []byte(status), nil }
