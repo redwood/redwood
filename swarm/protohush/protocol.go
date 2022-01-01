@@ -194,6 +194,7 @@ func (hp *hushProtocol) Start() error {
 		return err
 	}
 	for proposalHash := range proposalHashes {
+		hp.Debugf("ADD PROPOSAL %v", proposalHash)
 		hp.poolWorker.Add(proposeIndividualSession{proposalHash, hp})
 	}
 
@@ -342,23 +343,38 @@ func (hp *hushProtocol) ensureSessionWithSelf(sessionType string) error {
 	return nil
 }
 
-func (hp *hushProtocol) EnsureIndividualSession(ctx context.Context, sessionType string, recipient types.Address) (_ IndividualSessionProposal, exists bool, _ error) {
+func (hp *hushProtocol) EnsureIndividualSession(
+	ctx context.Context,
+	sessionType string,
+	recipient types.Address,
+) (_ IndividualSessionProposal, alreadyExisted bool, _ error) {
 	identity, err := hp.keyStore.DefaultPublicIdentity()
 	if err != nil {
 		return IndividualSessionProposal{}, false, errors.Wrapf(err, "while fetching default public identity")
 	}
 
+	// Check if we have an established session
 	session, err := hp.store.LatestIndividualSessionWithUsers(sessionType, identity.Address(), recipient)
-	if errors.Cause(err) == errors.Err404 {
-		session, err := hp.ProposeIndividualSession(ctx, sessionType, recipient, 0)
-		if err != nil {
-			return IndividualSessionProposal{}, false, err
-		}
-		return session, false, nil
-	} else if err != nil {
-		return IndividualSessionProposal{}, false, errors.Wrapf(err, "while fetching latest individual session ID with %v", recipient)
+	if err == nil {
+		return session, true, nil
+	} else if errors.Cause(err) != errors.Err404 {
+		return IndividualSessionProposal{}, false, err
 	}
-	return session, true, nil
+
+	// Check if we have a pending session proposal
+	session, err = hp.store.OutgoingIndividualSessionProposalByUsersAndType(sessionType, identity.Address(), recipient)
+	if err == nil {
+		return session, false, nil
+	} else if errors.Cause(err) != errors.Err404 {
+		return IndividualSessionProposal{}, false, err
+	}
+
+	// Failing the above, propose a new session
+	session, err = hp.ProposeIndividualSession(ctx, sessionType, recipient, 0)
+	if err != nil {
+		return IndividualSessionProposal{}, false, err
+	}
+	return session, false, nil
 }
 
 func (hp *hushProtocol) ProposeNextIndividualSession(ctx context.Context, sessionType string, recipient types.Address) (IndividualSessionProposal, error) {
@@ -411,7 +427,7 @@ func (hp *hushProtocol) ProposeIndividualSession(ctx context.Context, sessionTyp
 		return IndividualSessionProposal{}, err
 	}
 
-	hp.Debugf("Add proposeIndividualSession")
+	hp.Debugf("Add proposeIndividualSession %+v", errors.New(""))
 	hp.poolWorker.Add(proposeIndividualSession{proposalHash, hp})
 	return proposal, nil
 }
@@ -1715,6 +1731,7 @@ func (hp *hushProtocol) withPeers(
 		tpts[k] = v
 	}
 	hp.Successf("YEET transports %v", tpts)
+	hp.Successf("YEET peers %v", peers)
 
 	var chDones []<-chan struct{}
 	for _, peer := range peers {

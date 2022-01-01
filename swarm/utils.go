@@ -16,6 +16,7 @@ func TryEndpoints(
 		if !endpoint.Dialable() {
 			continue
 		}
+		numDialable++
 	}
 	if numDialable == 0 {
 		ch := make(chan struct{})
