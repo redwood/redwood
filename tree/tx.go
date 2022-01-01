@@ -23,7 +23,7 @@ var (
 	TxStatusInvalid   = pb.TxStatusInvalid
 	TxStatusValid     = pb.TxStatusValid
 
-	ParsePatch = pb.ParsePatch
+	// ParsePatch = pb.ParsePatch
 )
 
 type StateURI string

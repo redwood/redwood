@@ -194,16 +194,26 @@ func unmarshalURLQuery(fieldName, query string, fieldVal reflect.Value) error {
 	return unmarshalHTTPField(fieldName, query, fieldVal)
 }
 
+type HTTPHeaderUnmarshaler interface {
+	UnmarshalHTTPHeader(header string) error
+}
+
 func unmarshalHTTPHeader(fieldName, header string, fieldVal reflect.Value) error {
+	val := fieldVal.Interface()
+	if as, is := val.(HTTPHeaderUnmarshaler); is {
+		return as.UnmarshalHTTPHeader(header)
+	}
 	return unmarshalHTTPField(fieldName, header, fieldVal)
 }
 
 func unmarshalHTTPField(fieldName, value string, fieldVal reflect.Value) error {
 	if as, is := fieldVal.Interface().(encoding.TextUnmarshaler); is {
 		return as.UnmarshalText([]byte(value))
+	}
 
-	} else if fieldVal.Type().Elem().ConvertibleTo(stringType) {
-		fieldVal.Elem().Set(reflect.ValueOf(value).Convert(fieldVal.Type().Elem()))
+	rval := reflect.ValueOf(value)
+	if rval.Type().ConvertibleTo(fieldVal.Type().Elem()) {
+		fieldVal.Elem().Set(rval.Convert(fieldVal.Type().Elem()))
 		return nil
 
 	} else {

@@ -2,6 +2,7 @@ package state
 
 import (
 	"bytes"
+	"encoding/json"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -325,30 +326,21 @@ func (k *Keypath) Unmarshal(data []byte) error {
 	return nil
 }
 
-var urlSeparator byte = '/'
-
-func (k *Keypath) UnmarshalURLPath(path string) error {
-	keypath, _, err := ParseKeypathAndRange([]byte(path), urlSeparator)
+func (k *Keypath) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
 	if err != nil {
 		return err
 	}
-	*k = keypath
+	*k = Keypath(s).Normalized()
 	return nil
 }
 
-func (k *Keypath) UnmarshalText(data []byte) error {
-	keypath, _, err := ParseKeypathAndRange(data, urlSeparator)
-	if err != nil {
-		return err
-	}
-	*k = keypath
-	return nil
+func (k Keypath) MarshalJSON() ([]byte, error) {
+	return json.Marshal(string(k.Normalized()))
 }
 
 func (k *Keypath) Size() int { return len(*k) }
-func (k Keypath) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + string(k) + `"`), nil
-}
 
 // func (k *Keypath) UnmarshalJSON(data []byte) error {
 // 	if len(data) < 3 {
@@ -434,7 +426,7 @@ func ParseKeypathAndRange(s []byte, keypathSeparator byte) (Keypath, *Range, err
 				if err != nil {
 					return nil, nil, errors.WithStack(err)
 				}
-				if rng != nil {
+				if theRange != nil {
 					rng = theRange
 				} else {
 					keypath = keypath.PushIndex(idx)
@@ -527,7 +519,6 @@ func parseRangeOrIndex(s []byte) (*Range, uint64, int, error) {
 				// Disallow [x:y:z]
 				return nil, 0, 0, errors.WithStack(ErrBadKeypath)
 			}
-			isRange = true
 
 			start, err := strconv.ParseInt(string(buf), 10, 64)
 			if err != nil {

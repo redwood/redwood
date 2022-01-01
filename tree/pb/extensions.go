@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/types"
 )
@@ -89,13 +90,24 @@ func (p Patch) Value() (interface{}, error) {
 }
 
 func (p Patch) String() string {
+	bs, err := p.MarshalText()
+	if err != nil {
+		return fmt.Sprintf("<ERR while marshaling patch keypath '"+string(p.Keypath)+"': %v>", p.Keypath)
+	}
+	return string(bs)
+}
+
+var ErrBadPatch = errors.New("bad patch string")
+var equalsSign byte = '='
+
+func (p Patch) MarshalText() ([]byte, error) {
 	parts := p.Keypath.Parts()
 	var keypathParts []string
-	for _, key := range parts {
-		if bytes.IndexByte(key, '.') > -1 {
-			keypathParts = append(keypathParts, `["`+string(key)+`"]`)
+	for _, part := range parts {
+		if bytes.IndexByte(part, KeypathSeparator[0]) > -1 {
+			keypathParts = append(keypathParts, `["`+string(part)+`"]`)
 		} else {
-			keypathParts = append(keypathParts, KeypathSeparator+string(key))
+			keypathParts = append(keypathParts, KeypathSeparator+string(part))
 		}
 	}
 	s := strings.Join(keypathParts, "")
@@ -110,17 +122,39 @@ func (p Patch) String() string {
 
 	s += " = " + string(p.ValueJSON)
 
-	return s
+	return []byte(s), nil
 }
 
-func (p Patch) Copy() Patch {
-	val := make([]byte, len(p.ValueJSON))
-	copy(val, p.ValueJSON)
-	return Patch{
-		Keypath:   p.Keypath.Copy(),
-		Range:     p.Range.Copy(),
-		ValueJSON: val,
+func (p *Patch) UnmarshalText(bs []byte) error {
+	idx := bytes.IndexByte(bs, equalsSign)
+	if idx < 0 {
+		return errors.Wrapf(ErrBadPatch, "no '=' sign")
 	}
+
+	keypath, rng, err := state.ParseKeypathAndRange(bs[:idx], KeypathSeparator[0])
+	if err != nil {
+		return errors.Wrapf(err, "%v", ErrBadPatch)
+	}
+
+	valueJSON := bytes.TrimSpace(bs[idx+1:])
+	if len(valueJSON) == 0 {
+		return errors.Wrapf(ErrBadPatch, "no value")
+	}
+
+	*p = Patch{
+		Keypath:   keypath,
+		Range:     rng,
+		ValueJSON: valueJSON,
+	}
+	return nil
+}
+
+func (p Patch) MarshalJSON() ([]byte, error) {
+	bs, err := p.MarshalText()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(string(bs))
 }
 
 func (p *Patch) UnmarshalJSON(bs []byte) error {
@@ -129,13 +163,24 @@ func (p *Patch) UnmarshalJSON(bs []byte) error {
 	if err != nil {
 		return err
 	}
-	*p, err = ParsePatch([]byte(s))
-	return err
+	return p.UnmarshalText([]byte(s))
 }
 
-func (p Patch) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p.String())
+func (p Patch) Copy() Patch {
+	valueJSON := make([]byte, len(p.ValueJSON))
+	copy(valueJSON, p.ValueJSON)
+	return Patch{
+		Keypath:   p.Keypath,
+		Range:     p.Range.Copy(),
+		ValueJSON: valueJSON,
+	}
 }
+
+// type PatchKeypath state.Keypath
+
+// func (k PatchKeypath) ToStateKeypath() state.Keypath {
+
+// }
 
 // func (status TxStatus) Marshal() ([]byte, error) { return []byte(status), nil }
 

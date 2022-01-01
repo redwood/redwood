@@ -138,6 +138,7 @@ func (m *Tx) GetStatus() TxStatus {
 }
 
 type Patch struct {
+	// string keypath = 1;
 	Keypath   redwood_dev_state.Keypath `protobuf:"bytes,1,opt,name=keypath,proto3,customtype=redwood.dev/state.Keypath" json:"keypath"`
 	Range     *pb.Range                 `protobuf:"bytes,2,opt,name=range,proto3" json:"range,omitempty"`
 	ValueJSON []byte                    `protobuf:"bytes,3,opt,name=valueJSON,proto3" json:"valueJSON,omitempty"`

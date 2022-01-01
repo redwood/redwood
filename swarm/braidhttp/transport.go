@@ -659,11 +659,76 @@ func (t *transport) serveGetTx(w http.ResponseWriter, r *http.Request) {
 	utils.RespondJSON(w, tx)
 }
 
+type keypathAndRangePath struct {
+	Keypath state.Keypath
+	Range   *state.Range
+}
+
+func (k *keypathAndRangePath) UnmarshalURLPath(path string) error {
+	keypath, rng, err := state.ParseKeypathAndRange([]byte(path), byte('/'))
+	if err != nil {
+		return err
+	}
+	k.Keypath = keypath
+	k.Range = rng
+	return nil
+}
+
+type httpRangeHeader struct {
+	RangeType string
+	Range     *state.Range
+}
+
+func (h *httpRangeHeader) UnmarshalHTTPHeader(header string) error {
+	*h = httpRangeHeader{}
+
+	// Range: -10:-5
+	// @@TODO: real json Range parsing
+	parts := strings.SplitN(header, "=", 2)
+	if len(parts) != 2 {
+		return errors.Errorf("bad Range header: '%v'", header)
+	}
+	h.RangeType = parts[0]
+
+	switch h.RangeType {
+	case "json":
+		parts = strings.SplitN(parts[1], ":", 2)
+		if len(parts) != 2 {
+			return errors.Errorf("bad Range header: '%v'", header)
+		}
+	case "bytes":
+		parts = strings.SplitN(parts[1], "-", 2)
+		if len(parts) != 2 {
+			return errors.Errorf("bad Range header: '%v'", header)
+		}
+	}
+	start, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return errors.Errorf("bad Range header: '%v'", header)
+	}
+	if parts[1] == "" {
+		if start == 0 {
+			h.Range = nil
+		} else {
+			h.Range = &state.Range{start, math.MaxUint64, false}
+		}
+	} else {
+		end, err := strconv.ParseUint(parts[1], 10, 64)
+		if err != nil {
+			return errors.Errorf("bad Range header: '%v'", header)
+		}
+		h.Range = &state.Range{start, end, false}
+	}
+	return nil
+}
+
 func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	type request struct {
-		StateURI string         `header:"State-URI" query:"state_uri"`
-		Keypath  state.Keypath  `path:""`
-		Version  *state.Version `header:"Version"`
+		StateURI        string              `header:"State-URI" query:"state_uri"`
+		Version         *state.Version      `header:"Version"`
+		KeypathAndRange keypathAndRangePath `path:""`
+		RangeHeader     *httpRangeHeader    `header:"Range"`
+		Raw             bool                `query:"raw"`
 	}
 
 	var req request
@@ -680,169 +745,69 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rng *state.Range
-	if rstr := r.Header.Get("Range"); rstr != "" {
-		// Range: -10:-5
-		// @@TODO: real json Range parsing
-		parts := strings.SplitN(rstr, "=", 2)
-		if len(parts) != 2 {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
-		}
-
-		switch parts[0] {
-		case "json":
-			parts = strings.SplitN(parts[1], ":", 2)
-			if len(parts) != 2 {
-				http.Error(w, "bad Range header", http.StatusBadRequest)
-				return
-			}
-		case "bytes":
-			parts = strings.SplitN(parts[1], "-", 2)
-			if len(parts) != 2 {
-				http.Error(w, "bad Range header", http.StatusBadRequest)
-				return
-			}
-		}
-		start, err := strconv.ParseUint(parts[0], 10, 64)
-		if err != nil {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
-		}
-		if parts[1] == "" {
-			rng = &state.Range{start, math.MaxUint64, false}
-		} else {
-			end, err := strconv.ParseUint(parts[1], 10, 64)
-			if err != nil {
-				http.Error(w, "bad Range header", http.StatusBadRequest)
-				return
-			}
-			rng = &state.Range{start, end, false}
-		}
-	}
-
-	if rng != nil && rng.Start == 0 && rng.End == math.MaxUint64 {
-		rng = nil
-	}
-
-	// Add the "Parents" header
-	t.addParentsHeader(req.StateURI, w)
-	// {
-	// 	leaves, err := t.controllerHub.Leaves(req.StateURI)
-	// 	if err != nil {
-	// 		http.Error(w, fmt.Sprintf("%v", err), http.StatusNotFound)
-	// 		return
-	// 	}
-	// 	if len(leaves) > 0 {
-	// 		leaf := leaves[0]
-
-	// 		tx, err := t.controllerHub.FetchTx(req.StateURI, leaf)
-	// 		if err != nil {
-	// 			http.Error(w, fmt.Sprintf("can't fetch tx %v: %+v", leaf, err.Error()), http.StatusNotFound)
-	// 			return
-	// 		}
-	// 		parents := tx.Parents
-
-	// 		var parentStrs []string
-	// 		for _, pid := range parents {
-	// 			parentStrs = append(parentStrs, pid.Hex())
-	// 		}
-	// 		w.Header().Add("Parents", strings.Join(parentStrs, ","))
-	// 	} else {
-	// 		w.Header().Add("Parents", "")
-	// 	}
-	// }
-
-	indexName, indexArg := parseIndexParams(r)
-	raw, err := parseRawParam(r)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusBadRequest)
-		return
+	if req.RangeHeader != nil {
+		rng = req.RangeHeader.Range
+	} else {
+		rng = req.KeypathAndRange.Range
 	}
 
 	var node state.Node
 	var anyMissing bool
 
-	if indexName != "" {
-		// Index query
+	node, err = t.controllerHub.StateAtVersion(req.StateURI, req.Version)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+		return
+	}
+	defer node.Close()
 
-		// You can specify an index_arg of * in order to fetch the entire index
-		var indexArgKeypath state.Keypath
-		if indexArg != "*" {
-			indexArgKeypath = state.Keypath(indexArg)
-		}
+	if req.Raw {
+		node = node.NodeAt(req.KeypathAndRange.Keypath, rng)
 
-		node, err = t.controllerHub.QueryIndex(req.StateURI, req.Version, req.Keypath, state.Keypath(indexName), indexArgKeypath, rng)
-		if errors.Cause(err) == errors.Err404 {
-			http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+	} else {
+		var exists bool
+		node, exists, err = nelson.Seek(node, req.KeypathAndRange.Keypath, t.controllerHub, t.blobStore)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 			return
-		} else if err != nil {
+		} else if !exists {
+			http.Error(w, fmt.Sprintf("not found: %v", req.KeypathAndRange.Keypath), http.StatusNotFound)
+			return
+		}
+		// kp := req.KeypathAndRange.Keypath
+		req.KeypathAndRange.Keypath = nil
+
+		// node, err = node.CopyToMemory(req.KeypathAndRange.Keypath, rng)
+		// if errors.Cause(err) == errors.Err404 {
+		// 	http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+		// 	return
+		// } else if err != nil {
+		// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+		// 	return
+		// }
+		// fmt.Printf("NODE COPY %v (%T) %+v\n", kp, node, node)
+
+		// node, anyMissing, err = nelson.Resolve(node, t.controllerHub, t.blobStore)
+		// if err != nil {
+		// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+		// 	return
+		// }
+		// fmt.Printf("NODE RESOLVE %v (%T) %+v\n", kp, node, node)
+
+		indexHTMLExists, err := node.Exists(req.KeypathAndRange.Keypath.Push(state.Keypath("index.html")))
+		if err != nil {
 			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 			return
 		}
-
-	} else {
-		// State query
-		node, err = t.controllerHub.StateAtVersion(req.StateURI, req.Version)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
-			return
+		if indexHTMLExists {
+			req.KeypathAndRange.Keypath = req.KeypathAndRange.Keypath.Push(state.Keypath("index.html"))
+			node = node.NodeAt(state.Keypath("index.html"), nil)
 		}
-		defer node.Close()
-
-		if raw {
-			node = node.NodeAt(req.Keypath, rng)
-
-		} else {
-			var exists bool
-			node, exists, err = nelson.Seek(node, req.Keypath, t.controllerHub, t.blobStore)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-				return
-			} else if !exists {
-				http.Error(w, fmt.Sprintf("not found: %v", req.Keypath), http.StatusNotFound)
-				return
-			}
-			// kp := req.Keypath
-			req.Keypath = nil
-
-			// node, err = node.CopyToMemory(req.Keypath, rng)
-			// if errors.Cause(err) == errors.Err404 {
-			// 	http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
-			// 	return
-			// } else if err != nil {
-			// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-			// 	return
-			// }
-			// fmt.Printf("NODE COPY %v (%T) %+v\n", kp, node, node)
-
-			// node, anyMissing, err = nelson.Resolve(node, t.controllerHub, t.blobStore)
-			// if err != nil {
-			// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-			// 	return
-			// }
-			// fmt.Printf("NODE RESOLVE %v (%T) %+v\n", kp, node, node)
-
-			indexHTMLExists, err := node.Exists(req.Keypath.Push(state.Keypath("index.html")))
-			if err != nil {
-				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-				return
-			}
-			if indexHTMLExists {
-				req.Keypath = req.Keypath.Push(state.Keypath("index.html"))
-				node = node.NodeAt(state.Keypath("index.html"), nil)
-			}
-		}
-	}
-
-	err = t.addResourceHeaders(req.StateURI, node, w)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-		return
 	}
 
 	var val interface{}
 	var exists bool
-	if !raw {
+	if !req.Raw {
 		val, exists, err = nelson.GetValueRecursive(node, nil, nil)
 	} else {
 		val, exists, err = node.Value(nil, nil)
@@ -865,6 +830,17 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	}
 	defer respBuf.Close()
 
+	// Add the "Parents" header
+	t.addParentsHeader(req.StateURI, w)
+
+	// Add resource headers
+	err = t.addResourceHeaders(req.StateURI, node, w)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Add "Partial Content" status code if applicable
 	if anyMissing {
 		w.WriteHeader(http.StatusPartialContent)
 	}
@@ -1047,7 +1023,8 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, peerConn
 		scanner := bufio.NewScanner(patchReader)
 		for scanner.Scan() {
 			line := scanner.Bytes()
-			patch, err := tree.ParsePatch(line)
+			var patch tree.Patch
+			err := patch.UnmarshalText([]byte(line))
 			if err != nil {
 				http.Error(w, fmt.Sprintf("bad patch string: %v", line), http.StatusBadRequest)
 				return

@@ -46,7 +46,6 @@ enum TxStatus {
 
 message Patch {
     option (gogoproto.stringer) = false;
-    // option (gogoproto.testgen) = false;
 
     bytes keypath = 1 [(gogoproto.customtype) = "redwood.dev/state.Keypath", (gogoproto.nullable) = false];
     Redwood.state.Range range = 2;
