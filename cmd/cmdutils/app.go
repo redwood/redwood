@@ -247,6 +247,11 @@ func (app *App) Start() error {
 	var transports []swarm.Transport
 	{
 		if cfg.Libp2pTransport.Enabled {
+			store, err := libp2p.NewStore(app.SharedStateDB)
+			if err != nil {
+				return err
+			}
+
 			var bootstrapPeers []string
 			for _, bp := range cfg.BootstrapPeers {
 				if bp.Transport != "libp2p" {
@@ -259,9 +264,10 @@ func (app *App) Start() error {
 				cfg.Libp2pTransport.ListenPort,
 				cfg.Libp2pTransport.ReachableAt,
 				bootstrapPeers,
-				cfg.Libp2pTransport.StaticRelays,
+				// cfg.Libp2pTransport.StaticRelays,
 				filepath.Join(cfg.DataRoot, libp2p.TransportName),
 				cfg.DNSOverHTTPSURL,
+				store,
 				app.ControllerHub,
 				app.KeyStore,
 				app.BlobStore,
@@ -368,7 +374,7 @@ func (app *App) Start() error {
 	}
 
 	if cfg.HTTPRPC.Enabled {
-		rwRPC := rpc.NewHTTPServer([]byte(cfg.JWTSecret), app.AuthProto, app.BlobProto, app.TreeProto, app.PeerStore, app.KeyStore, app.BlobStore, app.ControllerHub)
+		rwRPC := rpc.NewHTTPServer([]byte(cfg.JWTSecret), app.AuthProto, app.BlobProto, app.TreeProto, app.PeerStore, app.KeyStore, app.BlobStore, app.ControllerHub, app.Libp2pTransport)
 		var server interface{}
 		if cfg.HTTPRPC.Server != nil {
 			server = cfg.HTTPRPC.Server(rwRPC)

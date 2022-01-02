@@ -21,6 +21,7 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
+	"redwood.dev/swarm/libp2p"
 	"redwood.dev/swarm/protoauth"
 	"redwood.dev/swarm/protoblob"
 	"redwood.dev/swarm/prototree"
@@ -70,14 +71,15 @@ func StartHTTPRPC(svc interface{}, config *HTTPConfig, jwtSecret []byte) (*http.
 
 type HTTPServer struct {
 	log.Logger
-	jwtSecret     []byte
-	authProto     protoauth.AuthProtocol
-	blobProto     protoblob.BlobProtocol
-	treeProto     prototree.TreeProtocol
-	peerStore     swarm.PeerStore
-	keyStore      identity.KeyStore
-	blobStore     blob.Store
-	controllerHub tree.ControllerHub
+	jwtSecret       []byte
+	authProto       protoauth.AuthProtocol
+	blobProto       protoblob.BlobProtocol
+	treeProto       prototree.TreeProtocol
+	peerStore       swarm.PeerStore
+	keyStore        identity.KeyStore
+	blobStore       blob.Store
+	controllerHub   tree.ControllerHub
+	libp2pTransport libp2p.Transport
 }
 
 func NewHTTPServer(
@@ -89,17 +91,19 @@ func NewHTTPServer(
 	keyStore identity.KeyStore,
 	blobStore blob.Store,
 	controllerHub tree.ControllerHub,
+	libp2pTransport libp2p.Transport,
 ) *HTTPServer {
 	return &HTTPServer{
-		Logger:        log.NewLogger("http rpc"),
-		jwtSecret:     jwtSecret,
-		authProto:     authProto,
-		blobProto:     blobProto,
-		treeProto:     treeProto,
-		peerStore:     peerStore,
-		keyStore:      keyStore,
-		blobStore:     blobStore,
-		controllerHub: controllerHub,
+		Logger:          log.NewLogger("http rpc"),
+		jwtSecret:       jwtSecret,
+		authProto:       authProto,
+		blobProto:       blobProto,
+		treeProto:       treeProto,
+		peerStore:       peerStore,
+		keyStore:        keyStore,
+		blobStore:       blobStore,
+		controllerHub:   controllerHub,
+		libp2pTransport: libp2pTransport,
 	}
 }
 
@@ -226,6 +230,49 @@ func (s *HTTPServer) AddPeer(r *http.Request, args *AddPeerArgs, resp *AddPeerRe
 	}
 	s.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: args.TransportName, DialAddr: args.DialAddr}, "")
 	return nil
+}
+
+type (
+	StaticRelaysArgs     struct{}
+	StaticRelaysResponse struct {
+		StaticRelays []string
+	}
+)
+
+func (s *HTTPServer) StaticRelays(r *http.Request, args *StaticRelaysArgs, resp *StaticRelaysResponse) error {
+	if s.libp2pTransport == nil {
+		return errors.ErrUnsupported
+	}
+	resp.StaticRelays = s.libp2pTransport.StaticRelays().Slice()
+	return nil
+}
+
+type (
+	AddStaticRelayArgs struct {
+		DialAddr string
+	}
+	AddStaticRelayResponse struct{}
+)
+
+func (s *HTTPServer) AddStaticRelay(r *http.Request, args *AddStaticRelayArgs, resp *AddStaticRelayResponse) error {
+	if s.libp2pTransport == nil {
+		return errors.ErrUnsupported
+	}
+	return s.libp2pTransport.AddStaticRelay(args.DialAddr)
+}
+
+type (
+	RemoveStaticRelayArgs struct {
+		DialAddr string
+	}
+	RemoveStaticRelayResponse struct{}
+)
+
+func (s *HTTPServer) RemoveStaticRelay(r *http.Request, args *RemoveStaticRelayArgs, resp *RemoveStaticRelayResponse) error {
+	if s.libp2pTransport == nil {
+		return errors.ErrUnsupported
+	}
+	return s.libp2pTransport.RemoveStaticRelay(args.DialAddr)
 }
 
 type (

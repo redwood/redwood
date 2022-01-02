@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { Avatar, IconButton, TextField } from '@material-ui/core'
-import { Add as AddIcon, CloudDownloadRounded as ImportIcon, Face as FaceIcon } from '@material-ui/icons'
+import { Add as AddIcon, CloudDownloadRounded as ImportIcon, Face as FaceIcon, Settings as SettingsIcon } from '@material-ui/icons'
 import moment from 'moment'
 
 import Tooltip from '../Tooltip'
@@ -10,6 +10,7 @@ import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
 import Input, { InputLabel } from '../Input'
 import { ServerFab, DMButton } from '../ServerFab'
+import SettingsModal from '../SettingsModal'
 import AddServerModal from './AddServerModal'
 import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 import useModal from '../../hooks/useModal'
@@ -64,10 +65,15 @@ function ServerBar({ className, verticalPadding }) {
     const [isLoaded, setIsLoaded] = useState(false)
 	const joinedServers = useJoinedServers()
 
+    const { onPresent: onPresentSettingsModal, onDismiss: onDismissSettingsModal } = useModal('settings')
     const { onPresent: onPresentContactsModal } = useModal('contacts')
     const { onPresent: onPresentAddServerModal, onDismiss: onDismissAddServerModal } = useModal('add server')
     const { onPresent: onPresentImportServerModal, onDismiss: onDismissImportServerModal } = useModal('import server')
     const theme = useTheme()
+
+    const onClickSettings = useCallback(() => {
+        onPresentSettingsModal()
+    }, [onPresentSettingsModal])
 
     const onClickContacts = useCallback(() => {
         onPresentContactsModal()
@@ -106,6 +112,12 @@ function ServerBar({ className, verticalPadding }) {
 
             <Spacer />
 
+            <Tooltip title="Settings" placement="right" arrow>
+                <ServerIconWrapper onClick={onClickSettings}>
+                    <CircularButton><SettingsIcon style={{ color: theme.color.indigo[500] }} /></CircularButton>
+                </ServerIconWrapper>
+            </Tooltip>
+
             <Tooltip title="Contacts" placement="right" arrow>
                 <ServerIconWrapper onClick={onClickContacts}>
                     <CircularButton><FaceIcon style={{ color: theme.color.indigo[500] }} /></CircularButton>
@@ -124,6 +136,7 @@ function ServerBar({ className, verticalPadding }) {
                 </ServerIconWrapper>
             </Tooltip>
 
+            <SettingsModal onDismiss={onDismissSettingsModal} />
             <AddServerModal onDismiss={onDismissAddServerModal} />
             <ImportServerModal onDismiss={onDismissImportServerModal} />
         </Container>

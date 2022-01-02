@@ -168,6 +168,14 @@ var defaultREPLCommands = REPLCommands{
 		HelpText: "interact with the libp2p transport",
 		Subcommands: REPLCommands{
 			"id": CmdLibp2pPeerID,
+			"relay": REPLCommand{
+				HelpText: "interact with the libp2p transport",
+				Subcommands: REPLCommands{
+					"add":  CmdLibp2pRelayAdd,
+					"rm":   CmdLibp2pRelayRemove,
+					"list": CmdLibp2pRelayList,
+				},
+			},
 		},
 	},
 	"ps": REPLCommand{
@@ -217,6 +225,43 @@ var (
 			}
 			peerID := app.Libp2pTransport.Libp2pPeerID()
 			app.Debugf("libp2p peer ID: %v", peerID)
+			return nil
+		},
+	}
+
+	CmdLibp2pRelayAdd = REPLCommand{
+		HelpText: "add a libp2p static relay",
+		Handler: func(args []string, app *App) error {
+			if app.Libp2pTransport == nil {
+				return errors.New("libp2p is disabled")
+			} else if len(args) < 1 {
+				return errors.New("requires 1 argument: libp2p relay add <multiaddress>")
+			}
+			return app.Libp2pTransport.AddStaticRelay(args[0])
+		},
+	}
+
+	CmdLibp2pRelayRemove = REPLCommand{
+		HelpText: "remove a libp2p static relay",
+		Handler: func(args []string, app *App) error {
+			if app.Libp2pTransport == nil {
+				return errors.New("libp2p is disabled")
+			} else if len(args) < 1 {
+				return errors.New("requires 1 argument: libp2p relay rm <multiaddress>")
+			}
+			return app.Libp2pTransport.RemoveStaticRelay(args[0])
+		},
+	}
+
+	CmdLibp2pRelayList = REPLCommand{
+		HelpText: "list the currently configured libp2p static relays",
+		Handler: func(args []string, app *App) error {
+			if app.Libp2pTransport == nil {
+				return errors.New("libp2p is disabled")
+			}
+			for relay := range app.Libp2pTransport.StaticRelays() {
+				fmt.Println(" -", relay)
+			}
 			return nil
 		},
 	}

@@ -194,7 +194,6 @@ func (hp *hushProtocol) Start() error {
 		return err
 	}
 	for proposalHash := range proposalHashes {
-		hp.Debugf("ADD PROPOSAL %v", proposalHash)
 		hp.poolWorker.Add(proposeIndividualSession{proposalHash, hp})
 	}
 
@@ -740,7 +739,6 @@ func (t *exchangeDHPubkeysTask) exchangeDHPubkeys(ctx context.Context) {
 		duIDs.Add(peer.DeviceUniqueID())
 	}
 	for duID := range duIDs {
-		t.Successf("ADD %v", duID)
 		t.hushProto.poolWorker.Add(exchangeDHPubkeys{duID, t.hushProto})
 	}
 }
@@ -753,7 +751,6 @@ type exchangeDHPubkeys struct {
 func (t exchangeDHPubkeys) ID() process.PoolUniqueID { return t }
 
 func (t exchangeDHPubkeys) Work(ctx context.Context) (retry bool) {
-	t.hushProto.Successf("WORK %v", t.deviceUniqueID)
 	attestations, err := t.hushProto.store.DHPubkeyAttestations()
 	if err != nil {
 		t.hushProto.Errorf("while fetching DH pubkey attestations: %v", err)
@@ -762,16 +759,13 @@ func (t exchangeDHPubkeys) Work(ctx context.Context) (retry bool) {
 
 	peer, exists := t.hushProto.peerStore.PeerWithDeviceUniqueID(t.deviceUniqueID)
 	if !exists {
-		t.hushProto.Successf("PEER NOT EXIST %v", t.deviceUniqueID)
 		return true
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	t.hushProto.Successf("OK %v", t.deviceUniqueID)
 	t.hushProto.withPeers(ctx, []swarm.PeerInfo{peer}, func(ctx context.Context, peerConn HushPeerConn) error {
-		t.hushProto.Successf("SEND PUBKEY ATTESTATIONS %v", t.deviceUniqueID)
 		err = peerConn.SendDHPubkeyAttestations(ctx, attestations)
 		if err != nil {
 			t.hushProto.Errorf("while exchanging DH pubkey: %v", err)
@@ -1730,13 +1724,10 @@ func (hp *hushProtocol) withPeers(
 	for k, v := range hp.transports {
 		tpts[k] = v
 	}
-	hp.Successf("YEET transports %v", tpts)
-	hp.Successf("YEET peers %v", peers)
 
 	var chDones []<-chan struct{}
 	for _, peer := range peers {
 		chDone := swarm.TryEndpoints(ctx, tpts, peer.Endpoints(), func(ctx context.Context, peerConn swarm.PeerConn) error {
-			hp.Successf("YEET TRY %v", peerConn.DeviceUniqueID())
 			return fn(ctx, peerConn.(HushPeerConn))
 		})
 		chDones = append(chDones, chDone)

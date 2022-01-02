@@ -5,12 +5,19 @@ import (
 	"time"
 )
 
+// TryEndpoints accepts a list of peer endpoints for a single peer, attempts to
+// establish connections to each of the endpoints concurrently, and runs the provided
+// function on each one. As long as the function returns an error, it will continue
+// attempting (while respecting the backoff for that endpoint). As soon as the
+// function succeeds once, for a single endpoint, all connections are closed and
+// TryEndpoints terminates. The returned channel closes when termination occurs.
 func TryEndpoints(
 	ctx context.Context,
 	transports map[string]Transport,
 	endpoints map[PeerDialInfo]PeerEndpoint,
 	fn func(ctx context.Context, peerConn PeerConn) error,
-) <-chan struct{} {
+) (chDone <-chan struct{}) {
+
 	var numDialable int
 	for _, endpoint := range endpoints {
 		if !endpoint.Dialable() {
@@ -32,7 +39,6 @@ func TryEndpoints(
 		if _, exists := transports[dialInfo.TransportName]; !exists {
 			continue
 		}
-		numDialable++
 
 		go func() {
 			peerConn, err := transports[dialInfo.TransportName].NewPeerConn(ctx, dialInfo.DialAddr)

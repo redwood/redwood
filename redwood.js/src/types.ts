@@ -21,6 +21,9 @@ export interface RPCClient {
     knownStateURIs: () => Promise<string[]>
     sendTx: (tx: RPCSendTx) => void
     addPeer: (dialInfo: PeerDialInfo) => void
+    staticRelays: () => Promise<string[]>
+    addStaticRelay: (dialAddr: string) => void
+    removeStaticRelay: (dialAddr: string) => void
     privateTreeMembers: (stateURI: string) => Promise<string[]>
     peers: () => Promise<RPCPeer[]>
 }
