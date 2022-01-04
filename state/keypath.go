@@ -2,7 +2,13 @@ package state
 
 import (
 	"bytes"
-	"crypto/rand"
+	"encoding/json"
+	"math/rand"
+	"strconv"
+	"strings"
+
+	"redwood.dev/errors"
+	"redwood.dev/utils"
 )
 
 type Keypath []byte
@@ -289,13 +295,13 @@ func (k Keypath) CommonAncestor(other Keypath) Keypath {
 
 func (k Keypath) Normalized() Keypath {
 	if len(k) == 0 {
-		return k
+		return nil
 	}
 	if k[0] == KeypathSeparator[0] {
 		k = k[1:]
 	}
 	if len(k) == 0 {
-		return k
+		return nil
 	}
 	if k[len(k)-1] == KeypathSeparator[0] {
 		k = k[:len(k)-1]
@@ -320,22 +326,26 @@ func (k *Keypath) Unmarshal(data []byte) error {
 	return nil
 }
 
-func (k *Keypath) Size() int { return len(*k) }
-func (k Keypath) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + string(k) + `"`), nil
-}
 func (k *Keypath) UnmarshalJSON(data []byte) error {
-	if len(data) < 3 {
-		*k = Keypath{}
-		return nil
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
 	}
-	*k = Keypath(data[1 : len(data)-1]).Normalized()
+	*k = Keypath(s).Normalized()
 	return nil
 }
+
+func (k Keypath) MarshalJSON() ([]byte, error) {
+	return json.Marshal(string(k.Normalized()))
+}
+
+func (k *Keypath) Size() int { return len(*k) }
+
 func (k Keypath) Compare(other Keypath) int { return bytes.Compare(k[:], other[:]) }
 func (k Keypath) Equal(other Keypath) bool  { return bytes.Equal(k[:], other[:]) }
 
-func JoinKeypaths(s []Keypath, sep []byte) Keypath {
+func JoinKeypaths(s []Keypath) Keypath {
 	if len(s) == 0 {
 		return nil
 	}
@@ -343,7 +353,7 @@ func JoinKeypaths(s []Keypath, sep []byte) Keypath {
 		// Just return a copy.
 		return append([]byte(nil), s[0]...)
 	}
-	n := len(sep) * (len(s) - 1)
+	n := len(KeypathSeparator) * (len(s) - 1)
 	for _, v := range s {
 		n += len(v)
 	}
@@ -351,16 +361,10 @@ func JoinKeypaths(s []Keypath, sep []byte) Keypath {
 	b := make(Keypath, n)
 	bp := copy(b, s[0])
 	for _, v := range s[1:] {
-		bp += copy(b[bp:], sep)
+		bp += copy(b[bp:], KeypathSeparator)
 		bp += copy(b[bp:], v)
 	}
 	return b
-}
-
-func randomBytes(length int) []byte {
-	bs := make([]byte, length)
-	rand.Read(bs)
-	return bs
 }
 
 type gogoprotobufTest interface {
@@ -373,6 +377,158 @@ type gogoprotobufTest interface {
 }
 
 func NewPopulatedKeypath(_ gogoprotobufTest) *Keypath {
-	k := Keypath(randomBytes(32))
+	parts := make([]string, rand.Intn(5))
+	for i := range parts {
+		parts[i] = utils.RandomString(rand.Intn(10))
+	}
+	k := Keypath([]byte(strings.Join(parts, string(KeypathSeparator))))
 	return &k
+}
+
+var ErrBadKeypath = errors.New("bad keypath")
+
+func ParseKeypathAndRange(s []byte, keypathSeparator byte) (Keypath, *Range, error) {
+	var keypath Keypath
+	var rng *Range
+
+	s = bytes.TrimSpace(s)
+
+	for i := 0; i < len(s); {
+		switch s[i] {
+		case keypathSeparator:
+			key, err := parseKeypathPart(s[i:], keypathSeparator)
+			if err != nil {
+				return nil, nil, errors.WithStack(err)
+			}
+			keypath = keypath.Push(key)
+			i += len(key) + 1
+
+		case '[':
+			switch s[i+1] {
+			case '"', '\'':
+				key, err := parseBracketKey(s[i:])
+				if err != nil {
+					return nil, nil, errors.WithStack(err)
+				}
+				keypath = keypath.Push(key)
+				i += len(key) + 4
+
+			case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+				theRange, idx, length, err := parseRangeOrIndex(s[i:])
+				if err != nil {
+					return nil, nil, errors.WithStack(err)
+				}
+				if theRange != nil {
+					rng = theRange
+				} else {
+					keypath = keypath.PushIndex(idx)
+				}
+				i += length
+
+			default:
+				return nil, nil, errors.WithStack(ErrBadKeypath)
+			}
+
+		default:
+			return nil, nil, errors.WithStack(ErrBadKeypath)
+		}
+	}
+	return keypath.Normalized(), rng, nil
+}
+
+func parseKeypathPart(s []byte, keypathSeparator byte) ([]byte, error) {
+	buf := []byte{}
+	// start at index 1, skip first dot
+	for i := 1; i < len(s); i++ {
+		if s[i] == keypathSeparator || s[i] == '[' || s[i] == ' ' {
+			if len(buf) == 0 {
+				return nil, nil
+			}
+			return buf, nil
+		} else {
+			buf = append(buf, s[i])
+		}
+	}
+	return buf, nil
+}
+
+func parseBracketKey(s []byte) ([]byte, error) {
+	if len(s) < 5 {
+		return nil, errors.WithStack(ErrBadKeypath)
+	} else if s[0] != '[' && s[1] != '"' {
+		return nil, errors.WithStack(ErrBadKeypath)
+	}
+
+	buf := []byte{}
+	// start at index 2, skip ["
+	for i := 2; i < len(s); i++ {
+		if s[i] == '"' {
+			return buf, nil
+		} else {
+			buf = append(buf, s[i])
+		}
+	}
+	return nil, errors.WithStack(ErrBadKeypath)
+}
+
+func parseRangeOrIndex(s []byte) (*Range, uint64, int, error) {
+	var (
+		isRange = false
+		rng     = &Range{}
+		buf     = make([]byte, 0, 8) // Approximation/heuristic
+	)
+	// Start at index 1, skip [
+	for i := 1; i < len(s); i++ {
+		if s[i] == ']' {
+			if len(buf) == 0 {
+				return nil, 0, 0, errors.WithStack(ErrBadKeypath)
+			}
+			end, err := strconv.ParseInt(string(buf), 10, 64)
+			if err != nil {
+				return nil, 0, 0, errors.WithStack(ErrBadKeypath)
+			}
+
+			if !isRange {
+				if end < 0 {
+					// Can't have negative indices (yet... @@TODO)
+					return nil, 0, 0, errors.WithStack(ErrBadKeypath)
+				}
+				return nil, uint64(end), i + 1, nil
+			}
+
+			if end == 0 && buf[0] == '-' {
+				rng.Reverse = true
+			} else if end < 0 {
+				rng.End = uint64(-end)
+				rng.Reverse = true
+			} else {
+				rng.End = uint64(end)
+			}
+			return rng, 0, i + 1, nil
+
+		} else if s[i] == ':' {
+			if isRange {
+				// Disallow [x:y:z]
+				return nil, 0, 0, errors.WithStack(ErrBadKeypath)
+			}
+
+			start, err := strconv.ParseInt(string(buf), 10, 64)
+			if err != nil {
+				return nil, 0, 0, errors.WithStack(ErrBadKeypath)
+			}
+			if start == 0 && buf[0] == '-' {
+				rng.Reverse = true
+			} else if start < 0 {
+				rng.Start = uint64(-start)
+				rng.Reverse = true
+			} else {
+				rng.Start = uint64(start)
+			}
+			isRange = true
+			buf = make([]byte, 0, 8)
+		} else {
+			buf = append(buf, s[i])
+		}
+	}
+	return nil, 0, 0, errors.WithStack(ErrBadKeypath)
 }
