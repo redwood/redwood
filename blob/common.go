@@ -29,7 +29,8 @@ type Store interface {
 	HaveChunk(sha3 types.Hash) (bool, error)
 	StoreChunkIfHashMatches(expectedSHA3 types.Hash, chunkBytes []byte) error
 
-	BlobIDs() *IDIterator
+	// BlobIDs() *IDIterator
+	BlobIDs() (sha1s, sha3s []ID, _ error)
 
 	BlobsNeeded() ([]ID, error)
 	MarkBlobsAsNeeded(refs []ID) error
