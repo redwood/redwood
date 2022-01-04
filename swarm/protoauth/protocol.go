@@ -99,6 +99,11 @@ func (ap *authProtocol) Start() error {
 	return nil
 }
 
+func (ap *authProtocol) Close() error {
+	ap.Infof(0, "auth protocol shutting down")
+	return ap.Process.Close()
+}
+
 func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn AuthPeerConn) (err error) {
 	defer errors.AddStack(&err)
 

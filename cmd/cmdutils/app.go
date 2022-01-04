@@ -440,6 +440,9 @@ func closeIfError(err *error, x interface{}) {
 }
 
 func (app *App) Close() error {
+	app.Infof(0, "shutting down")
+
+	app.Infof(0, "killing rpc")
 	if app.HTTPRPCServer != nil {
 		err := app.HTTPRPCServer.Close()
 		if err != nil {
@@ -447,21 +450,25 @@ func (app *App) Close() error {
 		}
 	}
 
+	app.Infof(0, "killing keystore")
 	if app.KeyStore != nil {
 		app.KeyStore.Close()
 		app.KeyStore = nil
 	}
 
+	app.Infof(0, "killing blobstore")
 	if app.BlobStore != nil {
 		app.BlobStore.Close()
 		app.BlobStore = nil
 	}
 
+	app.Infof(0, "killing txstore")
 	if app.TxStore != nil {
 		app.TxStore.Close()
 		app.TxStore = nil
 	}
 
+	app.Infof(0, "killing shared state db")
 	if app.SharedStateDB != nil {
 		app.SharedStateDB.Close()
 		app.SharedStateDB = nil

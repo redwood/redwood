@@ -91,6 +91,11 @@ func (bp *blobProtocol) Start() error {
 	return nil
 }
 
+func (bp *blobProtocol) Close() error {
+	bp.Infof(0, "blob protocol shutting down")
+	return bp.Process.Close()
+}
+
 func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-chan BlobPeerConn {
 	ch := make(chan BlobPeerConn)
 

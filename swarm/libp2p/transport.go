@@ -327,6 +327,8 @@ func (t *transport) Start() error {
 }
 
 func (t *transport) Close() error {
+	t.Infof(0, "libp2p transport shutting down")
+
 	err := t.mdns.Close()
 	if err != nil {
 		t.Errorf("error closing libp2p mDNS service: %v", err)

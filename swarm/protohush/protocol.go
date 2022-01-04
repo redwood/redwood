@@ -190,6 +190,11 @@ func (hp *hushProtocol) Start() error {
 	return nil
 }
 
+func (hp *hushProtocol) Close() error {
+	hp.Infof(0, "hush protocol shutting down")
+	return hp.Process.Close()
+}
+
 func (hp *hushProtocol) ensureSessionWithSelf(sessionType string) error {
 	identity, err := hp.keyStore.DefaultPublicIdentity()
 	if err != nil {

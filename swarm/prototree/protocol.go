@@ -165,6 +165,11 @@ func (tp *treeProtocol) Start() error {
 	return nil
 }
 
+func (tp *treeProtocol) Close() error {
+	tp.Infof(0, "tree protocol shutting down")
+	return tp.Process.Close()
+}
+
 func (tp *treeProtocol) SendTx(ctx context.Context, tx tree.Tx) (err error) {
 	tp.Infof(0, "adding tx (%v) %v", tx.StateURI, tx.ID.Pretty())
 

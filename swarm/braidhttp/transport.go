@@ -208,6 +208,7 @@ func (t *transport) Start() error {
 }
 
 func (t *transport) Close() error {
+	t.Infof(0, "braidhttp transport shutting down")
 	// Non-graceful
 	err := t.srv.Close()
 	if err != nil {
