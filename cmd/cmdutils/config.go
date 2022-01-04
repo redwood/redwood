@@ -72,6 +72,7 @@ type Libp2pTransportConfig struct {
 	Enabled      bool     `yaml:"Enabled"`
 	ListenAddr   string   `yaml:"ListenAddr"`
 	ListenPort   uint     `yaml:"ListenPort"`
+	Key          string   `yaml:"Key"`
 	Reachability string   `yaml:"Reachability"`
 	ReachableAt  string   `yaml:"ReachableAt"`
 	StaticRelays []string `yaml:"StaticRelays"`

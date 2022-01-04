@@ -148,6 +148,24 @@ func (app *App) Start() error {
 			return err
 		}
 		defer closeIfError(&err, app.KeyStore)
+
+		if len(cfg.Libp2pTransport.Key) > 0 {
+			keyBytes, err := base64.StdEncoding.DecodeString(cfg.Libp2pTransport.Key)
+			if err != nil {
+				return err
+			}
+
+			if !libp2p.IsValidKey(keyBytes) {
+				app.Errorf("invalid libp2p key")
+				return errors.New("invalid libp2p key")
+			}
+
+			err = app.KeyStore.SaveExtraUserData("libp2p:p2pkey", hex.EncodeToString(keyBytes))
+			if err != nil {
+				app.Errorf("while saving libp2p key: %+v", err)
+				return err
+			}
+		}
 	}
 
 	// All DBs other than the keystore are encrypted at rest
