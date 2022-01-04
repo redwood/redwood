@@ -26,6 +26,8 @@ type DBTree struct {
 	db       *badger.DB
 	filename string
 	log.Logger
+	chStop chan struct{}
+	wgDone *sync.WaitGroup
 }
 
 type EncryptionConfig struct {
@@ -38,10 +40,27 @@ func NewDBTree(badgerOpts badger.Options) (*DBTree, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DBTree{db, badgerOpts.Dir, log.NewLogger("db tree")}, nil
+	db.RunValueLogGC(0.5)
+	chStop := make(chan struct{})
+	var wgDone sync.WaitGroup
+	wgDone.Add(1)
+	go func() {
+		defer wgDone.Done()
+		for {
+			db.RunValueLogGC(0.5)
+			select {
+			case <-time.After(1 * time.Minute):
+			case <-chStop:
+				return
+			}
+		}
+	}()
+	return &DBTree{db, badgerOpts.Dir, log.NewLogger("db tree"), chStop, &wgDone}, nil
 }
 
 func (t *DBTree) Close() error {
+	close(t.chStop)
+	t.wgDone.Wait()
 	return t.db.Close()
 }
 
@@ -72,6 +91,8 @@ type VersionedDBTree struct {
 	db       *badger.DB
 	filename string
 	log.Logger
+	chStop chan struct{}
+	wgDone *sync.WaitGroup
 }
 
 func NewVersionedDBTree(badgerOpts badger.Options) (*VersionedDBTree, error) {
@@ -79,10 +100,27 @@ func NewVersionedDBTree(badgerOpts badger.Options) (*VersionedDBTree, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &VersionedDBTree{db, badgerOpts.Dir, log.NewLogger("db tree")}, nil
+	db.RunValueLogGC(0.5)
+	chStop := make(chan struct{})
+	var wgDone sync.WaitGroup
+	wgDone.Add(1)
+	go func() {
+		defer wgDone.Done()
+		for {
+			db.RunValueLogGC(0.5)
+			select {
+			case <-time.After(1 * time.Minute):
+			case <-chStop:
+				return
+			}
+		}
+	}()
+	return &VersionedDBTree{db, badgerOpts.Dir, log.NewLogger("db tree"), chStop, &wgDone}, nil
 }
 
 func (t *VersionedDBTree) Close() error {
+	close(t.chStop)
+	t.wgDone.Wait()
 	return t.db.Close()
 }
 
@@ -164,11 +202,8 @@ func (tx *DBNode) Close() {
 
 func (tx *DBNode) Save() error {
 	var err error
-	var wg sync.WaitGroup
-	wg.Add(1)
 	tx.tx.CommitWith(func(innerErr error) {
 		err = innerErr
-		wg.Done()
 	})
 	return err
 }
