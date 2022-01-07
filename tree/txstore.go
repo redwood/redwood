@@ -17,6 +17,8 @@ type TxStore interface {
 	MarkLeaf(stateURI string, txID state.Version) error
 	UnmarkLeaf(stateURI string, txID state.Version) error
 	Leaves(stateURI string) ([]state.Version, error)
+
+	DebugPrint()
 }
 
 type TxIterator interface {

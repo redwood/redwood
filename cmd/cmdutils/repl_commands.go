@@ -139,12 +139,18 @@ var defaultREPLCommands = REPLCommands{
 	"tree": REPLCommand{
 		HelpText: "interact with the tree protocol",
 		Subcommands: REPLCommands{
-			"get":       CmdGetState,
-			"set":       CmdSetState,
-			"uris":      CmdStateURIs,
-			"txs":       CmdListTxs,
+			"get":  CmdGetState,
+			"set":  CmdSetState,
+			"uris": CmdStateURIs,
+			"txs": REPLCommand{
+				Subcommands: REPLCommands{
+					"list":      CmdListTxs,
+					"dumpstore": CmdTxStoreDebugPrint,
+				},
+			},
 			"subscribe": CmdSubscribe,
 			"dumpstore": CmdTreeStoreDebugPrint,
+			"dumptree":  CmdControllerDebugPrint,
 		},
 	},
 	"blob": REPLCommand{
@@ -316,6 +322,11 @@ var (
 				}
 				app.Debugf("- %v", tx.ID)
 			}
+
+	CmdTxStoreDebugPrint = REPLCommand{
+		HelpText: "print the contents of the tx store",
+		Handler: func(args []string, app *App) error {
+			app.TxStore.DebugPrint()
 			return nil
 		},
 	}
@@ -546,6 +557,17 @@ var (
 		HelpText: "print the contents of the prototree store",
 		Handler: func(args []string, app *App) error {
 			app.TreeProtoStore.DebugPrint()
+			return nil
+		},
+	}
+
+	CmdControllerDebugPrint = REPLCommand{
+		HelpText: "print the contents of a state DB",
+		Handler: func(args []string, app *App) error {
+			if len(args) < 1 {
+				return errors.New("requires 1 argument: tree dumptree <state uri>")
+			}
+			app.ControllerHub.DebugPrint(args[0])
 			return nil
 		},
 	}

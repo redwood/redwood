@@ -262,3 +262,33 @@ func (s *badgerTxStore) Leaves(stateURI string) ([]state.Version, error) {
 	})
 	return leaves, err
 }
+
+func (s *badgerTxStore) DebugPrint() {
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Reverse = false
+		opts.PrefetchValues = true
+		opts.PrefetchSize = 10
+		iter := txn.NewIterator(opts)
+		defer iter.Close()
+
+		for iter.Rewind(); iter.Valid(); iter.Next() {
+			key := iter.Item().KeyCopy(nil)
+			val, err := iter.Item().ValueCopy(nil)
+			if err != nil {
+				return err
+			}
+
+			// var tx Tx
+			// err = tx.Unmarshal(val)
+			// if err != nil {
+			// 	return err
+			// }
+			s.Debugf("%v: %0x", string(key), val)
+		}
+		return nil
+	})
+	if err != nil {
+		s.Errorf("error: %v", err)
+	}
+}
