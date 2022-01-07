@@ -658,7 +658,10 @@ func (t exchangeDHPubkeys) Work(ctx context.Context) (retry bool) {
 		return true
 	}
 
-	t.hushProto.withPeers(ctx, 3*time.Second, []swarm.PeerInfo{peer}, func(ctx context.Context, peerConn HushPeerConn) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	t.hushProto.withPeers(ctx, []swarm.PeerInfo{peer}, func(ctx context.Context, peerConn HushPeerConn) error {
 		err = peerConn.SendDHPubkeyAttestations(ctx, attestations)
 		if err != nil {
 			t.hushProto.Errorf("while exchanging DH pubkey: %v", err)
@@ -745,8 +748,10 @@ func (t proposeIndividualSession) Work(ctx context.Context) (retry bool) {
 		return true
 	}
 
-	t.hushProto.withPeers(ctx, 3*time.Second, t.hushProto.peerStore.PeersWithAddress(bobAddr), func(ctx context.Context, peerConn HushPeerConn) error {
-		t.hushProto.Debugf("proposeIndividualSession WITH PEERS %v", peerConn.DialInfo())
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	t.hushProto.withPeers(ctx, t.hushProto.peerStore.PeersWithAddress(bobAddr), func(ctx context.Context, peerConn HushPeerConn) error {
 		_, bobAsymEncPubkey := peerConn.PublicKeys(session.SessionID.BobAddr)
 
 		encryptedProposalBytes, err := t.hushProto.keyStore.SealMessageFor(identity.Address(), bobAsymEncPubkey, sessionBytes)
@@ -1597,7 +1602,6 @@ func (hp *hushProtocol) onSessionOpened(proposalHash types.Hash, peerAddr types.
 
 func (hp *hushProtocol) withPeers(
 	ctx context.Context,
-	attemptTimeout time.Duration,
 	peers []swarm.PeerInfo,
 	fn func(ctx context.Context, hushPeerConn HushPeerConn) error,
 ) {
@@ -1606,28 +1610,19 @@ func (hp *hushProtocol) withPeers(
 		tpts[k] = v
 	}
 
-	var pools []*swarm.EndpointPool
+	var chDones []<-chan struct{}
 	for _, peer := range peers {
-		pool := swarm.NewEndpointPool("", peer, tpts, attemptTimeout, 3*time.Second, func(ctx context.Context, peerConn swarm.PeerConn) error {
+		chDone := swarm.TryEndpoints(ctx, tpts, peer.Endpoints(), func(ctx context.Context, peerConn swarm.PeerConn) error {
 			return fn(ctx, peerConn.(HushPeerConn))
 		})
-
-		err := hp.SpawnChild(ctx, pool)
-		if err != nil {
-			hp.Errorf("while spawning endpoint pool: %v", err)
-			continue
-		}
-		pools = append(pools, pool)
+		chDones = append(chDones, chDone)
 	}
 
-	go func() {
-		<-ctx.Done()
-		for _, pool := range pools {
-			pool.Close()
+	for _, chDone := range chDones {
+		select {
+		case <-chDone:
+		case <-ctx.Done():
+			return
 		}
-
-	}()
-	for _, pool := range pools {
-		<-pool.Done()
 	}
 }

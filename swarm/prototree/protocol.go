@@ -799,8 +799,10 @@ func (tp *treeProtocol) handleNewState(tx tree.Tx, node state.Node, leaves []sta
 			for peerAddress := range members {
 				peerInfos = append(peerInfos, tp.peerStore.PeersWithAddress(peerAddress)...)
 			}
-			go tp.withPeers(context.TODO(), 3*time.Second, peerInfos, func(ctx context.Context, treePeerConn TreePeerConn) error {
-				return treePeerConn.Ack(tx.StateURI, tx.ID)
+			tp.Process.Go(nil, "ack "+tx.StateURI+" "+tx.ID.Hex(), func(ctx context.Context) {
+				tp.withPeers(ctx, peerInfos, func(ctx context.Context, treePeerConn TreePeerConn) error {
+					return treePeerConn.Ack(tx.StateURI, tx.ID)
+				})
 			})
 
 			tp.poolWorker.Add(broadcastPrivateTx{tx.StateURI, tx.ID, tp})
@@ -908,7 +910,7 @@ func (t *announceP2PStateURIsTask) announceP2PStateURIs(ctx context.Context) {
 		for peerAddress := range members {
 			peerInfos = append(peerInfos, t.treeProto.peerStore.PeersWithAddress(peerAddress)...)
 		}
-		t.treeProto.withPeers(ctx, 3*time.Second, peerInfos, func(ctx context.Context, treePeerConn TreePeerConn) error {
+		t.treeProto.withPeers(ctx, peerInfos, func(ctx context.Context, treePeerConn TreePeerConn) error {
 			return treePeerConn.AnnounceP2PStateURI(ctx, stateURI)
 		})
 	}
@@ -1031,7 +1033,6 @@ func (t broadcastPrivateTx) Work(ctx context.Context) (retry bool) {
 
 func (tp *treeProtocol) withPeers(
 	ctx context.Context,
-	attemptTimeout time.Duration,
 	peers []swarm.PeerInfo,
 	fn func(ctx context.Context, treePeerConn TreePeerConn) error,
 ) {
@@ -1040,20 +1041,19 @@ func (tp *treeProtocol) withPeers(
 		tpts[k] = v
 	}
 
-	var pools []*swarm.EndpointPool
+	var chDones []<-chan struct{}
 	for _, peer := range peers {
-		pool := swarm.NewEndpointPool("", peer, tpts, attemptTimeout, 3*time.Second, func(ctx context.Context, peerConn swarm.PeerConn) error {
+		chDone := swarm.TryEndpoints(ctx, tpts, peer.Endpoints(), func(ctx context.Context, peerConn swarm.PeerConn) error {
 			return fn(ctx, peerConn.(TreePeerConn))
 		})
-
-		err := tp.SpawnChild(ctx, pool)
-		if err != nil {
-			tp.Errorf("while spawning endpoint pool: %v", err)
-			continue
-		}
-		pools = append(pools, pool)
+		chDones = append(chDones, chDone)
 	}
-	for _, pool := range pools {
-		<-pool.Done()
+
+	for _, chDone := range chDones {
+		select {
+		case <-chDone:
+		case <-ctx.Done():
+			return
+		}
 	}
 }
