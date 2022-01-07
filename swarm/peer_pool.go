@@ -138,6 +138,7 @@ func (p *peerPool) deliverAvailablePeers(ctx context.Context) {
 
 func (p *peerPool) handlePeersInTimeout(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-p.Process.Done():
