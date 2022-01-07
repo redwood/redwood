@@ -158,11 +158,10 @@ func (s *HTTPServer) Subscribe(r *http.Request, args *SubscribeArgs, resp *Subsc
 		subscriptionType |= prototree.SubscriptionType_States
 	}
 
-	sub, err := s.treeProto.Subscribe(ctx, args.StateURI, subscriptionType, state.Keypath(args.Keypath), nil)
+	err = s.treeProto.Subscribe(ctx, args.StateURI)
 	if err != nil {
 		return errors.Wrap(err, "error subscribing to "+args.StateURI)
 	}
-	sub.Close()
 	return nil
 }
 
