@@ -46,6 +46,12 @@ func makeTxKey(stateURI string, txID state.Version) []byte {
 	return append([]byte("tx:"+stateURI+":"), txID[:]...)
 }
 
+func (p *badgerTxStore) AddStateURI(stateURI string) error {
+	return p.db.Update(func(txn *badger.Txn) error {
+		return txn.Set([]byte("stateuri:"+stateURI), nil)
+	})
+}
+
 func (p *badgerTxStore) AddTx(tx Tx) (err error) {
 	defer errors.Annotate(&err, "badgerTxStore#AddTx")
 
