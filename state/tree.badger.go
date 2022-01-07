@@ -1394,15 +1394,15 @@ func (tx *DBNode) delete(absKeypath Keypath, rng *Range) (err error) {
 		if parentNodeType == NodeTypeMap {
 			idx, err := tx.indexOfMapSubkey(absParentKeypath, keypathToDelete)
 			if errors.Cause(err) == ErrNilKeypath {
-				rng = &Range{0, int64(length)}
+				rng = &Range{0, length, false}
 			} else if err != nil {
 				return err
 			}
-			rng = &Range{int64(idx), int64(idx) + 1}
+			rng = &Range{idx, idx + 1, false}
 
 		} else if parentNodeType == NodeTypeSlice {
-			idx := int64(DecodeSliceIndex(keypathToDelete))
-			rng = &Range{idx, idx + 1}
+			idx := DecodeSliceIndex(keypathToDelete)
+			rng = &Range{idx, idx + 1, false}
 		}
 		return tx.delete(absParentKeypath, rng)
 	}
@@ -1430,7 +1430,7 @@ func (tx *DBNode) delete(absKeypath Keypath, rng *Range) (err error) {
 
 	// Re-number the trailing entries if the root node is a slice
 	if rootNodeType == NodeTypeSlice && endIdx < length {
-		renumberRange := &Range{int64(endIdx), int64(length)}
+		renumberRange := &Range{endIdx, length, false}
 		delta := -int64(rng.Length())
 
 		err := tx.scanChildrenForward(NodeTypeSlice, absKeypath, renumberRange, length, true, func(absChildKeypath Keypath, item *badger.Item) error {
