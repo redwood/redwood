@@ -613,12 +613,25 @@ func (s *store) DeleteIncomingIndividualMessage(msg IndividualMessage) error {
 	return node.Save()
 }
 
-func (s *store) OutgoingGroupMessageIntentIDs(sessionType string) (types.StringSet, error) {
+func (s *store) OutgoingGroupMessageSessionTypes() (types.StringSet, error) {
 	node := s.db.State(false)
 	defer node.Close()
 
+	sessionTypes := types.NewStringSet(nil)
+	for _, sessionType := range node.NodeAt(outgoingGroupMessageIntentsKeypath, nil).Subkeys() {
+		sessionTypes.Add(sessionType.String())
+	}
+	return sessionTypes, nil
+}
+
+func (s *store) OutgoingGroupMessageIntentIDsForSessionType(sessionType string) (types.StringSet, error) {
+	node := s.db.State(false)
+	defer node.Close()
+
+	keypath := outgoingGroupMessageIntentsKeypathForSessionType(sessionType)
+
 	ids := types.NewStringSet(nil)
-	for _, subkey := range node.Subkeys() {
+	for _, subkey := range node.NodeAt(keypath, nil).Subkeys() {
 		ids.Add(subkey.String())
 	}
 	return ids, nil

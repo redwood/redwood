@@ -50,7 +50,8 @@ type Store interface {
 	DeleteIncomingIndividualMessage(msg IndividualMessage) error
 
 	// Group messages
-	OutgoingGroupMessageIntentIDs(sessionType string) (types.StringSet, error)
+	OutgoingGroupMessageSessionTypes() (types.StringSet, error)
+	OutgoingGroupMessageIntentIDsForSessionType(sessionType string) (types.StringSet, error)
 	OutgoingGroupMessageIntent(sessionType, id string) (GroupMessageIntent, error)
 	SaveOutgoingGroupMessageIntent(intent GroupMessageIntent) error
 	DeleteOutgoingGroupMessageIntent(sessionType, id string) error
