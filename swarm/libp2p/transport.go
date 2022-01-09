@@ -881,12 +881,16 @@ func NewAnnounceBlobsTask(
 // Periodically announces our objects to the network.
 func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 	// Announce the blobs we're serving
-	iter := t.blobStore.BlobIDs()
+	sha1s, sha3s, err := t.blobStore.BlobIDs()
+	if err != nil {
+		t.Errorf("while fetching blob IDs: %v", err)
+		// Even if we receive an error, there might still be blob
+		// IDs, so we don't want to return here.
+	}
 
 	var chDones []<-chan struct{}
-	for iter.Rewind(); iter.Valid(); iter.Next() {
-		sha1, sha3 := iter.Current()
 
+	for _, sha1 := range sha1s {
 		chDone := t.Process.Go(nil, sha1.String(), func(ctx context.Context) {
 			err := t.transport.AnnounceBlob(ctx, sha1)
 			if err != nil {
@@ -894,8 +898,10 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 			}
 		})
 		chDones = append(chDones, chDone)
+	}
 
-		chDone = t.Process.Go(nil, sha3.String(), func(ctx context.Context) {
+	for _, sha3 := range sha3s {
+		chDone := t.Process.Go(nil, sha3.String(), func(ctx context.Context) {
 			err := t.transport.AnnounceBlob(ctx, sha3)
 			if err != nil {
 				t.Errorf("announce: error: %v", err)
@@ -904,7 +910,11 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 		chDones = append(chDones, chDone)
 	}
 	for _, chDone := range chDones {
-		<-chDone
+		select {
+		case <-chDone:
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
@@ -957,7 +967,11 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 		chDones = append(chDones, chDone)
 	}
 	for _, chDone := range chDones {
-		<-chDone
+		select {
+		case <-chDone:
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
