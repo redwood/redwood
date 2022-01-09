@@ -98,6 +98,18 @@ func (s *store) loadData() error {
 	} else if err != nil {
 		return err
 	}
+
+	var stateURIs []string
+	for stateURIEncoded := range s.data.SubscribedStateURIs {
+		stateURI, err := url.QueryUnescape(stateURIEncoded)
+		if err != nil {
+			s.Errorf("could not unescape stateuri '%v'", stateURIEncoded)
+			continue
+		}
+		stateURIs = append(stateURIs, stateURI)
+	}
+	s.data.SubscribedStateURIs = types.NewStringSet(stateURIs)
+
 	return nil
 }
 
