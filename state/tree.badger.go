@@ -1113,22 +1113,23 @@ func (tx *DBNode) setRangeSlice(absKeypath Keypath, rng *Range, encodedVal []byt
 		iter.Close()
 	}
 
+	// Set the new length
+	encoded, err := encodeNode(NodeTypeSlice, ValueTypeInvalid, newLen, nil)
+	if err != nil {
+		return err
+	}
+	err = tx.tx.Set(absKeypath, encoded)
+	if err != nil {
+		return err
+	}
+
 	// Finally, splice in the new values
 	err = walkGoValue(spliceVal, func(nodeKeypath Keypath, val interface{}) (keepRecursing bool, _ error) {
-		nodeKeypath = nodeKeypath.Copy()
 		if len(nodeKeypath) == 0 {
-			encoded, err := encodeNode(NodeTypeSlice, ValueTypeInvalid, newLen, nil)
-			if err != nil {
-				return false, err
-			}
-
-			err = tx.tx.Set(absKeypath, encoded)
-			if err != nil {
-				return false, err
-			}
 			return true, nil
 		}
 
+		nodeKeypath = nodeKeypath.Copy()
 		absNodeKeypath := absKeypath
 		oldIdx := DecodeSliceIndex(nodeKeypath[:8])
 		newIdx := oldIdx + startIdx
@@ -1158,9 +1159,6 @@ func (tx *DBNode) setNoRange(absKeypath Keypath, value interface{}) error {
 	}
 
 	numParts := absKeypath.NumParts()
-
-	// When setting a value in a map, we need to check to see if the key is new,
-	// and if so, increment the map's length by 1
 	if numParts > 0 {
 		absParentKeypath, _ := absKeypath.Pop()
 
@@ -1174,7 +1172,10 @@ func (tx *DBNode) setNoRange(absKeypath Keypath, value interface{}) error {
 			if err != nil {
 				return err
 			}
+
 			if nodeType == NodeTypeMap {
+				// When setting a value in a map, we need to check to see if the key is new,
+				// and if so, increment the map's length by 1
 				exists, err := tx.exists(absKeypath)
 				if err != nil {
 					return err
