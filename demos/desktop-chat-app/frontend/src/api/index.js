@@ -97,13 +97,7 @@ export default function(redwoodClient, ownAddress) {
             patches: [
                 ' = ' + Redwood.utils.JSON.stringify({
                     'Merge-Type': {
-                        'Content-Type': 'resolver/js',
-                        'value': {
-                            'src': {
-                                'Content-Type': 'link',
-                                'value': `blob:sha3:${sync9JSSha3}`,
-                            }
-                        }
+                        'Content-Type': 'resolver/dumb',
                     },
                     'Validator': {
                         'Content-Type': 'validator/permissions',
@@ -147,13 +141,7 @@ export default function(redwoodClient, ownAddress) {
             patches: [
                 ' = ' + Redwood.utils.JSON.stringify({
                     'Merge-Type': {
-                        'Content-Type': 'resolver/js',
-                        'value': {
-                            'src': {
-                                'Content-Type': 'link',
-                                'value': `blob:sha3:${sync9JSSha3}`,
-                            }
-                        }
+                        'Content-Type': 'resolver/dumb',
                     },
                     'Validator': {
                         'Content-Type': 'validator/permissions',

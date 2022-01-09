@@ -165,22 +165,11 @@ func (app *App) monitorForDMs() {
 }
 
 func (app *App) initializeLocalState() {
-	_, sync9Sha3, err := app.BlobStore.StoreBlob(ioutil.NopCloser(bytes.NewReader(sync9.RedwoodResolverSrc)))
-	if err != nil {
-		panic(err)
-	}
-
 	type M = map[string]interface{}
 
-	app.EnsureInitialState("chat.local/servers", "value", M{
+	app.app.EnsureInitialState("chat.local/servers", "value", M{
 		"Merge-Type": M{
-			"Content-Type": "resolver/js",
-			"value": M{
-				"src": M{
-					"Content-Type": "link",
-					"value":        "blob:sha3:" + sync9Sha3.Hex(),
-				},
-			},
+			"Content-Type": "resolver/dumb",
 		},
 		"Validator": M{
 			"Content-Type": "validator/permissions",
@@ -195,15 +184,9 @@ func (app *App) initializeLocalState() {
 		"value": M{},
 	})
 
-	app.EnsureInitialState("chat.local/dms", "rooms", M{
+	app.app.EnsureInitialState("chat.local/dms", "rooms", M{
 		"Merge-Type": M{
-			"Content-Type": "resolver/js",
-			"value": M{
-				"src": M{
-					"Content-Type": "link",
-					"value":        "blob:sha3:" + sync9Sha3.Hex(),
-				},
-			},
+			"Content-Type": "resolver/dumb",
 		},
 		"Validator": M{
 			"Content-Type": "validator/permissions",
@@ -218,15 +201,9 @@ func (app *App) initializeLocalState() {
 		"rooms": M{},
 	})
 
-	app.EnsureInitialState("chat.local/address-book", "value", M{
+	app.app.EnsureInitialState("chat.local/address-book", "value", M{
 		"Merge-Type": M{
-			"Content-Type": "resolver/js",
-			"value": M{
-				"src": M{
-					"Content-Type": "link",
-					"value":        "blob:sha3:" + sync9Sha3.Hex(),
-				},
-			},
+			"Content-Type": "resolver/dumb",
 		},
 		"Validator": M{
 			"Content-Type": "validator/permissions",
