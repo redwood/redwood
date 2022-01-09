@@ -60,11 +60,23 @@ export default function createRPCClient({ endpoint }: { endpoint: string }): RPC
             await rpcFetch(endpoint, 'RPC.AddPeer', { TransportName: transportName, DialAddr: dialAddr })
         },
 
+        staticRelays: async function (): Promise<string[]> {
+            return (await rpcFetch(endpoint, 'RPC.StaticRelays', {})).StaticRelays || []
+        },
+
+        addStaticRelay: async function (dialAddr: string) {
+            await rpcFetch(endpoint, 'RPC.AddStaticRelay', { DialAddr: dialAddr })
+        },
+
+        removeStaticRelay: async function (dialAddr: string) {
+            await rpcFetch(endpoint, 'RPC.RemoveStaticRelay', { DialAddr: dialAddr })
+        },
+
         privateTreeMembers: async function (stateURI: string) {
             try {
                 return (await rpcFetch(endpoint, 'RPC.PrivateTreeMembers', { StateURI: stateURI })).Members as string[]
             } catch (err) {
-                if (err.toString().indexOf('no controller for that stateURI') > -1) {
+                if (`${err}`.indexOf('no controller for that stateURI') > -1) {
                     return []
                 }
                 throw err
