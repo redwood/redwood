@@ -9,20 +9,20 @@ type (
 	BaseHushTransport struct {
 		muIncomingDHPubkeyAttestationsCallbacks      sync.RWMutex
 		muIncomingIndividualSessionProposalCallbacks sync.RWMutex
-		muIncomingIndividualSessionApprovalCallbacks sync.RWMutex
+		muIncomingIndividualSessionResponseCallbacks sync.RWMutex
 		muIncomingIndividualMessageCallbacks         sync.RWMutex
 		muIncomingGroupMessageCallbacks              sync.RWMutex
 
 		incomingDHPubkeyExchangeCallbacks          []IncomingDHPubkeyAttestationsCallback
 		incomingIndividualSessionProposalCallbacks []IncomingIndividualSessionProposalCallback
-		incomingIndividualSessionApprovalCallbacks []IncomingIndividualSessionApprovalCallback
+		incomingIndividualSessionResponseCallbacks []IncomingIndividualSessionResponseCallback
 		incomingIndividualMessageCallbacks         []IncomingIndividualMessageCallback
 		incomingGroupMessageCallbacks              []IncomingGroupMessageCallback
 	}
 
 	IncomingDHPubkeyAttestationsCallback      func(ctx context.Context, attestations []DHPubkeyAttestation, peer HushPeerConn)
 	IncomingIndividualSessionProposalCallback func(ctx context.Context, encryptedProposal []byte, alice HushPeerConn)
-	IncomingIndividualSessionApprovalCallback func(ctx context.Context, approval IndividualSessionApproval, bob HushPeerConn)
+	IncomingIndividualSessionResponseCallback func(ctx context.Context, approval IndividualSessionResponse, bob HushPeerConn)
 	IncomingIndividualMessageCallback         func(ctx context.Context, msg IndividualMessage, peer HushPeerConn)
 	IncomingGroupMessageCallback              func(ctx context.Context, msg GroupMessage, peer HushPeerConn)
 )
@@ -71,19 +71,19 @@ func (t *BaseHushTransport) HandleIncomingIndividualSessionProposal(ctx context.
 	wg.Wait()
 }
 
-func (t *BaseHushTransport) OnIncomingIndividualSessionApproval(handler IncomingIndividualSessionApprovalCallback) {
-	t.muIncomingIndividualSessionApprovalCallbacks.Lock()
-	defer t.muIncomingIndividualSessionApprovalCallbacks.Unlock()
-	t.incomingIndividualSessionApprovalCallbacks = append(t.incomingIndividualSessionApprovalCallbacks, handler)
+func (t *BaseHushTransport) OnIncomingIndividualSessionResponse(handler IncomingIndividualSessionResponseCallback) {
+	t.muIncomingIndividualSessionResponseCallbacks.Lock()
+	defer t.muIncomingIndividualSessionResponseCallbacks.Unlock()
+	t.incomingIndividualSessionResponseCallbacks = append(t.incomingIndividualSessionResponseCallbacks, handler)
 }
 
-func (t *BaseHushTransport) HandleIncomingIndividualSessionApproval(ctx context.Context, approval IndividualSessionApproval, bob HushPeerConn) {
-	t.muIncomingIndividualSessionApprovalCallbacks.RLock()
-	defer t.muIncomingIndividualSessionApprovalCallbacks.RUnlock()
+func (t *BaseHushTransport) HandleIncomingIndividualSessionResponse(ctx context.Context, approval IndividualSessionResponse, bob HushPeerConn) {
+	t.muIncomingIndividualSessionResponseCallbacks.RLock()
+	defer t.muIncomingIndividualSessionResponseCallbacks.RUnlock()
 
 	var wg sync.WaitGroup
-	wg.Add(len(t.incomingIndividualSessionApprovalCallbacks))
-	for _, handler := range t.incomingIndividualSessionApprovalCallbacks {
+	wg.Add(len(t.incomingIndividualSessionResponseCallbacks))
+	for _, handler := range t.incomingIndividualSessionResponseCallbacks {
 		handler := handler
 		go func() {
 			defer wg.Done()

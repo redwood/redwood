@@ -51,9 +51,10 @@ message IndividualSessionProposal {
     bytes remoteDHPubkey = 5          [(gogoproto.moretags) = "tree:\"remoteDHPubkey\""];
 }
 
-message IndividualSessionApproval {
+message IndividualSessionResponse {
     bytes proposalHash = 1 [(gogoproto.moretags) = "tree:\"proposalHash\"", (gogoproto.customtype) = "redwood.dev/types.Hash", (gogoproto.nullable) = false];
     bytes bobSig = 2       [(gogoproto.moretags) = "tree:\"bobSig\""];
+    bool approved = 3      [(gogoproto.moretags) = "tree:\"approved\""];
 }
 
 message IndividualMessage {

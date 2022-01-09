@@ -67,20 +67,6 @@ func (_m *HushPeerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm
 	return r0
 }
 
-// ApproveIndividualSession provides a mock function with given fields: ctx, approval
-func (_m *HushPeerConn) ApproveIndividualSession(ctx context.Context, approval pb.IndividualSessionApproval) error {
-	ret := _m.Called(ctx, approval)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, pb.IndividualSessionApproval) error); ok {
-		r0 = rf(ctx, approval)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
 // Close provides a mock function with given fields:
 func (_m *HushPeerConn) Close() error {
 	ret := _m.Called()
@@ -306,6 +292,20 @@ func (_m *HushPeerConn) RemoveStateURI(stateURI string) error {
 	var r0 error
 	if rf, ok := ret.Get(0).(func(string) error); ok {
 		r0 = rf(stateURI)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RespondToIndividualSession provides a mock function with given fields: ctx, approval
+func (_m *HushPeerConn) RespondToIndividualSession(ctx context.Context, approval pb.IndividualSessionResponse) error {
+	ret := _m.Called(ctx, approval)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, pb.IndividualSessionResponse) error); ok {
+		r0 = rf(ctx, approval)
 	} else {
 		r0 = ret.Error(0)
 	}
