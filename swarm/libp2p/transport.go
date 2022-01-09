@@ -321,6 +321,26 @@ func (t *transport) Start() error {
 	connectToStaticRelaysTask.Enqueue()
 	t.Process.SpawnChild(nil, connectToStaticRelaysTask)
 
+	t.peerStore.OnNewUnverifiedPeer(func(dialInfo swarm.PeerDialInfo) {
+		if dialInfo.TransportName != TransportName {
+			return
+		} else if strings.Contains(dialInfo.DialAddr, "/p2p-circuit") {
+			return
+		}
+		go func() {
+			for _, relayInfo := range staticRelays {
+				for _, relayAddr := range relayInfo.Addrs {
+					idx := strings.Index(dialInfo.DialAddr, "/p2p/")
+					if idx == -1 {
+						continue
+					}
+					relayPeerAddr := relayAddr.String() + "/p2p/" + relayInfo.ID.String() + "/p2p-circuit" + dialInfo.DialAddr[idx:]
+					t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: relayPeerAddr}, dialInfo.DialAddr[idx+len("/p2p/"):])
+				}
+			}
+		}()
+	})
+
 	t.Infof(0, "libp2p peer ID is %v", t.Libp2pPeerID())
 
 	return nil
