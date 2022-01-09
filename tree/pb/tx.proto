@@ -21,7 +21,7 @@ option (gogoproto.unmarshaler_all) = true;
 
 message Tx {
     // See note on the Patch message
-    option (gogoproto.testgen) = false;
+    // option (gogoproto.testgen) = false;
 
     bytes id = 1                  [(gogoproto.customtype) = "redwood.dev/state.Version",   (gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
     repeated bytes parents = 2    [(gogoproto.customtype) = "redwood.dev/state.Version",   (gogoproto.nullable) = false];
@@ -46,7 +46,6 @@ enum TxStatus {
 
 message Patch {
     option (gogoproto.stringer) = false;
-    option (gogoproto.testgen) = false;
 
     bytes keypath = 1 [(gogoproto.customtype) = "redwood.dev/state.Keypath", (gogoproto.nullable) = false];
     Redwood.state.Range range = 2;
