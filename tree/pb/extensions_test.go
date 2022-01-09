@@ -2,7 +2,6 @@ package pb_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,15 +27,9 @@ func TestPatchString(t *testing.T) {
 		ValueJSON: valueJSON,
 	}
 
-	fmt.Println(p.String())
 	bs, err := p.MarshalJSON()
 	require.NoError(t, err)
-	fmt.Println(string(bs))
-
-	var p2 pb.Patch
-	err = p2.UnmarshalJSON(bs)
-	require.NoError(t, err)
-	fmt.Printf("%+v\n", p2)
+	require.Equal(t, `".foo.bar.baz = {\"hello\":\"hi\",\"yeet\":{\"blah\":\"yes\"}}"`, string(bs))
 }
 
 func TestPatch_Unmarshal(t *testing.T) {
@@ -72,11 +65,11 @@ func TestPatch_Unmarshal(t *testing.T) {
 		{`.["foo"].bar = "a"`, pb.Patch{state.Keypath("foo/bar"), nil, []byte(`"a"`)}, nil},
 		{`["foo"].bar = "a"`, pb.Patch{state.Keypath("foo/bar"), nil, []byte(`"a"`)}, nil},
 		{`["foo.bar"].baz = "a"`, pb.Patch{state.Keypath("foo.bar/baz"), nil, []byte(`"a"`)}, nil},
-		{`.text.value[-3] = "a"`, pb.Patch{}, pb.ErrBadPatch},
-		{`.text.value[] = "a"`, pb.Patch{}, pb.ErrBadPatch},
-		{`.text.value[] = `, pb.Patch{}, pb.ErrBadPatch},
-		{`.text.value[foo] = "a"`, pb.Patch{}, pb.ErrBadPatch},
-		{`text.value = "a"`, pb.Patch{}, pb.ErrBadPatch},
+		{`.text.value[-3] = "a"`, pb.Patch{}, state.ErrBadKeypath},
+		{`.text.value[] = "a"`, pb.Patch{}, state.ErrBadKeypath},
+		{`.text.value[] = `, pb.Patch{}, state.ErrBadKeypath},
+		{`.text.value[foo] = "a"`, pb.Patch{}, state.ErrBadKeypath},
+		{`text.value = "a"`, pb.Patch{}, state.ErrBadKeypath},
 	}
 
 	for _, test := range tests {
