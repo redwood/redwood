@@ -92,6 +92,29 @@ func (_m *TreeProtocol) Go(ctx context.Context, name string, fn func(context.Con
 	return r0
 }
 
+// InProcessSubscription provides a mock function with given fields: ctx, stateURI, subscriptionType, keypath, fetchHistoryOpts
+func (_m *TreeProtocol) InProcessSubscription(ctx context.Context, stateURI string, subscriptionType prototree.SubscriptionType, keypath state.Keypath, fetchHistoryOpts *prototree.FetchHistoryOpts) (prototree.ReadableSubscription, error) {
+	ret := _m.Called(ctx, stateURI, subscriptionType, keypath, fetchHistoryOpts)
+
+	var r0 prototree.ReadableSubscription
+	if rf, ok := ret.Get(0).(func(context.Context, string, prototree.SubscriptionType, state.Keypath, *prototree.FetchHistoryOpts) prototree.ReadableSubscription); ok {
+		r0 = rf(ctx, stateURI, subscriptionType, keypath, fetchHistoryOpts)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(prototree.ReadableSubscription)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, string, prototree.SubscriptionType, state.Keypath, *prototree.FetchHistoryOpts) error); ok {
+		r1 = rf(ctx, stateURI, subscriptionType, keypath, fetchHistoryOpts)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Name provides a mock function with given fields:
 func (_m *TreeProtocol) Name() string {
 	ret := _m.Called()
@@ -196,27 +219,32 @@ func (_m *TreeProtocol) Start() error {
 	return r0
 }
 
-// Subscribe provides a mock function with given fields: ctx, stateURI, subscriptionType, keypath, fetchHistoryOpts
-func (_m *TreeProtocol) Subscribe(ctx context.Context, stateURI string, subscriptionType prototree.SubscriptionType, keypath state.Keypath, fetchHistoryOpts *prototree.FetchHistoryOpts) (prototree.ReadableSubscription, error) {
-	ret := _m.Called(ctx, stateURI, subscriptionType, keypath, fetchHistoryOpts)
+// State provides a mock function with given fields:
+func (_m *TreeProtocol) State() process.State {
+	ret := _m.Called()
 
-	var r0 prototree.ReadableSubscription
-	if rf, ok := ret.Get(0).(func(context.Context, string, prototree.SubscriptionType, state.Keypath, *prototree.FetchHistoryOpts) prototree.ReadableSubscription); ok {
-		r0 = rf(ctx, stateURI, subscriptionType, keypath, fetchHistoryOpts)
+	var r0 process.State
+	if rf, ok := ret.Get(0).(func() process.State); ok {
+		r0 = rf()
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(prototree.ReadableSubscription)
-		}
+		r0 = ret.Get(0).(process.State)
 	}
 
-	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, string, prototree.SubscriptionType, state.Keypath, *prototree.FetchHistoryOpts) error); ok {
-		r1 = rf(ctx, stateURI, subscriptionType, keypath, fetchHistoryOpts)
+	return r0
+}
+
+// Subscribe provides a mock function with given fields: ctx, stateURI
+func (_m *TreeProtocol) Subscribe(ctx context.Context, stateURI string) error {
+	ret := _m.Called(ctx, stateURI)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, stateURI)
 	} else {
-		r1 = ret.Error(1)
+		r0 = ret.Error(0)
 	}
 
-	return r0, r1
+	return r0
 }
 
 // SubscribeStateURIs provides a mock function with given fields:

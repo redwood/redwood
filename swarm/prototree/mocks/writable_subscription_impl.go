@@ -176,6 +176,20 @@ func (_m *WritableSubscriptionImpl) Start() error {
 	return r0
 }
 
+// State provides a mock function with given fields:
+func (_m *WritableSubscriptionImpl) State() process.State {
+	ret := _m.Called()
+
+	var r0 process.State
+	if rf, ok := ret.Get(0).(func() process.State); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(process.State)
+	}
+
+	return r0
+}
+
 // String provides a mock function with given fields:
 func (_m *WritableSubscriptionImpl) String() string {
 	ret := _m.Called()

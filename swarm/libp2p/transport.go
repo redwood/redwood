@@ -566,8 +566,8 @@ func (t *transport) handleHushStream(stream netp2p.Stream) {
 	} else if msg := proto.GetProposeIndividualSession(); msg != nil {
 		t.HandleIncomingIndividualSessionProposal(ctx, msg.EncryptedProposal, peerConn)
 
-	} else if msg := proto.GetRespondToIndividualSession(); msg != nil {
-		t.HandleIncomingIndividualSessionResponse(ctx, *msg.Approval, peerConn)
+	} else if msg := proto.GetRespondToIndividualSessionProposal(); msg != nil {
+		t.HandleIncomingIndividualSessionResponse(ctx, *msg.Response, peerConn)
 
 	} else if msg := proto.GetSendIndividualMessage(); msg != nil {
 		t.HandleIncomingIndividualMessage(ctx, *msg.Message, peerConn)

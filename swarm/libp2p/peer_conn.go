@@ -252,7 +252,7 @@ func (peer *peerConn) RespondToIndividualSession(ctx context.Context, response p
 		return err
 	}
 	defer peer.Close()
-	return peer.writeProtobuf(pb.MakeHushProtobuf_RespondToIndividualSession(response))
+	return peer.writeProtobuf(pb.MakeHushProtobuf_RespondToIndividualSessionProposal(response))
 }
 
 func (peer *peerConn) SendHushIndividualMessage(ctx context.Context, msg protohush.IndividualMessage) error {
