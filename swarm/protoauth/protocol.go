@@ -72,17 +72,15 @@ func (ap *authProtocol) Start() error {
 		return err
 	}
 
-	ap.poolWorker = process.NewPoolWorker("pool worker", 4, process.NewStaticScheduler(5*time.Second, 10*time.Second))
+	ap.poolWorker = process.NewPoolWorker("pool worker", 16, process.NewStaticScheduler(5*time.Second, 10*time.Second))
 	err = ap.Process.SpawnChild(nil, ap.poolWorker)
 	if err != nil {
 		return err
 	}
-	for _, dialInfo := range ap.peerStore.UnverifiedPeers() {
-		ap.poolWorker.Add(verifyPeer{dialInfo, ap})
-	}
 
 	announcePeersTask := NewAnnouncePeersTask(10*time.Second, ap, ap.peerStore, ap.transports)
 	ap.peerStore.OnNewUnverifiedPeer(func(dialInfo swarm.PeerDialInfo) {
+		ap.Debugf("new unverified peer: %+v", dialInfo)
 		// @@TODO: the following line causes some kind of infinite loop when > 1 peer is online
 		// announcePeersTask.Enqueue()
 		ap.poolWorker.Add(verifyPeer{dialInfo, ap})
@@ -91,6 +89,15 @@ func (ap *authProtocol) Start() error {
 	if err != nil {
 		return err
 	}
+
+	go func() {
+		for {
+			for _, dialInfo := range ap.peerStore.UnverifiedPeers() {
+				ap.poolWorker.Add(verifyPeer{dialInfo, ap})
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}()
 
 	for _, tpt := range ap.transports {
 		ap.Infof(0, "registering %v", tpt.Name())
@@ -140,7 +147,6 @@ func (ap *authProtocol) ChallengePeerIdentity(ctx context.Context, peerConn Auth
 
 		ap.peerStore.AddVerifiedCredentials(peerConn.DialInfo(), peerConn.DeviceUniqueID(), sigpubkey.Address(), sigpubkey, encpubkey)
 	}
-
 	return nil
 }
 
@@ -238,7 +244,7 @@ func (t *announcePeersTask) announcePeers(ctx context.Context) {
 						return
 					}
 
-					peerConn.AnnouncePeers(ctx, allDialInfos)
+					err = peerConn.AnnouncePeers(ctx, allDialInfos)
 					if err != nil {
 						// t.Errorf("error writing to peerConn: %+v", err)
 					}
@@ -293,6 +299,14 @@ func (t verifyPeer) Work(ctx context.Context) (retry bool) {
 	}
 	defer authPeerConn.Close()
 
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	err = authPeerConn.EnsureConnected(ctx)
+	if err != nil {
+		return true
+	}
+
 	err = t.authProto.ChallengePeerIdentity(ctx, authPeerConn)
 	if errors.Cause(err) == errors.ErrConnection {
 		// no-op
@@ -301,7 +315,6 @@ func (t verifyPeer) Work(ctx context.Context) (retry bool) {
 		// no-op
 		return true
 	} else if err != nil {
-		t.authProto.Errorf("error verifying peerConn identity (%v): %v", authPeerConn.DialInfo(), err)
 		return true
 	}
 	t.authProto.Successf("authenticated with %v (addresses=%v)", t.dialInfo, authPeerConn.Addresses())
