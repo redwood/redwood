@@ -1822,7 +1822,7 @@ func (n *DBNode) depthFirstIterator(absKeypath Keypath, prefetchValues bool, pre
 		scanPrefix:     scanPrefix,
 		tx:             n.tx,
 		rootNode:       n,
-		iterNode:       &DBNode{tx: n.tx},
+		iterNode:       &DBNode{tx: n.tx, activeIterator: n.activeIterator, keyPrefix: n.keyPrefix},
 	}
 }
 
