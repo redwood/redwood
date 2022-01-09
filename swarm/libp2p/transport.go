@@ -60,6 +60,9 @@ type Transport interface {
 	Libp2pPeerID() string
 	ListenAddrs() []string
 	Peers() []corepeer.AddrInfo
+	AddStaticRelay(relayAddr string) error
+	RemoveStaticRelay(relayAddr string) error
+	StaticRelays() types.StringSet
 }
 
 type transport struct {
@@ -79,11 +82,11 @@ type transport struct {
 	p2pKey            cryptop2p.PrivKey
 	reachableAt       string
 	bootstrapPeers    []string
-	staticRelays      []string
 	datastorePath     string
 	dohDNSResolverURL string
 	*metrics.BandwidthCounter
 
+	store         Store
 	controllerHub tree.ControllerHub
 	peerStore     swarm.PeerStore
 	keyStore      identity.KeyStore
@@ -106,9 +109,10 @@ func NewTransport(
 	port uint,
 	reachableAt string,
 	bootstrapPeers []string,
-	staticRelays []string,
+	// staticRelays []string,
 	datastorePath string,
 	dohDNSResolverURL string,
+	store Store,
 	controllerHub tree.ControllerHub,
 	keyStore identity.KeyStore,
 	blobStore blob.Store,
@@ -120,9 +124,9 @@ func NewTransport(
 		port:              port,
 		reachableAt:       reachableAt,
 		bootstrapPeers:    bootstrapPeers,
-		staticRelays:      staticRelays,
 		datastorePath:     datastorePath,
 		dohDNSResolverURL: dohDNSResolverURL,
+		store:             store,
 		controllerHub:     controllerHub,
 		keyStore:          keyStore,
 		blobStore:         blobStore,
@@ -153,7 +157,7 @@ func (t *transport) Start() error {
 
 	t.BandwidthCounter = metrics.NewBandwidthCounter()
 
-	staticRelays, err := addrInfosFromStrings(t.staticRelays)
+	staticRelays, err := addrInfosFromStrings(t.store.StaticRelays().Slice())
 	if err != nil {
 		t.Warnf("while decoding static relays: %v", err)
 	}
@@ -318,7 +322,7 @@ func (t *transport) Start() error {
 		t.blobStore.OnBlobsSaved(announceBlobsTask.Enqueue)
 	}
 
-	connectToStaticRelaysTask := NewConnectToStaticRelaysTask(8*time.Second, staticRelays, t.libp2pHost)
+	connectToStaticRelaysTask := NewConnectToStaticRelaysTask(8*time.Second, t)
 	connectToStaticRelaysTask.Enqueue()
 	t.Process.SpawnChild(nil, connectToStaticRelaysTask)
 
@@ -397,6 +401,18 @@ func (t *transport) ListenAddrs() []string {
 
 func (t *transport) Peers() []corepeer.AddrInfo {
 	return peerstore.PeerInfos(t.libp2pHost.Peerstore(), t.libp2pHost.Peerstore().Peers())
+}
+
+func (t *transport) StaticRelays() types.StringSet {
+	return t.store.StaticRelays()
+}
+
+func (t *transport) AddStaticRelay(relayAddr string) error {
+	return t.store.AddStaticRelay(relayAddr)
+}
+
+func (t *transport) RemoveStaticRelay(relayAddr string) error {
+	return t.store.RemoveStaticRelay(relayAddr)
 }
 
 func (t *transport) Listen(network netp2p.Network, multiaddr ma.Multiaddr)      {}
@@ -910,7 +926,7 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 	}
 
 	var chDones []<-chan struct{}
-	for _, stateURI := range stateURIs {
+	for stateURI := range stateURIs {
 		stateURI := stateURI
 
 		chDone := t.Process.Go(nil, stateURI, func(ctx context.Context) {
@@ -936,41 +952,49 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 type connectToStaticRelaysTask struct {
 	process.PeriodicTask
 	log.Logger
-	staticRelays []corepeer.AddrInfo
-	libp2pHost   p2phost.Host
+	tpt *transport
 }
 
 func NewConnectToStaticRelaysTask(
 	interval time.Duration,
-	staticRelays []corepeer.AddrInfo,
-	libp2pHost p2phost.Host,
+	tpt *transport,
 ) *connectToStaticRelaysTask {
 	t := &connectToStaticRelaysTask{
-		Logger:       log.NewLogger("libp2p"),
-		staticRelays: staticRelays,
-		libp2pHost:   libp2pHost,
+		Logger: log.NewLogger("libp2p"),
+		tpt:    tpt,
 	}
 	t.PeriodicTask = *process.NewPeriodicTask("ConnectToStaticRelaysTask", utils.NewStaticTicker(interval), t.connectToStaticRelays)
 	return t
 }
 
 func (t *connectToStaticRelaysTask) connectToStaticRelays(ctx context.Context) {
+	staticRelays, err := addrInfosFromStrings(t.tpt.StaticRelays().Slice())
+	if err != nil {
+		t.Warnf("while decoding static relays: %v", err)
+	}
+
 	var chDones []<-chan struct{}
-	for _, relay := range t.staticRelays {
-		if len(t.libp2pHost.Network().ConnsToPeer(relay.ID)) > 0 {
+	for _, relay := range staticRelays {
+		if len(t.tpt.libp2pHost.Network().ConnsToPeer(relay.ID)) > 0 {
 			continue
 		}
 
 		relay := relay
 		chDone := t.Process.Go(nil, "relay "+relay.ID.Pretty(), func(ctx context.Context) {
-			err := t.libp2pHost.Connect(ctx, relay)
+			err := t.tpt.libp2pHost.Connect(ctx, relay)
 			if err != nil {
 				// t.Errorf("error connecting to static relay (%v): %v", relay.ID, err)
+			} else {
+				t.Successf("connected to static relay %v", relay)
 			}
 		})
 		chDones = append(chDones, chDone)
 	}
 	for _, chDone := range chDones {
-		<-chDone
+		select {
+		case <-chDone:
+		case <-ctx.Done():
+			return
+		}
 	}
 }
