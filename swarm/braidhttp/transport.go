@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httputil"
@@ -272,7 +273,13 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "HEAD":
-		// This is mainly used to poll for new peers
+		// Without a path, this method is used to poll for new peers
+		// Otherwise...
+		if strings.HasPrefix(r.URL.Path, "/__blob/") {
+			t.serveGetBlobMetadata(w, r)
+		} else {
+			t.serveHeadRequest(w, r)
+		}
 
 	case "OPTIONS":
 		// w.Header().Set("Access-Control-Allow-Headers", "State-URI")
@@ -393,6 +400,51 @@ func (t *transport) addressFromRequest(r *http.Request) (types.Address, error) {
 		return types.Address{}, err
 	}
 	return types.AddressFromBytes(addressBytes), nil
+}
+
+func (t *transport) serveHeadRequest(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		StateURI string        `header:"State-URI" query:"state_uri"`
+		Keypath  state.Keypath `header:"Keypath"   query:"keypath"   path:""`
+	}
+
+	var req request
+	err := utils.UnmarshalHTTPRequest(&req, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.StateURI == "" {
+		req.StateURI = t.defaultStateURI
+	}
+	stateURIs, err := t.controllerHub.KnownStateURIs()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else if !stateURIs.Contains(req.StateURI) {
+		http.Error(w, "state URI not found", http.StatusNotFound)
+		return
+	}
+
+	err = t.addParentsHeader(req.StateURI, w)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	node, err := t.controllerHub.StateAtVersion(req.StateURI, nil)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+		return
+	}
+	defer node.Close()
+
+	err = t.addResourceHeaders(req.StateURI, node, w)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 // Respond to a request from another node challenging our identity.
@@ -770,7 +822,6 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 	respBuf, ok := nelson.GetReadCloser(val)
 	if !ok {
-		contentType = "application/json"
 		j, err := json.Marshal(val)
 		if err != nil {
 			panic(err)
@@ -779,16 +830,17 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	}
 	defer respBuf.Close()
 
-	// Right now, this is just to facilitate the Chrome extension
-	allowSubscribe := map[string]bool{
-		"application/json": true,
-		"application/js":   true,
-		"text/plain":       true,
-	}
-	if allowSubscribe[contentType] {
-		w.Header().Set("Subscribe", "Allow")
+	// Add the "Parents" header
+	t.addParentsHeader(req.StateURI, w)
+
+	// Add resource headers
+	err = t.addResourceHeaders(req.StateURI, node, w)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+		return
 	}
 
+	// Add "Partial Content" status code if applicable
 	if anyMissing {
 		w.WriteHeader(http.StatusPartialContent)
 	}
@@ -820,6 +872,26 @@ func (t *transport) serveAck(w http.ResponseWriter, r *http.Request, peerConn *p
 	stateURI := r.Header.Get("State-URI")
 
 	t.HandleAckReceived(stateURI, txID, peerConn)
+}
+
+func (t *transport) serveGetBlobMetadata(w http.ResponseWriter, r *http.Request) {
+	blobIDStr := r.URL.Path[len("/__blob/"):]
+	var blobID blob.ID
+	err := blobID.UnmarshalText([]byte(blobIDStr))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	have, err := t.blobStore.HaveBlob(blobID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else if !have {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (t *transport) servePostBlob(w http.ResponseWriter, r *http.Request) {
@@ -951,7 +1023,8 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, peerConn
 		scanner := bufio.NewScanner(patchReader)
 		for scanner.Scan() {
 			line := scanner.Bytes()
-			patch, err := tree.ParsePatch(line)
+			var patch tree.Patch
+			err := patch.UnmarshalText([]byte(line))
 			if err != nil {
 				http.Error(w, fmt.Sprintf("bad patch string: %v", line), http.StatusBadRequest)
 				return
@@ -1195,6 +1268,47 @@ func (t *transport) makePeerConn(writer io.Writer, flusher http.Flusher, dialAdd
 	}
 	peer.PeerEndpoint = t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, dialAddr}, deviceUniqueID)
 	return peer
+}
+
+func (t *transport) addParentsHeader(stateURI string, w http.ResponseWriter) error {
+	leaves, err := t.controllerHub.Leaves(stateURI)
+	if err != nil {
+		return err
+	}
+	var leavesStrs []string
+	for _, leafID := range leaves {
+		leavesStrs = append(leavesStrs, leafID.Hex())
+	}
+	w.Header().Add("Parents", strings.Join(leavesStrs, ","))
+	return nil
+}
+
+func (t *transport) addResourceHeaders(stateURI string, node state.Node, w http.ResponseWriter) error {
+	w.Header().Set("State-URI", stateURI)
+
+	contentType, err := nelson.GetContentType(node)
+	if err != nil {
+		return errors.Wrapf(err, "error getting content type")
+	}
+	if contentType == "application/octet-stream" {
+		contentType = utils.GuessContentTypeFromFilename(string(node.Keypath().Part(-1)))
+	}
+	w.Header().Set("Content-Type", contentType)
+
+	contentLength, err := nelson.GetContentLength(node)
+	if err != nil {
+		return errors.Wrapf(err, "error getting content length")
+	}
+	if contentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+	}
+
+	resourceLength, err := node.Length()
+	if err != nil {
+		return errors.Wrapf(err, "error getting resource length")
+	}
+	w.Header().Set("Resource-Length", strconv.FormatUint(resourceLength, 10))
+	return nil
 }
 
 func (t *transport) doRequest(req *http.Request) (*http.Response, error) {
