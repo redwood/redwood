@@ -203,6 +203,7 @@ func (t *transport) Start() error {
 				dht.BootstrapPeers(append(staticRelays, bootstrapPeers...)...),
 				dht.Mode(dht.ModeServer),
 				dht.Datastore(datastore),
+				dht.MaxRecordAge(dhtTTL),
 				// dht.Validator(blankValidator{}), // Set a pass-through validator
 			)
 			return t.dht, err
