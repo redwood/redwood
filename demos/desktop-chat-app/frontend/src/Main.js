@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import styled, { useTheme } from 'styled-components'
 import { Redirect, useHistory } from 'react-router-dom'
-import { Code as CodeIcon } from '@material-ui/icons'
+import { Code as CodeIcon, InsertDriveFile as FileIcon } from '@material-ui/icons'
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 
@@ -16,6 +16,7 @@ import ToastContent from './components/Toast/ToastContent'
 import Sidebar from './components/Sidebar'
 import Chat from './components/Chat'
 import StateTreeDebugView from './components/StateTreeDebugView'
+import FileView from './components/FileView'
 import ContactsModal from './components/ContactsModal'
 import Spacer from './components/Spacer'
 import useNavigation from './hooks/useNavigation'
@@ -66,6 +67,10 @@ const SServerBar = styled(ServerBar)`
 const SChat = styled(Chat)`
     flex-grow: 1;
     padding-left: 16px;
+`
+
+const SFileView = styled(FileView)`
+    width: 564px;
 `
 
 const SStateTreeDebugView = styled(StateTreeDebugView)`
@@ -135,10 +140,26 @@ function Main(props) {
 	}, [profilesFetched])
 
 
+    let [showFileView, setShowFileView] = useState(false)
     let [showDebugView, setShowDebugView] = useState(false)
+
+    let onClickShowFileView = useCallback(() => {
+        if (showFileView) {
+            setShowFileView(false)
+        } else {
+            setShowFileView(true)
+            setShowDebugView(false)
+        }
+    }, [showFileView, setShowFileView])
+
     let onClickShowDebugView = useCallback(() => {
-        setShowDebugView(!showDebugView)
-	}, [showDebugView, setShowDebugView])
+        if (showDebugView) {
+            setShowDebugView(false)
+        } else {
+            setShowDebugView(true)
+            setShowFileView(false)
+        }
+    }, [showDebugView, setShowDebugView])
 
 	if (shouldRedirect) {
 		if ((props.profileNames || []).length === 0) {
@@ -151,10 +172,16 @@ function Main(props) {
         <Layout>
             <SServerBar verticalPadding={serverBarVerticalPadding} />
             <HeaderAndContent>
-                <SHeaderBar onClickShowDebugView={onClickShowDebugView} />
+                <SHeaderBar
+                    showFileView={showFileView}
+                    onClickShowFileView={onClickShowFileView}
+                    showDebugView={showDebugView}
+                    onClickShowDebugView={onClickShowDebugView}
+                />
                 <Content>
                     <Sidebar />
                     <SChat />
+                    {showFileView && <SFileView />}
                     {showDebugView && <SStateTreeDebugView />}
                 </Content>
 				{ roomKeys.map((key) => <NotificationMount
@@ -331,7 +358,13 @@ const SCodeIcon = styled(CodeIcon)`
     cursor: pointer;
 `
 
-function HeaderBar({ onClickShowDebugView, className }) {
+const SFileIcon = styled(FileIcon)`
+    padding: 12px;
+    cursor: pointer;
+`
+
+function HeaderBar({ showFileView, onClickShowFileView, showDebugView, onClickShowDebugView, className }) {
+    const theme = useTheme()
     const { selectedServer, selectedRoom } = useNavigation()
     const { currentRoom, currentServer } = useCurrentServerAndRoom()
     const roomName = useRoomName(selectedServer, selectedRoom)
@@ -340,7 +373,8 @@ function HeaderBar({ onClickShowDebugView, className }) {
             <ServerTitle>{currentServer && currentServer.name} /</ServerTitle>
             <ChatTitle>{currentRoom && roomName}</ChatTitle>
             {/* <Spacer size="flex" /> */}
-            <SCodeIcon style={{ color: 'white', marginLeft: 'auto' }} onClick={onClickShowDebugView} />
+            <SFileIcon style={{ color: showFileView  ? theme.color.green[500] : 'white', marginLeft: 'auto' }} onClick={onClickShowFileView} />
+            <SCodeIcon style={{ color: showDebugView ? theme.color.green[500] : 'white' }} onClick={onClickShowDebugView} />
         </HeaderBarContainer>
     )
 }

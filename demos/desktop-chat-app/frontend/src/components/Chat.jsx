@@ -17,6 +17,7 @@ import { withHistory } from 'slate-history'
 import Button from './Button'
 import Input from './Input'
 import Attachment from './Attachment'
+import AttachmentModal from './AttachmentModal'
 import Embed from './Embed'
 import EmojiQuickSearch from './EmojiQuickSearch'
 import TextBox from './TextBox'
@@ -222,13 +223,12 @@ function Chat({ className }) {
     const [searchMention, setSearchMention] = useState('')
 
     const { onPresent: onPresentPreviewModal } = useModal('attachment preview')
-    const [previewedAttachment, setPreviewedAttachment] = useState({})
     const onClickAttachment = useCallback((attachment, url) => {
-        setPreviewedAttachment({ attachment, url })
-        onPresentPreviewModal()
-    }, [setPreviewedAttachment, onPresentPreviewModal])
+        onPresentPreviewModal({ attachment, url })
+    }, [onPresentPreviewModal])
 
     const numMessages = ((roomState || {}).messages || []).length
+    const numFiles = ((roomState || {}).files || []).length
     const [messages, setMessages] = useState([])
 
     // Init Slate Editor
@@ -416,7 +416,7 @@ function Chat({ className }) {
 		// const attachmentCount = Array.prototype.map.call(attachmentsInput.current.files, x => x).length
         if (!api || !plainMessage) { return }
         // Replace with markdown serializer
-        await api.sendMessage(plainMessage, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, messages)
+        await api.sendMessage(plainMessage, attachments, nodeIdentities[0].address, selectedServer, selectedRoom, numMessages, numFiles)
         setAttachments([])
 		setPreviews([])
         setEmojiSearchWord('')
@@ -430,12 +430,15 @@ function Chat({ className }) {
 		setMessageText(initialMessageText)
 		
 		attachmentsInput.current.value = ''
-    }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, messages, api, previews])
+    }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, numMessages, numFiles, api, previews])
 
     useEffect(() => {
         // Scrolls on new messages
         if (messageTextContainer.current) {
           setTimeout(() => {
+            if (!messageTextContainer.current) {
+                return
+            }
 			messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
 			// fireNotificationAlert()
           }, 0)
@@ -637,7 +640,7 @@ function Chat({ className }) {
                 ))}
             </MessageContainer>
 
-            <AttachmentPreviewModal attachment={previewedAttachment.attachment} url={previewedAttachment.url} />
+            <AttachmentModal />
 
             <ImgPreviewContainer show={previews.length > 0}>
                 {previews.map((dataURL, idx) => !!dataURL ? (
@@ -831,40 +834,5 @@ const SMessageParseContainer = styled.div`
     top: 4px;
   }
 `
-
-const SModalContent = styled(ModalContent)`
-    width: 600px;
-    flex-direction: column;
-`
-
-const Metadata = styled.div`
-    padding-bottom: 4px;
-`
-
-const Filename = styled.span`
-    font-size: 0.8rem;
-`
-
-const Filesize = styled.span`
-    font-size: 0.8rem;
-    color: ${props => props.theme.color.grey[100]};
-`
-
-function AttachmentPreviewModal({ attachment, url }) {
-    if (!attachment) {
-        return null
-    }
-    return (
-        <Modal modalKey="attachment preview">
-            <SModalContent>
-                <Metadata>
-                    <Filename>{attachment.filename} </Filename>
-                    <Filesize>({filesize(attachment['Content-Length'])})</Filesize>
-                </Metadata>
-                <Embed contentType={attachment['Content-Type']} url={url} width={600} />
-            </SModalContent>
-        </Modal>
-    )
-}
 
 export default Chat
