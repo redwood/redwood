@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
-	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"path/filepath"
@@ -13,7 +11,7 @@ import (
 
 	"redwood.dev/cmd/cmdutils"
 	"redwood.dev/log"
-	"redwood.dev/redwood.js/embed/sync9"
+	"redwood.dev/process"
 	"redwood.dev/rpc"
 	"redwood.dev/state"
 	"redwood.dev/tree"
@@ -21,10 +19,10 @@ import (
 )
 
 type App struct {
-	*cmdutils.App
+	process.Process
 	log.Logger
+	app *cmdutils.App
 
-	started       bool
 	httpRPCServer *http.Server
 
 	profileRoot string
@@ -39,6 +37,7 @@ const AppName = "redwood-chat"
 
 func newApp(password, mnemonic, profileRoot, profileName, configPath string, devMode bool) (*App, error) {
 	app := &App{
+		Process:     *process.New("hush"),
 		Logger:      log.NewLogger("app"),
 		profileRoot: profileRoot,
 		profileName: profileName,
@@ -83,7 +82,7 @@ func newApp(password, mnemonic, profileRoot, profileName, configPath string, dev
 		return nil, err
 	}
 
-	app.App = cmdutils.NewApp(AppName, cfg)
+	app.app = cmdutils.NewApp(AppName, cfg)
 
 	app.Info(0, utils.PrettyJSON(cfg))
 
@@ -91,12 +90,15 @@ func newApp(password, mnemonic, profileRoot, profileName, configPath string, dev
 }
 
 func (app *App) Start() error {
-	err := app.App.Start()
+	err := app.Process.Start()
 	if err != nil {
 		return err
 	}
 
-	app.started = true
+	err = app.Process.SpawnChild(nil, app.app)
+	if err != nil {
+		return err
+	}
 
 	app.initializeLocalState()
 	app.monitorForDMs()
@@ -104,16 +106,11 @@ func (app *App) Start() error {
 	return nil
 }
 
-func (app *App) Close() error {
-	app.started = false
-	return app.Process.Close()
-}
-
 func (app *App) monitorForDMs() {
 	app.Process.Go(nil, "monitorForDMs", func(ctx context.Context) {
 		time.Sleep(5 * time.Second)
 
-		sub, err := app.TreeProto.SubscribeStateURIs()
+		sub, err := app.app.TreeProto.SubscribeStateURIs()
 		if err != nil {
 			panic(err)
 		}
@@ -138,7 +135,7 @@ func (app *App) monitorForDMs() {
 				roomKeypath := state.Keypath("rooms").Pushs(roomName)
 				var found bool
 				func() {
-					dmState, err := app.ControllerHub.StateAtVersion("chat.local/dms", nil)
+					dmState, err := app.app.ControllerHub.StateAtVersion("chat.local/dms", nil)
 					if err != nil {
 						panic(err)
 					}
@@ -150,7 +147,7 @@ func (app *App) monitorForDMs() {
 					}
 				}()
 				if !found {
-					err := app.TreeProto.SendTx(ctx, tree.Tx{
+					err := app.app.TreeProto.SendTx(ctx, tree.Tx{
 						ID:       state.RandomVersion(),
 						StateURI: "chat.local/dms",
 						Patches: []tree.Patch{{
