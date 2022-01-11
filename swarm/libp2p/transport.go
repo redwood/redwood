@@ -892,6 +892,9 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 
 	for _, sha1 := range sha1s {
 		chDone := t.Process.Go(nil, sha1.String(), func(ctx context.Context) {
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+
 			err := t.transport.AnnounceBlob(ctx, sha1)
 			if err != nil {
 				t.Errorf("announce: error: %v", err)

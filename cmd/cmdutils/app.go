@@ -150,7 +150,7 @@ func (app *App) Start() error {
 		app.KeyStore = identity.NewBadgerKeyStore(badgerOpts.ForPath(cfg.KeyStoreRoot()), scryptParams)
 		err = app.KeyStore.Unlock(cfg.KeyStore.Password, cfg.KeyStore.Mnemonic)
 		if err != nil {
-			app.Errorf("while unlocking keystore: %+v", err)
+			app.Errorf("while unlocking keystore at %v: %+v", cfg.KeyStoreRoot(), err)
 			return err
 		}
 		defer closeIfError(&err, app.KeyStore)

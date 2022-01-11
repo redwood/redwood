@@ -1,24 +1,38 @@
-Node:
-    BootstrapPeers: []
-    SubscribedStateURIs:
-      - docs.redwood.dev/document-3192
-    MaxPeersPerSubscription: 4
-    DataRoot: ./node2_data
-    DevMode: true
-P2PTransport:
+BootstrapPeers: []
+DataRoot: ./node2_data
+DNSOverHTTPSURL: ""
+Nurse:
+    Enabled: false
+Libp2pTransport:
     Enabled: true
-    KeyFile: /home/spook/.config/redwood/p2p_key
     ListenAddr: 0.0.0.0
     ListenPort: 21241
+    Reachability: ""
     ReachableAt: ""
-HTTPTransport:
+    StaticRelays: []
+BraidHTTPTransport:
     Enabled: true
     ListenHost: :9090
+    ListenHostSSL: :9092
+    TLSCertFile: ""
+    TLSKeyFile: ""
     DefaultStateURI: docs.redwood.dev/document-3192
     ReachableAt: http://localhost:9090
+AuthProtocol:
+    Enabled: true
+BlobProtocol:
+    Enabled: true
+HushProtocol:
+    Enabled: true
+TreeProtocol:
+    Enabled: true
+    MaxPeersPerSubscription: 4
 HTTPRPC:
-    Enabled: false
-    ListenHost: :8081
+    Enabled: true
+    ListenHost: :9091
+    TLSCertFile: ""
+    TLSKeyFile: ""
     Whitelist:
         Enabled: false
         PermittedAddrs: []
+

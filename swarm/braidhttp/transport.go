@@ -738,8 +738,6 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("req %+v\n", req)
-
 	if req.StateURI == "" {
 		req.StateURI = t.defaultStateURI
 	}
@@ -754,19 +752,19 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	var node state.Node
 	var anyMissing bool
 
-	node, err = t.controllerHub.StateAtVersion(req.StateURI, req.Version)
+	rootNode, err := t.controllerHub.StateAtVersion(req.StateURI, req.Version)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
 		return
 	}
-	defer node.Close()
+	defer rootNode.Close()
 
 	if req.Raw {
-		node = node.NodeAt(req.KeypathAndRange.Keypath, rng)
+		node = rootNode.NodeAt(req.KeypathAndRange.Keypath, rng)
 
 	} else {
 		var exists bool
-		node, exists, err = nelson.Seek(node, req.KeypathAndRange.Keypath, t.controllerHub, t.blobStore)
+		node, exists, err = nelson.Seek(rootNode, req.KeypathAndRange.Keypath, t.controllerHub, t.blobStore)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 			return
@@ -774,25 +772,7 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("not found: %v", req.KeypathAndRange.Keypath), http.StatusNotFound)
 			return
 		}
-		// kp := req.KeypathAndRange.Keypath
 		req.KeypathAndRange.Keypath = nil
-
-		// node, err = node.CopyToMemory(req.KeypathAndRange.Keypath, rng)
-		// if errors.Cause(err) == errors.Err404 {
-		// 	http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
-		// 	return
-		// } else if err != nil {
-		// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-		// 	return
-		// }
-		// fmt.Printf("NODE COPY %v (%T) %+v\n", kp, node, node)
-
-		// node, anyMissing, err = nelson.Resolve(node, t.controllerHub, t.blobStore)
-		// if err != nil {
-		// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-		// 	return
-		// }
-		// fmt.Printf("NODE RESOLVE %v (%T) %+v\n", kp, node, node)
 
 		indexHTMLExists, err := node.Exists(req.KeypathAndRange.Keypath.Push(state.Keypath("index.html")))
 		if err != nil {
@@ -801,7 +781,15 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		}
 		if indexHTMLExists {
 			req.KeypathAndRange.Keypath = req.KeypathAndRange.Keypath.Push(state.Keypath("index.html"))
-			node = node.NodeAt(state.Keypath("index.html"), nil)
+
+			node, exists, err = nelson.Seek(node, state.Keypath("index.html"), t.controllerHub, t.blobStore)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+				return
+			} else if !exists {
+				http.Error(w, fmt.Sprintf("not found: %v", req.KeypathAndRange.Keypath), http.StatusNotFound)
+				return
+			}
 		}
 	}
 

@@ -200,9 +200,9 @@ func createBlob(commitHash string, filePath state.Keypath, fileData FileData, cl
 		return BlobEntry{}, err
 	}
 
-	sha1, err := git.NewOid(fileData.SHA1)
+	sha1, err := git.NewOid(fileData.SHA1[:40])
 	if err != nil {
-		return BlobEntry{}, err
+		return BlobEntry{}, errors.WithStack(err)
 	}
 	if odb.Exists(sha1) {
 		return BlobEntry{*sha1, int64(fileData.ContentLength)}, nil

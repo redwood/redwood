@@ -95,6 +95,8 @@ func run(c *cli.Context) (err error) {
 		return err
 	}
 
+	fmt.Println("reading config at", configPath)
+
 	// Copy the default config and unmarshal the config file over it
 	cfg := cmdutils.DefaultConfig(AppName)
 	err = cmdutils.FindOrCreateConfigAtPath(&cfg, AppName, configPath)

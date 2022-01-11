@@ -172,12 +172,12 @@ func DrillDownUntilFrame(
 	keypath state.Keypath,
 ) (frameNode, nonFrameNode state.Node, remaining state.Keypath, _ error) {
 	for {
-		isNelSONFrame, err := node.Exists(ValueKey)
+		is, err := isNelSONFrame(node)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 
-		if isNelSONFrame {
+		if is {
 			return node, nil, keypath, nil
 
 		} else if len(keypath) == 0 {
@@ -205,10 +205,10 @@ func CollapseFrame(
 	stateResolver StateResolver,
 	blobResolver BlobResolver,
 ) (*Frame, state.Node, state.Keypath, error) {
-	exists, err := node.Exists(ContentTypeKey)
+	is, err := isNelSONFrame(node)
 	if err != nil {
 		return nil, nil, nil, err
-	} else if !exists {
+	} else if !is {
 		panic("CollapseFrame was not passed a state.Node representing a NelSON frame")
 	}
 
@@ -218,10 +218,10 @@ func CollapseFrame(
 	for {
 		frame.Node = node
 
-		exists, err := node.Exists(ContentTypeKey)
+		is, err := isNelSONFrame(node)
 		if err != nil {
 			return nil, nil, nil, err
-		} else if !exists {
+		} else if !is {
 			return frame, node, keypath, nil
 		}
 
@@ -301,6 +301,10 @@ func CollapseFrame(
 		}
 	}
 	return frame, node, keypath, nil
+}
+
+func isNelSONFrame(node state.Node) (bool, error) {
+	return node.Exists(ValueKey)
 }
 
 // Given a state.Node, Resolve will recursively resolve all NelSON frames

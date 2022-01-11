@@ -1,23 +1,38 @@
-Node:
-    BootstrapPeers: []
-    SubscribedStateURIs:
-      - somegitprovider.org/gitdemo
-    MaxPeersPerSubscription: 4
-    DataRoot: ./node1_data
-    DevMode: true
-P2PTransport:
+BootstrapPeers: []
+DataRoot: ./node1_data
+DNSOverHTTPSURL: ""
+Nurse:
+    Enabled: false
+Libp2pTransport:
     Enabled: true
     ListenAddr: 0.0.0.0
     ListenPort: 21231
+    Reachability: ""
     ReachableAt: ""
-HTTPTransport:
+    StaticRelays: []
+BraidHTTPTransport:
     Enabled: true
     ListenHost: :8080
+    ListenHostSSL: :8082
+    TLSCertFile: ""
+    TLSKeyFile: ""
     DefaultStateURI: somegitprovider.org/gitdemo
     ReachableAt: http://localhost:8080
+AuthProtocol:
+    Enabled: true
+BlobProtocol:
+    Enabled: true
+HushProtocol:
+    Enabled: true
+TreeProtocol:
+    Enabled: true
+    MaxPeersPerSubscription: 4
 HTTPRPC:
-    Enabled: false
+    Enabled: true
     ListenHost: :8081
+    TLSCertFile: ""
+    TLSKeyFile: ""
     Whitelist:
         Enabled: false
         PermittedAddrs: []
+
