@@ -401,21 +401,10 @@ func TestStore(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, have)
 
-		iter := store.BlobIDs()
-		defer iter.Close()
-
-		var ids []blob.ID
-		for iter.Rewind(); iter.Valid(); iter.Next() {
-			if iter.Err() != nil {
-				break
-			}
-			sha1, sha3 := iter.Current()
-			ids = append(ids, sha1)
-			ids = append(ids, sha3)
-		}
-		require.NoError(t, iter.Err())
-
+		sha1s, sha3s, err := store.BlobIDs()
 		require.NoError(t, err)
+		ids := append(sha1s, sha3s...)
+
 		require.Len(t, ids, 4)
 		require.Contains(t, ids, blob.ID{types.SHA3, blob1SHA3})
 		require.Contains(t, ids, blob.ID{types.SHA1, blob1SHA1})

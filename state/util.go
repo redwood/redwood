@@ -383,13 +383,14 @@ func setValueAtKeypath(x interface{}, keypath Keypath, val interface{}, clobber 
 		}
 	}
 
-	if asMap, isMap := cur.(map[string]interface{}); isMap {
-		asMap[string(key)] = val
-	} else if asSlice, isSlice := cur.([]interface{}); isSlice {
-		asSlice[DecodeSliceIndex(key)] = val
-	} else if asNode, isNode := cur.(Node); isNode {
-		asNode.Set(Keypath(key), nil, val)
-	} else {
+	switch cur := cur.(type) {
+	case map[string]interface{}:
+		cur[string(key)] = val
+	case []interface{}:
+		cur[DecodeSliceIndex(key)] = val
+	case Node:
+		cur.Set(Keypath(key), nil, val)
+	default:
 		panic(fmt.Sprintf("bad 3: %T %v", cur, key))
 	}
 	return x

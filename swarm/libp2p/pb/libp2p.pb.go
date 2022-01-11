@@ -332,7 +332,7 @@ type HushMessage struct {
 	// Types that are valid to be assigned to Payload:
 	//	*HushMessage_DhPubkeyAttestations
 	//	*HushMessage_ProposeIndividualSession_
-	//	*HushMessage_ApproveIndividualSession_
+	//	*HushMessage_RespondToIndividualSessionProposal_
 	//	*HushMessage_SendIndividualMessage_
 	//	*HushMessage_SendGroupMessage_
 	Payload isHushMessage_Payload `protobuf_oneof:"payload"`
@@ -384,8 +384,8 @@ type HushMessage_DhPubkeyAttestations struct {
 type HushMessage_ProposeIndividualSession_ struct {
 	ProposeIndividualSession *HushMessage_ProposeIndividualSession `protobuf:"bytes,2,opt,name=proposeIndividualSession,proto3,oneof" json:"proposeIndividualSession,omitempty"`
 }
-type HushMessage_ApproveIndividualSession_ struct {
-	ApproveIndividualSession *HushMessage_ApproveIndividualSession `protobuf:"bytes,3,opt,name=approveIndividualSession,proto3,oneof" json:"approveIndividualSession,omitempty"`
+type HushMessage_RespondToIndividualSessionProposal_ struct {
+	RespondToIndividualSessionProposal *HushMessage_RespondToIndividualSessionProposal `protobuf:"bytes,3,opt,name=respondToIndividualSessionProposal,proto3,oneof" json:"respondToIndividualSessionProposal,omitempty"`
 }
 type HushMessage_SendIndividualMessage_ struct {
 	SendIndividualMessage *HushMessage_SendIndividualMessage `protobuf:"bytes,4,opt,name=sendIndividualMessage,proto3,oneof" json:"sendIndividualMessage,omitempty"`
@@ -394,11 +394,11 @@ type HushMessage_SendGroupMessage_ struct {
 	SendGroupMessage *HushMessage_SendGroupMessage `protobuf:"bytes,5,opt,name=sendGroupMessage,proto3,oneof" json:"sendGroupMessage,omitempty"`
 }
 
-func (*HushMessage_DhPubkeyAttestations) isHushMessage_Payload()      {}
-func (*HushMessage_ProposeIndividualSession_) isHushMessage_Payload() {}
-func (*HushMessage_ApproveIndividualSession_) isHushMessage_Payload() {}
-func (*HushMessage_SendIndividualMessage_) isHushMessage_Payload()    {}
-func (*HushMessage_SendGroupMessage_) isHushMessage_Payload()         {}
+func (*HushMessage_DhPubkeyAttestations) isHushMessage_Payload()                {}
+func (*HushMessage_ProposeIndividualSession_) isHushMessage_Payload()           {}
+func (*HushMessage_RespondToIndividualSessionProposal_) isHushMessage_Payload() {}
+func (*HushMessage_SendIndividualMessage_) isHushMessage_Payload()              {}
+func (*HushMessage_SendGroupMessage_) isHushMessage_Payload()                   {}
 
 func (m *HushMessage) GetPayload() isHushMessage_Payload {
 	if m != nil {
@@ -421,9 +421,9 @@ func (m *HushMessage) GetProposeIndividualSession() *HushMessage_ProposeIndividu
 	return nil
 }
 
-func (m *HushMessage) GetApproveIndividualSession() *HushMessage_ApproveIndividualSession {
-	if x, ok := m.GetPayload().(*HushMessage_ApproveIndividualSession_); ok {
-		return x.ApproveIndividualSession
+func (m *HushMessage) GetRespondToIndividualSessionProposal() *HushMessage_RespondToIndividualSessionProposal {
+	if x, ok := m.GetPayload().(*HushMessage_RespondToIndividualSessionProposal_); ok {
+		return x.RespondToIndividualSessionProposal
 	}
 	return nil
 }
@@ -447,7 +447,7 @@ func (*HushMessage) XXX_OneofWrappers() []interface{} {
 	return []interface{}{
 		(*HushMessage_DhPubkeyAttestations)(nil),
 		(*HushMessage_ProposeIndividualSession_)(nil),
-		(*HushMessage_ApproveIndividualSession_)(nil),
+		(*HushMessage_RespondToIndividualSessionProposal_)(nil),
 		(*HushMessage_SendIndividualMessage_)(nil),
 		(*HushMessage_SendGroupMessage_)(nil),
 	}
@@ -539,21 +539,23 @@ func (m *HushMessage_ProposeIndividualSession) GetEncryptedProposal() []byte {
 	return nil
 }
 
-type HushMessage_ApproveIndividualSession struct {
-	Approval *pb1.IndividualSessionApproval `protobuf:"bytes,1,opt,name=approval,proto3" json:"approval,omitempty"`
+type HushMessage_RespondToIndividualSessionProposal struct {
+	Response *pb1.IndividualSessionResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
 }
 
-func (m *HushMessage_ApproveIndividualSession) Reset()      { *m = HushMessage_ApproveIndividualSession{} }
-func (*HushMessage_ApproveIndividualSession) ProtoMessage() {}
-func (*HushMessage_ApproveIndividualSession) Descriptor() ([]byte, []int) {
+func (m *HushMessage_RespondToIndividualSessionProposal) Reset() {
+	*m = HushMessage_RespondToIndividualSessionProposal{}
+}
+func (*HushMessage_RespondToIndividualSessionProposal) ProtoMessage() {}
+func (*HushMessage_RespondToIndividualSessionProposal) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cad2813fa2bf04bd, []int{1, 2}
 }
-func (m *HushMessage_ApproveIndividualSession) XXX_Unmarshal(b []byte) error {
+func (m *HushMessage_RespondToIndividualSessionProposal) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *HushMessage_ApproveIndividualSession) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *HushMessage_RespondToIndividualSessionProposal) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_HushMessage_ApproveIndividualSession.Marshal(b, m, deterministic)
+		return xxx_messageInfo_HushMessage_RespondToIndividualSessionProposal.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -563,21 +565,21 @@ func (m *HushMessage_ApproveIndividualSession) XXX_Marshal(b []byte, determinist
 		return b[:n], nil
 	}
 }
-func (m *HushMessage_ApproveIndividualSession) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_HushMessage_ApproveIndividualSession.Merge(m, src)
+func (m *HushMessage_RespondToIndividualSessionProposal) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HushMessage_RespondToIndividualSessionProposal.Merge(m, src)
 }
-func (m *HushMessage_ApproveIndividualSession) XXX_Size() int {
+func (m *HushMessage_RespondToIndividualSessionProposal) XXX_Size() int {
 	return m.Size()
 }
-func (m *HushMessage_ApproveIndividualSession) XXX_DiscardUnknown() {
-	xxx_messageInfo_HushMessage_ApproveIndividualSession.DiscardUnknown(m)
+func (m *HushMessage_RespondToIndividualSessionProposal) XXX_DiscardUnknown() {
+	xxx_messageInfo_HushMessage_RespondToIndividualSessionProposal.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_HushMessage_ApproveIndividualSession proto.InternalMessageInfo
+var xxx_messageInfo_HushMessage_RespondToIndividualSessionProposal proto.InternalMessageInfo
 
-func (m *HushMessage_ApproveIndividualSession) GetApproval() *pb1.IndividualSessionApproval {
+func (m *HushMessage_RespondToIndividualSessionProposal) GetResponse() *pb1.IndividualSessionResponse {
 	if m != nil {
-		return m.Approval
+		return m.Response
 	}
 	return nil
 }
@@ -677,7 +679,7 @@ func init() {
 	proto.RegisterType((*HushMessage)(nil), "Redwood.swarm.libp2p.HushMessage")
 	proto.RegisterType((*HushMessage_DHPubkeyAttestations)(nil), "Redwood.swarm.libp2p.HushMessage.DHPubkeyAttestations")
 	proto.RegisterType((*HushMessage_ProposeIndividualSession)(nil), "Redwood.swarm.libp2p.HushMessage.ProposeIndividualSession")
-	proto.RegisterType((*HushMessage_ApproveIndividualSession)(nil), "Redwood.swarm.libp2p.HushMessage.ApproveIndividualSession")
+	proto.RegisterType((*HushMessage_RespondToIndividualSessionProposal)(nil), "Redwood.swarm.libp2p.HushMessage.RespondToIndividualSessionProposal")
 	proto.RegisterType((*HushMessage_SendIndividualMessage)(nil), "Redwood.swarm.libp2p.HushMessage.SendIndividualMessage")
 	proto.RegisterType((*HushMessage_SendGroupMessage)(nil), "Redwood.swarm.libp2p.HushMessage.SendGroupMessage")
 }
@@ -685,52 +687,53 @@ func init() {
 func init() { proto.RegisterFile("libp2p.proto", fileDescriptor_cad2813fa2bf04bd) }
 
 var fileDescriptor_cad2813fa2bf04bd = []byte{
-	// 714 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x95, 0x4f, 0x6f, 0xd3, 0x4c,
-	0x10, 0xc6, 0xd7, 0x6d, 0xda, 0xa6, 0xd3, 0x54, 0xea, 0xbb, 0x4a, 0xab, 0xc8, 0xaf, 0x58, 0xaa,
-	0x0a, 0x24, 0x04, 0xc5, 0x91, 0x52, 0x01, 0x82, 0x0b, 0x6a, 0xa8, 0xc0, 0x15, 0x6a, 0x55, 0x6d,
-	0x10, 0x48, 0x95, 0x90, 0xb0, 0xe3, 0x6d, 0x6c, 0x9a, 0x78, 0xad, 0xac, 0xdd, 0x3f, 0x37, 0x3e,
-	0x02, 0xdf, 0x02, 0x3e, 0x02, 0x47, 0x8e, 0x3d, 0xf6, 0xc0, 0xa1, 0x27, 0xd4, 0xb8, 0x17, 0x8e,
-	0x3d, 0x72, 0x44, 0x5e, 0x3b, 0x89, 0xd3, 0xd8, 0x6a, 0x4e, 0xf6, 0x66, 0xf6, 0xf9, 0x3d, 0xb3,
-	0x33, 0xe3, 0x0d, 0x94, 0xda, 0x8e, 0xe9, 0xd5, 0x3c, 0xcd, 0xeb, 0x72, 0x9f, 0xe3, 0x32, 0x65,
-	0xd6, 0x31, 0xe7, 0x96, 0x26, 0x8e, 0x8d, 0x6e, 0x47, 0x8b, 0x63, 0xea, 0xe3, 0x96, 0xe3, 0xdb,
-	0x81, 0xa9, 0x35, 0x79, 0xa7, 0xda, 0xe2, 0x2d, 0x5e, 0x95, 0x9b, 0xcd, 0xe0, 0x40, 0xae, 0xe4,
-	0x42, 0xbe, 0xc5, 0x10, 0x15, 0x9b, 0x6d, 0x6e, 0x56, 0x3d, 0xb3, 0x1a, 0x3d, 0x93, 0xdf, 0xee,
-	0x48, 0x60, 0x2c, 0xb4, 0x03, 0x61, 0x47, 0xe1, 0xe8, 0x19, 0x87, 0xd7, 0x7e, 0x15, 0x60, 0xa1,
-	0xde, 0xe6, 0xe6, 0x0e, 0x13, 0xc2, 0x68, 0x31, 0xfc, 0x01, 0x16, 0x0f, 0x98, 0xdf, 0xb4, 0x77,
-	0x0c, 0xd7, 0x39, 0x60, 0xc2, 0xaf, 0x28, 0xab, 0xca, 0x83, 0x85, 0x5a, 0x55, 0xcb, 0xca, 0x4f,
-	0x4b, 0x29, 0xb5, 0xd7, 0x69, 0x99, 0x8e, 0xe8, 0x28, 0x07, 0xbf, 0x83, 0x92, 0x60, 0xae, 0x35,
-	0xe0, 0x4e, 0x49, 0xae, 0x76, 0x3b, 0xb7, 0x91, 0x52, 0xe9, 0x88, 0x8e, 0x50, 0xf0, 0x2e, 0x80,
-	0xb4, 0x79, 0x65, 0x07, 0xee, 0x61, 0x65, 0x5a, 0x32, 0xd7, 0x27, 0xcc, 0x55, 0x6a, 0x74, 0x44,
-	0x53, 0x04, 0xfc, 0x16, 0xe6, 0x23, 0x7e, 0x8c, 0x2b, 0x48, 0xdc, 0xa3, 0xc9, 0x52, 0xec, 0xd3,
-	0x86, 0x7a, 0xf5, 0x09, 0x2c, 0x8e, 0x14, 0x05, 0xdf, 0x83, 0x29, 0xc7, 0x4a, 0x2a, 0x5a, 0x1e,
-	0x60, 0x65, 0xb3, 0x22, 0xdc, 0xf6, 0x16, 0x9d, 0x72, 0x2c, 0x75, 0x1f, 0x4a, 0xe9, 0x33, 0xe3,
-	0x1a, 0x14, 0x3b, 0xa3, 0xdd, 0x58, 0x19, 0xd5, 0xf6, 0x77, 0xd2, 0xc1, 0x3e, 0xbc, 0x02, 0xb3,
-	0xec, 0xc4, 0x11, 0xbe, 0x90, 0x75, 0x2e, 0xd2, 0x64, 0xa5, 0xae, 0x02, 0x0c, 0xcf, 0x8e, 0x31,
-	0x14, 0x84, 0x6d, 0x6c, 0x48, 0x6a, 0x89, 0xca, 0x77, 0xf5, 0x39, 0xcc, 0x0f, 0x8e, 0x83, 0xcb,
-	0x30, 0xd3, 0x94, 0xa5, 0x88, 0x77, 0xc4, 0x8b, 0x3c, 0x78, 0x7d, 0x1e, 0xe6, 0x3c, 0xe3, 0xb4,
-	0xcd, 0x0d, 0x6b, 0xed, 0x5b, 0x11, 0x16, 0xf4, 0x40, 0xd8, 0xfd, 0xb1, 0x6a, 0x43, 0xd9, 0xb2,
-	0xf7, 0x02, 0xf3, 0x90, 0x9d, 0x6e, 0xfa, 0x3e, 0x13, 0xbe, 0xe1, 0x3b, 0xdc, 0x15, 0xc9, 0x79,
-	0x9e, 0x66, 0x97, 0x38, 0x05, 0xd0, 0xb6, 0xf4, 0x71, 0xb5, 0x8e, 0x68, 0x26, 0x15, 0x9f, 0x40,
-	0xc5, 0xeb, 0x72, 0x8f, 0x0b, 0xb6, 0xed, 0x5a, 0xce, 0x91, 0x63, 0x05, 0x46, 0xbb, 0xc1, 0x84,
-	0x70, 0xb8, 0x9b, 0xcc, 0xdd, 0x8b, 0xdb, 0x1d, 0xf7, 0x72, 0x08, 0x3a, 0xa2, 0xb9, 0xf4, 0xc8,
-	0xd9, 0xf0, 0xbc, 0x2e, 0x3f, 0xca, 0x70, 0x9e, 0x9e, 0xd4, 0x79, 0x33, 0x87, 0x10, 0x39, 0xe7,
-	0xd1, 0x31, 0x87, 0xe5, 0x68, 0xf2, 0x86, 0x81, 0x84, 0x96, 0x4c, 0xf1, 0xb3, 0xdb, 0x6d, 0x1b,
-	0x59, 0x72, 0x1d, 0xd1, 0x6c, 0x2e, 0xfe, 0x04, 0x4b, 0x51, 0xe0, 0x4d, 0x97, 0x07, 0x5e, 0xdf,
-	0x6b, 0x46, 0x7a, 0xd5, 0x26, 0xf3, 0x4a, 0x2b, 0x75, 0x44, 0xc7, 0x68, 0xaa, 0x0b, 0xe5, 0xac,
-	0xb6, 0xe3, 0xf7, 0x50, 0x32, 0x46, 0x87, 0x68, 0x3a, 0xe3, 0xb3, 0x1f, 0xdc, 0x78, 0x59, 0xb3,
-	0x53, 0x2f, 0x9c, 0xfd, 0xbe, 0x8b, 0xe8, 0x08, 0x47, 0xd5, 0xa1, 0x92, 0xd7, 0x74, 0xbc, 0x0e,
-	0xff, 0x31, 0xb7, 0xd9, 0x3d, 0xf5, 0x7c, 0x66, 0xc5, 0x9b, 0x8c, 0x76, 0xf2, 0x55, 0x8c, 0x07,
-	0xd4, 0xcf, 0x50, 0xc9, 0x6b, 0x22, 0xde, 0x85, 0x62, 0xdc, 0xc4, 0x04, 0x30, 0x5e, 0xaf, 0x61,
-	0xe6, 0x63, 0xea, 0xcd, 0x44, 0x49, 0x07, 0x0c, 0xf5, 0x23, 0x2c, 0x67, 0x76, 0x0e, 0x6f, 0xc1,
-	0x5c, 0x27, 0xe9, 0x4b, 0xec, 0xf3, 0x70, 0x02, 0x9f, 0x44, 0x4c, 0xfb, 0x52, 0xb5, 0x01, 0x4b,
-	0x37, 0x9b, 0x85, 0x5f, 0xde, 0x24, 0xdf, 0xcf, 0x25, 0xa7, 0x75, 0x03, 0x68, 0xea, 0xa6, 0xa8,
-	0x1b, 0xe7, 0x3d, 0x82, 0x2e, 0x7a, 0x04, 0x5d, 0xf6, 0x88, 0x72, 0xdd, 0x23, 0xca, 0xdf, 0x1e,
-	0x51, 0xbe, 0x84, 0x44, 0xf9, 0x1e, 0x12, 0xe5, 0x47, 0x48, 0x94, 0x9f, 0x21, 0x51, 0xce, 0x42,
-	0xa2, 0x9c, 0x87, 0x44, 0xb9, 0x0c, 0x89, 0xf2, 0x27, 0x24, 0xe8, 0x3a, 0x24, 0xca, 0xd7, 0x2b,
-	0x82, 0xce, 0xaf, 0x08, 0xba, 0xb8, 0x22, 0x68, 0xff, 0xff, 0x6e, 0xe2, 0x6f, 0xb1, 0xa3, 0x6a,
-	0xfc, 0x8f, 0x17, 0x4f, 0x5d, 0xd5, 0x33, 0xcd, 0x59, 0x99, 0xce, 0xc6, 0xbf, 0x00, 0x00, 0x00,
-	0xff, 0xff, 0x70, 0x84, 0xda, 0x68, 0x72, 0x07, 0x00, 0x00,
+	// 725 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x95, 0xcf, 0x6a, 0xdb, 0x4a,
+	0x14, 0xc6, 0x47, 0x89, 0x93, 0x38, 0x27, 0x0e, 0xe4, 0x0e, 0x4e, 0x30, 0xba, 0xdc, 0xb9, 0xc1,
+	0xb4, 0x50, 0xda, 0x54, 0x06, 0x87, 0xb6, 0xb4, 0x9b, 0x52, 0xd7, 0xb4, 0x0a, 0x25, 0x21, 0x8c,
+	0x43, 0x0b, 0x81, 0x42, 0x25, 0x6b, 0x62, 0x89, 0xd8, 0x1a, 0xe1, 0x91, 0xf2, 0x67, 0xd7, 0x47,
+	0xe8, 0xaa, 0xcf, 0xd0, 0x47, 0xe8, 0xb2, 0xcb, 0x2c, 0xbd, 0xe8, 0x22, 0xab, 0x12, 0x2b, 0x9b,
+	0x2e, 0xb3, 0xec, 0xb2, 0x78, 0x24, 0x2b, 0x72, 0x2c, 0x63, 0xaf, 0xa4, 0xf1, 0x99, 0xef, 0x77,
+	0xce, 0x9c, 0xf3, 0x69, 0x0c, 0x85, 0xb6, 0x63, 0x7a, 0x55, 0x4f, 0xf3, 0xba, 0xdc, 0xe7, 0xb8,
+	0x48, 0x99, 0x75, 0xca, 0xb9, 0xa5, 0x89, 0x53, 0xa3, 0xdb, 0xd1, 0xa2, 0x98, 0xfa, 0xb8, 0xe5,
+	0xf8, 0x76, 0x60, 0x6a, 0x4d, 0xde, 0xa9, 0xb4, 0x78, 0x8b, 0x57, 0xe4, 0x66, 0x33, 0x38, 0x92,
+	0x2b, 0xb9, 0x90, 0x6f, 0x11, 0x44, 0xc5, 0x66, 0x9b, 0x9b, 0x15, 0xcf, 0xac, 0x0c, 0x9e, 0xf1,
+	0x6f, 0xff, 0x49, 0x60, 0x24, 0xb4, 0x03, 0x61, 0x0f, 0xc2, 0x83, 0x67, 0x14, 0x2e, 0xff, 0xcc,
+	0xc1, 0x4a, 0xad, 0xcd, 0xcd, 0x5d, 0x26, 0x84, 0xd1, 0x62, 0xf8, 0x03, 0xac, 0x1e, 0x31, 0xbf,
+	0x69, 0xef, 0x1a, 0xae, 0x73, 0xc4, 0x84, 0x5f, 0x52, 0x36, 0x95, 0x07, 0x2b, 0xd5, 0x8a, 0x96,
+	0x55, 0x9f, 0x96, 0x52, 0x6a, 0x6f, 0xd2, 0x32, 0x1d, 0xd1, 0x51, 0x0e, 0x3e, 0x80, 0x82, 0x60,
+	0xae, 0x95, 0x70, 0xe7, 0x24, 0x57, 0x9b, 0xce, 0x6d, 0xa4, 0x54, 0x3a, 0xa2, 0x23, 0x14, 0xbc,
+	0x07, 0x20, 0xd3, 0xbc, 0xb6, 0x03, 0xf7, 0xb8, 0x34, 0x2f, 0x99, 0x5b, 0x33, 0xd6, 0x2a, 0x35,
+	0x3a, 0xa2, 0x29, 0x02, 0x7e, 0x07, 0xcb, 0x03, 0x7e, 0x84, 0xcb, 0x49, 0xdc, 0xa3, 0xd9, 0x4a,
+	0x1c, 0xd2, 0x6e, 0xf5, 0xea, 0x13, 0x58, 0x1d, 0x69, 0x0a, 0xbe, 0x07, 0x73, 0x8e, 0x15, 0x77,
+	0xb4, 0x98, 0x60, 0xe5, 0xb0, 0x06, 0xb8, 0x9d, 0x3a, 0x9d, 0x73, 0x2c, 0xf5, 0x10, 0x0a, 0xe9,
+	0x33, 0xe3, 0x2a, 0xe4, 0x3b, 0xa3, 0xd3, 0xd8, 0x18, 0xd5, 0x0e, 0x77, 0xd2, 0x64, 0x1f, 0xde,
+	0x80, 0x45, 0x76, 0xe6, 0x08, 0x5f, 0xc8, 0x3e, 0xe7, 0x69, 0xbc, 0x52, 0x37, 0x01, 0x6e, 0xcf,
+	0x8e, 0x31, 0xe4, 0x84, 0x6d, 0x6c, 0x4b, 0x6a, 0x81, 0xca, 0x77, 0xf5, 0x39, 0x2c, 0x27, 0xc7,
+	0xc1, 0x45, 0x58, 0x68, 0xca, 0x56, 0x44, 0x3b, 0xa2, 0xc5, 0x24, 0x78, 0x6d, 0x19, 0x96, 0x3c,
+	0xe3, 0xbc, 0xcd, 0x0d, 0xab, 0xdc, 0xcb, 0xc3, 0x8a, 0x1e, 0x08, 0x7b, 0x68, 0xab, 0x36, 0x14,
+	0x2d, 0x7b, 0x3f, 0x30, 0x8f, 0xd9, 0xf9, 0x2b, 0xdf, 0x67, 0xc2, 0x37, 0x7c, 0x87, 0xbb, 0x22,
+	0x3e, 0xcf, 0xd3, 0xec, 0x16, 0xa7, 0x00, 0x5a, 0x5d, 0x1f, 0x57, 0xeb, 0x88, 0x66, 0x52, 0xf1,
+	0x19, 0x94, 0xbc, 0x2e, 0xf7, 0xb8, 0x60, 0x3b, 0xae, 0xe5, 0x9c, 0x38, 0x56, 0x60, 0xb4, 0x1b,
+	0x4c, 0x08, 0x87, 0xbb, 0xb1, 0xef, 0x5e, 0x4c, 0xcf, 0xb8, 0x3f, 0x81, 0xa0, 0x23, 0x3a, 0x91,
+	0x8e, 0xbf, 0x2a, 0x50, 0xee, 0x32, 0xe1, 0x71, 0xd7, 0x3a, 0xe0, 0x63, 0xe1, 0x08, 0x69, 0xb4,
+	0x63, 0xa3, 0xd6, 0xa7, 0x17, 0x41, 0xa7, 0xb2, 0x74, 0x44, 0x67, 0xc8, 0x88, 0x39, 0xac, 0x0f,
+	0x8c, 0x79, 0xbb, 0x21, 0xce, 0x10, 0x9b, 0xfc, 0xd9, 0xf4, 0x52, 0x1a, 0x59, 0x72, 0x1d, 0xd1,
+	0x6c, 0x2e, 0xfe, 0x04, 0x6b, 0x83, 0xc0, 0xdb, 0x2e, 0x0f, 0xbc, 0x61, 0xae, 0x05, 0x99, 0xab,
+	0x3a, 0x5b, 0xae, 0xb4, 0x52, 0x47, 0x74, 0x8c, 0xa6, 0xba, 0x50, 0xcc, 0x72, 0x05, 0x7e, 0x0f,
+	0x05, 0x63, 0xd4, 0x63, 0xf3, 0x19, 0xb7, 0x42, 0x72, 0x21, 0x66, 0x59, 0xab, 0x96, 0xbb, 0xf8,
+	0xf5, 0x3f, 0xa2, 0x23, 0x1c, 0x55, 0x87, 0xd2, 0x24, 0x4f, 0xe0, 0x2d, 0xf8, 0x87, 0xb9, 0xcd,
+	0xee, 0xb9, 0xe7, 0x33, 0x2b, 0x99, 0x72, 0xf4, 0xd1, 0x8c, 0x07, 0x54, 0x1f, 0xca, 0xd3, 0x07,
+	0x8b, 0xf7, 0x20, 0x1f, 0x0d, 0x56, 0xb0, 0xf8, 0x3b, 0xa9, 0x4e, 0x3c, 0xc3, 0x18, 0x85, 0xc6,
+	0x4a, 0x9a, 0x30, 0xd4, 0x8f, 0xb0, 0x9e, 0x39, 0x43, 0x5c, 0x87, 0xa5, 0x4e, 0x3c, 0xa1, 0x28,
+	0xcf, 0xc3, 0x19, 0xf2, 0xc4, 0x62, 0x3a, 0x94, 0xaa, 0x0d, 0x58, 0xbb, 0x3b, 0x36, 0xfc, 0xf2,
+	0x2e, 0xf9, 0xfe, 0x44, 0x72, 0x5a, 0x97, 0x40, 0x53, 0x57, 0x4a, 0xcd, 0xe8, 0xf5, 0x09, 0xba,
+	0xec, 0x13, 0x74, 0xd5, 0x27, 0xca, 0x4d, 0x9f, 0x28, 0x7f, 0xfa, 0x44, 0xf9, 0x1c, 0x12, 0xe5,
+	0x5b, 0x48, 0x94, 0xef, 0x21, 0x51, 0x7e, 0x84, 0x44, 0xb9, 0x08, 0x89, 0xd2, 0x0b, 0x89, 0x72,
+	0x15, 0x12, 0xe5, 0x77, 0x48, 0xd0, 0x4d, 0x48, 0x94, 0x2f, 0xd7, 0x04, 0xf5, 0xae, 0x09, 0xba,
+	0xbc, 0x26, 0xe8, 0xf0, 0xdf, 0x6e, 0x9c, 0xdf, 0x62, 0x27, 0x95, 0xe8, 0xaf, 0x31, 0xf2, 0x5f,
+	0xc5, 0x33, 0xcd, 0x45, 0x59, 0xce, 0xf6, 0xdf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x4b, 0xde, 0x5d,
+	0xa0, 0x9b, 0x07, 0x00, 0x00,
 }
 
 func (this *BlobMessage) VerboseEqual(that interface{}) error {
@@ -1339,7 +1342,7 @@ func (this *HushMessage_ProposeIndividualSession_) VerboseEqual(that interface{}
 	}
 	return nil
 }
-func (this *HushMessage_ApproveIndividualSession_) VerboseEqual(that interface{}) error {
+func (this *HushMessage_RespondToIndividualSessionProposal_) VerboseEqual(that interface{}) error {
 	if that == nil {
 		if this == nil {
 			return nil
@@ -1347,25 +1350,25 @@ func (this *HushMessage_ApproveIndividualSession_) VerboseEqual(that interface{}
 		return fmt.Errorf("that == nil && this != nil")
 	}
 
-	that1, ok := that.(*HushMessage_ApproveIndividualSession_)
+	that1, ok := that.(*HushMessage_RespondToIndividualSessionProposal_)
 	if !ok {
-		that2, ok := that.(HushMessage_ApproveIndividualSession_)
+		that2, ok := that.(HushMessage_RespondToIndividualSessionProposal_)
 		if ok {
 			that1 = &that2
 		} else {
-			return fmt.Errorf("that is not of type *HushMessage_ApproveIndividualSession_")
+			return fmt.Errorf("that is not of type *HushMessage_RespondToIndividualSessionProposal_")
 		}
 	}
 	if that1 == nil {
 		if this == nil {
 			return nil
 		}
-		return fmt.Errorf("that is type *HushMessage_ApproveIndividualSession_ but is nil && this != nil")
+		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSessionProposal_ but is nil && this != nil")
 	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_ApproveIndividualSession_ but is not nil && this == nil")
+		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSessionProposal_ but is not nil && this == nil")
 	}
-	if !this.ApproveIndividualSession.Equal(that1.ApproveIndividualSession) {
-		return fmt.Errorf("ApproveIndividualSession this(%v) Not Equal that(%v)", this.ApproveIndividualSession, that1.ApproveIndividualSession)
+	if !this.RespondToIndividualSessionProposal.Equal(that1.RespondToIndividualSessionProposal) {
+		return fmt.Errorf("RespondToIndividualSessionProposal this(%v) Not Equal that(%v)", this.RespondToIndividualSessionProposal, that1.RespondToIndividualSessionProposal)
 	}
 	return nil
 }
@@ -1507,14 +1510,14 @@ func (this *HushMessage_ProposeIndividualSession_) Equal(that interface{}) bool 
 	}
 	return true
 }
-func (this *HushMessage_ApproveIndividualSession_) Equal(that interface{}) bool {
+func (this *HushMessage_RespondToIndividualSessionProposal_) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*HushMessage_ApproveIndividualSession_)
+	that1, ok := that.(*HushMessage_RespondToIndividualSessionProposal_)
 	if !ok {
-		that2, ok := that.(HushMessage_ApproveIndividualSession_)
+		that2, ok := that.(HushMessage_RespondToIndividualSessionProposal_)
 		if ok {
 			that1 = &that2
 		} else {
@@ -1526,7 +1529,7 @@ func (this *HushMessage_ApproveIndividualSession_) Equal(that interface{}) bool 
 	} else if this == nil {
 		return false
 	}
-	if !this.ApproveIndividualSession.Equal(that1.ApproveIndividualSession) {
+	if !this.RespondToIndividualSessionProposal.Equal(that1.RespondToIndividualSessionProposal) {
 		return false
 	}
 	return true
@@ -1697,7 +1700,7 @@ func (this *HushMessage_ProposeIndividualSession) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *HushMessage_ApproveIndividualSession) VerboseEqual(that interface{}) error {
+func (this *HushMessage_RespondToIndividualSessionProposal) VerboseEqual(that interface{}) error {
 	if that == nil {
 		if this == nil {
 			return nil
@@ -1705,36 +1708,36 @@ func (this *HushMessage_ApproveIndividualSession) VerboseEqual(that interface{})
 		return fmt.Errorf("that == nil && this != nil")
 	}
 
-	that1, ok := that.(*HushMessage_ApproveIndividualSession)
+	that1, ok := that.(*HushMessage_RespondToIndividualSessionProposal)
 	if !ok {
-		that2, ok := that.(HushMessage_ApproveIndividualSession)
+		that2, ok := that.(HushMessage_RespondToIndividualSessionProposal)
 		if ok {
 			that1 = &that2
 		} else {
-			return fmt.Errorf("that is not of type *HushMessage_ApproveIndividualSession")
+			return fmt.Errorf("that is not of type *HushMessage_RespondToIndividualSessionProposal")
 		}
 	}
 	if that1 == nil {
 		if this == nil {
 			return nil
 		}
-		return fmt.Errorf("that is type *HushMessage_ApproveIndividualSession but is nil && this != nil")
+		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSessionProposal but is nil && this != nil")
 	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_ApproveIndividualSession but is not nil && this == nil")
+		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSessionProposal but is not nil && this == nil")
 	}
-	if !this.Approval.Equal(that1.Approval) {
-		return fmt.Errorf("Approval this(%v) Not Equal that(%v)", this.Approval, that1.Approval)
+	if !this.Response.Equal(that1.Response) {
+		return fmt.Errorf("Response this(%v) Not Equal that(%v)", this.Response, that1.Response)
 	}
 	return nil
 }
-func (this *HushMessage_ApproveIndividualSession) Equal(that interface{}) bool {
+func (this *HushMessage_RespondToIndividualSessionProposal) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*HushMessage_ApproveIndividualSession)
+	that1, ok := that.(*HushMessage_RespondToIndividualSessionProposal)
 	if !ok {
-		that2, ok := that.(HushMessage_ApproveIndividualSession)
+		that2, ok := that.(HushMessage_RespondToIndividualSessionProposal)
 		if ok {
 			that1 = &that2
 		} else {
@@ -1746,7 +1749,7 @@ func (this *HushMessage_ApproveIndividualSession) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if !this.Approval.Equal(that1.Approval) {
+	if !this.Response.Equal(that1.Response) {
 		return false
 	}
 	return true
@@ -1977,12 +1980,12 @@ func (this *HushMessage_ProposeIndividualSession_) GoString() string {
 		`ProposeIndividualSession:` + fmt.Sprintf("%#v", this.ProposeIndividualSession) + `}`}, ", ")
 	return s
 }
-func (this *HushMessage_ApproveIndividualSession_) GoString() string {
+func (this *HushMessage_RespondToIndividualSessionProposal_) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&pb.HushMessage_ApproveIndividualSession_{` +
-		`ApproveIndividualSession:` + fmt.Sprintf("%#v", this.ApproveIndividualSession) + `}`}, ", ")
+	s := strings.Join([]string{`&pb.HushMessage_RespondToIndividualSessionProposal_{` +
+		`RespondToIndividualSessionProposal:` + fmt.Sprintf("%#v", this.RespondToIndividualSessionProposal) + `}`}, ", ")
 	return s
 }
 func (this *HushMessage_SendIndividualMessage_) GoString() string {
@@ -2027,14 +2030,14 @@ func (this *HushMessage_ProposeIndividualSession) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *HushMessage_ApproveIndividualSession) GoString() string {
+func (this *HushMessage_RespondToIndividualSessionProposal) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 5)
-	s = append(s, "&pb.HushMessage_ApproveIndividualSession{")
-	if this.Approval != nil {
-		s = append(s, "Approval: "+fmt.Sprintf("%#v", this.Approval)+",\n")
+	s = append(s, "&pb.HushMessage_RespondToIndividualSessionProposal{")
+	if this.Response != nil {
+		s = append(s, "Response: "+fmt.Sprintf("%#v", this.Response)+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -2411,16 +2414,16 @@ func (m *HushMessage_ProposeIndividualSession_) MarshalToSizedBuffer(dAtA []byte
 	}
 	return len(dAtA) - i, nil
 }
-func (m *HushMessage_ApproveIndividualSession_) MarshalTo(dAtA []byte) (int, error) {
+func (m *HushMessage_RespondToIndividualSessionProposal_) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HushMessage_ApproveIndividualSession_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *HushMessage_RespondToIndividualSessionProposal_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
-	if m.ApproveIndividualSession != nil {
+	if m.RespondToIndividualSessionProposal != nil {
 		{
-			size, err := m.ApproveIndividualSession.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.RespondToIndividualSessionProposal.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -2541,7 +2544,7 @@ func (m *HushMessage_ProposeIndividualSession) MarshalToSizedBuffer(dAtA []byte)
 	return len(dAtA) - i, nil
 }
 
-func (m *HushMessage_ApproveIndividualSession) Marshal() (dAtA []byte, err error) {
+func (m *HushMessage_RespondToIndividualSessionProposal) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2551,19 +2554,19 @@ func (m *HushMessage_ApproveIndividualSession) Marshal() (dAtA []byte, err error
 	return dAtA[:n], nil
 }
 
-func (m *HushMessage_ApproveIndividualSession) MarshalTo(dAtA []byte) (int, error) {
+func (m *HushMessage_RespondToIndividualSessionProposal) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HushMessage_ApproveIndividualSession) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *HushMessage_RespondToIndividualSessionProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Approval != nil {
+	if m.Response != nil {
 		{
-			size, err := m.Approval.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.Response.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -2750,7 +2753,7 @@ func NewPopulatedHushMessage(r randyLibp2P, easy bool) *HushMessage {
 	case 2:
 		this.Payload = NewPopulatedHushMessage_ProposeIndividualSession_(r, easy)
 	case 3:
-		this.Payload = NewPopulatedHushMessage_ApproveIndividualSession_(r, easy)
+		this.Payload = NewPopulatedHushMessage_RespondToIndividualSessionProposal_(r, easy)
 	case 4:
 		this.Payload = NewPopulatedHushMessage_SendIndividualMessage_(r, easy)
 	case 5:
@@ -2771,9 +2774,9 @@ func NewPopulatedHushMessage_ProposeIndividualSession_(r randyLibp2P, easy bool)
 	this.ProposeIndividualSession = NewPopulatedHushMessage_ProposeIndividualSession(r, easy)
 	return this
 }
-func NewPopulatedHushMessage_ApproveIndividualSession_(r randyLibp2P, easy bool) *HushMessage_ApproveIndividualSession_ {
-	this := &HushMessage_ApproveIndividualSession_{}
-	this.ApproveIndividualSession = NewPopulatedHushMessage_ApproveIndividualSession(r, easy)
+func NewPopulatedHushMessage_RespondToIndividualSessionProposal_(r randyLibp2P, easy bool) *HushMessage_RespondToIndividualSessionProposal_ {
+	this := &HushMessage_RespondToIndividualSessionProposal_{}
+	this.RespondToIndividualSessionProposal = NewPopulatedHushMessage_RespondToIndividualSessionProposal(r, easy)
 	return this
 }
 func NewPopulatedHushMessage_SendIndividualMessage_(r randyLibp2P, easy bool) *HushMessage_SendIndividualMessage_ {
@@ -2813,10 +2816,10 @@ func NewPopulatedHushMessage_ProposeIndividualSession(r randyLibp2P, easy bool) 
 	return this
 }
 
-func NewPopulatedHushMessage_ApproveIndividualSession(r randyLibp2P, easy bool) *HushMessage_ApproveIndividualSession {
-	this := &HushMessage_ApproveIndividualSession{}
+func NewPopulatedHushMessage_RespondToIndividualSessionProposal(r randyLibp2P, easy bool) *HushMessage_RespondToIndividualSessionProposal {
+	this := &HushMessage_RespondToIndividualSessionProposal{}
 	if r.Intn(5) != 0 {
-		this.Approval = pb1.NewPopulatedIndividualSessionApproval(r, easy)
+		this.Response = pb1.NewPopulatedIndividualSessionResponse(r, easy)
 	}
 	if !easy && r.Intn(10) != 0 {
 	}
@@ -3069,14 +3072,14 @@ func (m *HushMessage_ProposeIndividualSession_) Size() (n int) {
 	}
 	return n
 }
-func (m *HushMessage_ApproveIndividualSession_) Size() (n int) {
+func (m *HushMessage_RespondToIndividualSessionProposal_) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.ApproveIndividualSession != nil {
-		l = m.ApproveIndividualSession.Size()
+	if m.RespondToIndividualSessionProposal != nil {
+		l = m.RespondToIndividualSessionProposal.Size()
 		n += 1 + l + sovLibp2P(uint64(l))
 	}
 	return n
@@ -3133,14 +3136,14 @@ func (m *HushMessage_ProposeIndividualSession) Size() (n int) {
 	return n
 }
 
-func (m *HushMessage_ApproveIndividualSession) Size() (n int) {
+func (m *HushMessage_RespondToIndividualSessionProposal) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.Approval != nil {
-		l = m.Approval.Size()
+	if m.Response != nil {
+		l = m.Response.Size()
 		n += 1 + l + sovLibp2P(uint64(l))
 	}
 	return n
@@ -3300,12 +3303,12 @@ func (this *HushMessage_ProposeIndividualSession_) String() string {
 	}, "")
 	return s
 }
-func (this *HushMessage_ApproveIndividualSession_) String() string {
+func (this *HushMessage_RespondToIndividualSessionProposal_) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_ApproveIndividualSession_{`,
-		`ApproveIndividualSession:` + strings.Replace(fmt.Sprintf("%v", this.ApproveIndividualSession), "HushMessage_ApproveIndividualSession", "HushMessage_ApproveIndividualSession", 1) + `,`,
+	s := strings.Join([]string{`&HushMessage_RespondToIndividualSessionProposal_{`,
+		`RespondToIndividualSessionProposal:` + strings.Replace(fmt.Sprintf("%v", this.RespondToIndividualSessionProposal), "HushMessage_RespondToIndividualSessionProposal", "HushMessage_RespondToIndividualSessionProposal", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -3355,12 +3358,12 @@ func (this *HushMessage_ProposeIndividualSession) String() string {
 	}, "")
 	return s
 }
-func (this *HushMessage_ApproveIndividualSession) String() string {
+func (this *HushMessage_RespondToIndividualSessionProposal) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_ApproveIndividualSession{`,
-		`Approval:` + strings.Replace(fmt.Sprintf("%v", this.Approval), "IndividualSessionApproval", "pb1.IndividualSessionApproval", 1) + `,`,
+	s := strings.Join([]string{`&HushMessage_RespondToIndividualSessionProposal{`,
+		`Response:` + strings.Replace(fmt.Sprintf("%v", this.Response), "IndividualSessionResponse", "pb1.IndividualSessionResponse", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -4064,7 +4067,7 @@ func (m *HushMessage) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ApproveIndividualSession", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RespondToIndividualSessionProposal", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4091,11 +4094,11 @@ func (m *HushMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &HushMessage_ApproveIndividualSession{}
+			v := &HushMessage_RespondToIndividualSessionProposal{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Payload = &HushMessage_ApproveIndividualSession_{v}
+			m.Payload = &HushMessage_RespondToIndividualSessionProposal_{v}
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -4356,7 +4359,7 @@ func (m *HushMessage_ProposeIndividualSession) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *HushMessage_ApproveIndividualSession) Unmarshal(dAtA []byte) error {
+func (m *HushMessage_RespondToIndividualSessionProposal) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -4379,15 +4382,15 @@ func (m *HushMessage_ApproveIndividualSession) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: ApproveIndividualSession: wiretype end group for non-group")
+			return fmt.Errorf("proto: RespondToIndividualSessionProposal: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ApproveIndividualSession: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: RespondToIndividualSessionProposal: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Approval", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Response", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4414,10 +4417,10 @@ func (m *HushMessage_ApproveIndividualSession) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Approval == nil {
-				m.Approval = &pb1.IndividualSessionApproval{}
+			if m.Response == nil {
+				m.Response = &pb1.IndividualSessionResponse{}
 			}
-			if err := m.Approval.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.Response.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

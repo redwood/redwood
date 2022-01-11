@@ -1,39 +1,40 @@
 package pb
 
+import (
+	"math"
+)
+
 func (rng *Range) Copy() *Range {
 	if rng == nil {
 		return nil
 	}
-	return &Range{rng.Start, rng.End}
+	return &Range{rng.Start, rng.End, rng.Reverse}
 }
 
 func (rng *Range) Valid() bool {
-	if rng.End < rng.Start {
-		return false
+	if rng.Reverse {
+		return rng.End <= rng.Start
 	}
-	if rng.Start < 0 && rng.End > 0 {
-		return false
-	}
-	return true
+	return rng.End >= rng.Start
 }
 
 func (rng *Range) Length() uint64 {
-	if rng.Start < 0 {
-		return uint64(-(rng.Start - rng.End))
-	}
-	return uint64(rng.End - rng.Start)
+	return uint64(math.Abs(float64(rng.End) - float64(rng.Start)))
 }
 
 func (rng *Range) ValidForLength(length uint64) bool {
-	if rng.Start < 0 {
-		return uint64(-rng.Start) <= length
+	if !rng.Valid() {
+		return false
 	}
-	return uint64(rng.End) <= length
+	if rng.Reverse {
+		return rng.Start <= length
+	}
+	return rng.End <= length
 }
 
 func (rng *Range) IndicesForLength(length uint64) (uint64, uint64) {
-	if rng.Start < 0 {
-		return uint64(int64(length) + rng.Start), uint64(int64(length) + rng.End)
+	if rng.Reverse {
+		return length - rng.Start, length - rng.End
 	}
-	return uint64(rng.Start), uint64(rng.End)
+	return rng.Start, rng.End
 }

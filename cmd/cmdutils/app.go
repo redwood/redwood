@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -61,6 +63,10 @@ type App struct {
 	HTTPRPCServer       *http.Server
 	HTTPRPCServerConfig rpc.HTTPConfig
 	SharedStateDB       *state.DBTree
+
+	PeerDB *state.DBTree
+	HushDB *state.DBTree
+	TreeDB *state.DBTree
 
 	Nurse *health.Nurse
 }
@@ -144,10 +150,28 @@ func (app *App) Start() error {
 		app.KeyStore = identity.NewBadgerKeyStore(badgerOpts.ForPath(cfg.KeyStoreRoot()), scryptParams)
 		err = app.KeyStore.Unlock(cfg.KeyStore.Password, cfg.KeyStore.Mnemonic)
 		if err != nil {
-			app.Errorf("while unlocking keystore: %+v", err)
+			app.Errorf("while unlocking keystore at %v: %+v", cfg.KeyStoreRoot(), err)
 			return err
 		}
 		defer closeIfError(&err, app.KeyStore)
+
+		if len(cfg.Libp2pTransport.Key) > 0 {
+			keyBytes, err := base64.StdEncoding.DecodeString(cfg.Libp2pTransport.Key)
+			if err != nil {
+				return err
+			}
+
+			if !libp2p.IsValidKey(keyBytes) {
+				app.Errorf("invalid libp2p key")
+				return errors.New("invalid libp2p key")
+			}
+
+			err = app.KeyStore.SaveExtraUserData("libp2p:p2pkey", hex.EncodeToString(keyBytes))
+			if err != nil {
+				app.Errorf("while saving libp2p key: %+v", err)
+				return err
+			}
+		}
 	}
 
 	// All DBs other than the keystore are encrypted at rest
@@ -162,7 +186,31 @@ func (app *App) Start() error {
 	defer closeIfError(&err, db)
 	app.SharedStateDB = db
 
-	app.PeerStore = swarm.NewPeerStore(app.SharedStateDB)
+	peerdb, err := state.NewDBTree(badgerOpts.ForPath(filepath.Join(cfg.DataRoot, "peers")))
+	if err != nil {
+		app.Errorf("while opening shared db: %+v", err)
+		return err
+	}
+	defer closeIfError(&err, peerdb)
+	app.PeerDB = peerdb
+
+	hushdb, err := state.NewDBTree(badgerOpts.ForPath(filepath.Join(cfg.DataRoot, "hush")))
+	if err != nil {
+		app.Errorf("while opening shared db: %+v", err)
+		return err
+	}
+	defer closeIfError(&err, hushdb)
+	app.HushDB = hushdb
+
+	treedb, err := state.NewDBTree(badgerOpts.ForPath(filepath.Join(cfg.DataRoot, "tree")))
+	if err != nil {
+		app.Errorf("while opening shared db: %+v", err)
+		return err
+	}
+	defer closeIfError(&err, treedb)
+	app.TreeDB = treedb
+
+	app.PeerStore = swarm.NewPeerStore(app.PeerDB)
 
 	app.BlobStore = blob.NewBadgerStore(badgerOpts.ForPath(cfg.BlobDataRoot()))
 	err = app.BlobStore.Start()
@@ -199,6 +247,11 @@ func (app *App) Start() error {
 	var transports []swarm.Transport
 	{
 		if cfg.Libp2pTransport.Enabled {
+			store, err := libp2p.NewStore(app.SharedStateDB)
+			if err != nil {
+				return err
+			}
+
 			var bootstrapPeers []string
 			for _, bp := range cfg.BootstrapPeers {
 				if bp.Transport != "libp2p" {
@@ -211,9 +264,9 @@ func (app *App) Start() error {
 				cfg.Libp2pTransport.ListenPort,
 				cfg.Libp2pTransport.ReachableAt,
 				bootstrapPeers,
-				cfg.Libp2pTransport.StaticRelays,
 				filepath.Join(cfg.DataRoot, libp2p.TransportName),
 				cfg.DNSOverHTTPSURL,
+				store,
 				app.ControllerHub,
 				app.KeyStore,
 				app.BlobStore,
@@ -272,13 +325,13 @@ func (app *App) Start() error {
 	}
 
 	if cfg.HushProtocol.Enabled {
-		app.HushProtoStore = protohush.NewStore(app.SharedStateDB)
+		app.HushProtoStore = protohush.NewStore(app.HushDB)
 		app.HushProto = protohush.NewHushProtocol(transports, app.HushProtoStore, app.KeyStore, app.PeerStore)
 		protocols = append(protocols, app.HushProto)
 	}
 
 	if cfg.TreeProtocol.Enabled {
-		app.TreeProtoStore, err = prototree.NewStore(app.SharedStateDB)
+		app.TreeProtoStore, err = prototree.NewStore(app.TreeDB)
 		if err != nil {
 			app.Errorf("while opening prototree store: %+v", err)
 			return err
@@ -320,7 +373,7 @@ func (app *App) Start() error {
 	}
 
 	if cfg.HTTPRPC.Enabled {
-		rwRPC := rpc.NewHTTPServer([]byte(cfg.JWTSecret), app.AuthProto, app.BlobProto, app.TreeProto, app.PeerStore, app.KeyStore, app.BlobStore, app.ControllerHub)
+		rwRPC := rpc.NewHTTPServer([]byte(cfg.JWTSecret), app.AuthProto, app.BlobProto, app.TreeProto, app.PeerStore, app.KeyStore, app.BlobStore, app.ControllerHub, app.Libp2pTransport)
 		var server interface{}
 		if cfg.HTTPRPC.Server != nil {
 			server = cfg.HTTPRPC.Server(rwRPC)
@@ -357,9 +410,14 @@ func (app *App) Start() error {
 			if cfg.REPLConfig.Prompt != "" {
 				prompt = cfg.REPLConfig.Prompt
 			}
-			app.startREPL(prompt, cfg.REPLConfig.Commands)
-			<-AwaitInterrupt()
-			app.Process.Close()
+			go app.startREPL(prompt, cfg.REPLConfig.Commands)
+			select {
+			// case <-AwaitInterrupt():
+			// 	app.Infof(0, "CLOSE cmdutils interrupt")
+			// 	app.Process.Close()
+			case <-app.Process.Done():
+				app.Infof(0, "CLOSE cmdutils done")
+			}
 		}()
 
 		app.Process.Go(nil, "repl (await termination)", func(ctx context.Context) {
@@ -381,9 +439,9 @@ func (app *App) Start() error {
 						continue
 					}
 
-					app.TermUI.Sidebar.SetStateURIs(stateURIs)
+					app.TermUI.Sidebar.SetStateURIs(stateURIs.Slice())
 					states := make(map[string]string)
-					for _, stateURI := range stateURIs {
+					for stateURI := range stateURIs {
 						node, err := app.ControllerHub.StateAtVersion(stateURI, nil)
 						if err != nil {
 							panic(err)
@@ -422,6 +480,9 @@ func closeIfError(err *error, x interface{}) {
 }
 
 func (app *App) Close() error {
+	app.Infof(0, "shutting down")
+
+	app.Infof(0, "killing rpc")
 	if app.HTTPRPCServer != nil {
 		err := app.HTTPRPCServer.Close()
 		if err != nil {
@@ -429,26 +490,47 @@ func (app *App) Close() error {
 		}
 	}
 
+	app.Infof(0, "killing keystore")
 	if app.KeyStore != nil {
 		app.KeyStore.Close()
 		app.KeyStore = nil
 	}
 
+	app.Infof(0, "killing blobstore")
 	if app.BlobStore != nil {
 		app.BlobStore.Close()
 		app.BlobStore = nil
 	}
 
+	app.Infof(0, "killing txstore")
 	if app.TxStore != nil {
 		app.TxStore.Close()
 		app.TxStore = nil
 	}
 
+	app.Infof(0, "killing shared state db")
 	if app.SharedStateDB != nil {
 		app.SharedStateDB.Close()
 		app.SharedStateDB = nil
 	}
 
+	app.Infof(0, "killing tree db")
+	if app.TreeDB != nil {
+		app.TreeDB.Close()
+		app.TreeDB = nil
+	}
+	app.Infof(0, "killing hush db")
+	if app.HushDB != nil {
+		app.HushDB.Close()
+		app.HushDB = nil
+	}
+	app.Infof(0, "killing peer db")
+	if app.PeerDB != nil {
+		app.PeerDB.Close()
+		app.PeerDB = nil
+	}
+
+	app.Infof(0, "killing process")
 	return app.Process.Close()
 }
 
@@ -540,15 +622,15 @@ func (app *App) startREPL(prompt string, replCommands REPLCommands) {
 func AwaitInterrupt() <-chan struct{} {
 	chDone := make(chan struct{})
 
+	sigInbox := make(chan os.Signal, 1)
+	signal.Notify(sigInbox, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+
 	go func() {
-		sigInbox := make(chan os.Signal, 1)
-
-		signal.Notify(sigInbox, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
-
 		count := 0
 		firstTime := int64(0)
 
 		for range sigInbox {
+			fmt.Println("received interrupt")
 			count++
 			curTime := time.Now().Unix()
 

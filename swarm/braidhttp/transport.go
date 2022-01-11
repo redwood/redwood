@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httputil"
@@ -208,6 +209,7 @@ func (t *transport) Start() error {
 }
 
 func (t *transport) Close() error {
+	t.Infof(0, "braidhttp transport shutting down")
 	// Non-graceful
 	err := t.srv.Close()
 	if err != nil {
@@ -271,7 +273,13 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "HEAD":
-		// This is mainly used to poll for new peers
+		// Without a path, this method is used to poll for new peers
+		// Otherwise...
+		if strings.HasPrefix(r.URL.Path, "/__blob/") {
+			t.serveGetBlobMetadata(w, r)
+		} else {
+			t.serveHeadRequest(w, r)
+		}
 
 	case "OPTIONS":
 		// w.Header().Set("Access-Control-Allow-Headers", "State-URI")
@@ -392,6 +400,51 @@ func (t *transport) addressFromRequest(r *http.Request) (types.Address, error) {
 		return types.Address{}, err
 	}
 	return types.AddressFromBytes(addressBytes), nil
+}
+
+func (t *transport) serveHeadRequest(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		StateURI string        `header:"State-URI" query:"state_uri"`
+		Keypath  state.Keypath `header:"Keypath"   query:"keypath"   path:""`
+	}
+
+	var req request
+	err := utils.UnmarshalHTTPRequest(&req, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.StateURI == "" {
+		req.StateURI = t.defaultStateURI
+	}
+	stateURIs, err := t.controllerHub.KnownStateURIs()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else if !stateURIs.Contains(req.StateURI) {
+		http.Error(w, "state URI not found", http.StatusNotFound)
+		return
+	}
+
+	err = t.addParentsHeader(req.StateURI, w)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	node, err := t.controllerHub.StateAtVersion(req.StateURI, nil)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+		return
+	}
+	defer node.Close()
+
+	err = t.addResourceHeaders(req.StateURI, node, w)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 // Respond to a request from another node challenging our identity.
@@ -543,7 +596,7 @@ func (t *transport) serveWSSubscription(w http.ResponseWriter, r *http.Request, 
 
 	subRequest := prototree.SubscriptionRequest{
 		StateURI:         req.StateURI,
-		Keypath:          state.Keypath(req.Keypath),
+		Keypath:          req.Keypath,
 		Type:             req.SubType,
 		FetchHistoryOpts: &fetchHistoryOpts,
 		Addresses:        types.NewAddressSet([]types.Address{address}),
@@ -606,10 +659,76 @@ func (t *transport) serveGetTx(w http.ResponseWriter, r *http.Request) {
 	utils.RespondJSON(w, tx)
 }
 
+type keypathAndRangePath struct {
+	Keypath state.Keypath
+	Range   *state.Range
+}
+
+func (k *keypathAndRangePath) UnmarshalURLPath(path string) error {
+	keypath, rng, err := state.ParseKeypathAndRange([]byte(path), byte('/'))
+	if err != nil {
+		return err
+	}
+	k.Keypath = keypath
+	k.Range = rng
+	return nil
+}
+
+type httpRangeHeader struct {
+	RangeType string
+	Range     *state.Range
+}
+
+func (h *httpRangeHeader) UnmarshalHTTPHeader(header string) error {
+	*h = httpRangeHeader{}
+
+	// Range: -10:-5
+	// @@TODO: real json Range parsing
+	parts := strings.SplitN(header, "=", 2)
+	if len(parts) != 2 {
+		return errors.Errorf("bad Range header: '%v'", header)
+	}
+	h.RangeType = parts[0]
+
+	switch h.RangeType {
+	case "json":
+		parts = strings.SplitN(parts[1], ":", 2)
+		if len(parts) != 2 {
+			return errors.Errorf("bad Range header: '%v'", header)
+		}
+	case "bytes":
+		parts = strings.SplitN(parts[1], "-", 2)
+		if len(parts) != 2 {
+			return errors.Errorf("bad Range header: '%v'", header)
+		}
+	}
+	start, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return errors.Errorf("bad Range header: '%v'", header)
+	}
+	if parts[1] == "" {
+		if start == 0 {
+			h.Range = nil
+		} else {
+			h.Range = &state.Range{start, math.MaxUint64, false}
+		}
+	} else {
+		end, err := strconv.ParseUint(parts[1], 10, 64)
+		if err != nil {
+			return errors.Errorf("bad Range header: '%v'", header)
+		}
+		h.Range = &state.Range{start, end, false}
+	}
+	return nil
+}
+
 func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	type request struct {
-		StateURI string         `header:"State-URI" query:"state_uri"`
-		Version  *state.Version `header:"Version"`
+		StateURI        string              `header:"State-URI" query:"state_uri"`
+		Version         *state.Version      `header:"Version"`
+		KeypathAndRange keypathAndRangePath `path:""`
+		RangeHeader     *httpRangeHeader    `header:"Range"`
+		Raw             bool                `query:"raw"`
 	}
 
 	var req request
@@ -623,191 +742,60 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		req.StateURI = t.defaultStateURI
 	}
 
-	keypathStrs := utils.FilterEmptyStrings(strings.Split(r.URL.Path[1:], "/"))
-	keypathStr := strings.Join(keypathStrs, string(state.KeypathSeparator))
-	keypath := state.Keypath(keypathStr)
-	parts := keypath.Parts()
-	newParts := make([]state.Keypath, 0, len(parts))
-	for _, part := range parts {
-		if idx := part.IndexByte('['); idx > -1 {
-			newParts = append(newParts, part[:idx])
-			x, err := strconv.ParseInt(string(part[idx+1:len(part)-1]), 10, 64)
-			if err != nil {
-				http.Error(w, "bad slice index", http.StatusBadRequest)
-				return
-			}
-			newParts = append(newParts, state.EncodeSliceIndex(uint64(x)))
-		} else {
-			newParts = append(newParts, part)
-		}
-	}
-	keypath = state.JoinKeypaths(newParts, []byte("/"))
-
 	var rng *state.Range
-	if rstr := r.Header.Get("Range"); rstr != "" {
-		// Range: -10:-5
-		// @@TODO: real json Range parsing
-		parts := strings.SplitN(rstr, "=", 2)
-		if len(parts) != 2 {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
-		} else if parts[0] != "json" {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
-		}
-		parts = strings.SplitN(parts[1], ":", 2)
-		if len(parts) != 2 {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
-		}
-		start, err := strconv.ParseInt(parts[0], 10, 64)
-		if err != nil {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
-		}
-		end, err := strconv.ParseInt(parts[1], 10, 64)
-		if err != nil {
-			http.Error(w, "bad Range header", http.StatusBadRequest)
-			return
-		}
-		rng = &state.Range{start, end}
-	}
-
-	// Add the "Parents" header
-	{
-		leaves, err := t.controllerHub.Leaves(req.StateURI)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("%v", err), http.StatusNotFound)
-			return
-		}
-		if len(leaves) > 0 {
-			leaf := leaves[0]
-
-			tx, err := t.controllerHub.FetchTx(req.StateURI, leaf)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("can't fetch tx %v: %+v", leaf, err.Error()), http.StatusNotFound)
-				return
-			}
-			parents := tx.Parents
-
-			var parentStrs []string
-			for _, pid := range parents {
-				parentStrs = append(parentStrs, pid.Hex())
-			}
-			w.Header().Add("Parents", strings.Join(parentStrs, ","))
-		} else {
-			w.Header().Add("Parents", "")
-		}
-	}
-
-	indexName, indexArg := parseIndexParams(r)
-	raw, err := parseRawParam(r)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusBadRequest)
-		return
+	if req.RangeHeader != nil {
+		rng = req.RangeHeader.Range
+	} else {
+		rng = req.KeypathAndRange.Range
 	}
 
 	var node state.Node
 	var anyMissing bool
 
-	if indexName != "" {
-		// Index query
+	rootNode, err := t.controllerHub.StateAtVersion(req.StateURI, req.Version)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+		return
+	}
+	defer rootNode.Close()
 
-		// You can specify an index_arg of * in order to fetch the entire index
-		var indexArgKeypath state.Keypath
-		if indexArg != "*" {
-			indexArgKeypath = state.Keypath(indexArg)
-		}
+	if req.Raw {
+		node = rootNode.NodeAt(req.KeypathAndRange.Keypath, rng)
 
-		node, err = t.controllerHub.QueryIndex(req.StateURI, req.Version, keypath, state.Keypath(indexName), indexArgKeypath, rng)
-		if errors.Cause(err) == errors.Err404 {
-			http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
+	} else {
+		var exists bool
+		node, exists, err = nelson.Seek(rootNode, req.KeypathAndRange.Keypath, t.controllerHub, t.blobStore)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 			return
-		} else if err != nil {
+		} else if !exists {
+			http.Error(w, fmt.Sprintf("not found: %v", req.KeypathAndRange.Keypath), http.StatusNotFound)
+			return
+		}
+		req.KeypathAndRange.Keypath = nil
+
+		indexHTMLExists, err := node.Exists(req.KeypathAndRange.Keypath.Push(state.Keypath("index.html")))
+		if err != nil {
 			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 			return
 		}
+		if indexHTMLExists {
+			req.KeypathAndRange.Keypath = req.KeypathAndRange.Keypath.Push(state.Keypath("index.html"))
 
-	} else {
-		// State query
-		node, err = t.controllerHub.StateAtVersion(req.StateURI, req.Version)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
-			return
-		}
-		defer node.Close()
-
-		if raw {
-			node = node.NodeAt(keypath, rng)
-
-		} else {
-			var exists bool
-			node, exists, err = nelson.Seek(node, keypath, t.controllerHub, t.blobStore)
+			node, exists, err = nelson.Seek(node, state.Keypath("index.html"), t.controllerHub, t.blobStore)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 				return
 			} else if !exists {
-				http.Error(w, fmt.Sprintf("not found: %v", keypath), http.StatusNotFound)
+				http.Error(w, fmt.Sprintf("not found: %v", req.KeypathAndRange.Keypath), http.StatusNotFound)
 				return
-			}
-			keypath = nil
-
-			// node, err = node.CopyToMemory(keypath, rng)
-			// if errors.Cause(err) == errors.Err404 {
-			// 	http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
-			// 	return
-			// } else if err != nil {
-			// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-			// 	return
-			// }
-
-			// node, anyMissing, err = nelson.Resolve(node, t.controllerHub, t.blobStore)
-			// if err != nil {
-			// 	http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-			// 	return
-			// }
-
-			indexHTMLExists, err := node.Exists(keypath.Push(state.Keypath("index.html")))
-			if err != nil {
-				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-				return
-			}
-			if indexHTMLExists {
-				keypath = keypath.Push(state.Keypath("index.html"))
-				node = node.NodeAt(state.Keypath("index.html"), nil)
 			}
 		}
 	}
 
-	contentType, err := nelson.GetContentType(node)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("error getting content type: %+v", err), http.StatusInternalServerError)
-		return
-	}
-	if contentType == "application/octet-stream" {
-		contentType = utils.GuessContentTypeFromFilename(string(keypath.Part(-1)))
-	}
-	w.Header().Set("Content-Type", contentType)
-
-	contentLength, err := nelson.GetContentLength(node)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("error getting content length: %+v", err), http.StatusInternalServerError)
-		return
-	}
-	if contentLength > 0 {
-		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
-	}
-
-	resourceLength, err := node.Length()
-	if err != nil {
-		http.Error(w, fmt.Sprintf("error getting length: %+v", err), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Resource-Length", strconv.FormatUint(resourceLength, 10))
-
 	var val interface{}
 	var exists bool
-	if !raw {
+	if !req.Raw {
 		val, exists, err = nelson.GetValueRecursive(node, nil, nil)
 	} else {
 		val, exists, err = node.Value(nil, nil)
@@ -822,7 +810,6 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 
 	respBuf, ok := nelson.GetReadCloser(val)
 	if !ok {
-		contentType = "application/json"
 		j, err := json.Marshal(val)
 		if err != nil {
 			panic(err)
@@ -831,16 +818,17 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	}
 	defer respBuf.Close()
 
-	// Right now, this is just to facilitate the Chrome extension
-	allowSubscribe := map[string]bool{
-		"application/json": true,
-		"application/js":   true,
-		"text/plain":       true,
-	}
-	if allowSubscribe[contentType] {
-		w.Header().Set("Subscribe", "Allow")
+	// Add the "Parents" header
+	t.addParentsHeader(req.StateURI, w)
+
+	// Add resource headers
+	err = t.addResourceHeaders(req.StateURI, node, w)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+		return
 	}
 
+	// Add "Partial Content" status code if applicable
 	if anyMissing {
 		w.WriteHeader(http.StatusPartialContent)
 	}
@@ -872,6 +860,26 @@ func (t *transport) serveAck(w http.ResponseWriter, r *http.Request, peerConn *p
 	stateURI := r.Header.Get("State-URI")
 
 	t.HandleAckReceived(stateURI, txID, peerConn)
+}
+
+func (t *transport) serveGetBlobMetadata(w http.ResponseWriter, r *http.Request) {
+	blobIDStr := r.URL.Path[len("/__blob/"):]
+	var blobID blob.ID
+	err := blobID.UnmarshalText([]byte(blobIDStr))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	have, err := t.blobStore.HaveBlob(blobID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else if !have {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (t *transport) servePostBlob(w http.ResponseWriter, r *http.Request) {
@@ -1003,7 +1011,8 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, peerConn
 		scanner := bufio.NewScanner(patchReader)
 		for scanner.Scan() {
 			line := scanner.Bytes()
-			patch, err := tree.ParsePatch(line)
+			var patch tree.Patch
+			err := patch.UnmarshalText([]byte(line))
 			if err != nil {
 				http.Error(w, fmt.Sprintf("bad patch string: %v", line), http.StatusBadRequest)
 				return
@@ -1247,6 +1256,47 @@ func (t *transport) makePeerConn(writer io.Writer, flusher http.Flusher, dialAdd
 	}
 	peer.PeerEndpoint = t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, dialAddr}, deviceUniqueID)
 	return peer
+}
+
+func (t *transport) addParentsHeader(stateURI string, w http.ResponseWriter) error {
+	leaves, err := t.controllerHub.Leaves(stateURI)
+	if err != nil {
+		return err
+	}
+	var leavesStrs []string
+	for _, leafID := range leaves {
+		leavesStrs = append(leavesStrs, leafID.Hex())
+	}
+	w.Header().Add("Parents", strings.Join(leavesStrs, ","))
+	return nil
+}
+
+func (t *transport) addResourceHeaders(stateURI string, node state.Node, w http.ResponseWriter) error {
+	w.Header().Set("State-URI", stateURI)
+
+	contentType, err := nelson.GetContentType(node)
+	if err != nil {
+		return errors.Wrapf(err, "error getting content type")
+	}
+	if contentType == "application/octet-stream" {
+		contentType = utils.GuessContentTypeFromFilename(string(node.Keypath().Part(-1)))
+	}
+	w.Header().Set("Content-Type", contentType)
+
+	contentLength, err := nelson.GetContentLength(node)
+	if err != nil {
+		return errors.Wrapf(err, "error getting content length")
+	}
+	if contentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+	}
+
+	resourceLength, err := node.Length()
+	if err != nil {
+		return errors.Wrapf(err, "error getting resource length")
+	}
+	w.Header().Set("Resource-Length", strconv.FormatUint(resourceLength, 10))
+	return nil
 }
 
 func (t *transport) doRequest(req *http.Request) (*http.Response, error) {

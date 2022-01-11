@@ -88,7 +88,6 @@ async function genesis() {
     }
     await node1Client.put(tx1)
 
-
     let tx2 = {
         stateURI: 'chat.com/room-2837',
         id: Redwood.utils.randomID(),

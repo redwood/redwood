@@ -14,20 +14,21 @@ import (
 
 func TestVersionedDBTree_Value_MapWithRange(t *testing.T) {
 	tests := []struct {
-		start, end int64
+		start, end uint64
+		reverse    bool
 		expected   interface{}
 	}{
-		{0, 1, M{
+		{0, 1, false, M{
 			"asdf": S{"1234", float64(987.2), uint64(333)}},
 		},
-		{0, 2, M{
+		{0, 2, false, M{
 			"asdf": S{"1234", float64(987.2), uint64(333)},
 			"flo":  float64(321),
 		}},
-		{1, 2, M{
+		{1, 2, false, M{
 			"flo": float64(321),
 		}},
-		{1, 3, M{
+		{1, 3, false, M{
 			"flo": float64(321),
 			"flox": S{
 				uint64(65),
@@ -35,7 +36,7 @@ func TestVersionedDBTree_Value_MapWithRange(t *testing.T) {
 				"jkjkjkj",
 			},
 		}},
-		{0, 5, M{
+		{0, 5, false, M{
 			"asdf": S{"1234", float64(987.2), uint64(333)},
 			"flo":  float64(321),
 			"flox": S{
@@ -48,15 +49,22 @@ func TestVersionedDBTree_Value_MapWithRange(t *testing.T) {
 				"xyzzy": uint64(33),
 			},
 		}},
-		{0, 0, M{}},
-		{5, 5, state.ErrInvalidRange},
-		{6, 6, state.ErrInvalidRange},
-		{-2, 0, M{
+		{0, 0, false, M{}},
+		{5, 5, false, state.ErrInvalidRange},
+		{6, 6, false, state.ErrInvalidRange},
+		{2, 0, true, M{
 			"floxxx": "asdf123",
 			"hello": M{
 				"xyzzy": uint64(33),
 			},
 		}},
+		{2, 0, true, M{
+			"floxxx": "asdf123",
+			"hello": M{
+				"xyzzy": uint64(33),
+			},
+		}},
+		{0, 0, true, M{}},
 	}
 
 	rootKeypaths := []state.Keypath{state.Keypath(nil)}
@@ -73,7 +81,7 @@ func TestVersionedDBTree_Value_MapWithRange(t *testing.T) {
 
 				node := db.StateAtVersion(nil, false)
 
-				val, exists, err := node.Value(rootKeypath, &state.Range{test.start, test.end})
+				val, exists, err := node.Value(rootKeypath, &state.Range{test.start, test.end, test.reverse})
 				switch exp := test.expected.(type) {
 				case error:
 					require.True(t, errors.Cause(exp) == test.expected)
@@ -89,35 +97,36 @@ func TestVersionedDBTree_Value_MapWithRange(t *testing.T) {
 
 func TestVersionedDBTree_Value_SliceWithRange(t *testing.T) {
 	tests := []struct {
-		start, end int64
+		start, end uint64
+		reverse    bool
 		expected   interface{}
 	}{
-		{0, 1, S{
+		{0, 1, false, S{
 			uint64(8383),
 		}},
-		{0, 2, S{
+		{0, 2, false, S{
 			uint64(8383),
 			M{"9999": "hi", "vvvv": "yeah"},
 		}},
-		{1, 2, S{
+		{1, 2, false, S{
 			M{"9999": "hi", "vvvv": "yeah"},
 		}},
-		{1, 3, S{
+		{1, 3, false, S{
 			M{"9999": "hi", "vvvv": "yeah"},
 			float64(321.23),
 		}},
-		{0, 3, S{
+		{0, 3, false, S{
 			uint64(8383),
 			M{"9999": "hi", "vvvv": "yeah"},
 			float64(321.23),
 		}},
-		{0, 0, S{}},
-		{4, 4, state.ErrInvalidRange},
-		{-2, 0, S{
+		{0, 0, false, S{}},
+		{4, 4, false, state.ErrInvalidRange},
+		{2, 0, true, S{
 			float64(321.23),
 			"hello",
 		}},
-		{-2, -1, S{
+		{2, 1, true, S{
 			float64(321.23),
 		}},
 	}
@@ -131,7 +140,7 @@ func TestVersionedDBTree_Value_SliceWithRange(t *testing.T) {
 
 			node := db.StateAtVersion(nil, false)
 
-			val, exists, err := node.Value(state.Keypath(nil), &state.Range{test.start, test.end})
+			val, exists, err := node.Value(state.Keypath(nil), &state.Range{test.start, test.end, test.reverse})
 			switch exp := test.expected.(type) {
 			case error:
 				require.True(t, errors.Cause(exp) == test.expected)
@@ -496,7 +505,7 @@ func TestVersionedDBTree_Set_Range_String(t *testing.T) {
 	node.Close()
 
 	err = update(db, &v, func(tx *state.DBNode) error {
-		err := tx.Set(state.Keypath("foo/string"), &state.Range{3, 6}, "xx")
+		err := tx.Set(state.Keypath("foo/string"), &state.Range{3, 6, false}, "xx")
 		require.NoError(t, err)
 		return nil
 	})
@@ -520,25 +529,29 @@ func TestVersionedDBTree_Set_Range_Slice(t *testing.T) {
 		setVals       []interface{}
 		expectedSlice []interface{}
 	}{
-		{"start grow", state.Keypath("foo/slice"), &state.Range{0, 2}, S{testVal5, testVal6, testVal7, testVal8},
+		{"start grow", state.Keypath("foo/slice"), &state.Range{0, 2, false}, S{testVal5, testVal6, testVal7, testVal8},
 			S{testVal5, testVal6, testVal7, testVal8, testVal3, testVal4}},
-		{"start same", state.Keypath("foo/slice"), &state.Range{0, 2}, S{testVal5, testVal6},
+		{"start same", state.Keypath("foo/slice"), &state.Range{0, 2, false}, S{testVal5, testVal6},
 			S{testVal5, testVal6, testVal3, testVal4}},
-		{"start shrink", state.Keypath("foo/slice"), &state.Range{0, 2}, S{testVal5},
+		{"start shrink", state.Keypath("foo/slice"), &state.Range{0, 2, false}, S{testVal5},
 			S{testVal5, testVal3, testVal4}},
-		{"middle grow", state.Keypath("foo/slice"), &state.Range{1, 3}, S{testVal5, testVal6, testVal7, testVal8},
+		{"middle grow", state.Keypath("foo/slice"), &state.Range{1, 3, false}, S{testVal5, testVal6, testVal7, testVal8},
 			S{testVal1, testVal5, testVal6, testVal7, testVal8, testVal4}},
-		{"middle same", state.Keypath("foo/slice"), &state.Range{1, 3}, S{testVal5, testVal6},
+		{"middle same", state.Keypath("foo/slice"), &state.Range{1, 3, false}, S{testVal5, testVal6},
 			S{testVal1, testVal5, testVal6, testVal4}},
-		{"middle shrink", state.Keypath("foo/slice"), &state.Range{1, 3}, S{testVal5},
+		{"middle shrink", state.Keypath("foo/slice"), &state.Range{1, 3, false}, S{testVal5},
 			S{testVal1, testVal5, testVal4}},
-		{"end grow", state.Keypath("foo/slice"), &state.Range{2, 4}, S{testVal5, testVal6, testVal7, testVal8},
+		{"end grow", state.Keypath("foo/slice"), &state.Range{2, 4, false}, S{testVal5, testVal6, testVal7, testVal8},
 			S{testVal1, testVal2, testVal5, testVal6, testVal7, testVal8}},
-		{"end same", state.Keypath("foo/slice"), &state.Range{2, 4}, S{testVal5, testVal6},
+		{"end same", state.Keypath("foo/slice"), &state.Range{2, 4, false}, S{testVal5, testVal6},
 			S{testVal1, testVal2, testVal5, testVal6}},
-		{"end shrink", state.Keypath("foo/slice"), &state.Range{1, 4}, S{testVal5},
+		{"end shrink", state.Keypath("foo/slice"), &state.Range{1, 4, false}, S{testVal5},
 			S{testVal1, testVal5}},
-		{"end append", state.Keypath("foo/slice"), &state.Range{4, 4}, S{testVal5, testVal6, testVal7, testVal8},
+		{"end append", state.Keypath("foo/slice"), &state.Range{4, 4, false}, S{testVal5, testVal6, testVal7, testVal8},
+			S{testVal1, testVal2, testVal3, testVal4, testVal5, testVal6, testVal7, testVal8}},
+		{"end append (-0, one)", state.Keypath("foo/slice"), &state.Range{0, 0, true}, S{testVal5},
+			S{testVal1, testVal2, testVal3, testVal4, testVal5}},
+		{"end append (-0, many)", state.Keypath("foo/slice"), &state.Range{0, 0, true}, S{testVal5, testVal6, testVal7, testVal8},
 			S{testVal1, testVal2, testVal3, testVal4, testVal5, testVal6, testVal7, testVal8}},
 	}
 

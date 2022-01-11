@@ -15,7 +15,6 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
-	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -139,12 +138,18 @@ var defaultREPLCommands = REPLCommands{
 	"tree": REPLCommand{
 		HelpText: "interact with the tree protocol",
 		Subcommands: REPLCommands{
-			"get":       CmdGetState,
-			"set":       CmdSetState,
-			"uris":      CmdStateURIs,
-			"txs":       CmdListTxs,
+			"get":  CmdGetState,
+			"set":  CmdSetState,
+			"uris": CmdStateURIs,
+			"txs": REPLCommand{
+				Subcommands: REPLCommands{
+					"list":      CmdListTxs,
+					"dumpstore": CmdTxStoreDebugPrint,
+				},
+			},
 			"subscribe": CmdSubscribe,
 			"dumpstore": CmdTreeStoreDebugPrint,
+			"dumptree":  CmdControllerDebugPrint,
 		},
 	},
 	"blob": REPLCommand{
@@ -163,9 +168,28 @@ var defaultREPLCommands = REPLCommands{
 		HelpText: "interact with the libp2p transport",
 		Subcommands: REPLCommands{
 			"id": CmdLibp2pPeerID,
+			"relay": REPLCommand{
+				HelpText: "interact with the libp2p transport",
+				Subcommands: REPLCommands{
+					"add":  CmdLibp2pRelayAdd,
+					"rm":   CmdLibp2pRelayRemove,
+					"list": CmdLibp2pRelayList,
+				},
+			},
 		},
 	},
-	"ps": CmdProcessTree,
+	"ps": REPLCommand{
+		HelpText: "view information about the current tree of goroutines",
+		Subcommands: REPLCommands{
+			"tree": CmdProcessTree,
+		},
+	},
+	"shared": REPLCommand{
+		HelpText: "",
+		Subcommands: REPLCommands{
+			"dumpstore": CmdSharedStateStoreDebugPrint,
+		},
+	},
 }
 
 var (
@@ -205,6 +229,43 @@ var (
 		},
 	}
 
+	CmdLibp2pRelayAdd = REPLCommand{
+		HelpText: "add a libp2p static relay",
+		Handler: func(args []string, app *App) error {
+			if app.Libp2pTransport == nil {
+				return errors.New("libp2p is disabled")
+			} else if len(args) < 1 {
+				return errors.New("requires 1 argument: libp2p relay add <multiaddress>")
+			}
+			return app.Libp2pTransport.AddStaticRelay(args[0])
+		},
+	}
+
+	CmdLibp2pRelayRemove = REPLCommand{
+		HelpText: "remove a libp2p static relay",
+		Handler: func(args []string, app *App) error {
+			if app.Libp2pTransport == nil {
+				return errors.New("libp2p is disabled")
+			} else if len(args) < 1 {
+				return errors.New("requires 1 argument: libp2p relay rm <multiaddress>")
+			}
+			return app.Libp2pTransport.RemoveStaticRelay(args[0])
+		},
+	}
+
+	CmdLibp2pRelayList = REPLCommand{
+		HelpText: "list the currently configured libp2p static relays",
+		Handler: func(args []string, app *App) error {
+			if app.Libp2pTransport == nil {
+				return errors.New("libp2p is disabled")
+			}
+			for relay := range app.Libp2pTransport.StaticRelays() {
+				fmt.Println(" -", relay)
+			}
+			return nil
+		},
+	}
+
 	CmdSubscribe = REPLCommand{
 		HelpText: "subscribe to a state URI",
 		Handler: func(args []string, app *App) error {
@@ -214,17 +275,10 @@ var (
 
 			stateURI := args[0]
 
-			sub, err := app.TreeProto.Subscribe(
-				context.Background(),
-				stateURI,
-				prototree.SubscriptionType_Txs,
-				nil,
-				&prototree.FetchHistoryOpts{FromTxID: tree.GenesisTxID},
-			)
+			err := app.TreeProto.Subscribe(context.Background(), stateURI)
 			if err != nil {
 				return err
 			}
-			sub.Close()
 			return nil
 		},
 	}
@@ -239,7 +293,7 @@ var (
 			if len(stateURIs) == 0 {
 				fmt.Println("no known state URIs")
 			} else {
-				for _, stateURI := range stateURIs {
+				for stateURI := range stateURIs {
 					fmt.Println("- ", stateURI)
 				}
 			}
@@ -262,7 +316,7 @@ var (
 			var keypath state.Keypath
 			var rng *state.Range
 			if len(args) > 1 {
-				_, keypath, rng, err = tree.ParsePatchPath([]byte(args[1]))
+				keypath, rng, err = state.ParseKeypathAndRange([]byte(args[1]), byte('.'))
 				if err != nil {
 					return err
 				}
@@ -316,13 +370,35 @@ var (
 			iter := app.TxStore.AllTxsForStateURI(stateURI, tree.GenesisTxID)
 			defer iter.Close()
 
+			var rows [][]string
 			for {
 				tx := iter.Next()
 				if tx == nil {
 					break
 				}
-				app.Debugf("- %v", tx.ID)
+				var parents []string
+				for _, parent := range tx.Parents {
+					parents = append(parents, parent.Hex())
+				}
+				rows = append(rows, []string{tx.ID.Hex(), tx.Status.String(), strings.Join(parents, " ")})
 			}
+
+			table := tablewriter.NewWriter(os.Stdout)
+			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
+			table.SetCenterSeparator("|")
+			table.SetRowLine(true)
+			table.SetAutoMergeCellsByColumnIndex([]int{0, 1})
+			table.SetHeader([]string{"ID", "Status", "Parents"})
+			table.AppendBulk(rows)
+			table.Render()
+			return nil
+		},
+	}
+
+	CmdTxStoreDebugPrint = REPLCommand{
+		HelpText: "print the contents of the tx store",
+		Handler: func(args []string, app *App) error {
+			app.TxStore.DebugPrint()
 			return nil
 		},
 	}
@@ -444,7 +520,7 @@ var (
 		HelpText: "add a peer",
 		Handler: func(args []string, app *App) error {
 			if len(args) < 2 {
-				return errors.New("requires 2 arguments: addpeer <transport> <dial addr>")
+				return errors.New("requires 2 arguments: peers add <transport> <dial addr>")
 			}
 			app.PeerStore.AddDialInfo(swarm.PeerDialInfo{args[0], args[1]}, "")
 			return nil
@@ -557,6 +633,17 @@ var (
 		},
 	}
 
+	CmdControllerDebugPrint = REPLCommand{
+		HelpText: "print the contents of a state DB",
+		Handler: func(args []string, app *App) error {
+			if len(args) < 1 {
+				return errors.New("requires 1 argument: tree dumptree <state uri>")
+			}
+			app.ControllerHub.DebugPrint(args[0])
+			return nil
+		},
+	}
+
 	CmdPeerStoreDebugPrint = REPLCommand{
 		HelpText: "print the contents of the peer store",
 		Handler: func(args []string, app *App) error {
@@ -584,6 +671,16 @@ var (
 				return err
 			}
 			return app.BlobStore.SetMaxFetchConns(n)
+		},
+	}
+
+	CmdSharedStateStoreDebugPrint = REPLCommand{
+		HelpText: "print the contents of the shared state store",
+		Handler: func(args []string, app *App) error {
+			node := app.SharedStateDB.State(false)
+			defer node.Close()
+			node.DebugPrint(func(msg string, args ...interface{}) { fmt.Printf(msg, args...) }, true, 0)
+			return nil
 		},
 	}
 )

@@ -21,7 +21,6 @@ function useUsers(stateURI) {
     }
     const usersTree = useStateTree(usersStateURI)
     const users = (usersTree || {}).users || defaultValue.current
-    console.log('users', users)
 
     useEffect(() => {
         let newUsers = {}

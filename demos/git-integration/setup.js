@@ -37,10 +37,10 @@ async function genesis() {
     let scriptJS = fs.createReadStream('./repo/script.js')
     let readmeMD = fs.createReadStream('./repo/README.md')
     let redwoodJPG = fs.createReadStream('./repo/redwood.jpg')
-    let { sha1: indexHTMLSha1 } = await node1Client.storeBlob(indexHTML)
-    let { sha1: scriptJSSha1 } = await node1Client.storeBlob(scriptJS)
-    let { sha1: readmeMDSha1 } = await node1Client.storeBlob(readmeMD)
-    let { sha1: redwoodJPGSha1 } = await node1Client.storeBlob(redwoodJPG)
+    let { sha1: indexHTMLSha1, sha3: indexHTMLSha3 } = await node1Client.storeBlob(indexHTML)
+    let { sha1: scriptJSSha1, sha3: scriptJSSha3 } = await node1Client.storeBlob(scriptJS)
+    let { sha1: readmeMDSha1, sha3: readmeMDSha3 } = await node1Client.storeBlob(readmeMD)
+    let { sha1: redwoodJPGSha1, sha3: redwoodJPGSha3 } = await node1Client.storeBlob(redwoodJPG)
 
     // Send the genesis tx to set up the repo (this is sort of like `git init`).
     //
@@ -74,27 +74,9 @@ async function genesis() {
                             }
                         },
                         '*': {
-                            '^\\.refs\\..*': {
+                            '^.*': {
                                 'write': true
                             },
-                            '^\\.commits\\.[a-f0-9]+\\.parents': {
-                                'write': true
-                            },
-                            '^\\.commits\\.[a-f0-9]+\\.message': {
-                                'write': true
-                            },
-                            '^\\.commits\\.[a-f0-9]+\\.timestamp': {
-                                'write': true
-                            },
-                            '^\\.commits\\.[a-f0-9]+\\.author': {
-                                'write': true
-                            },
-                            '^\\.commits\\.[a-f0-9]+\\.committer': {
-                                'write': true
-                            },
-                            '^\\.commits\\.[a-f0-9]+\\.files': {
-                                'write': true
-                            }
                         }
                     }
                 },
@@ -115,8 +97,8 @@ async function genesis() {
     // Note: if you alter the contents of the ./repo subdirectory, you'll need to determine the
     // git commit hash of the first commit again, and then tweak these variables.  Otherwise,
     // you'll get a "bad object" error from git.
-    let commit1Hash = '3832ec27a841e7a2071e1edaa6ca280f974f20b3'
-    let commit1Timestamp = '2021-03-01T18:03:22-06:00'
+    let commit1Hash = '305c6e97a68ec38b4b89a4f1e5bc18c8ba2b76eb'
+    let commit1Timestamp = '2022-01-10T19:44:38-06:00'
 
     let tx2 = {
         stateURI: 'somegitprovider.org/gitdemo',
@@ -128,34 +110,43 @@ async function genesis() {
                 'timestamp': commit1Timestamp,
                 'author': {
                     'name': 'Bryn Bellomy',
-                    'email': 'bryn.bellomy@gmail.com',
+                    'email': 'bryn@signals.io',
                     'timestamp': commit1Timestamp,
                 },
                 'committer': {
                     'name': 'Bryn Bellomy',
-                    'email': 'bryn.bellomy@gmail.com',
+                    'email': 'bryn@signals.io',
                     'timestamp': commit1Timestamp,
                 },
+                'sig': '',
                 'files': {
                     'README.md': {
                         'Content-Type': 'link',
+                        'Content-Length': 104,
                         'mode': 33188,
-                        'value': `blob:sha1:${readmeMDSha1}`,
+                        'value': `blob:sha3:${readmeMDSha3}`,
+                        'sha1': readmeMDSha1,
                     },
                     'redwood.jpg': {
                         'Content-Type': 'link',
+                        'Content-Length': 1198230,
                         'mode': 33188,
-                        'value': `blob:sha1:${redwoodJPGSha1}`,
+                        'value': `blob:sha3:${redwoodJPGSha3}`,
+                        'sha1': redwoodJPGSha1,
                     },
                     'index.html': {
                         'Content-Type': 'link',
+                        'Content-Length': 8493,
                         'mode': 33188,
-                        'value': `blob:sha1:${indexHTMLSha1}`,
+                        'value': `blob:sha3:${indexHTMLSha3}`,
+                        'sha1': indexHTMLSha1,
                     },
                     'script.js': {
                         'Content-Type': 'link',
+                        'Content-Length': 62,
                         'mode': 33188,
-                        'value': `blob:sha1:${scriptJSSha1}`,
+                        'value': `blob:sha3:${scriptJSSha3}`,
+                        'sha1': scriptJSSha1,
                     }
                 }
             }),

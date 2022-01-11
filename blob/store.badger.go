@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/dgraph-io/badger/v2"
+	"go.uber.org/multierr"
 	"golang.org/x/crypto/sha3"
 
 	"redwood.dev/errors"
@@ -18,6 +19,7 @@ import (
 type badgerStore struct {
 	log.Logger
 
+	mu         *sync.RWMutex
 	db         *state.DBTree
 	badgerOpts badger.Options
 
@@ -42,6 +44,7 @@ const (
 func NewBadgerStore(badgerOpts badger.Options) *badgerStore {
 	return &badgerStore{
 		Logger:     log.NewLogger("blobstore"),
+		mu:         &sync.RWMutex{},
 		badgerOpts: badgerOpts,
 	}
 }
@@ -59,10 +62,15 @@ func (s *badgerStore) Start() error {
 }
 
 func (s *badgerStore) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	_ = s.db.Close()
 }
 
 func (s *badgerStore) BlobReader(blobID ID) (io.ReadCloser, int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	have, err := s.HaveBlob(blobID)
 	if err != nil {
 		return nil, 0, err
@@ -96,6 +104,9 @@ func (s *badgerStore) BlobReader(blobID ID) (io.ReadCloser, int64, error) {
 }
 
 func (s *badgerStore) StoreBlob(reader io.ReadCloser) (types.Hash, types.Hash, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	chunker := NewChunker(reader)
 	defer chunker.Close()
 	for {
@@ -128,6 +139,9 @@ func (s *badgerStore) StoreBlob(reader io.ReadCloser) (types.Hash, types.Hash, e
 }
 
 func (s *badgerStore) markBlobPresentAndValid(sha1, sha3 types.Hash) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	node := s.db.State(true)
 	defer node.Close()
 
@@ -154,6 +168,9 @@ func (s *badgerStore) markBlobPresentAndValid(sha1, sha3 types.Hash) error {
 }
 
 func (s *badgerStore) HaveBlob(blobID ID) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	sha3, err := s.sha3ForBlobID(blobID)
 	if errors.Cause(err) == errors.Err404 {
 		return false, nil
@@ -184,6 +201,9 @@ func (s *badgerStore) HaveBlob(blobID ID) (bool, error) {
 }
 
 func (s *badgerStore) VerifyBlobOrPrune(blobID ID) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	valid, sha1, sha3, err := s.verifyBlob(blobID)
 	if err != nil {
 		return errors.Wrapf(err, "while verifying blob %v: %v", blobID, err)
@@ -235,6 +255,9 @@ func (s *badgerStore) verifyBlob(blobID ID) (valid bool, sha1Hash types.Hash, sh
 }
 
 func (s *badgerStore) Manifest(blobID ID) (Manifest, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	sha3, err := s.sha3ForBlobID(blobID)
 	if err != nil {
 		return Manifest{}, err
@@ -261,6 +284,9 @@ func (s *badgerStore) Manifest(blobID ID) (Manifest, error) {
 }
 
 func (s *badgerStore) StoreManifest(blobID ID, manifest Manifest) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	sha3, err := s.sha3ForBlobID(blobID)
 	if err != nil {
 		return err
@@ -277,6 +303,9 @@ func (s *badgerStore) StoreManifest(blobID ID, manifest Manifest) error {
 }
 
 func (s *badgerStore) HaveManifest(blobID ID) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	sha3, err := s.sha3ForBlobID(blobID)
 	if err != nil {
 		return false, err
@@ -288,6 +317,9 @@ func (s *badgerStore) HaveManifest(blobID ID) (bool, error) {
 }
 
 func (s *badgerStore) Chunk(sha3 types.Hash) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	node := s.db.State(false)
 	defer node.Close()
 
@@ -310,6 +342,9 @@ func (s *badgerStore) Chunk(sha3 types.Hash) ([]byte, error) {
 }
 
 func (s *badgerStore) StoreChunkIfHashMatches(expectedSHA3 types.Hash, chunkBytes []byte) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	sha3 := types.HashBytes(chunkBytes)
 	if sha3 != expectedSHA3 {
 		return errors.Wrapf(ErrWrongHash, "expected %v, got %v (len: %v)", expectedSHA3.Hex(), sha3, len(chunkBytes))
@@ -343,16 +378,38 @@ func haveAllChunks(rootNode state.Node, chunkSHA3s []types.Hash) (bool, error) {
 }
 
 func (s *badgerStore) HaveChunk(sha3 types.Hash) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	node := s.db.State(false)
 	defer node.Close()
 	return node.Exists(chunkKeypath(sha3))
 }
 
-func (s *badgerStore) BlobIDs() *IDIterator {
-	return newIDIterator(s.db)
+func (s *badgerStore) BlobIDs() (sha1s, sha3s []ID, _ error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	iter := newIDIterator(s.db)
+	defer iter.Close()
+
+	var errs error
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		if iter.Err() != nil {
+			errs = multierr.Append(errs, iter.Err())
+			continue
+		}
+		sha1, sha3 := iter.Current()
+		sha1s = append(sha1s, sha1)
+		sha3s = append(sha3s, sha3)
+	}
+	return sha1s, sha3s, errs
 }
 
 func (s *badgerStore) BlobsNeeded() ([]ID, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	node := s.db.State(false).NodeAt(missingBlobsKey, nil)
 	defer node.Close()
 
@@ -373,6 +430,9 @@ func (s *badgerStore) BlobsNeeded() ([]ID, error) {
 }
 
 func (s *badgerStore) MarkBlobsAsNeeded(blobs []ID) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	var actuallyNeeded []ID
 	for _, blobID := range blobs {
 		have, err := s.HaveBlob(blobID)
@@ -535,6 +595,9 @@ func missingBlobKeypath(blobID ID) state.Keypath {
 }
 
 func (s *badgerStore) Contents() (map[types.Hash]map[types.Hash]bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	m := make(map[types.Hash]map[types.Hash]bool)
 
 	rootNode := s.db.State(false)
@@ -576,6 +639,9 @@ func (s *badgerStore) Contents() (map[types.Hash]map[types.Hash]bool, error) {
 }
 
 func (s *badgerStore) MaxFetchConns() (uint64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	node := s.db.State(false)
 	defer node.Close()
 
@@ -589,6 +655,9 @@ func (s *badgerStore) MaxFetchConns() (uint64, error) {
 }
 
 func (s *badgerStore) SetMaxFetchConns(maxFetchConns uint64) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	node := s.db.State(true)
 	defer node.Close()
 
@@ -600,6 +669,9 @@ func (s *badgerStore) SetMaxFetchConns(maxFetchConns uint64) error {
 }
 
 func (s *badgerStore) DebugPrint() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	keypaths, values, err := s.db.DebugPrint(nil, nil)
 	if err != nil {
 		panic(err)

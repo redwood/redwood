@@ -203,12 +203,13 @@ func (s *peerStore) AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) Pe
 		return e
 	}
 
-	var pd *peerDetails
+	var endpoint PeerEndpoint
 	var exists bool
 	func() {
 		s.muPeers.Lock()
 		defer s.muPeers.Unlock()
 
+		var pd *peerDetails
 		var needsSave bool
 		pd, exists, needsSave = s.ensurePeerDetails(dialInfo, deviceUniqueID)
 
@@ -222,11 +223,12 @@ func (s *peerStore) AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) Pe
 				s.Warnf("could not save modifications to peerstore DB: %v", err)
 			}
 		}
+		endpoint = pd.Endpts[dialInfo]
 	}()
 	if !exists && deviceUniqueID != "" {
 		s.notifyNewUnverifiedPeerListeners(dialInfo)
 	}
-	return pd.Endpts[dialInfo]
+	return endpoint
 }
 
 func (s *peerStore) findPeerDetails(dialInfo PeerDialInfo, deviceUniqueID string) *peerDetails {
@@ -522,24 +524,25 @@ func (s *peerStore) fetchAllPeerDetails() (map[string]*peerDetails, error) {
 }
 
 func (s *peerStore) savePeerDetails(pd *peerDetails) error {
-	node := s.state.State(true)
-	defer node.Close()
+	// node := s.state.State(true)
+	// defer node.Close()
 
-	keypath := state.Keypath("peers").Pushs(pd.DeviceUniqID)
+	// keypath := state.Keypath("peers").Pushs(pd.DeviceUniqID)
 
-	stateURIs := types.NewStringSet(nil)
-	for stateURI := range pd.Stateuris {
-		stateURIs.Add(url.QueryEscape(stateURI))
-	}
-	old := pd.Stateuris
-	pd.Stateuris = stateURIs
-	defer func() { pd.Stateuris = old }()
+	// stateURIs := types.NewStringSet(nil)
+	// for stateURI := range pd.Stateuris {
+	// 	stateURIs.Add(url.QueryEscape(stateURI))
+	// }
+	// old := pd.Stateuris
+	// pd.Stateuris = stateURIs
+	// defer func() { pd.Stateuris = old }()
 
-	err := node.Set(keypath, nil, pd)
-	if err != nil {
-		return err
-	}
-	return node.Save()
+	// err := node.Set(keypath, nil, pd)
+	// if err != nil {
+	// 	return err
+	// }
+	// return node.Save()
+	return nil
 }
 
 func (s *peerStore) deletePeers(deviceUniqueIDs []string) error {

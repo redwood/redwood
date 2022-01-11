@@ -55,7 +55,7 @@ func (acl DefaultACL) TypeOf(stateURI string) StateURIType {
 		return StateURIType_Invalid
 	}
 	hostParts := strings.Split(parts[0], ".")
-	if len(hostParts) != 2 || len(hostParts[0]) == 0 || len(hostParts[1]) == 0 {
+	if len(hostParts) < 2 || len(hostParts[0]) == 0 || len(hostParts[1]) == 0 {
 		return StateURIType_Invalid
 	}
 	switch hostParts[1] {

@@ -839,15 +839,15 @@ func BenchmarkHushMessage_ProposeIndividualSessionProtoUnmarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func TestHushMessage_ApproveIndividualSessionProto(t *testing.T) {
+func TestHushMessage_RespondToIndividualSessionProposalProto(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedHushMessage_ApproveIndividualSession(popr, false)
+	p := NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, false)
 	dAtA, err := github_com_gogo_protobuf_proto.Marshal(p)
 	if err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
-	msg := &HushMessage_ApproveIndividualSession{}
+	msg := &HushMessage_RespondToIndividualSessionProposal{}
 	if err := github_com_gogo_protobuf_proto.Unmarshal(dAtA, msg); err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
@@ -873,10 +873,10 @@ func TestHushMessage_ApproveIndividualSessionProto(t *testing.T) {
 	}
 }
 
-func TestHushMessage_ApproveIndividualSessionMarshalTo(t *testing.T) {
+func TestHushMessage_RespondToIndividualSessionProposalMarshalTo(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedHushMessage_ApproveIndividualSession(popr, false)
+	p := NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, false)
 	size := p.Size()
 	dAtA := make([]byte, size)
 	for i := range dAtA {
@@ -886,7 +886,7 @@ func TestHushMessage_ApproveIndividualSessionMarshalTo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
-	msg := &HushMessage_ApproveIndividualSession{}
+	msg := &HushMessage_RespondToIndividualSessionProposal{}
 	if err := github_com_gogo_protobuf_proto.Unmarshal(dAtA, msg); err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
@@ -901,12 +901,12 @@ func TestHushMessage_ApproveIndividualSessionMarshalTo(t *testing.T) {
 	}
 }
 
-func BenchmarkHushMessage_ApproveIndividualSessionProtoMarshal(b *testing.B) {
+func BenchmarkHushMessage_RespondToIndividualSessionProposalProtoMarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_ApproveIndividualSession, 10000)
+	pops := make([]*HushMessage_RespondToIndividualSessionProposal, 10000)
 	for i := 0; i < 10000; i++ {
-		pops[i] = NewPopulatedHushMessage_ApproveIndividualSession(popr, false)
+		pops[i] = NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -919,18 +919,18 @@ func BenchmarkHushMessage_ApproveIndividualSessionProtoMarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_ApproveIndividualSessionProtoUnmarshal(b *testing.B) {
+func BenchmarkHushMessage_RespondToIndividualSessionProposalProtoUnmarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
 	datas := make([][]byte, 10000)
 	for i := 0; i < 10000; i++ {
-		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedHushMessage_ApproveIndividualSession(popr, false))
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, false))
 		if err != nil {
 			panic(err)
 		}
 		datas[i] = dAtA
 	}
-	msg := &HushMessage_ApproveIndividualSession{}
+	msg := &HushMessage_RespondToIndividualSessionProposal{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		total += len(datas[i%10000])
@@ -1313,16 +1313,16 @@ func TestHushMessage_ProposeIndividualSessionJSON(t *testing.T) {
 		t.Fatalf("seed = %d, %#v !Json Equal %#v", seed, msg, p)
 	}
 }
-func TestHushMessage_ApproveIndividualSessionJSON(t *testing.T) {
+func TestHushMessage_RespondToIndividualSessionProposalJSON(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedHushMessage_ApproveIndividualSession(popr, true)
+	p := NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, true)
 	marshaler := github_com_gogo_protobuf_jsonpb.Marshaler{}
 	jsondata, err := marshaler.MarshalToString(p)
 	if err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
-	msg := &HushMessage_ApproveIndividualSession{}
+	msg := &HushMessage_RespondToIndividualSessionProposal{}
 	err = github_com_gogo_protobuf_jsonpb.UnmarshalString(jsondata, msg)
 	if err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
@@ -1648,12 +1648,12 @@ func TestHushMessage_ProposeIndividualSessionProtoCompactText(t *testing.T) {
 	}
 }
 
-func TestHushMessage_ApproveIndividualSessionProtoText(t *testing.T) {
+func TestHushMessage_RespondToIndividualSessionProposalProtoText(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedHushMessage_ApproveIndividualSession(popr, true)
+	p := NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, true)
 	dAtA := github_com_gogo_protobuf_proto.MarshalTextString(p)
-	msg := &HushMessage_ApproveIndividualSession{}
+	msg := &HushMessage_RespondToIndividualSessionProposal{}
 	if err := github_com_gogo_protobuf_proto.UnmarshalText(dAtA, msg); err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
@@ -1665,12 +1665,12 @@ func TestHushMessage_ApproveIndividualSessionProtoText(t *testing.T) {
 	}
 }
 
-func TestHushMessage_ApproveIndividualSessionProtoCompactText(t *testing.T) {
+func TestHushMessage_RespondToIndividualSessionProposalProtoCompactText(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedHushMessage_ApproveIndividualSession(popr, true)
+	p := NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, true)
 	dAtA := github_com_gogo_protobuf_proto.CompactTextString(p)
-	msg := &HushMessage_ApproveIndividualSession{}
+	msg := &HushMessage_RespondToIndividualSessionProposal{}
 	if err := github_com_gogo_protobuf_proto.UnmarshalText(dAtA, msg); err != nil {
 		t.Fatalf("seed = %d, err = %v", seed, err)
 	}
@@ -1870,14 +1870,14 @@ func TestHushMessage_ProposeIndividualSessionVerboseEqual(t *testing.T) {
 		t.Fatalf("%#v !VerboseEqual %#v, since %v", msg, p, err)
 	}
 }
-func TestHushMessage_ApproveIndividualSessionVerboseEqual(t *testing.T) {
+func TestHushMessage_RespondToIndividualSessionProposalVerboseEqual(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedHushMessage_ApproveIndividualSession(popr, false)
+	p := NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, false)
 	dAtA, err := github_com_gogo_protobuf_proto.Marshal(p)
 	if err != nil {
 		panic(err)
 	}
-	msg := &HushMessage_ApproveIndividualSession{}
+	msg := &HushMessage_RespondToIndividualSessionProposal{}
 	if err := github_com_gogo_protobuf_proto.Unmarshal(dAtA, msg); err != nil {
 		panic(err)
 	}
@@ -2019,9 +2019,9 @@ func TestHushMessage_ProposeIndividualSessionGoString(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-func TestHushMessage_ApproveIndividualSessionGoString(t *testing.T) {
+func TestHushMessage_RespondToIndividualSessionProposalGoString(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedHushMessage_ApproveIndividualSession(popr, false)
+	p := NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, false)
 	s1 := p.GoString()
 	s2 := fmt.Sprintf("%#v", p)
 	if s1 != s2 {
@@ -2346,10 +2346,10 @@ func BenchmarkHushMessage_ProposeIndividualSessionSize(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func TestHushMessage_ApproveIndividualSessionSize(t *testing.T) {
+func TestHushMessage_RespondToIndividualSessionProposalSize(t *testing.T) {
 	seed := time.Now().UnixNano()
 	popr := math_rand.New(math_rand.NewSource(seed))
-	p := NewPopulatedHushMessage_ApproveIndividualSession(popr, true)
+	p := NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, true)
 	size2 := github_com_gogo_protobuf_proto.Size(p)
 	dAtA, err := github_com_gogo_protobuf_proto.Marshal(p)
 	if err != nil {
@@ -2368,12 +2368,12 @@ func TestHushMessage_ApproveIndividualSessionSize(t *testing.T) {
 	}
 }
 
-func BenchmarkHushMessage_ApproveIndividualSessionSize(b *testing.B) {
+func BenchmarkHushMessage_RespondToIndividualSessionProposalSize(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_ApproveIndividualSession, 1000)
+	pops := make([]*HushMessage_RespondToIndividualSessionProposal, 1000)
 	for i := 0; i < 1000; i++ {
-		pops[i] = NewPopulatedHushMessage_ApproveIndividualSession(popr, false)
+		pops[i] = NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -2526,9 +2526,9 @@ func TestHushMessage_ProposeIndividualSessionStringer(t *testing.T) {
 		t.Fatalf("String want %v got %v", s1, s2)
 	}
 }
-func TestHushMessage_ApproveIndividualSessionStringer(t *testing.T) {
+func TestHushMessage_RespondToIndividualSessionProposalStringer(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedHushMessage_ApproveIndividualSession(popr, false)
+	p := NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, false)
 	s1 := p.String()
 	s2 := fmt.Sprintf("%v", p)
 	if s1 != s2 {

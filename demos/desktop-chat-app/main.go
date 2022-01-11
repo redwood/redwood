@@ -80,6 +80,7 @@ func main() {
 			http.ListenAndServe(":"+c.String("pprof"), nil)
 		}()
 		// runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
+		runtime.SetCPUProfileRate(1000)
 
 		var (
 			profileRoot = c.String("root")

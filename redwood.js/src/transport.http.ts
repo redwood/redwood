@@ -119,7 +119,7 @@ export default function (opts: { httpHost: string, onFoundPeers?: PeersCallback 
                                 let { stateURI, tx, state, leaves } = JSON.parse(msg)
                                 callback(null, { stateURI, tx, state, leaves })
                             } catch (err) {
-                                callback(err, undefined as any)
+                                callback(`${err}`, undefined as any)
                             }
                         }
                     }

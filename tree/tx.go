@@ -22,9 +22,6 @@ var (
 	TxStatusInMempool = pb.TxStatusInMempool
 	TxStatusInvalid   = pb.TxStatusInvalid
 	TxStatusValid     = pb.TxStatusValid
-
-	ParsePatch     = pb.ParsePatch
-	ParsePatchPath = pb.ParsePatchPath
 )
 
 type StateURI string

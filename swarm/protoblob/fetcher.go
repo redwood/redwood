@@ -23,7 +23,7 @@ type fetcher struct {
 	blobStore      blob.Store
 	searchForPeers func(ctx context.Context, blobID blob.ID) <-chan BlobPeerConn
 	peerPool       swarm.PeerPool
-	workPool       *swarm.WorkPool
+	workPool       *workPool
 	getPeerBackoff utils.ExponentialBackoff
 }
 
@@ -169,7 +169,7 @@ func (f *fetcher) startWorkPool(chunkSHA3s []types.Hash) error {
 		}
 	}
 
-	f.workPool = swarm.NewWorkPool(jobs)
+	f.workPool = newWorkPool(jobs)
 	return f.Process.SpawnChild(nil, f.workPool)
 }
 
@@ -307,4 +307,72 @@ func (f *fetcher) convertBlobPeerChan(ctx context.Context, ch <-chan BlobPeerCon
 		}
 	}()
 	return chPeer
+}
+
+type workPool struct {
+	process.Process
+	jobs           map[interface{}]int
+	chJobs         chan interface{}
+	chJobsComplete chan struct{}
+}
+
+func newWorkPool(jobs []interface{}) *workPool {
+	p := &workPool{
+		Process:        *process.New("work pool"),
+		jobs:           make(map[interface{}]int),
+		chJobs:         make(chan interface{}, len(jobs)),
+		chJobsComplete: make(chan struct{}),
+	}
+	for i, job := range jobs {
+		p.jobs[job] = i
+		p.chJobs <- job
+	}
+	return p
+}
+
+func (p *workPool) Start() error {
+	err := p.Process.Start()
+	if err != nil {
+		return err
+	}
+	defer p.Process.Autoclose()
+
+	p.Process.Go(nil, "await completion", func(ctx context.Context) {
+		numJobs := len(p.chJobs)
+		for i := 0; i < numJobs; i++ {
+			select {
+			case <-p.chJobsComplete:
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+	return nil
+}
+
+func (p *workPool) NextJob() (job interface{}, i int, ok bool) {
+	select {
+	case <-p.Ctx().Done():
+		return nil, 0, false
+	case job = <-p.chJobs:
+		return job, p.jobs[job], true
+	}
+}
+
+func (p *workPool) ReturnFailedJob(job interface{}) {
+	select {
+	case <-p.Ctx().Done():
+	case p.chJobs <- job:
+	}
+}
+
+func (p *workPool) MarkJobComplete() {
+	select {
+	case <-p.Ctx().Done():
+	case p.chJobsComplete <- struct{}{}:
+	}
+}
+
+func (p *workPool) NumJobs() int {
+	return len(p.jobs)
 }

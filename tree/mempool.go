@@ -33,7 +33,7 @@ type mempool struct {
 
 func NewMempool(processCallback func(tx Tx) processTxOutcome) *mempool {
 	return &mempool{
-		Process:                 *process.New("Mempool"),
+		Process:                 *process.New("mempool"),
 		Logger:                  log.NewLogger("mempool"),
 		chStop:                  make(chan struct{}),
 		chDone:                  make(chan struct{}),

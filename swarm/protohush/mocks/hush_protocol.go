@@ -118,6 +118,34 @@ func (_m *HushProtocol) EncryptIndividualMessage(sessionType string, recipient t
 	return r0
 }
 
+// EnsureIndividualSession provides a mock function with given fields: ctx, sessionType, recipient
+func (_m *HushProtocol) EnsureIndividualSession(ctx context.Context, sessionType string, recipient types.Address) (pb.IndividualSessionProposal, bool, error) {
+	ret := _m.Called(ctx, sessionType, recipient)
+
+	var r0 pb.IndividualSessionProposal
+	if rf, ok := ret.Get(0).(func(context.Context, string, types.Address) pb.IndividualSessionProposal); ok {
+		r0 = rf(ctx, sessionType, recipient)
+	} else {
+		r0 = ret.Get(0).(pb.IndividualSessionProposal)
+	}
+
+	var r1 bool
+	if rf, ok := ret.Get(1).(func(context.Context, string, types.Address) bool); ok {
+		r1 = rf(ctx, sessionType, recipient)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func(context.Context, string, types.Address) error); ok {
+		r2 = rf(ctx, sessionType, recipient)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // Go provides a mock function with given fields: ctx, name, fn
 func (_m *HushProtocol) Go(ctx context.Context, name string, fn func(context.Context)) <-chan struct{} {
 	ret := _m.Called(ctx, name, fn)
@@ -196,31 +224,45 @@ func (_m *HushProtocol) ProcessTree() map[string]interface{} {
 }
 
 // ProposeIndividualSession provides a mock function with given fields: ctx, sessionType, recipient, epoch
-func (_m *HushProtocol) ProposeIndividualSession(ctx context.Context, sessionType string, recipient types.Address, epoch uint64) error {
+func (_m *HushProtocol) ProposeIndividualSession(ctx context.Context, sessionType string, recipient types.Address, epoch uint64) (pb.IndividualSessionProposal, error) {
 	ret := _m.Called(ctx, sessionType, recipient, epoch)
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, types.Address, uint64) error); ok {
+	var r0 pb.IndividualSessionProposal
+	if rf, ok := ret.Get(0).(func(context.Context, string, types.Address, uint64) pb.IndividualSessionProposal); ok {
 		r0 = rf(ctx, sessionType, recipient, epoch)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(pb.IndividualSessionProposal)
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, string, types.Address, uint64) error); ok {
+		r1 = rf(ctx, sessionType, recipient, epoch)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // ProposeNextIndividualSession provides a mock function with given fields: ctx, sessionType, recipient
-func (_m *HushProtocol) ProposeNextIndividualSession(ctx context.Context, sessionType string, recipient types.Address) error {
+func (_m *HushProtocol) ProposeNextIndividualSession(ctx context.Context, sessionType string, recipient types.Address) (pb.IndividualSessionProposal, error) {
 	ret := _m.Called(ctx, sessionType, recipient)
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, types.Address) error); ok {
+	var r0 pb.IndividualSessionProposal
+	if rf, ok := ret.Get(0).(func(context.Context, string, types.Address) pb.IndividualSessionProposal); ok {
 		r0 = rf(ctx, sessionType, recipient)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(pb.IndividualSessionProposal)
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, string, types.Address) error); ok {
+		r1 = rf(ctx, sessionType, recipient)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // SpawnChild provides a mock function with given fields: ctx, child
@@ -246,6 +288,20 @@ func (_m *HushProtocol) Start() error {
 		r0 = rf()
 	} else {
 		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// State provides a mock function with given fields:
+func (_m *HushProtocol) State() process.State {
+	ret := _m.Called()
+
+	var r0 process.State
+	if rf, ok := ret.Get(0).(func() process.State); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(process.State)
 	}
 
 	return r0

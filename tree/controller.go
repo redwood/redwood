@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"redwood.dev/blob"
 	"redwood.dev/crypto"
@@ -26,6 +27,7 @@ type Controller interface {
 	QueryIndex(version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
 	Leaves() ([]state.Version, error)
 	OnNewState(fn NewStateCallback)
+	DebugPrint()
 }
 
 type controller struct {
@@ -93,6 +95,11 @@ func (c *controller) Start() (err error) {
 		return err
 	}
 
+	err = c.txStore.AddStateURI(c.stateURI)
+	if err != nil {
+		return err
+	}
+
 	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(c.stateURI)
 	states, err := state.NewVersionedDBTree(c.badgerOpts.ForPath(filepath.Join(c.stateDBRootPath, stateURIClean)))
 	if err != nil {
@@ -115,6 +122,26 @@ func (c *controller) Start() (err error) {
 	if err != nil {
 		return err
 	}
+
+	// @@TODO: this is idiotic, fix it
+	go func() {
+		select {
+		case <-c.Process.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
+
+		iter := c.txStore.AllTxsForStateURI(c.stateURI, GenesisTxID)
+		for {
+			tx := iter.Next()
+			if tx == nil {
+				break
+			}
+			if tx.Status == TxStatusInMempool {
+				c.mempool.Add(*tx)
+			}
+		}
+	}()
 
 	// Listen for new blobs
 	c.blobStore.OnBlobsSaved(c.mempool.ForceReprocess)
@@ -755,4 +782,10 @@ func (c *controller) QueryIndex(version *state.Version, keypath state.Keypath, i
 	}
 
 	return indexNode.NodeAt(queryParam, rng), nil
+}
+
+func (c *controller) DebugPrint() {
+	node := c.states.StateAtVersion(nil, false)
+	defer node.Close()
+	node.DebugPrint(func(msg string, args ...interface{}) { fmt.Printf(msg, args...) }, true, 0)
 }

@@ -158,13 +158,13 @@ func (_m *HushTransport) OnIncomingIndividualMessage(handler protohush.IncomingI
 	_m.Called(handler)
 }
 
-// OnIncomingIndividualSessionApproval provides a mock function with given fields: handler
-func (_m *HushTransport) OnIncomingIndividualSessionApproval(handler protohush.IncomingIndividualSessionApprovalCallback) {
+// OnIncomingIndividualSessionProposal provides a mock function with given fields: handler
+func (_m *HushTransport) OnIncomingIndividualSessionProposal(handler protohush.IncomingIndividualSessionProposalCallback) {
 	_m.Called(handler)
 }
 
-// OnIncomingIndividualSessionProposal provides a mock function with given fields: handler
-func (_m *HushTransport) OnIncomingIndividualSessionProposal(handler protohush.IncomingIndividualSessionProposalCallback) {
+// OnIncomingIndividualSessionResponse provides a mock function with given fields: handler
+func (_m *HushTransport) OnIncomingIndividualSessionResponse(handler protohush.IncomingIndividualSessionResponseCallback) {
 	_m.Called(handler)
 }
 
@@ -207,6 +207,20 @@ func (_m *HushTransport) Start() error {
 		r0 = rf()
 	} else {
 		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// State provides a mock function with given fields:
+func (_m *HushTransport) State() process.State {
+	ret := _m.Called()
+
+	var r0 process.State
+	if rf, ok := ret.Get(0).(func() process.State); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(process.State)
 	}
 
 	return r0

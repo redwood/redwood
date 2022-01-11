@@ -56,11 +56,11 @@ func MakeHushProtobuf_ProposeIndividualSession(encryptedProposal []byte) *HushMe
 	}
 }
 
-func MakeHushProtobuf_ApproveIndividualSession(approval protohush.IndividualSessionApproval) *HushMessage {
+func MakeHushProtobuf_RespondToIndividualSessionProposal(response protohush.IndividualSessionResponse) *HushMessage {
 	return &HushMessage{
-		Payload: &HushMessage_ApproveIndividualSession_{
-			ApproveIndividualSession: &HushMessage_ApproveIndividualSession{
-				Approval: &approval,
+		Payload: &HushMessage_RespondToIndividualSessionProposal_{
+			RespondToIndividualSessionProposal: &HushMessage_RespondToIndividualSessionProposal{
+				Response: &response,
 			},
 		},
 	}

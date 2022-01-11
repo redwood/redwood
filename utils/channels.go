@@ -133,7 +133,6 @@ func CombinedContext(signals ...interface{}) (context.Context, context.CancelFun
 	signals = append(signals, ctx)
 
 	var cases []reflect.SelectCase
-	var cancel2 context.CancelFunc
 	for _, signal := range signals {
 		var ch reflect.Value
 
@@ -146,23 +145,21 @@ func CombinedContext(signals ...interface{}) (context.Context, context.CancelFun
 			ch = reflect.ValueOf(sig)
 		case time.Duration:
 			var ctxTimeout context.Context
-			ctxTimeout, cancel2 = context.WithTimeout(ctx, sig)
+			ctxTimeout, _ = context.WithTimeout(ctx, sig)
 			ch = reflect.ValueOf(ctxTimeout.Done())
 		default:
 			continue
 		}
 		cases = append(cases, reflect.SelectCase{Chan: ch, Dir: reflect.SelectRecv})
 	}
+	cases = append(cases, reflect.SelectCase{Chan: reflect.ValueOf(ctx.Done()), Dir: reflect.SelectRecv})
 
 	go func() {
 		defer cancel()
-		if cancel2 != nil {
-			defer cancel2()
-		}
 		_, _, _ = reflect.Select(cases)
 	}()
 
-	return context.WithCancel(ctx)
+	return ctx, cancel
 }
 
 type ChanContext chan struct{}

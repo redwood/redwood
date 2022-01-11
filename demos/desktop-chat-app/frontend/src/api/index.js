@@ -97,13 +97,7 @@ export default function(redwoodClient, ownAddress) {
             patches: [
                 ' = ' + Redwood.utils.JSON.stringify({
                     'Merge-Type': {
-                        'Content-Type': 'resolver/js',
-                        'value': {
-                            'src': {
-                                'Content-Type': 'link',
-                                'value': `blob:sha3:${sync9JSSha3}`,
-                            }
-                        }
+                        'Content-Type': 'resolver/dumb',
                     },
                     'Validator': {
                         'Content-Type': 'validator/permissions',
@@ -114,6 +108,7 @@ export default function(redwoodClient, ownAddress) {
                         },
                     },
                     'messages': [],
+                    'files': [],
                 }),
             ],
         }
@@ -147,13 +142,7 @@ export default function(redwoodClient, ownAddress) {
             patches: [
                 ' = ' + Redwood.utils.JSON.stringify({
                     'Merge-Type': {
-                        'Content-Type': 'resolver/js',
-                        'value': {
-                            'src': {
-                                'Content-Type': 'link',
-                                'value': `blob:sha3:${sync9JSSha3}`,
-                            }
-                        }
+                        'Content-Type': 'resolver/dumb',
                     },
                     'Validator': {
                         'Content-Type': 'validator/permissions',
@@ -166,6 +155,7 @@ export default function(redwoodClient, ownAddress) {
                     'Members': users,
                     'users': users,
                     'messages': [],
+                    'files': [],
                 }),
             ],
         })
@@ -183,7 +173,9 @@ export default function(redwoodClient, ownAddress) {
         }, 3000)
     }
 
-    async function sendMessage(messageText, files, nodeAddress, server, room, messages) {
+    async function sendMessage(messageText, files, nodeAddress, server, room, numMessages, numFiles) {
+        let now = Math.floor(new Date().getTime() / 1000)
+        let patches = []
         let attachments = []
         if (!!files && files.length > 0) {
             attachments = (await Promise.all(
@@ -197,19 +189,31 @@ export default function(redwoodClient, ownAddress) {
                     'value': 'blob:sha3:' + refHashes.sha3,
                 },
             }))
+
+            for (let i = 0; i < attachments.length; i++) {
+                patches.push(`.files[-0:-0] = ` + Redwood.utils.JSON.stringify([{
+                    'Content-Type': attachments[i]['Content-Type'],
+                    'Content-Length': attachments[i]['Content-Length'],
+                    'filename': attachments[i]['filename'],
+                    'value': attachments[i]['value'],
+                    'sender': nodeAddress.toLowerCase(),
+                    'timestamp': now,
+                }]))
+            }
         }
+
+        patches.push('.messages[-0:-0] = ' + Redwood.utils.JSON.stringify([{
+            sender: nodeAddress.toLowerCase(),
+            text: messageText,
+            timestamp: now,
+            attachments: attachments.length > 0 ? attachments : null,
+        }]))
+
 
         let tx = {
             id: Redwood.utils.randomID(),
             stateURI: `${server}/${room}`,
-            patches: [
-                '.messages[' + messages.length + ':' + messages.length + '] = ' + Redwood.utils.JSON.stringify([{
-                    sender: nodeAddress.toLowerCase(),
-                    text: messageText,
-                    timestamp: Math.floor(new Date().getTime() / 1000),
-                    attachments: attachments.length > 0 ? attachments : null,
-                }]),
-            ],
+            patches: patches,
         }
         await redwoodClient.rpc.sendTx(tx)
     }

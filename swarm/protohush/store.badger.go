@@ -320,17 +320,17 @@ func (s *store) DeleteIncomingIndividualSessionProposal(proposal EncryptedIndivi
 	return node.Save()
 }
 
-func (s *store) OutgoingIndividualSessionApprovals() (map[types.Address]map[types.Hash]IndividualSessionApproval, error) {
+func (s *store) OutgoingIndividualSessionResponses() (map[types.Address]map[types.Hash]IndividualSessionResponse, error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	var approvals_ map[string]map[types.Hash]IndividualSessionApproval
-	err := node.NodeAt(outgoingIndividualSessionApprovalsKeypath.Copy(), nil).Scan(&approvals_)
+	var approvals_ map[string]map[types.Hash]IndividualSessionResponse
+	err := node.NodeAt(outgoingIndividualSessionResponsesKeypath.Copy(), nil).Scan(&approvals_)
 	if err != nil {
 		return nil, err
 	}
 
-	approvals := make(map[types.Address]map[types.Hash]IndividualSessionApproval)
+	approvals := make(map[types.Address]map[types.Hash]IndividualSessionResponse)
 	for a, x := range approvals_ {
 		addr, err := types.AddressFromHex(a)
 		if err != nil {
@@ -341,58 +341,58 @@ func (s *store) OutgoingIndividualSessionApprovals() (map[types.Address]map[type
 	return approvals, nil
 }
 
-func (s *store) OutgoingIndividualSessionApproval(aliceAddr types.Address, proposalHash types.Hash) (IndividualSessionApproval, error) {
+func (s *store) OutgoingIndividualSessionResponse(aliceAddr types.Address, proposalHash types.Hash) (IndividualSessionResponse, error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	keypath := outgoingIndividualSessionApprovalKeypathFor(aliceAddr, proposalHash)
+	keypath := outgoingIndividualSessionResponseKeypathFor(aliceAddr, proposalHash)
 	exists, err := node.Exists(keypath)
 	if err != nil {
-		return IndividualSessionApproval{}, err
+		return IndividualSessionResponse{}, err
 	} else if !exists {
-		return IndividualSessionApproval{}, errors.Err404
+		return IndividualSessionResponse{}, errors.Err404
 	}
 
-	var approval IndividualSessionApproval
+	var approval IndividualSessionResponse
 	err = node.NodeAt(keypath, nil).Scan(&approval)
 	if err != nil {
-		return IndividualSessionApproval{}, err
+		return IndividualSessionResponse{}, err
 	}
 	return approval, nil
 }
 
-func (s *store) OutgoingIndividualSessionApprovalsForUser(aliceAddr types.Address) ([]IndividualSessionApproval, error) {
+func (s *store) OutgoingIndividualSessionResponsesForUser(aliceAddr types.Address) ([]IndividualSessionResponse, error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	var approvalsMap map[string]IndividualSessionApproval
-	err := node.NodeAt(outgoingIndividualSessionApprovalsKeypathForUser(aliceAddr), nil).Scan(&approvalsMap)
+	var approvalsMap map[string]IndividualSessionResponse
+	err := node.NodeAt(outgoingIndividualSessionResponsesKeypathForUser(aliceAddr), nil).Scan(&approvalsMap)
 	if err != nil {
 		return nil, err
 	}
-	var approvals []IndividualSessionApproval
+	var approvals []IndividualSessionResponse
 	for _, a := range approvalsMap {
 		approvals = append(approvals, a)
 	}
 	return approvals, nil
 }
 
-func (s *store) SaveOutgoingIndividualSessionApproval(aliceAddr types.Address, approval IndividualSessionApproval) error {
+func (s *store) SaveOutgoingIndividualSessionResponse(aliceAddr types.Address, approval IndividualSessionResponse) error {
 	node := s.db.State(true)
 	defer node.Close()
 
-	err := node.Set(outgoingIndividualSessionApprovalKeypathFor(aliceAddr, approval.ProposalHash), nil, approval)
+	err := node.Set(outgoingIndividualSessionResponseKeypathFor(aliceAddr, approval.ProposalHash), nil, approval)
 	if err != nil {
 		return err
 	}
 	return node.Save()
 }
 
-func (s *store) DeleteOutgoingIndividualSessionApproval(aliceAddr types.Address, proposalHash types.Hash) error {
+func (s *store) DeleteOutgoingIndividualSessionResponse(aliceAddr types.Address, proposalHash types.Hash) error {
 	node := s.db.State(true)
 	defer node.Close()
 
-	err := node.Delete(outgoingIndividualSessionApprovalKeypathFor(aliceAddr, proposalHash), nil)
+	err := node.Delete(outgoingIndividualSessionResponseKeypathFor(aliceAddr, proposalHash), nil)
 	if err != nil {
 		return err
 	}
@@ -613,12 +613,25 @@ func (s *store) DeleteIncomingIndividualMessage(msg IndividualMessage) error {
 	return node.Save()
 }
 
-func (s *store) OutgoingGroupMessageIntentIDs(sessionType string) (types.StringSet, error) {
+func (s *store) OutgoingGroupMessageSessionTypes() (types.StringSet, error) {
 	node := s.db.State(false)
 	defer node.Close()
 
+	sessionTypes := types.NewStringSet(nil)
+	for _, sessionType := range node.NodeAt(outgoingGroupMessageIntentsKeypath, nil).Subkeys() {
+		sessionTypes.Add(sessionType.String())
+	}
+	return sessionTypes, nil
+}
+
+func (s *store) OutgoingGroupMessageIntentIDsForSessionType(sessionType string) (types.StringSet, error) {
+	node := s.db.State(false)
+	defer node.Close()
+
+	keypath := outgoingGroupMessageIntentsKeypathForSessionType(sessionType)
+
 	ids := types.NewStringSet(nil)
-	for _, subkey := range node.Subkeys() {
+	for _, subkey := range node.NodeAt(keypath, nil).Subkeys() {
 		ids.Add(subkey.String())
 	}
 	return ids, nil
@@ -958,7 +971,7 @@ var (
 	outgoingIndividualSessionProposalsByHashKeypath  = outgoingIndividualSessionProposalsKeypath.Copy().Pushs("by-hash")
 	outgoingIndividualSessionProposalsByUsersKeypath = outgoingIndividualSessionProposalsKeypath.Copy().Pushs("by-users")
 
-	outgoingIndividualSessionApprovalsKeypath = rootKeypath.Copy().Pushs("approvals-out")
+	outgoingIndividualSessionResponsesKeypath = rootKeypath.Copy().Pushs("approvals-out")
 	incomingIndividualSessionProposalsKeypath = rootKeypath.Copy().Pushs("proposals-in")
 
 	individualSessionsKeypath       = rootKeypath.Copy().Pushs("individual-sessions")
@@ -1000,12 +1013,12 @@ func incomingIndividualSessionProposalKeypathFor(proposalHash types.Hash) state.
 	return incomingIndividualSessionProposalsKeypath.Copy().Pushs(proposalHash.Hex())
 }
 
-func outgoingIndividualSessionApprovalsKeypathForUser(aliceAddr types.Address) state.Keypath {
-	return outgoingIndividualSessionApprovalsKeypath.Copy().Pushs(aliceAddr.Hex())
+func outgoingIndividualSessionResponsesKeypathForUser(aliceAddr types.Address) state.Keypath {
+	return outgoingIndividualSessionResponsesKeypath.Copy().Pushs(aliceAddr.Hex())
 }
 
-func outgoingIndividualSessionApprovalKeypathFor(aliceAddr types.Address, proposalHash types.Hash) state.Keypath {
-	return outgoingIndividualSessionApprovalsKeypathForUser(aliceAddr).Pushs(proposalHash.Hex())
+func outgoingIndividualSessionResponseKeypathFor(aliceAddr types.Address, proposalHash types.Hash) state.Keypath {
+	return outgoingIndividualSessionResponsesKeypathForUser(aliceAddr).Pushs(proposalHash.Hex())
 }
 
 func individualSessionsKeypathForUsers(aliceAddr, bobAddr types.Address) state.Keypath {

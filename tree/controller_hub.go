@@ -11,6 +11,7 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/state"
+	"redwood.dev/types"
 	"redwood.dev/utils/badgerutils"
 )
 
@@ -22,7 +23,7 @@ type ControllerHub interface {
 	FetchTxs(stateURI string, fromTxID state.Version) TxIterator
 
 	EnsureController(stateURI string) (Controller, error)
-	KnownStateURIs() ([]string, error)
+	KnownStateURIs() (types.StringSet, error)
 	StateAtVersion(stateURI string, version *state.Version) (state.Node, error)
 	QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
 	Leaves(stateURI string) ([]state.Version, error)
@@ -30,6 +31,7 @@ type ControllerHub interface {
 	BlobReader(refID blob.ID) (io.ReadCloser, int64, error)
 
 	OnNewState(fn NewStateCallback)
+	DebugPrint(stateURI string)
 }
 
 type controllerHub struct {
@@ -82,7 +84,7 @@ func (m *controllerHub) Start() (err error) {
 		return err
 	}
 
-	for _, stateURI := range stateURIs {
+	for stateURI := range stateURIs {
 		_, err := m.EnsureController(stateURI)
 		if err != nil {
 			return err
@@ -118,7 +120,7 @@ func (m *controllerHub) EnsureController(stateURI string) (Controller, error) {
 	return ctrl, nil
 }
 
-func (m *controllerHub) KnownStateURIs() ([]string, error) {
+func (m *controllerHub) KnownStateURIs() (types.StringSet, error) {
 	return m.txStore.KnownStateURIs()
 }
 
@@ -189,4 +191,14 @@ func (m *controllerHub) notifyNewStateListeners(tx Tx, root state.Node, leaves [
 		}()
 	}
 	wg.Wait()
+}
+
+func (m *controllerHub) DebugPrint(stateURI string) {
+	m.controllersMu.RLock()
+	defer m.controllersMu.RUnlock()
+	if m.controllers[stateURI] == nil {
+		fmt.Println("no such controller")
+		return
+	}
+	m.controllers[stateURI].DebugPrint()
 }

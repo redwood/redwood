@@ -9,6 +9,7 @@ ADD ./blob /build/blob/
 ADD ./cmd /build/cmd/
 ADD ./crypto /build/crypto/
 ADD ./errors /build/errors/
+ADD ./health /build/health/
 ADD ./identity /build/identity/
 ADD ./internal /build/internal/
 ADD ./log /build/log/

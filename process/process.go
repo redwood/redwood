@@ -47,6 +47,7 @@ type Spawnable interface {
 	Start() error
 	Close() error
 	Done() <-chan struct{}
+	State() State
 }
 
 type ProcessTreer interface {
@@ -82,6 +83,7 @@ func (p *Process) Start() error {
 
 func (p *Process) Close() error {
 	p.closeOnce.Do(func() {
+		p.Infof(0, p.name+" shutting down...")
 		func() {
 			p.mu.Lock()
 			defer p.mu.Unlock()
@@ -116,6 +118,12 @@ func (p *Process) AutocloseWithCleanup(closeFn func()) {
 
 func (p *Process) Name() string {
 	return p.name
+}
+
+func (p *Process) State() State {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.state
 }
 
 func (p *Process) Ctx() context.Context {

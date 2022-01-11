@@ -16,6 +16,17 @@ func FilterEmptyStrings(s []string) []string {
 	return filtered
 }
 
+func FilterEmptyBytes(bss [][]byte) [][]byte {
+	var filtered [][]byte
+	for i := range bss {
+		if len(bss[i]) == 0 {
+			continue
+		}
+		filtered = append(filtered, bss[i])
+	}
+	return filtered
+}
+
 func RandomNumberString() string {
 	return strconv.Itoa(rand.Intn(8999) + 1000)
 }

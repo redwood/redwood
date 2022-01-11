@@ -3,7 +3,7 @@ module redwood.dev
 require (
 	github.com/aclements/go-rabin v0.0.0-20170911142644-d0b643ea1a4c
 	github.com/aristanetworks/goarista v0.0.0-20191023202215-f096da5361bb // indirect
-	github.com/brynbellomy/git2go v0.0.0-20210223020543-1b73664dc577
+	github.com/brynbellomy/git2go v0.0.0-20220103011358-0816142080de
 	github.com/brynbellomy/go-luaconv v0.0.0-20160402002339-1f84b1d2470d
 	github.com/brynbellomy/go-structomancer v1.0.3
 	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae
@@ -24,6 +24,8 @@ require (
 	github.com/ipfs/go-cid v0.0.7
 	github.com/ipfs/go-datastore v0.4.5
 	github.com/ipfs/go-ds-badger2 v0.1.1 // indirect
+	github.com/libgit2/git2go v27.10.0+incompatible // indirect
+	github.com/libgit2/git2go/v33 v33.0.4 // indirect
 	github.com/libp2p/go-doh-resolver v0.3.1 // indirect
 	github.com/libp2p/go-libp2p v0.14.4
 	github.com/libp2p/go-libp2p-circuit v0.4.0 // indirect

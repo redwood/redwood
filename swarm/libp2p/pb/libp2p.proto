@@ -50,7 +50,7 @@ message HushMessage {
     oneof payload {
         DHPubkeyAttestations dhPubkeyAttestations = 1;
         ProposeIndividualSession proposeIndividualSession = 2;
-        ApproveIndividualSession approveIndividualSession = 3;
+        RespondToIndividualSessionProposal respondToIndividualSessionProposal = 3;
         SendIndividualMessage sendIndividualMessage = 4;
         SendGroupMessage sendGroupMessage = 5;
     }
@@ -63,8 +63,8 @@ message HushMessage {
         bytes encryptedProposal = 1;
     }
 
-    message ApproveIndividualSession {
-        Redwood.swarm.protohush.IndividualSessionApproval approval = 1;
+    message RespondToIndividualSessionProposal {
+        Redwood.swarm.protohush.IndividualSessionResponse response = 1;
     }
 
     message SendIndividualMessage {

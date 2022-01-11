@@ -19,11 +19,14 @@ import (
 
 	"golang.org/x/net/publicsuffix"
 
+	"redwood.dev/blob"
 	"redwood.dev/crypto"
 	"redwood.dev/errors"
 	"redwood.dev/state"
+	"redwood.dev/swarm"
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type LightClient struct {
@@ -190,6 +193,77 @@ func (c *LightClient) FetchTx(stateURI string, txID state.Version) (*tree.Tx, er
 	return &tx, nil
 }
 
+type HeadResponse struct {
+	StateURI       string
+	Parents        []state.Version
+	ContentType    string
+	ContentLength  int64
+	ResourceLength int64
+	Peers          []swarm.PeerDialInfo
+}
+
+func (c *LightClient) Head(stateURI string, keypath state.Keypath) (HeadResponse, error) {
+	client := c.client()
+
+	url := c.dialAddr
+	if len(keypath) > 0 {
+		url += keypath.String()
+	}
+
+	req, err := http.NewRequest("HEAD", url, nil)
+	if err != nil {
+		return HeadResponse{}, errors.WithStack(err)
+	}
+
+	if stateURI != "" {
+		req.Header.Set("State-URI", stateURI)
+	}
+
+	r, err := client.Do(req)
+	if err != nil {
+		return HeadResponse{}, errors.WithStack(err)
+	} else if r.StatusCode == 404 {
+		return HeadResponse{}, errors.Err404
+	} else if r.StatusCode != 200 {
+		return HeadResponse{}, errors.Errorf("error getting state@HEAD (%v) %v", r.StatusCode, r.Status)
+	}
+
+	type response struct {
+		StateURI       string `header:"State-URI"`
+		Parents        string `header:"Parents"`
+		ContentType    string `header:"Content-Type"`
+		ContentLength  int64  `header:"Content-Length"`
+		ResourceLength int64  `header:"Resource-Length"`
+		AltSvc         string `header:"Alt-Svc"`
+	}
+
+	var resp response
+	err = utils.UnmarshalHTTPResponse(&resp, r)
+	if err != nil {
+		return HeadResponse{}, err
+	}
+
+	var parents []state.Version
+	parentStrs := strings.Split(resp.Parents, ",")
+	for _, pstr := range parentStrs {
+		pstr = strings.TrimSpace(pstr)
+		pid, err := state.VersionFromHex(pstr)
+		if err != nil {
+			return HeadResponse{}, errors.New("bad parents header")
+		}
+		parents = append(parents, pid)
+	}
+
+	return HeadResponse{
+		StateURI:       resp.StateURI,
+		Parents:        parents,
+		ContentType:    resp.ContentType,
+		ContentLength:  resp.ContentLength,
+		ResourceLength: resp.ResourceLength,
+		Peers:          nil, // @@TODO
+	}, nil
+}
+
 func (c *LightClient) Get(stateURI string, version *state.Version, keypath state.Keypath, rng *state.Range, raw bool) (io.ReadCloser, int64, []state.Version, error) {
 	client := c.client()
 	url := c.dialAddr + "/" + string(keypath)
@@ -214,6 +288,8 @@ func (c *LightClient) Get(stateURI string, version *state.Version, keypath state
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0, nil, errors.WithStack(err)
+	} else if resp.StatusCode == 404 {
+		return nil, 0, nil, errors.Err404
 	} else if resp.StatusCode != 200 {
 		if version != nil {
 			return nil, 0, nil, errors.Errorf("error getting state@%v: (%v) %v", version.Hex(), resp.StatusCode, resp.Status)
@@ -245,7 +321,7 @@ func (c *LightClient) Get(stateURI string, version *state.Version, keypath state
 	return resp.Body, int64(contentLength), parents, nil
 }
 
-func (c *LightClient) Put(ctx context.Context, tx tree.Tx, recipientAddress types.Address, recipientEncPubkey *crypto.AsymEncPubkey) error {
+func (c *LightClient) Put(ctx context.Context, tx tree.Tx) error {
 	if len(tx.Sig) == 0 {
 		sig, err := c.sigkeys.SignHash(tx.Hash())
 		if err != nil {
@@ -267,6 +343,22 @@ func (c *LightClient) Put(ctx context.Context, tx tree.Tx, recipientAddress type
 	}
 	defer resp.Body.Close()
 	return nil
+}
+
+func (c *LightClient) HaveBlob(blobID blob.ID) (bool, error) {
+	blobIDBytes, err := blobID.MarshalText()
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+	req, err := http.NewRequest("HEAD", c.dialAddr+"/__blob/"+string(blobIDBytes), nil)
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+	resp, err := c.client().Do(req)
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+	return resp.StatusCode == http.StatusOK, nil
 }
 
 func (c *LightClient) StoreBlob(file io.Reader) (StoreBlobResponse, error) {

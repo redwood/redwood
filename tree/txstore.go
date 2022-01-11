@@ -2,21 +2,25 @@ package tree
 
 import (
 	"redwood.dev/state"
+	"redwood.dev/types"
 )
 
 type TxStore interface {
 	Start() error
 	Close()
 
+	AddStateURI(stateURI string) error
 	AddTx(tx Tx) error
 	RemoveTx(stateURI string, txID state.Version) error
 	TxExists(stateURI string, txID state.Version) (bool, error)
 	FetchTx(stateURI string, txID state.Version) (Tx, error)
 	AllTxsForStateURI(stateURI string, fromTxID state.Version) TxIterator
-	KnownStateURIs() ([]string, error)
+	KnownStateURIs() (types.StringSet, error)
 	MarkLeaf(stateURI string, txID state.Version) error
 	UnmarkLeaf(stateURI string, txID state.Version) error
 	Leaves(stateURI string) ([]state.Version, error)
+
+	DebugPrint()
 }
 
 type TxIterator interface {
