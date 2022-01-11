@@ -109,15 +109,13 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		libp2p.On("Name").Return("libp2p")
 		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
 
-		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return()
-		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil)
+		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return().Maybe()
+		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil).Maybe()
+		peerStore.On("AllDialInfos").Return(nil).Maybe()
 
 		proto := protoauth.NewAuthProtocol(transports, keyStore, peerStore)
 		proto.Start()
 		defer proto.Close()
-
-		peerStore.On("AllDialInfos").Return(nil).Maybe()
-		peerStore.On("UnverifiedPeers").Return(nil).Maybe()
 
 		expectedErr := errors.New("")
 
@@ -153,15 +151,13 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		libp2p.On("Name").Return("libp2p")
 		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
 
-		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return()
-		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil)
+		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return().Maybe()
+		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil).Maybe()
+		peerStore.On("AllDialInfos").Return(nil).Maybe()
 
 		proto := protoauth.NewAuthProtocol(transports, keyStore, peerStore)
 		proto.Start()
 		defer proto.Close()
-
-		peerStore.On("AllDialInfos").Return(nil).Maybe()
-		peerStore.On("UnverifiedPeers").Return(nil).Maybe()
 
 		expectedErr := errors.New("")
 
