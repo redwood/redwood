@@ -115,9 +115,9 @@ func (c *HTTPClient) AddPeer(args AddPeerArgs) error {
 	return c.rpcClient.Call("RPC.AddPeer", args, nil)
 }
 
-func (c *HTTPClient) KnownStateURIs() ([]string, error) {
-	var resp KnownStateURIsResponse
-	return resp.StateURIs, c.rpcClient.Call("RPC.KnownStateURIs", nil, &resp)
+func (c *HTTPClient) StateURIsWithData() ([]string, error) {
+	var resp StateURIsWithDataResponse
+	return resp.StateURIs, c.rpcClient.Call("RPC.StateURIsWithData", nil, &resp)
 }
 
 func (c *HTTPClient) SendTx(args SendTxArgs) error {

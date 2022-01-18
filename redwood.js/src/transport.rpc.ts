@@ -48,8 +48,8 @@ export default function createRPCClient({ endpoint }: { endpoint: string }): RPC
             return (await rpcFetch(endpoint, 'RPC.NewIdentity')).Address as string
         },
 
-        knownStateURIs: async function () {
-            return (await rpcFetch(endpoint, 'RPC.KnownStateURIs')).StateURIs as string[]
+        stateURIsWithData: async function () {
+            return (await rpcFetch(endpoint, 'RPC.StateURIsWithData')).StateURIs as string[]
         },
 
         sendTx: async function (tx: RPCSendTx) {

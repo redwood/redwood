@@ -110,7 +110,6 @@ func NewTransport(
 	port uint,
 	reachableAt string,
 	bootstrapPeers []string,
-	// staticRelays []string,
 	datastorePath string,
 	dohDNSResolverURL string,
 	store Store,
@@ -286,7 +285,6 @@ func (t *transport) Start() error {
 	if t.reachableAt != "" {
 		myDialAddrs.Add(t.reachableAt)
 	}
-	// myDialAddrs = cleanLibp2pAddrs(myDialAddrs, t.peerID)
 
 	for dialAddr := range myDialAddrs {
 		identities, err := t.keyStore.Identities()
@@ -308,6 +306,10 @@ func (t *transport) Start() error {
 		announceStateURIsTask := NewAnnounceStateURIsTask(30*time.Second, t.controllerHub, t.dht)
 		announceStateURIsTask.Enqueue()
 		t.Process.SpawnChild(nil, announceStateURIsTask)
+		t.controllerHub.OnNewStateURIWithData(func(stateURI string) {
+			announceStateURIsTask.Abort()
+			announceStateURIsTask.Enqueue()
+		})
 	}
 
 	if t.blobStore != nil {
@@ -324,19 +326,35 @@ func (t *transport) Start() error {
 	t.peerStore.OnNewUnverifiedPeer(func(dialInfo swarm.PeerDialInfo) {
 		if dialInfo.TransportName != TransportName {
 			return
+		} else if dialInfo.DialAddr == "" {
+			return
 		} else if strings.Contains(dialInfo.DialAddr, "/p2p-circuit") {
 			return
 		}
+
+		peerMultiaddr, err := ma.NewMultiaddr(dialInfo.DialAddr)
+		if err != nil {
+			return
+		}
+
+		peerID, err := peerMultiaddr.ValueForProtocol(ma.P_P2P)
+		if err != nil {
+			return
+		}
+
 		go func() {
-			for _, relayInfo := range staticRelays {
-				for _, relayAddr := range relayInfo.Addrs {
-					idx := strings.Index(dialInfo.DialAddr, "/p2p/")
-					if idx == -1 {
-						continue
-					}
-					relayPeerAddr := relayAddr.String() + "/p2p/" + relayInfo.ID.String() + "/p2p-circuit" + dialInfo.DialAddr[idx:]
-					t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: relayPeerAddr}, dialInfo.DialAddr[idx+len("/p2p/"):])
+			for relayAddr := range t.StaticRelays() {
+				relayMultiaddr, err := ma.NewMultiaddr(relayAddr)
+				if err != nil {
+					return
 				}
+
+				relayID, err := relayMultiaddr.ValueForProtocol(ma.P_P2P)
+				if err != nil {
+					return
+				}
+				relayPeerAddr := "/p2p/" + relayID + "/p2p-circuit/p2p/" + peerID
+				t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: relayPeerAddr}, peerID)
 			}
 		}()
 	})
@@ -423,6 +441,10 @@ func (t *transport) StaticRelays() types.StringSet {
 }
 
 func (t *transport) AddStaticRelay(relayAddr string) error {
+	_, err := ma.NewMultiaddr(relayAddr)
+	if err != nil {
+		return err
+	}
 	return t.store.AddStaticRelay(relayAddr)
 }
 
@@ -434,10 +456,16 @@ func (t *transport) Listen(network netp2p.Network, multiaddr ma.Multiaddr)      
 func (t *transport) ListenClose(network netp2p.Network, multiaddr ma.Multiaddr) {}
 
 func (t *transport) Connected(network netp2p.Network, conn netp2p.Conn) {
-	t.addPeerInfosToPeerStore(t.Peers())
-
 	addr := conn.RemoteMultiaddr().String() + "/p2p/" + conn.RemotePeer().Pretty()
 	t.Debugf("libp2p connected: %v", addr)
+
+	// Don't add static relays to the peer store
+	for relayAddr := range t.StaticRelays() {
+		if addr == relayAddr {
+			return
+		}
+	}
+
 	t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: addr}, deviceUniqueID(conn.RemotePeer()))
 }
 
@@ -484,17 +512,38 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 		return
 	}
 
-	var i uint
-	for _, dialInfo := range peerDialInfosFromPeerInfo(pinfo) {
-		if !t.peerStore.IsKnownPeer(dialInfo) {
-			i++
+	// if strings.Contains(pinfo.String(), "/ip4/127.0.0.1/") || strings.Contains(pinfo.String(), "/ip4/10.0.0") {
+	// 	t.Warnf("yeet 3 %v", pinfo)
+	// 	return
+	// }
+
+	ctx, cancel := utils.CombinedContext(t.Process.Ctx(), 10*time.Second)
+	defer cancel()
+
+	// Don't add static relays to the peer store
+	for _, multiaddr := range multiaddrsFromPeerInfo(pinfo) {
+		for relayAddr := range t.StaticRelays() {
+			if multiaddr.String() == relayAddr {
+				peer, err := t.makeDisconnectedPeerConn(pinfo)
+				if err != nil {
+					t.Errorf("while making disconnected peer conn (%v): %v", pinfo.ID.Pretty(), err)
+					return
+				}
+				_ = peer.EnsureConnected(ctx)
+				return
+			}
 		}
 	}
 
-	if i > 0 {
-		t.Infof(0, "%v: peer %+v found", via, pinfo.ID.Pretty())
-		t.addPeerInfosToPeerStore([]corepeer.AddrInfo{pinfo})
+	var known bool
+	for _, dialInfo := range peerDialInfosFromPeerInfo(pinfo) {
+		known = known || t.peerStore.IsKnownPeer(dialInfo)
 	}
+
+	if !known {
+		t.Infof(0, "%v: peer %+v found", via, pinfo.ID.Pretty())
+	}
+	t.addPeerInfosToPeerStore([]corepeer.AddrInfo{pinfo})
 
 	peer, err := t.makeDisconnectedPeerConn(pinfo)
 	if err != nil {
@@ -505,9 +554,6 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	if !peer.Ready() || !peer.Dialable() {
 		return
 	}
-
-	ctx, cancel := utils.CombinedContext(t.Process.Ctx(), 10*time.Second)
-	defer cancel()
 
 	_ = peer.EnsureConnected(ctx)
 	// if err != nil {
@@ -801,7 +847,7 @@ func (t *transport) AnnounceBlob(ctx context.Context, refID blob.ID) error {
 	}
 
 	err = t.dht.Provide(ctx, c, true)
-	if err != nil && err != kbucket.ErrLookupFailure {
+	if err != nil && err != kbucket.ErrLookupFailure && !strings.Contains(err.Error(), "context deadline exceeded") {
 		t.Errorf(`announce: could not dht.Provide ref "%v": %v`, refID.String(), err)
 		return err
 	}
@@ -896,7 +942,7 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 			defer cancel()
 
 			err := t.transport.AnnounceBlob(ctx, sha1)
-			if err != nil {
+			if err != nil && !strings.Contains(err.Error(), "context deadline exceeded") {
 				t.Errorf("announce: error: %v", err)
 			}
 		})
@@ -906,7 +952,7 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 	for _, sha3 := range sha3s {
 		chDone := t.Process.Go(nil, sha3.String(), func(ctx context.Context) {
 			err := t.transport.AnnounceBlob(ctx, sha3)
-			if err != nil {
+			if err != nil && !strings.Contains(err.Error(), "context deadline exceeded") {
 				t.Errorf("announce: error: %v", err)
 			}
 		})
@@ -944,7 +990,7 @@ func NewAnnounceStateURIsTask(
 
 func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 	// Announce the state URIs we're serving
-	stateURIs, err := t.controllerHub.KnownStateURIs()
+	stateURIs, err := t.controllerHub.StateURIsWithData()
 	if err != nil {
 		t.Errorf("error fetching known state URIs from DB: %v", err)
 		return
@@ -954,7 +1000,7 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 	for stateURI := range stateURIs {
 		stateURI := stateURI
 
-		chDone := t.Process.Go(nil, stateURI, func(ctx context.Context) {
+		chDone := t.Process.Go(ctx, stateURI, func(ctx context.Context) {
 			c, err := cidForString("serve:" + stateURI)
 			if err != nil {
 				t.Errorf("announce: error creating cid: %v", err)
@@ -962,7 +1008,7 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 			}
 
 			err = t.dht.Provide(ctx, c, true)
-			if err != nil && err != kbucket.ErrLookupFailure {
+			if err != nil && err != kbucket.ErrLookupFailure && errors.Cause(err) != context.DeadlineExceeded {
 				t.Errorf(`announce: could not dht.Provide stateURI "%v": %v`, stateURI, err)
 				return
 			}

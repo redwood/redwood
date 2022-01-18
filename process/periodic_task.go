@@ -2,6 +2,7 @@ package process
 
 import (
 	"context"
+	"sync"
 
 	"redwood.dev/utils"
 )
@@ -10,6 +11,8 @@ type PeriodicTask struct {
 	Process
 	ticker  utils.Ticker
 	mailbox *utils.Mailbox
+	abort   context.CancelFunc
+	abortMu sync.Mutex
 	taskFn  func(ctx context.Context)
 }
 
@@ -30,22 +33,32 @@ func (task *PeriodicTask) Start() error {
 	task.ticker.Start()
 
 	task.Process.Go(nil, "ticker", func(ctx context.Context) {
-	Loop:
 		for {
 			select {
 			case <-ctx.Done():
 				return
-
-			case <-task.ticker.Notify():
-				task.Enqueue()
-
-			case <-task.mailbox.Notify():
-				x := task.mailbox.Retrieve()
-				if x == nil {
-					continue Loop
-				}
-				task.taskFn(ctx)
+			default:
 			}
+			func() {
+				task.abortMu.Lock()
+				ctx, task.abort = context.WithCancel(ctx)
+				task.abortMu.Unlock()
+
+				select {
+				case <-ctx.Done():
+					return
+
+				case <-task.ticker.Notify():
+					task.Enqueue()
+
+				case <-task.mailbox.Notify():
+					x := task.mailbox.Retrieve()
+					if x == nil {
+						return
+					}
+					task.taskFn(ctx)
+				}
+			}()
 		}
 	})
 	return nil
@@ -58,4 +71,10 @@ func (task *PeriodicTask) Close() error {
 
 func (task *PeriodicTask) Enqueue() {
 	task.mailbox.Deliver(struct{}{})
+}
+
+func (task *PeriodicTask) Abort() {
+	task.abortMu.Lock()
+	defer task.abortMu.Unlock()
+	task.abort()
 }

@@ -286,7 +286,7 @@ var (
 	CmdStateURIs = REPLCommand{
 		HelpText: "list all known state URIs",
 		Handler: func(args []string, app *App) error {
-			stateURIs, err := app.ControllerHub.KnownStateURIs()
+			stateURIs, err := app.ControllerHub.StateURIsWithData()
 			if err != nil {
 				return err
 			}

@@ -18,7 +18,7 @@ export interface RPCClient {
     subscribe: ({ stateURI, keypath, txs, states }: RPCSubscribeParams) => void
     identities: () => Promise<RPCIdentitiesResponse[]>
     newIdentity: () => Promise<string>
-    knownStateURIs: () => Promise<string[]>
+    stateURIsWithData: () => Promise<string[]>
     sendTx: (tx: RPCSendTx) => void
     addPeer: (dialInfo: PeerDialInfo) => void
     staticRelays: () => Promise<string[]>

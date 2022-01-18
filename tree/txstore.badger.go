@@ -1,6 +1,8 @@
 package tree
 
 import (
+	"sync"
+
 	"github.com/dgraph-io/badger/v2"
 
 	"redwood.dev/errors"
@@ -11,8 +13,10 @@ import (
 
 type badgerTxStore struct {
 	log.Logger
-	db         *badger.DB
-	badgerOpts badger.Options
+	db                             *badger.DB
+	badgerOpts                     badger.Options
+	newStateURIWithDataListeners   []NewStateURIWithDataCallback
+	newStateURIWithDataListenersMu sync.RWMutex
 }
 
 func NewBadgerTxStore(badgerOpts badger.Options) TxStore {
@@ -47,10 +51,8 @@ func makeTxKey(stateURI string, txID state.Version) []byte {
 	return append([]byte("tx:"+stateURI+":"), txID[:]...)
 }
 
-func (p *badgerTxStore) AddStateURI(stateURI string) error {
-	return p.db.Update(func(txn *badger.Txn) error {
-		return txn.Set([]byte("stateuri:"+stateURI), nil)
-	})
+func makeStateURIKey(stateURI string) []byte {
+	return []byte("stateuri:" + stateURI)
 }
 
 func (p *badgerTxStore) AddTx(tx Tx) (err error) {
@@ -60,6 +62,8 @@ func (p *badgerTxStore) AddTx(tx Tx) (err error) {
 	if err != nil {
 		return err
 	}
+
+	var isNewStateURI bool
 
 	key := makeTxKey(tx.StateURI, tx.ID)
 	err = p.db.Update(func(txn *badger.Txn) error {
@@ -71,6 +75,11 @@ func (p *badgerTxStore) AddTx(tx Tx) (err error) {
 
 		// Add the new tx to the `.Children` slice on each of its parents
 		if tx.Status == TxStatusValid {
+			isNewStateURI, err = p.isStateURIWithData(txn, tx.StateURI)
+			if err != nil {
+				return err
+			}
+
 			for _, parentID := range tx.Parents {
 				item, err := txn.Get(makeTxKey(tx.StateURI, parentID))
 				if err != nil {
@@ -99,7 +108,7 @@ func (p *badgerTxStore) AddTx(tx Tx) (err error) {
 		}
 
 		// We need to keep track of all of the state URIs we know about
-		err = txn.Set([]byte("stateuri:"+tx.StateURI), nil)
+		err = txn.Set(makeStateURIKey(tx.StateURI), nil)
 		if err != nil {
 			return err
 		}
@@ -109,6 +118,15 @@ func (p *badgerTxStore) AddTx(tx Tx) (err error) {
 		p.Errorf("failed to write tx %v: %v", tx.ID.Pretty(), err)
 		return err
 	}
+
+	if isNewStateURI {
+		p.newStateURIWithDataListenersMu.RLock()
+		defer p.newStateURIWithDataListenersMu.RUnlock()
+		for _, fn := range p.newStateURIWithDataListeners {
+			fn(tx.StateURI)
+		}
+	}
+
 	p.Infof(0, "wrote tx %v %v (status: %v)", tx.StateURI, tx.ID.Pretty(), tx.Status)
 	return nil
 }
@@ -221,7 +239,7 @@ func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID state.Versio
 	return txIter
 }
 
-func (s *badgerTxStore) KnownStateURIs() (types.StringSet, error) {
+func (s *badgerTxStore) StateURIsWithData() (types.StringSet, error) {
 	stateURIs := types.NewStringSet(nil)
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -237,6 +255,30 @@ func (s *badgerTxStore) KnownStateURIs() (types.StringSet, error) {
 		return nil
 	})
 	return stateURIs, err
+}
+
+func (s *badgerTxStore) IsStateURIWithData(stateURI string) (is bool, err error) {
+	err = s.db.View(func(txn *badger.Txn) error {
+		is, err = s.isStateURIWithData(txn, stateURI)
+		return err
+	})
+	return
+}
+
+func (s *badgerTxStore) isStateURIWithData(txn *badger.Txn, stateURI string) (is bool, err error) {
+	_, err = txn.Get(makeStateURIKey(stateURI))
+	if errors.Cause(err) == badger.ErrKeyNotFound {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *badgerTxStore) OnNewStateURIWithData(fn NewStateURIWithDataCallback) {
+	s.newStateURIWithDataListenersMu.Lock()
+	defer s.newStateURIWithDataListenersMu.Unlock()
+	s.newStateURIWithDataListeners = append(s.newStateURIWithDataListeners, fn)
 }
 
 func (s *badgerTxStore) MarkLeaf(stateURI string, txID state.Version) error {
