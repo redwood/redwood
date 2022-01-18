@@ -484,6 +484,10 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 		return
 	}
 
+	if strings.Contains(pinfo.String(), "127.0.0.1") || strings.Contains(pinfo.String(), "/ip4/10.0.0") {
+		return
+	}
+
 	var i uint
 	for _, dialInfo := range peerDialInfosFromPeerInfo(pinfo) {
 		if !t.peerStore.IsKnownPeer(dialInfo) {
@@ -801,7 +805,7 @@ func (t *transport) AnnounceBlob(ctx context.Context, refID blob.ID) error {
 	}
 
 	err = t.dht.Provide(ctx, c, true)
-	if err != nil && err != kbucket.ErrLookupFailure {
+	if err != nil && err != kbucket.ErrLookupFailure && !strings.Contains(err.Error(), "context deadline exceeded") {
 		t.Errorf(`announce: could not dht.Provide ref "%v": %v`, refID.String(), err)
 		return err
 	}
@@ -896,7 +900,7 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 			defer cancel()
 
 			err := t.transport.AnnounceBlob(ctx, sha1)
-			if err != nil {
+			if err != nil && !strings.Contains(err.Error(), "context deadline exceeded") {
 				t.Errorf("announce: error: %v", err)
 			}
 		})
@@ -906,7 +910,7 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 	for _, sha3 := range sha3s {
 		chDone := t.Process.Go(nil, sha3.String(), func(ctx context.Context) {
 			err := t.transport.AnnounceBlob(ctx, sha3)
-			if err != nil {
+			if err != nil && !strings.Contains(err.Error(), "context deadline exceeded") {
 				t.Errorf("announce: error: %v", err)
 			}
 		})

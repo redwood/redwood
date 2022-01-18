@@ -267,34 +267,44 @@ func (t verifyPeer) DedupeActiveUniqueID() process.PoolUniqueID { return t }
 func (t verifyPeer) ID() process.PoolUniqueID                   { return t }
 
 func (t verifyPeer) Work(ctx context.Context) (retry bool) {
+	t.authProto.Warnf("verifyPeer %v", t.dialInfo)
+
 	unverifiedPeer := t.authProto.peerStore.PeerEndpoint(t.dialInfo)
 	if unverifiedPeer == nil {
+		t.authProto.Warnf("verifyPeer %v == nil", t.dialInfo)
 		return true
 	}
 
 	if !unverifiedPeer.Ready() {
+		t.authProto.Warnf("verifyPeer %v not ready", t.dialInfo)
 		return true
 	} else if !unverifiedPeer.Dialable() {
+		t.authProto.Warnf("verifyPeer %v not dialable", t.dialInfo)
 		return false
 	}
 
 	transport, exists := t.authProto.transports[unverifiedPeer.DialInfo().TransportName]
 	if !exists {
 		// Unsupported transport
+		t.authProto.Warnf("verifyPeer %v unsupported transport", t.dialInfo)
 		return false
 	}
 
 	peerConn, err := transport.NewPeerConn(ctx, unverifiedPeer.DialInfo().DialAddr)
 	if errors.Cause(err) == swarm.ErrPeerIsSelf {
+		t.authProto.Warnf("verifyPeer %v peer is self", t.dialInfo)
 		return false
 	} else if errors.Cause(err) == errors.ErrConnection {
+		t.authProto.Warnf("verifyPeer %v connection error", t.dialInfo)
 		return true
 	} else if err != nil {
+		t.authProto.Warnf("verifyPeer %v ERR: %+v", t.dialInfo, err)
 		return true
 	}
 
 	authPeerConn, is := peerConn.(AuthPeerConn)
 	if !is {
+		t.authProto.Warnf("verifyPeer %v is not auth peer", t.dialInfo)
 		return false
 	}
 	defer authPeerConn.Close()
@@ -304,17 +314,21 @@ func (t verifyPeer) Work(ctx context.Context) (retry bool) {
 
 	err = authPeerConn.EnsureConnected(ctx)
 	if err != nil {
+		t.authProto.Warnf("verifyPeer %v ERR 2: %+v", t.dialInfo, err)
 		return true
 	}
 
 	err = t.authProto.ChallengePeerIdentity(ctx, authPeerConn)
 	if errors.Cause(err) == errors.ErrConnection {
 		// no-op
+		t.authProto.Warnf("verifyPeer %v ERR 3: %+v", t.dialInfo, err)
 		return true
 	} else if errors.Cause(err) == context.Canceled {
 		// no-op
+		t.authProto.Warnf("verifyPeer %v ERR 4: %+v", t.dialInfo, err)
 		return true
 	} else if err != nil {
+		t.authProto.Warnf("verifyPeer %v ERR 5: %+v", t.dialInfo, err)
 		return true
 	}
 	t.authProto.Successf("authenticated with %v (addresses=%v)", t.dialInfo, authPeerConn.Addresses())
