@@ -446,7 +446,7 @@ func (t *transport) Connected(network netp2p.Network, conn netp2p.Conn) {
 
 	// Don't add static relays to the peer store
 	for relayAddr := range t.StaticRelays() {
-		if conn.RemoteMultiaddr().String() == relayAddr {
+		if addr == relayAddr {
 			return
 		}
 	}
@@ -501,6 +501,19 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 		return
 	}
 
+	ctx, cancel := utils.CombinedContext(t.Process.Ctx(), 10*time.Second)
+	defer cancel()
+
+	// Don't add static relays to the peer store
+	for _, multiaddr := range multiaddrsFromPeerInfo(pinfo) {
+		for relayAddr := range t.StaticRelays() {
+			if multiaddr.String() == relayAddr {
+				_ = peer.EnsureConnected(ctx)
+				return
+			}
+		}
+	}
+
 	var known bool
 	for _, dialInfo := range peerDialInfosFromPeerInfo(pinfo) {
 		known = known || t.peerStore.IsKnownPeer(dialInfo)
@@ -520,9 +533,6 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	if !peer.Ready() || !peer.Dialable() {
 		return
 	}
-
-	ctx, cancel := utils.CombinedContext(t.Process.Ctx(), 10*time.Second)
-	defer cancel()
 
 	_ = peer.EnsureConnected(ctx)
 	// if err != nil {
