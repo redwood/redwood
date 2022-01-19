@@ -508,6 +508,11 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	for _, multiaddr := range multiaddrsFromPeerInfo(pinfo) {
 		for relayAddr := range t.StaticRelays() {
 			if multiaddr.String() == relayAddr {
+				peer, err := t.makeDisconnectedPeerConn(pinfo)
+				if err != nil {
+					t.Errorf("while making disconnected peer conn (%v): %v", pinfo.ID.Pretty(), err)
+					return
+				}
 				_ = peer.EnsureConnected(ctx)
 				return
 			}
