@@ -434,7 +434,7 @@ func (app *App) Start() error {
 				select {
 				case <-time.After(3 * time.Second):
 					// @@TODO: use stateURI subscriptions for this
-					stateURIs, err := app.ControllerHub.KnownStateURIs()
+					stateURIs, err := app.ControllerHub.StateURIsWithData()
 					if err != nil {
 						continue
 					}

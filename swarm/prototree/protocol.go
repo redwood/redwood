@@ -547,11 +547,6 @@ func (tp *treeProtocol) Subscribe(ctx context.Context, stateURI string) error {
 		return errors.Wrap(err, "while updating config store")
 	}
 
-	_, err = tp.controllerHub.EnsureController(stateURI)
-	if err != nil {
-		return err
-	}
-
 	switch treeType {
 	case StateURIType_Invalid:
 		return errors.Errorf("invalid state URI: %v", stateURI)
@@ -889,7 +884,7 @@ func NewAnnounceP2PStateURIsTask(
 }
 
 func (t *announceP2PStateURIsTask) announceP2PStateURIs(ctx context.Context) {
-	stateURIs, err := t.treeProto.txStore.KnownStateURIs()
+	stateURIs, err := t.treeProto.txStore.StateURIsWithData()
 	if err != nil {
 		t.Errorf("while fetching state URIs from tx store: %v", err)
 		return

@@ -95,11 +95,6 @@ func (c *controller) Start() (err error) {
 		return err
 	}
 
-	err = c.txStore.AddStateURI(c.stateURI)
-	if err != nil {
-		return err
-	}
-
 	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(c.stateURI)
 	states, err := state.NewVersionedDBTree(c.badgerOpts.ForPath(filepath.Join(c.stateDBRootPath, stateURIClean)))
 	if err != nil {

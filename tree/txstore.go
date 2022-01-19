@@ -9,19 +9,22 @@ type TxStore interface {
 	Start() error
 	Close()
 
-	AddStateURI(stateURI string) error
 	AddTx(tx Tx) error
 	RemoveTx(stateURI string, txID state.Version) error
 	TxExists(stateURI string, txID state.Version) (bool, error)
 	FetchTx(stateURI string, txID state.Version) (Tx, error)
 	AllTxsForStateURI(stateURI string, fromTxID state.Version) TxIterator
-	KnownStateURIs() (types.StringSet, error)
+	IsStateURIWithData(stateURI string) (bool, error)
+	StateURIsWithData() (types.StringSet, error)
+	OnNewStateURIWithData(fn NewStateURIWithDataCallback)
 	MarkLeaf(stateURI string, txID state.Version) error
 	UnmarkLeaf(stateURI string, txID state.Version) error
 	Leaves(stateURI string) ([]state.Version, error)
 
 	DebugPrint()
 }
+
+type NewStateURIWithDataCallback func(stateURI string)
 
 type TxIterator interface {
 	Next() *Tx

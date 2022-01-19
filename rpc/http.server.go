@@ -276,17 +276,17 @@ func (s *HTTPServer) RemoveStaticRelay(r *http.Request, args *RemoveStaticRelayA
 }
 
 type (
-	KnownStateURIsArgs     struct{}
-	KnownStateURIsResponse struct {
+	StateURIsWithDataArgs     struct{}
+	StateURIsWithDataResponse struct {
 		StateURIs []string
 	}
 )
 
-func (s *HTTPServer) KnownStateURIs(r *http.Request, args *KnownStateURIsArgs, resp *KnownStateURIsResponse) error {
+func (s *HTTPServer) StateURIsWithData(r *http.Request, args *StateURIsWithDataArgs, resp *StateURIsWithDataResponse) error {
 	if s.controllerHub == nil {
 		return errors.ErrUnsupported
 	}
-	stateURIs, err := s.controllerHub.KnownStateURIs()
+	stateURIs, err := s.controllerHub.StateURIsWithData()
 	if err != nil {
 		return err
 	}

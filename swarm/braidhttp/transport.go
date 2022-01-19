@@ -418,11 +418,11 @@ func (t *transport) serveHeadRequest(w http.ResponseWriter, r *http.Request) {
 	if req.StateURI == "" {
 		req.StateURI = t.defaultStateURI
 	}
-	stateURIs, err := t.controllerHub.KnownStateURIs()
+	isKnown, err := t.controllerHub.IsStateURIWithData(req.StateURI)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	} else if !stateURIs.Contains(req.StateURI) {
+	} else if !isKnown {
 		http.Error(w, "state URI not found", http.StatusNotFound)
 		return
 	}
