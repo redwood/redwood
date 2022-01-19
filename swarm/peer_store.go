@@ -193,6 +193,7 @@ func (s *peerStore) notifyNewVerifiedPeerListeners(peer PeerInfo) {
 }
 
 func (s *peerStore) AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) PeerEndpoint {
+	s.Debugf("AddDialInfo %v (%v)", dialInfo, deviceUniqueID)
 	if deviceUniqueID == "" || dialInfo.DialAddr == "" {
 		pd := newPeerDetails(s, "")
 		e := &endpoint{

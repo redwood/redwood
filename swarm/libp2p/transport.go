@@ -250,6 +250,8 @@ func (t *transport) Start() error {
 			}
 
 			func() {
+				t.Successf("find peers loop")
+
 				ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 				defer cancel()
 
@@ -259,6 +261,7 @@ func (t *transport) Start() error {
 					return
 				}
 				for pinfo := range chPeers {
+					t.Successf("find peers loop -> %v", pinfo.String())
 					if pinfo.ID == t.peerID {
 						continue
 					} else if len(t.libp2pHost.Network().ConnsToPeer(pinfo.ID)) > 0 {
@@ -434,10 +437,20 @@ func (t *transport) Listen(network netp2p.Network, multiaddr ma.Multiaddr)      
 func (t *transport) ListenClose(network netp2p.Network, multiaddr ma.Multiaddr) {}
 
 func (t *transport) Connected(network netp2p.Network, conn netp2p.Conn) {
-	t.addPeerInfosToPeerStore(t.Peers())
+	// t.StaticRelays().Contains()
+
+	// t.addPeerInfosToPeerStore(t.Peers())
 
 	addr := conn.RemoteMultiaddr().String() + "/p2p/" + conn.RemotePeer().Pretty()
 	t.Debugf("libp2p connected: %v", addr)
+
+	// Don't add static relays to the peer store
+	for relayAddr := range t.StaticRelays() {
+		if conn.RemoteMultiaddr().String() == relayAddr {
+			return
+		}
+	}
+
 	t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: addr}, deviceUniqueID(conn.RemotePeer()))
 }
 
@@ -484,18 +497,16 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 		return
 	}
 
-	if strings.Contains(pinfo.String(), "127.0.0.1") || strings.Contains(pinfo.String(), "/ip4/10.0.0") {
+	if strings.Contains(pinfo.String(), "/ip4/127.0.0.1/") || strings.Contains(pinfo.String(), "/ip4/10.0.0") {
 		return
 	}
 
-	var i uint
+	var known bool
 	for _, dialInfo := range peerDialInfosFromPeerInfo(pinfo) {
-		if !t.peerStore.IsKnownPeer(dialInfo) {
-			i++
-		}
+		known = known || t.peerStore.IsKnownPeer(dialInfo)
 	}
 
-	if i > 0 {
+	if !known {
 		t.Infof(0, "%v: peer %+v found", via, pinfo.ID.Pretty())
 		t.addPeerInfosToPeerStore([]corepeer.AddrInfo{pinfo})
 	}

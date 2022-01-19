@@ -298,7 +298,7 @@ func (t verifyPeer) Work(ctx context.Context) (retry bool) {
 		t.authProto.Warnf("verifyPeer %v connection error", t.dialInfo)
 		return true
 	} else if err != nil {
-		t.authProto.Warnf("verifyPeer %v ERR: %+v", t.dialInfo, err)
+		t.authProto.Warnf("verifyPeer %v ERR: %v", t.dialInfo, err)
 		return true
 	}
 
@@ -314,21 +314,21 @@ func (t verifyPeer) Work(ctx context.Context) (retry bool) {
 
 	err = authPeerConn.EnsureConnected(ctx)
 	if err != nil {
-		t.authProto.Warnf("verifyPeer %v ERR 2: %+v", t.dialInfo, err)
+		t.authProto.Warnf("verifyPeer %v ERR 2: %v", t.dialInfo, err)
 		return true
 	}
 
 	err = t.authProto.ChallengePeerIdentity(ctx, authPeerConn)
 	if errors.Cause(err) == errors.ErrConnection {
 		// no-op
-		t.authProto.Warnf("verifyPeer %v ERR 3: %+v", t.dialInfo, err)
+		t.authProto.Warnf("verifyPeer %v ERR 3: %v", t.dialInfo, err)
 		return true
 	} else if errors.Cause(err) == context.Canceled {
 		// no-op
-		t.authProto.Warnf("verifyPeer %v ERR 4: %+v", t.dialInfo, err)
+		t.authProto.Warnf("verifyPeer %v ERR 4: %v", t.dialInfo, err)
 		return true
 	} else if err != nil {
-		t.authProto.Warnf("verifyPeer %v ERR 5: %+v", t.dialInfo, err)
+		t.authProto.Warnf("verifyPeer %v ERR 5: %v", t.dialInfo, err)
 		return true
 	}
 	t.authProto.Successf("authenticated with %v (addresses=%v)", t.dialInfo, authPeerConn.Addresses())
