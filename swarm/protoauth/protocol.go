@@ -11,7 +11,6 @@ import (
 	"redwood.dev/process"
 	"redwood.dev/swarm"
 	"redwood.dev/types"
-	"redwood.dev/utils"
 )
 
 //go:generate mockery --name AuthProtocol --output ./mocks/ --case=underscore
@@ -78,17 +77,12 @@ func (ap *authProtocol) Start() error {
 		return err
 	}
 
-	announcePeersTask := NewAnnouncePeersTask(10*time.Second, ap, ap.peerStore, ap.transports)
 	ap.peerStore.OnNewUnverifiedPeer(func(dialInfo swarm.PeerDialInfo) {
 		ap.Debugf("new unverified peer: %+v", dialInfo)
 		// @@TODO: the following line causes some kind of infinite loop when > 1 peer is online
 		// announcePeersTask.Enqueue()
 		ap.poolWorker.Add(verifyPeer{dialInfo, ap})
 	})
-	err = ap.Process.SpawnChild(nil, announcePeersTask)
-	if err != nil {
-		return err
-	}
 
 	go func() {
 		for {
@@ -181,77 +175,6 @@ func (ap *authProtocol) handleChallengeIdentity(challengeMsg ChallengeMsg, peerC
 		return err
 	}
 	return nil
-}
-
-type announcePeersTask struct {
-	process.PeriodicTask
-	log.Logger
-	authProto  AuthProtocol
-	peerStore  swarm.PeerStore
-	transports map[string]AuthTransport
-}
-
-func NewAnnouncePeersTask(
-	interval time.Duration,
-	authProto AuthProtocol,
-	peerStore swarm.PeerStore,
-	transports map[string]AuthTransport,
-) *announcePeersTask {
-	t := &announcePeersTask{
-		Logger:     log.NewLogger(ProtocolName),
-		authProto:  authProto,
-		peerStore:  peerStore,
-		transports: transports,
-	}
-	t.PeriodicTask = *process.NewPeriodicTask("AnnouncePeersTask", utils.NewStaticTicker(interval), t.announcePeers)
-	return t
-}
-
-func (t *announcePeersTask) announcePeers(ctx context.Context) {
-	// Announce peers
-	{
-		var allDialInfos []swarm.PeerDialInfo
-		for dialInfo := range t.peerStore.AllDialInfos() {
-			allDialInfos = append(allDialInfos, dialInfo)
-		}
-
-		for _, tpt := range t.transports {
-			for _, peerDetails := range t.peerStore.PeersFromTransport(tpt.Name()) {
-				if !peerDetails.Ready() || !peerDetails.Dialable() {
-					continue
-				} else if peerDetails.DialInfo().TransportName != tpt.Name() {
-					continue
-				}
-
-				tpt := tpt
-				peerDetails := peerDetails
-
-				t.Process.Go(nil, "announce peers", func(ctx context.Context) {
-					peerConn, err := tpt.NewPeerConn(ctx, peerDetails.DialInfo().DialAddr)
-					if errors.Cause(err) == swarm.ErrPeerIsSelf {
-						return
-					} else if err != nil {
-						t.Warnf("error creating new %v peerConn: %v", tpt.Name(), err)
-						return
-					}
-					defer peerConn.Close()
-
-					err = peerConn.EnsureConnected(ctx)
-					if errors.Cause(err) == errors.ErrConnection {
-						return
-					} else if err != nil {
-						t.Warnf("error connecting to %v peerConn (%v): %v", tpt.Name(), peerDetails.DialInfo().DialAddr, err)
-						return
-					}
-
-					err = peerConn.AnnouncePeers(ctx, allDialInfos)
-					if err != nil {
-						// t.Errorf("error writing to peerConn: %+v", err)
-					}
-				})
-			}
-		}
-	}
 }
 
 type verifyPeer struct {

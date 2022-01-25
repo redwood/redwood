@@ -24,6 +24,7 @@ require (
 	github.com/ipfs/go-cid v0.0.7
 	github.com/ipfs/go-datastore v0.4.5
 	github.com/ipfs/go-ds-badger2 v0.1.1 // indirect
+	github.com/ipfs/go-ipns v0.0.2 // indirect
 	github.com/libgit2/git2go v27.10.0+incompatible // indirect
 	github.com/libgit2/git2go/v33 v33.0.4 // indirect
 	github.com/libp2p/go-doh-resolver v0.3.1 // indirect

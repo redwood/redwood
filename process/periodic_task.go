@@ -40,10 +40,6 @@ func (task *PeriodicTask) Start() error {
 			default:
 			}
 			func() {
-				task.abortMu.Lock()
-				ctx, task.abort = context.WithCancel(ctx)
-				task.abortMu.Unlock()
-
 				select {
 				case <-ctx.Done():
 					return
@@ -56,7 +52,13 @@ func (task *PeriodicTask) Start() error {
 					if x == nil {
 						return
 					}
-					task.taskFn(ctx)
+
+					task.abortMu.Lock()
+					innerCtx, innerCancel := context.WithCancel(ctx)
+					task.abort = innerCancel
+					task.abortMu.Unlock()
+
+					task.taskFn(innerCtx)
 				}
 			}()
 		}
@@ -73,8 +75,15 @@ func (task *PeriodicTask) Enqueue() {
 	task.mailbox.Deliver(struct{}{})
 }
 
-func (task *PeriodicTask) Abort() {
+func (task *PeriodicTask) AbortIfRunning() {
 	task.abortMu.Lock()
 	defer task.abortMu.Unlock()
-	task.abort()
+	if task.abort != nil {
+		task.abort()
+	}
+}
+
+func (task *PeriodicTask) ForceRerun() {
+	task.AbortIfRunning()
+	task.Enqueue()
 }

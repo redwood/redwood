@@ -176,7 +176,7 @@ func (hp *hushProtocol) Start() error {
 		tpt.OnIncomingGroupMessage(hp.handleIncomingGroupMessage)
 	}
 
-	hp.peerStore.OnNewVerifiedPeer(func(peer swarm.PeerInfo) {
+	hp.peerStore.OnNewVerifiedPeer(func(peer swarm.PeerDevice) {
 		hp.poolWorker.Add(exchangeDHPubkeys{peer.DeviceUniqueID(), hp})
 	})
 
@@ -765,7 +765,7 @@ func (t exchangeDHPubkeys) Work(ctx context.Context) (retry bool) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	t.hushProto.withPeers(ctx, []swarm.PeerInfo{peer}, func(ctx context.Context, peerConn HushPeerConn) error {
+	t.hushProto.withPeers(ctx, []swarm.PeerDevice{peer}, func(ctx context.Context, peerConn HushPeerConn) error {
 		err = peerConn.SendDHPubkeyAttestations(ctx, attestations)
 		if err != nil {
 			t.hushProto.Errorf("while exchanging DH pubkey: %v", err)
@@ -1717,7 +1717,7 @@ func (hp *hushProtocol) onSessionOpened(proposalHash types.Hash, peerAddr types.
 
 func (hp *hushProtocol) withPeers(
 	ctx context.Context,
-	peers []swarm.PeerInfo,
+	peers []swarm.PeerDevice,
 	fn func(ctx context.Context, hushPeerConn HushPeerConn) error,
 ) {
 	tpts := make(map[string]swarm.Transport)

@@ -106,12 +106,7 @@ func (bn *bootstrapNode) Start() error {
 	opts.Options.EncryptionKey = bn.encryptionConfig.Key
 	opts.Options.EncryptionKeyRotationDuration = bn.encryptionConfig.KeyRotationInterval
 	opts.Options.IndexCacheSize = 100 << 20 // @@TODO: make configurable
-	// opts.Options.KeepL0InMemory = true      // @@TODO: make configurable
-	opts.Options.KeepL0InMemory = true // @@TODO: make configurable
-	// opts.MaxTableSize = 1 << 20
-	// opts.NumMemtables = 1
-	// opts.NumLevelZeroTables = 1
-	// opts.NumLevelZeroTablesStall = 5
+	opts.Options.KeepL0InMemory = true      // @@TODO: make configurable
 
 	datastore, err := badgerds.NewDatastore(bn.datastorePath, &opts)
 	if err != nil {
@@ -157,7 +152,7 @@ func (bn *bootstrapNode) Start() error {
 				dht.Mode(dht.ModeServer),
 				dht.Datastore(datastore),
 				dht.MaxRecordAge(dhtTTL),
-				// dht.Validator(blankValidator{}), // Set a pass-through validator
+				dht.RoutingTableFilter(dht.PublicRoutingTableFilter),
 			)
 			if err != nil {
 				return nil, err

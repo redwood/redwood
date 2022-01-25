@@ -46,10 +46,8 @@ type controllerHub struct {
 	dbRootPath    string
 	badgerOpts    badgerutils.OptsBuilder
 
-	newStateListeners      []NewStateCallback
-	newStateListenersMu    sync.RWMutex
-	newStateURIListeners   []NewStateURIWithDataCallback
-	newStateURIListenersMu sync.RWMutex
+	newStateListeners   []NewStateCallback
+	newStateListenersMu sync.RWMutex
 }
 
 var (
@@ -86,7 +84,7 @@ func (m *controllerHub) Start() (err error) {
 	}
 
 	for stateURI := range stateURIs {
-		_, err := m.ensureController(stateURI, true)
+		_, err := m.ensureController(stateURI)
 		if err != nil {
 			return err
 		}
@@ -95,7 +93,7 @@ func (m *controllerHub) Start() (err error) {
 	return nil
 }
 
-func (m *controllerHub) ensureController(stateURI string, isStartup bool) (Controller, error) {
+func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
 	m.controllersMu.Lock()
 	defer m.controllersMu.Unlock()
 
@@ -117,14 +115,6 @@ func (m *controllerHub) ensureController(stateURI string, isStartup bool) (Contr
 		}
 
 		m.controllers[stateURI] = ctrl
-
-		if !isStartup {
-			m.newStateURIListenersMu.RLock()
-			defer m.newStateURIListenersMu.RUnlock()
-			for _, fn := range m.newStateURIListeners {
-				fn(stateURI)
-			}
-		}
 	}
 	return ctrl, nil
 }
@@ -142,7 +132,7 @@ func (m *controllerHub) OnNewStateURIWithData(fn NewStateURIWithDataCallback) {
 }
 
 func (m *controllerHub) AddTx(tx Tx) error {
-	ctrl, err := m.ensureController(tx.StateURI, false)
+	ctrl, err := m.ensureController(tx.StateURI)
 	if err != nil {
 		return err
 	}

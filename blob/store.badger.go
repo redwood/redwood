@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/dgraph-io/badger/v2"
-	"go.uber.org/multierr"
 	"golang.org/x/crypto/sha3"
 
 	"redwood.dev/errors"
@@ -390,20 +389,32 @@ func (s *badgerStore) BlobIDs() (sha1s, sha3s []ID, _ error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	iter := newIDIterator(s.db)
-	defer iter.Close()
-
-	var errs error
-	for iter.Rewind(); iter.Valid(); iter.Next() {
-		if iter.Err() != nil {
-			errs = multierr.Append(errs, iter.Err())
-			continue
-		}
-		sha1, sha3 := iter.Current()
-		sha1s = append(sha1s, sha1)
-		sha3s = append(sha3s, sha3)
+	contents, err := s.Contents()
+	if err != nil {
+		return nil, nil, err
 	}
-	return sha1s, sha3s, errs
+
+Outer:
+	for sha3, chunks := range contents {
+		for _, have := range chunks {
+			if !have {
+				continue Outer
+			}
+		}
+		sha3s = append(sha3s, ID{HashAlg: types.SHA3, Hash: sha3})
+	}
+
+	node := s.db.State(false)
+	defer node.Close()
+
+	for _, id := range sha3s {
+		sha1, err := sha1ForSHA3(id.Hash, node)
+		if err != nil {
+			return nil, nil, err
+		}
+		sha1s = append(sha1s, ID{HashAlg: types.SHA1, Hash: sha1})
+	}
+	return sha1s, sha3s, nil
 }
 
 func (s *badgerStore) BlobsNeeded() ([]ID, error) {

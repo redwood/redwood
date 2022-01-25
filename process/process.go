@@ -83,7 +83,7 @@ func (p *Process) Start() error {
 
 func (p *Process) Close() error {
 	p.closeOnce.Do(func() {
-		p.Infof(0, p.name+" shutting down...")
+		// p.Infof(0, p.name+" shutting down...")
 		func() {
 			p.mu.Lock()
 			defer p.mu.Unlock()

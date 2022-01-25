@@ -728,7 +728,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 	return ch
 }
 
-func (tp *treeProtocol) peerInfosToPeerConns(ctx context.Context, peerInfos []swarm.PeerInfo) []TreePeerConn {
+func (tp *treeProtocol) peerInfosToPeerConns(ctx context.Context, peerInfos []swarm.PeerDevice) []TreePeerConn {
 	var conns []TreePeerConn
 	for _, peerInfo := range peerInfos {
 		for _, e := range peerInfo.Endpoints() {
@@ -789,12 +789,12 @@ func (tp *treeProtocol) handleNewState(tx tree.Tx, node state.Node, leaves []sta
 				return
 			}
 
-			var peerInfos []swarm.PeerInfo
+			var peerDevices []swarm.PeerDevice
 			for peerAddress := range members {
-				peerInfos = append(peerInfos, tp.peerStore.PeersWithAddress(peerAddress)...)
+				peerDevices = append(peerDevices, tp.peerStore.PeersWithAddress(peerAddress)...)
 			}
 			tp.Process.Go(nil, "ack "+tx.StateURI+" "+tx.ID.Hex(), func(ctx context.Context) {
-				tp.withPeers(ctx, peerInfos, func(ctx context.Context, treePeerConn TreePeerConn) error {
+				tp.withPeers(ctx, peerDevices, func(ctx context.Context, treePeerConn TreePeerConn) error {
 					return treePeerConn.Ack(tx.StateURI, tx.ID)
 				})
 			})
@@ -900,11 +900,11 @@ func (t *announceP2PStateURIsTask) announceP2PStateURIs(ctx context.Context) {
 			continue
 		}
 
-		var peerInfos []swarm.PeerInfo
+		var peerDevices []swarm.PeerDevice
 		for peerAddress := range members {
-			peerInfos = append(peerInfos, t.treeProto.peerStore.PeersWithAddress(peerAddress)...)
+			peerDevices = append(peerDevices, t.treeProto.peerStore.PeersWithAddress(peerAddress)...)
 		}
-		t.treeProto.withPeers(ctx, peerInfos, func(ctx context.Context, treePeerConn TreePeerConn) error {
+		t.treeProto.withPeers(ctx, peerDevices, func(ctx context.Context, treePeerConn TreePeerConn) error {
 			return treePeerConn.AnnounceP2PStateURI(ctx, stateURI)
 		})
 	}
@@ -1027,7 +1027,7 @@ func (t broadcastPrivateTx) Work(ctx context.Context) (retry bool) {
 
 func (tp *treeProtocol) withPeers(
 	ctx context.Context,
-	peers []swarm.PeerInfo,
+	peerDevices []swarm.PeerDevice,
 	fn func(ctx context.Context, treePeerConn TreePeerConn) error,
 ) {
 	tpts := make(map[string]swarm.Transport)
@@ -1036,7 +1036,7 @@ func (tp *treeProtocol) withPeers(
 	}
 
 	var chDones []<-chan struct{}
-	for _, peer := range peers {
+	for _, peer := range peerDevices {
 		chDone := swarm.TryEndpoints(ctx, tpts, peer.Endpoints(), func(ctx context.Context, peerConn swarm.PeerConn) error {
 			return fn(ctx, peerConn.(TreePeerConn))
 		})

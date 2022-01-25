@@ -243,7 +243,9 @@ func (s *HTTPServer) StaticRelays(r *http.Request, args *StaticRelaysArgs, resp 
 	if s.libp2pTransport == nil {
 		return errors.ErrUnsupported
 	}
-	resp.StaticRelays = s.libp2pTransport.StaticRelays().Slice()
+	for _, x := range s.libp2pTransport.StaticRelays().Slice() {
+		resp.StaticRelays = append(resp.StaticRelays, x.String())
+	}
 	return nil
 }
 

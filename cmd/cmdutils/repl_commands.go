@@ -259,7 +259,7 @@ var (
 			if app.Libp2pTransport == nil {
 				return errors.New("libp2p is disabled")
 			}
-			for relay := range app.Libp2pTransport.StaticRelays() {
+			for _, relay := range app.Libp2pTransport.StaticRelays().Slice() {
 				fmt.Println(" -", relay)
 			}
 			return nil
