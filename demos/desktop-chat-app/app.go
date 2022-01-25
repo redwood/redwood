@@ -33,8 +33,6 @@ type App struct {
 	devMode     bool
 }
 
-const AppName = "redwood-chat"
-
 func newApp(password, mnemonic, profileRoot, profileName, configPath string, devMode bool) (*App, error) {
 	app := &App{
 		Process:     *process.New("hush"),
@@ -48,8 +46,8 @@ func newApp(password, mnemonic, profileRoot, profileName, configPath string, dev
 	}
 
 	// Copy the default config and unmarshal the config file over it
-	cfg := cmdutils.DefaultConfig(AppName)
-	err := cmdutils.FindOrCreateConfigAtPath(&cfg, AppName, configPath)
+	cfg := cmdutils.DefaultConfig("hush")
+	err := cmdutils.FindOrCreateConfigAtPath(&cfg, "hush", configPath)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +80,7 @@ func newApp(password, mnemonic, profileRoot, profileName, configPath string, dev
 		return nil, err
 	}
 
-	app.app = cmdutils.NewApp(AppName, cfg)
+	app.app = cmdutils.NewApp("hush", cfg)
 
 	app.Info(0, utils.PrettyJSON(cfg))
 

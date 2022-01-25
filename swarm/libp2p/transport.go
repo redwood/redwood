@@ -1057,6 +1057,8 @@ func (t *connectToPeersTask) connectToPeers(outerCtx context.Context) {
 		peerID, err := corepeer.Decode(endpoint.DeviceUniqueID())
 		if err != nil {
 			continue
+		} else if peerID == t.tpt.libp2pHost.ID() {
+			continue
 		}
 
 		if len(t.tpt.libp2pHost.Network().ConnsToPeer(peerID)) > 0 {

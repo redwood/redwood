@@ -5,6 +5,9 @@ go 1.16
 replace redwood.dev => ../../
 
 require (
+	github.com/asticode/go-astikit v0.26.0
+	github.com/asticode/go-astilectron v0.27.0
+	github.com/asticode/go-astilectron-bootstrap v0.4.14
 	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/deoxxa/otto v0.0.0-20200922221731-ef014fd054ac // indirect

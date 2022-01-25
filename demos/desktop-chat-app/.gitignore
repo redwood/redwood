@@ -2,3 +2,6 @@
 node1_data/
 node2_data/
 redwood-chat
+output/
+bind*.go
+windows.syso

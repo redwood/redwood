@@ -8,11 +8,9 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"runtime"
-	"sync"
 
 	"github.com/brynbellomy/klog"
 	"github.com/urfave/cli"
-	"github.com/webview/webview"
 
 	"redwood.dev/cmd/cmdutils"
 	"redwood.dev/process"
@@ -26,13 +24,13 @@ func main() {
 	cliApp := cli.NewApp()
 	// cliApp.Version = env.AppVersion
 
-	configPath, err := cmdutils.DefaultConfigPath("redwood-chat")
+	configPath, err := cmdutils.DefaultConfigPath("hush")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	profileRoot, err := cmdutils.DefaultDataRoot("redwood-chat")
+	profileRoot, err := cmdutils.DefaultDataRoot("hush")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -134,80 +132,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-
-type GUI struct {
-	closeOnce sync.Once
-	chDone    chan struct{}
-
-	api     *API
-	webview webview.WebView
-}
-
-func newGUI(api *API) *GUI {
-	return &GUI{
-		api:    api,
-		chDone: make(chan struct{}),
-	}
-}
-
-func (gui *GUI) Start() error {
-	defer close(gui.chDone)
-
-	debug := true
-	gui.webview = webview.New(debug)
-	gui.webview.SetTitle("Minimal webview example")
-	gui.webview.SetSize(800, 600, webview.HintNone)
-	gui.webview.Navigate(fmt.Sprintf("http://localhost:%v/index.html", gui.api.port))
-	gui.webview.Run()
-	return nil
-}
-
-func (gui *GUI) Close() (err error) {
-	gui.closeOnce.Do(func() {
-		gui.webview.Destroy()
-		gui.webview.Dispatch(func() {
-			gui.webview.Destroy()
-			gui.webview.Terminate()
-		})
-	})
-	return nil
-}
-
-// MUON STUFF
-// cfg := &muon.Config{
-//  Title:          "asdf",
-//  Height:         800,
-//  Width:          600,
-//  Titled:         true,
-//  Resizeable:     true,
-//  FilesystemPath: "../projects/forest/lib",
-// }
-
-// m := muon.New(cfg, api.server)
-// err := m.Start()
-// if err != nil {
-//  panic(err)
-// }
-
-// ULTRALIGHT STUFF
-// app := ultralight.NewApp()
-// defer app.Destroy()
-
-// win := app.NewWindow(1024, 768, false, "Ultralight Browser")
-// defer win.Destroy()
-
-// ovl := win.Overlay(0)
-// ovl.Resize(win.Width(), UI_HEIGHT)
-
-// ovl.View().OnConsoleMessage(func(source ultralight.MessageSource, level ultralight.MessageLevel,
-//  message string, line uint, col uint, sourceId string) {
-//  fmt.Printf("CONSOLE source=%v level=%v id=%q line=%c col=%v %v\n",
-//      source, level, sourceId, line, col, message)
-// })
-
-// ui := &UI{win: win, ovl: ovl, tabWidth: win.Width(), tabHeight: win.Height() - UI_HEIGHT, tabs: map[int]*Tab{}}
-
-// view := ovl.View()
-
-// ovl.View().LoadURL("file:///assets/ui.html")
-// app.Run()

@@ -416,7 +416,6 @@ func (app *App) Start() error {
 			// 	app.Infof(0, "CLOSE cmdutils interrupt")
 			// 	app.Process.Close()
 			case <-app.Process.Done():
-				app.Infof(0, "CLOSE cmdutils done")
 			}
 		}()
 

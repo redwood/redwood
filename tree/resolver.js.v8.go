@@ -1,5 +1,4 @@
 //go:build !otto && !raspi
-
 package tree
 
 import (
