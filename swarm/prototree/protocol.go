@@ -141,7 +141,6 @@ func (tp *treeProtocol) Start() error {
 
 	tp.Process.Go(nil, "initial subscribe", func(ctx context.Context) {
 		for _, stateURI := range tp.store.SubscribedStateURIs().Slice() {
-			tp.Infof(0, "subscribing to %v", stateURI)
 			err := tp.Subscribe(ctx, stateURI)
 			if err != nil {
 				tp.Errorf("error subscribing to %v: %v", stateURI, err)
@@ -256,7 +255,8 @@ func (tp *treeProtocol) handleTxReceived(tx tree.Tx, peerConn TreePeerConn) {
 	if err != nil {
 		tp.Errorf("error fetching tx %v from store: %v", tx.ID.Pretty(), err)
 		// @@TODO: does it make sense to return here?
-		return
+		// return
+		exists = false // Just to be clear
 	}
 
 	if !exists {
@@ -365,7 +365,7 @@ func (tp *treeProtocol) handleFetchHistoryRequest(stateURI string, opts FetchHis
 
 	isPrivate := tp.acl.TypeOf(stateURI) == StateURIType_Private
 
-	iter := tp.controllerHub.FetchTxs(stateURI, opts.FromTxID)
+	iter := tp.controllerHub.FetchValidTxsOrdered(stateURI, opts.FromTxID)
 	defer iter.Close()
 
 	for {

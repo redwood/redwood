@@ -9,6 +9,7 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type badgerTxStore struct {
@@ -47,8 +48,12 @@ func (s *badgerTxStore) Close() {
 	}
 }
 
+func makeTxPrefixForStateURI(stateURI string) []byte {
+	return []byte("tx:" + stateURI + ":")
+}
+
 func makeTxKey(stateURI string, txID state.Version) []byte {
-	return append([]byte("tx:"+stateURI+":"), txID[:]...)
+	return append(makeTxPrefixForStateURI(stateURI), txID[:]...)
 }
 
 func makeStateURIKey(stateURI string) []byte {
@@ -182,6 +187,45 @@ func (p *badgerTxStore) FetchTx(stateURI string, txID state.Version) (Tx, error)
 }
 
 func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID state.Version) TxIterator {
+	if fromTxID == (state.Version{}) {
+		fromTxID = GenesisTxID
+	}
+
+	txIter := NewTxIterator()
+
+	go func() {
+		defer close(txIter.ch)
+
+		txIter.err = p.db.View(func(txn *badger.Txn) error {
+			opts := badger.DefaultIteratorOptions
+			iter := txn.NewIterator(opts)
+			defer iter.Close()
+
+			prefix := makeTxPrefixForStateURI(stateURI)
+
+			for iter.Seek(prefix); iter.ValidForPrefix(prefix); iter.Next() {
+				var tx Tx
+				err := iter.Item().Value(func(val []byte) error {
+					return tx.Unmarshal(val)
+				})
+				if err != nil {
+					return err
+				}
+
+				select {
+				case <-txIter.chClose:
+					return nil
+				case txIter.ch <- &tx:
+				}
+			}
+			return nil
+		})
+	}()
+
+	return txIter
+}
+
+func (p *badgerTxStore) AllValidTxsForStateURIOrdered(stateURI string, fromTxID state.Version) TxIterator {
 	if fromTxID == (state.Version{}) {
 		fromTxID = GenesisTxID
 	}
@@ -328,12 +372,12 @@ func (s *badgerTxStore) DebugPrint() {
 				return err
 			}
 
-			// var tx Tx
-			// err = tx.Unmarshal(val)
-			// if err != nil {
-			// 	return err
-			// }
-			s.Debugf("%v: %0x", string(key), val)
+			var tx Tx
+			err = tx.Unmarshal(val)
+			if err != nil {
+				return err
+			}
+			s.Debugf("%v: %v", string(key), utils.PrettyJSON(tx))
 		}
 		return nil
 	})

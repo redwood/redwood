@@ -65,11 +65,11 @@ var storeRootKeypath = state.Keypath("prototree")
 func NewStore(db *state.DBTree) (*store, error) {
 	s := &store{
 		Process:                     *process.New("prototree store"),
-		Logger:                      log.NewLogger("prototree store"),
+		Logger:                      log.NewLogger("prototree"),
 		db:                          db,
 		subscribedStateURIListeners: make(map[*subscribedStateURIListener]struct{}),
 	}
-	s.Infof(0, "opening prototree store")
+	s.Infof(0, "opening prototree store at %v", db.Filename())
 	err := s.loadData()
 	return s, err
 }

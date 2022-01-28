@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import styled from 'styled-components'
 
 const SInput = styled.input`
@@ -15,8 +15,20 @@ const SInput = styled.input`
 `
 
 function Input(props, ref) {
+    const { onEnter, onKeyDown } = props
+
+    const onKeyDownInner = useCallback(event => {
+        if (event.key === 'Enter' && !!onEnter) {
+            onEnter()
+        }
+        if (onKeyDown) {
+            onKeyDown(event)
+        }
+
+    }, [onKeyDown, onEnter])
+
     return (
-        <SInput {...props} ref={ref} />
+        <SInput {...props} ref={ref} onKeyDown={onKeyDownInner} />
     )
 }
 

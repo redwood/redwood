@@ -174,7 +174,7 @@ func (app *App) Start() error {
 		}
 	}
 
-	// All DBs other than the keystore are encrypted at rest
+	// All DBs other than the keystore are encrypted at rest with Badger's built-in encryption
 	badgerOpts = badgerOpts.WithEncryption(app.KeyStore.LocalSymEncKey().Bytes(), 24*time.Hour)
 
 	// Initialize the config DB shared by various packages

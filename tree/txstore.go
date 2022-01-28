@@ -14,6 +14,7 @@ type TxStore interface {
 	TxExists(stateURI string, txID state.Version) (bool, error)
 	FetchTx(stateURI string, txID state.Version) (Tx, error)
 	AllTxsForStateURI(stateURI string, fromTxID state.Version) TxIterator
+	AllValidTxsForStateURIOrdered(stateURI string, fromTxID state.Version) TxIterator
 	IsStateURIWithData(stateURI string) (bool, error)
 	StateURIsWithData() (types.StringSet, error)
 	OnNewStateURIWithData(fn NewStateURIWithDataCallback)

@@ -179,7 +179,7 @@ var replCommands = []replCommand{
 				for _, ma := range addrinfo.Addrs {
 					for _, conn := range conns {
 						stat := conn.Stat()
-						row := []string{addrinfo.ID.Pretty(), connectedness.String(), ma.String(), time.Since(stat.Opened).Round(1*time.Second).String() + " ago"}
+						row := []string{addrinfo.ID.Pretty(), ma.String(), connectedness.String(), time.Since(stat.Opened).Round(1*time.Second).String() + " ago"}
 						data = append(data, row)
 					}
 				}
@@ -189,7 +189,7 @@ var replCommands = []replCommand{
 			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
 			table.SetCenterSeparator("|")
 			table.SetRowLine(true)
-			table.SetHeader([]string{"Peer ID", "Connectedness", "Addr", "Conn opened"})
+			table.SetHeader([]string{"Peer ID", "Addr", "Connectedness", "Conn opened"})
 			table.SetAutoMergeCellsByColumnIndex([]int{0, 1})
 			table.SetColumnColor(
 				tablewriter.Colors{tablewriter.Bold, tablewriter.FgCyanColor},

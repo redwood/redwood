@@ -4,7 +4,7 @@ package main
 import (
 	"sync"
 
-    "github.com/webview/webview"
+	"github.com/webview/webview"
 )
 
 type GUI struct {
@@ -30,15 +30,15 @@ func (gui *GUI) Start() error {
 	gui.webview.Navigate(fmt.Sprintf("http://localhost:%v/index.html", gui.api.port))
 	gui.webview.Run()
 	return nil
+}
 
-
-func (gui *GUI) Close() (err error) {
+func (gui *GUI) Close() error {
 	gui.closeOnce.Do(func() {
-	 gui.webview.Destroy()
-	 gui.webview.Dispatch(func() {
-	     gui.webview.Destroy()
-	     gui.webview.Terminate()
-	 })
+		gui.webview.Destroy()
+		gui.webview.Dispatch(func() {
+			gui.webview.Destroy()
+			gui.webview.Terminate()
+		})
 	})
 	return nil
 }

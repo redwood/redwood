@@ -64,6 +64,10 @@ func (t *DBTree) Close() error {
 	return t.db.Close()
 }
 
+func (t *DBTree) Filename() string {
+	return t.filename
+}
+
 func (t *DBTree) DeleteDB() error {
 	err := t.Close()
 	if err != nil {

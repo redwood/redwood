@@ -3,6 +3,7 @@ package libp2p
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	badgerds "github.com/ipfs/go-ds-badger2"
@@ -119,7 +120,13 @@ func (bn *bootstrapNode) Start() error {
 		return err
 	}
 
-	dnsResolver, err := madns.NewResolver(madns.WithDefaultResolver(dohp2p.NewResolver(bn.dohDNSResolverURL)))
+	var innerResolver madns.BasicResolver
+	if bn.dohDNSResolverURL != "" {
+		innerResolver = dohp2p.NewResolver(bn.dohDNSResolverURL)
+	} else {
+		innerResolver = net.DefaultResolver
+	}
+	dnsResolver, err := madns.NewResolver(madns.WithDefaultResolver(innerResolver))
 	if err != nil {
 		return err
 	}
@@ -135,6 +142,7 @@ func (bn *bootstrapNode) Start() error {
 	libp2pHost, err := libp2p.New(bn.Process.Ctx(),
 		libp2p.ListenAddrStrings(
 			fmt.Sprintf("/ip4/0.0.0.0/tcp/%v", bn.port),
+			fmt.Sprintf("/ip6/::/tcp/%v", bn.port),
 		),
 		libp2p.Identity(bn.p2pKey),
 		libp2p.BandwidthReporter(bn.BandwidthCounter),
@@ -152,7 +160,7 @@ func (bn *bootstrapNode) Start() error {
 				dht.Mode(dht.ModeServer),
 				dht.Datastore(datastore),
 				dht.MaxRecordAge(dhtTTL),
-				dht.RoutingTableFilter(dht.PublicRoutingTableFilter),
+				// dht.RoutingTableFilter(dht.PublicRoutingTableFilter),
 			)
 			if err != nil {
 				return nil, err
@@ -287,19 +295,14 @@ func (bn *bootstrapNode) Disconnected(network netp2p.Network, conn netp2p.Conn) 
 	bn.Debugf("libp2p disconnected: %v", addr)
 }
 
-func (bn *bootstrapNode) OpenedStream(network netp2p.Network, stream netp2p.Stream) {
-	// addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
-	// bn.Debugf("opened stream: %v", addr)
-}
-
-func (bn *bootstrapNode) ClosedStream(network netp2p.Network, stream netp2p.Stream) {
-	// addr := stream.Conn().RemoteMultiaddr().String() + "/p2p/" + stream.Conn().RemotePeer().Pretty()
-	// bn.Debugf("opened stream: %v", addr)
-}
+func (bn *bootstrapNode) OpenedStream(network netp2p.Network, stream netp2p.Stream) {}
+func (bn *bootstrapNode) ClosedStream(network netp2p.Network, stream netp2p.Stream) {}
 
 // HandlePeerFound is the libp2p mDNS peer discovery callback
 func (bn *bootstrapNode) HandlePeerFound(pinfo corepeer.AddrInfo) {
 	if pinfo.ID == bn.peerID {
+		return
+	} else if len(bn.libp2pHost.Network().ConnsToPeer(pinfo.ID)) > 0 {
 		return
 	}
 

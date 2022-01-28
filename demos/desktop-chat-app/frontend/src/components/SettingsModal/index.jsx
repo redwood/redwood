@@ -138,7 +138,7 @@ function SettingsModal({ onDismiss }) {
                 }
 
                 <SStaticRelayFormWrapper>
-                    <SAddStaticRelayInput ref={newStaticRelayRef} />
+                    <SAddStaticRelayInput onEnter={onClickAddStaticRelay} ref={newStaticRelayRef} />
                     <Button primary onClick={onClickAddStaticRelay}>Add</Button>
                 </SStaticRelayFormWrapper>
 

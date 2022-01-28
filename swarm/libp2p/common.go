@@ -116,6 +116,16 @@ func (set PeerSet) Slice() []corepeer.AddrInfo {
 	return slice
 }
 
+func (set PeerSet) MultiaddrStrings() []string {
+	var strs []string
+	for _, addrInfo := range set.Slice() {
+		for _, addr := range addrInfo.Addrs {
+			strs = append(strs, addr.String())
+		}
+	}
+	return strs
+}
+
 func (set PeerSet) Copy() PeerSet {
 	set.mu.RLock()
 	defer set.mu.RUnlock()

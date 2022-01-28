@@ -204,7 +204,6 @@ func (sub *wsWritableSubscription) Start() (err error) {
 		}
 		defer sub.Process.Autoclose()
 
-		chGotCloseMsg := make(chan struct{})
 		ticker := time.NewTicker(wsPingPeriod)
 
 		// Say hello
@@ -212,12 +211,11 @@ func (sub *wsWritableSubscription) Start() (err error) {
 
 		sub.Process.Go(nil, "write", func(ctx context.Context) {
 			defer ticker.Stop()
+			defer sub.Close()
 
 			for {
 				select {
 				case <-ctx.Done():
-					return
-				case <-chGotCloseMsg:
 					return
 
 				case <-sub.messages.Notify():
@@ -233,6 +231,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 		})
 
 		sub.Process.Go(nil, "read", func(ctx context.Context) {
+			defer sub.Close()
 			for {
 				select {
 				case <-ctx.Done():
@@ -247,7 +246,6 @@ func (sub *wsWritableSubscription) Start() (err error) {
 				}
 
 				if msg.msgType == websocket.CloseMessage {
-					close(chGotCloseMsg)
 					return
 				} else if msg.msgType == websocket.PingMessage {
 					sub.messages.Deliver(wsMessage{websocket.PongMessage, nil})
@@ -392,18 +390,22 @@ func (sub *wsWritableSubscription) write(messageType int, bytes []byte) error {
 }
 
 func (sub *wsWritableSubscription) Close() error {
-	sub.writeMu.Lock()
-	sub.closed = true
-	sub.writeMu.Unlock()
+	var err error
+	sub.closeOnce.Do(func() {
+		sub.writeMu.Lock()
+		sub.closed = true
+		sub.writeMu.Unlock()
 
-	sub.Infof(0, "ws writable subscription closed")
+		sub.Infof(0, "ws writable subscription closed")
 
-	_ = sub.write(websocket.CloseMessage, []byte{})
+		_ = sub.write(websocket.CloseMessage, []byte{})
 
-	return multierr.Combine(
-		sub.wsConn.Close(),
-		sub.Process.Close(),
-	)
+		err = multierr.Combine(
+			sub.wsConn.Close(),
+			sub.Process.Close(),
+		)
+	})
+	return err
 }
 
 func (sub *wsWritableSubscription) Put(ctx context.Context, msg prototree.SubscriptionMsg) (err error) {

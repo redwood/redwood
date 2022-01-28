@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"strings"
+	"net"
 	"sync"
 	"time"
 
@@ -34,7 +34,6 @@ import (
 	rhost "github.com/libp2p/go-libp2p/p2p/host/routed"
 	ma "github.com/multiformats/go-multiaddr"
 	madns "github.com/multiformats/go-multiaddr-dns"
-	manet "github.com/multiformats/go-multiaddr/net"
 
 	"redwood.dev/blob"
 	"redwood.dev/errors"
@@ -170,7 +169,13 @@ func (t *transport) Start() error {
 		return err
 	}
 
-	dnsResolver, err := madns.NewResolver(madns.WithDefaultResolver(dohp2p.NewResolver(t.dohDNSResolverURL)))
+	var innerResolver madns.BasicResolver
+	if t.dohDNSResolverURL != "" {
+		innerResolver = dohp2p.NewResolver(t.dohDNSResolverURL)
+	} else {
+		innerResolver = net.DefaultResolver
+	}
+	dnsResolver, err := madns.NewResolver(madns.WithDefaultResolver(innerResolver))
 	if err != nil {
 		return err
 	}
@@ -181,6 +186,7 @@ func (t *transport) Start() error {
 	libp2pHost, err := libp2p.New(t.Process.Ctx(),
 		libp2p.ListenAddrStrings(
 			fmt.Sprintf("/ip4/0.0.0.0/tcp/%v", t.port),
+			fmt.Sprintf("/ip6/::/tcp/%v", t.port),
 		),
 		libp2p.Identity(t.p2pKey),
 		libp2p.BandwidthReporter(t.BandwidthCounter),
@@ -200,7 +206,7 @@ func (t *transport) Start() error {
 				dht.Mode(dht.ModeServer),
 				dht.Datastore(datastore),
 				dht.MaxRecordAge(dhtTTL),
-				dht.RoutingTableFilter(dht.PublicRoutingTableFilter),
+				// dht.RoutingTableFilter(dht.PublicRoutingTableFilter),
 			)
 			return t.dht, err
 		}),
@@ -322,8 +328,6 @@ func (t *transport) Start() error {
 	t.connectToPeersTask.Enqueue()
 	t.Process.SpawnChild(nil, t.connectToPeersTask)
 
-	t.peerStore.OnNewUnverifiedPeer(t.addPeerDialInfoThroughRelays)
-
 	t.Infof(0, "libp2p peer ID is %v", t.Libp2pPeerID())
 
 	return nil
@@ -432,7 +436,7 @@ func (t *transport) Connected(network netp2p.Network, conn netp2p.Conn) {
 	}
 
 	t.Debugf("libp2p connected: %v", addrInfo.String())
-	t.onPeerFound("", *addrInfo)
+	t.onPeerFound("incoming", *addrInfo)
 }
 
 func (t *transport) Disconnected(network netp2p.Network, conn netp2p.Conn) {
@@ -475,9 +479,9 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 	// Once libp2p peers are added to the peer store, we automatically attempt
 	// to connect to them (see `connectToPeersTask`)
 	for _, multiaddr := range multiaddrsFromPeerInfo(pinfo) {
-		if manet.IsPrivateAddr(multiaddr) {
-			continue
-		}
+		// if manet.IsPrivateAddr(multiaddr) {
+		// 	continue
+		// }
 
 		dialInfo := swarm.PeerDialInfo{TransportName: TransportName, DialAddr: multiaddr.String()}
 		if !t.peerStore.IsKnownPeer(dialInfo) {
@@ -496,54 +500,6 @@ func (t *transport) onPeerFound(via string, pinfo corepeer.AddrInfo) {
 			}
 		}
 	}
-}
-
-func (t *transport) addPeerDialInfoThroughRelays(dialInfo swarm.PeerDialInfo) {
-	// t.Warnf("addThroughRelays: %v", dialInfo.DialAddr)
-	// if dialInfo.TransportName != TransportName {
-	// 	t.Errorf("addThroughRelays 111: %v", dialInfo.DialAddr)
-	// 	return
-	// } else if dialInfo.DialAddr == "" {
-	// 	t.Errorf("addThroughRelays 222: %v", dialInfo.DialAddr)
-	// 	return
-	// 	// } else if strings.Contains(dialInfo.DialAddr, "/p2p-circuit") {
-	// 	// 	t.Errorf("addThroughRelays 333: %v", dialInfo.DialAddr)
-	// 	return
-	// }
-
-	// peerMultiaddr, err := ma.NewMultiaddr(dialInfo.DialAddr)
-	// if err != nil {
-	// 	t.Errorf("addThroughRelays 444: %v %v", dialInfo.DialAddr, err)
-	// 	return
-	// }
-
-	// peerIDString, err := peerMultiaddr.ValueForProtocol(ma.P_P2P)
-	// if err != nil {
-	// 	t.Errorf("addThroughRelays 555: %v %v", dialInfo.DialAddr, err)
-	// 	return
-	// }
-
-	// if t.store.StaticRelays().ContainsPeerIDString(peerIDString) {
-	// 	t.Errorf("addThroughRelays 777 (%v): %v", peerIDString, dialInfo.DialAddr)
-	// 	return
-	// }
-
-	// // Loop over our static relays and determine whether any of them share a
-	// // libp2p peer ID with the `dialInfo` passed into this method. If so, don't
-	// // create a relay peer with it.
-	// //
-	// // @@TODO: This is in a goroutine because of the mutex in the peer store
-	// // which would otherwise cause peerStore.AddDialInfo to deadlock
-	// go func() {
-
-	// 	for _, relayAddrInfo := range t.store.StaticRelays().Slice() {
-	// 		multiaddr, err := ma.NewMultiaddr("/p2p/" + relayAddrInfo.ID.String() + "/p2p-circuit/p2p/" + peerIDString)
-	// 		if err != nil {
-	// 			continue
-	// 		}
-	// 		t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: multiaddr.String()}, peerIDString)
-	// 	}
-	// }()
 }
 
 func (t *transport) handleBlobStream(stream netp2p.Stream) {
@@ -813,8 +769,6 @@ func (t *transport) ProvidersOfBlob(ctx context.Context, refID blob.ID) (<-chan 
 					continue
 				}
 
-				// t.Infof(0, `found peer %v for ref "%v"`, pinfo.ID, refID.String())
-
 				peer, err := t.makeDisconnectedPeerConn(pinfo)
 				if err != nil {
 					t.Errorf("while making disconnected peer conn (%v): %v", pinfo.ID.Pretty(), err)
@@ -840,7 +794,7 @@ func (t *transport) AnnounceBlob(ctx context.Context, refID blob.ID) error {
 	}
 
 	err = t.dht.Provide(ctx, c, true)
-	if err != nil && err != kbucket.ErrLookupFailure && !strings.Contains(err.Error(), "context deadline exceeded") {
+	if err != nil && err != kbucket.ErrLookupFailure && errors.Cause(err) != context.DeadlineExceeded && errors.Cause(err) != context.Canceled {
 		t.Errorf(`announce: could not dht.Provide ref "%v": %v`, refID.String(), err)
 		return err
 	}
@@ -896,6 +850,7 @@ type announceBlobsTask struct {
 	transport protoblob.BlobTransport
 	blobStore blob.Store
 	dht       DHT
+	interval  time.Duration
 }
 
 func NewAnnounceBlobsTask(
@@ -909,6 +864,7 @@ func NewAnnounceBlobsTask(
 		transport: transport,
 		blobStore: blobStore,
 		dht:       dht,
+		interval:  interval,
 	}
 	t.PeriodicTask = *process.NewPeriodicTask("AnnounceBlobsTask", utils.NewStaticTicker(interval), t.announceBlobs)
 	return t
@@ -916,7 +872,11 @@ func NewAnnounceBlobsTask(
 
 // Periodically announces our objects to the network.
 func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
-	// Announce the blobs we're serving
+	ctx, cancel := context.WithTimeout(ctx, t.interval)
+
+	child := t.Process.NewChild(ctx, "announce")
+	defer child.AutocloseWithCleanup(cancel)
+
 	sha1s, sha3s, err := t.blobStore.BlobIDs()
 	if err != nil {
 		t.Errorf("while fetching blob IDs: %v", err)
@@ -924,36 +884,25 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 		// IDs, so we don't want to return here.
 	}
 
-	var chDones []<-chan struct{}
-
 	for _, sha1 := range sha1s {
-		chDone := t.Process.Go(nil, sha1.String(), func(ctx context.Context) {
+		t.Process.Go(ctx, sha1.String(), func(ctx context.Context) {
 			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
 
 			err := t.transport.AnnounceBlob(ctx, sha1)
-			if err != nil && !strings.Contains(err.Error(), "context deadline exceeded") {
+			if err != nil && errors.Cause(err) != context.DeadlineExceeded && errors.Cause(err) != context.Canceled {
 				t.Errorf("announce: error: %v", err)
 			}
 		})
-		chDones = append(chDones, chDone)
 	}
 
 	for _, sha3 := range sha3s {
-		chDone := t.Process.Go(nil, sha3.String(), func(ctx context.Context) {
+		t.Process.Go(ctx, sha3.String(), func(ctx context.Context) {
 			err := t.transport.AnnounceBlob(ctx, sha3)
-			if err != nil && !strings.Contains(err.Error(), "context deadline exceeded") {
+			if err != nil && errors.Cause(err) != context.DeadlineExceeded && errors.Cause(err) != context.Canceled {
 				t.Errorf("announce: error: %v", err)
 			}
 		})
-		chDones = append(chDones, chDone)
-	}
-	for _, chDone := range chDones {
-		select {
-		case <-chDone:
-		case <-ctx.Done():
-			return
-		}
 	}
 }
 
@@ -962,6 +911,7 @@ type announceStateURIsTask struct {
 	log.Logger
 	controllerHub tree.ControllerHub
 	dht           DHT
+	interval      time.Duration
 }
 
 func NewAnnounceStateURIsTask(
@@ -973,24 +923,28 @@ func NewAnnounceStateURIsTask(
 		Logger:        log.NewLogger("libp2p"),
 		controllerHub: controllerHub,
 		dht:           dht,
+		interval:      interval,
 	}
 	t.PeriodicTask = *process.NewPeriodicTask("AnnounceStateURIsTask", utils.NewStaticTicker(interval), t.announceStateURIs)
 	return t
 }
 
 func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
-	// Announce the state URIs we're able to serve
+	ctx, cancel := context.WithTimeout(ctx, t.interval)
+
+	child := t.Process.NewChild(ctx, "announce")
+	defer child.AutocloseWithCleanup(cancel)
+
 	stateURIs, err := t.controllerHub.StateURIsWithData()
 	if err != nil {
 		t.Errorf("error fetching known state URIs from DB: %v", err)
 		return
 	}
 
-	var chDones []<-chan struct{}
 	for stateURI := range stateURIs {
 		stateURI := stateURI
 
-		chDone := t.Process.Go(ctx, stateURI, func(ctx context.Context) {
+		child.Go(ctx, stateURI, func(ctx context.Context) {
 			c, err := cidForString("serve:" + stateURI)
 			if err != nil {
 				t.Errorf("announce: error creating cid: %v", err)
@@ -998,19 +952,11 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 			}
 
 			err = t.dht.Provide(ctx, c, true)
-			if err != nil && err != kbucket.ErrLookupFailure && errors.Cause(err) != context.DeadlineExceeded {
+			if err != nil && err != kbucket.ErrLookupFailure && errors.Cause(err) != context.DeadlineExceeded && errors.Cause(err) != context.Canceled {
 				t.Errorf(`announce: could not dht.Provide stateURI "%v": %v`, stateURI, err)
 				return
 			}
 		})
-		chDones = append(chDones, chDone)
-	}
-	for _, chDone := range chDones {
-		select {
-		case <-chDone:
-		case <-ctx.Done():
-			return
-		}
 	}
 }
 
@@ -1034,13 +980,14 @@ func NewConnectToPeersTask(
 	return t
 }
 
-func (t *connectToPeersTask) connectToPeers(outerCtx context.Context) {
-	ctx, cancel := utils.CombinedContext(outerCtx, t.interval)
+func (t *connectToPeersTask) connectToPeers(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, t.interval)
 
 	child := t.Process.NewChild(ctx, "connect to peers")
 	defer child.AutocloseWithCleanup(cancel)
 
 	for _, addrInfo := range t.tpt.StaticRelays().Slice() {
+		addrInfo := addrInfo
 		child.Go(ctx, "connect to static relay "+addrInfo.String(), func(ctx context.Context) {
 			if len(t.tpt.libp2pHost.Network().ConnsToPeer(addrInfo.ID)) > 0 {
 				return
@@ -1094,7 +1041,8 @@ func (t *connectToPeersTask) connectToPeers(outerCtx context.Context) {
 type announcePeersTask struct {
 	process.PeriodicTask
 	log.Logger
-	tpt *transport
+	tpt      *transport
+	interval time.Duration
 }
 
 func NewAnnouncePeersTask(
@@ -1102,55 +1050,70 @@ func NewAnnouncePeersTask(
 	tpt *transport,
 ) *announcePeersTask {
 	t := &announcePeersTask{
-		Logger: log.NewLogger(TransportName),
-		tpt:    tpt,
+		Logger:   log.NewLogger(TransportName),
+		tpt:      tpt,
+		interval: interval,
 	}
 	t.PeriodicTask = *process.NewPeriodicTask("AnnouncePeersTask", utils.NewStaticTicker(interval), t.announcePeers)
 	return t
 }
 
 func (t *announcePeersTask) announcePeers(ctx context.Context) {
-	// Announce peers
-	{
-		var allDialInfos []swarm.PeerDialInfo
-		for dialInfo := range t.tpt.peerStore.AllDialInfos() {
-			allDialInfos = append(allDialInfos, dialInfo)
-		}
+	ctx, cancel := context.WithTimeout(ctx, t.interval)
 
-		for _, peerDevice := range t.tpt.peerStore.PeersFromTransport(t.tpt.Name()) {
-			if !peerDevice.Ready() || !peerDevice.Dialable() {
-				continue
-			} else if peerDevice.DialInfo().TransportName != t.tpt.Name() {
+	child := t.Process.NewChild(ctx, "announce peers")
+	defer child.AutocloseWithCleanup(cancel)
+
+	var allDialInfos []swarm.PeerDialInfo
+	for dialInfo := range t.tpt.peerStore.AllDialInfos() {
+		if dialInfo.TransportName == TransportName {
+			addrInfo, err := addrInfoFromString(dialInfo.DialAddr)
+			if err != nil {
 				continue
 			}
-
-			peerDevice := peerDevice
-
-			t.Process.Go(nil, "announce peers", func(ctx context.Context) {
-				swarmPeerConn, err := t.tpt.NewPeerConn(ctx, peerDevice.DialInfo().DialAddr)
-				if errors.Cause(err) == swarm.ErrPeerIsSelf {
-					return
-				} else if err != nil {
-					t.Warnf("error creating new %v peerConn: %v", t.tpt.Name(), err)
-					return
-				}
-				defer swarmPeerConn.Close()
-
-				libp2pPeerConn := swarmPeerConn.(*peerConn)
-
-				err = libp2pPeerConn.EnsureConnected(ctx)
-				if errors.Cause(err) == errors.ErrConnection {
-					return
-				} else if err != nil {
-					t.Warnf("error connecting to %v peer (%v): %v", t.tpt.Name(), peerDevice.DialInfo().DialAddr, err)
-					return
-				}
-
-				err = libp2pPeerConn.AnnouncePeers(ctx, allDialInfos)
-				if err != nil {
-					// t.Errorf("error writing to peerConn: %+v", err)
-				}
-			})
+			// Cull static relays from the peer store
+			if t.tpt.StaticRelays().ContainsPeerID(addrInfo.ID) {
+				_ = t.tpt.peerStore.RemovePeers([]string{string(addrInfo.ID)})
+				continue
+			}
+		} else {
+			allDialInfos = append(allDialInfos, dialInfo)
 		}
+	}
+
+	for _, peerDevice := range t.tpt.peerStore.PeersFromTransport(t.tpt.Name()) {
+		if !peerDevice.Ready() || !peerDevice.Dialable() {
+			continue
+		} else if peerDevice.DialInfo().TransportName != t.tpt.Name() {
+			continue
+		}
+
+		peerDevice := peerDevice
+
+		child.Go(ctx, "announce peers", func(ctx context.Context) {
+			swarmPeerConn, err := t.tpt.NewPeerConn(ctx, peerDevice.DialInfo().DialAddr)
+			if errors.Cause(err) == swarm.ErrPeerIsSelf {
+				return
+			} else if err != nil {
+				t.Warnf("error creating new %v peerConn: %v", t.tpt.Name(), err)
+				return
+			}
+			defer swarmPeerConn.Close()
+
+			libp2pPeerConn := swarmPeerConn.(*peerConn)
+
+			err = libp2pPeerConn.EnsureConnected(ctx)
+			if errors.Cause(err) == errors.ErrConnection {
+				return
+			} else if err != nil {
+				t.Warnf("error connecting to %v peer (%v): %v", t.tpt.Name(), peerDevice.DialInfo().DialAddr, err)
+				return
+			}
+
+			err = libp2pPeerConn.AnnouncePeers(ctx, allDialInfos)
+			if err != nil {
+				// t.Errorf("error writing to peerConn: %+v", err)
+			}
+		})
 	}
 }

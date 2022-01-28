@@ -20,7 +20,7 @@ type ControllerHub interface {
 
 	AddTx(tx Tx) error
 	FetchTx(stateURI string, txID state.Version) (Tx, error)
-	FetchTxs(stateURI string, fromTxID state.Version) TxIterator
+	FetchValidTxsOrdered(stateURI string, fromTxID state.Version) TxIterator
 
 	StateURIsWithData() (types.StringSet, error)
 	IsStateURIWithData(stateURI string) (bool, error)
@@ -139,8 +139,8 @@ func (m *controllerHub) AddTx(tx Tx) error {
 	return ctrl.AddTx(tx)
 }
 
-func (m *controllerHub) FetchTxs(stateURI string, fromTxID state.Version) TxIterator {
-	return m.txStore.AllTxsForStateURI(stateURI, fromTxID)
+func (m *controllerHub) FetchValidTxsOrdered(stateURI string, fromTxID state.Version) TxIterator {
+	return m.txStore.AllValidTxsForStateURIOrdered(stateURI, fromTxID)
 }
 
 func (m *controllerHub) FetchTx(stateURI string, txID state.Version) (Tx, error) {
