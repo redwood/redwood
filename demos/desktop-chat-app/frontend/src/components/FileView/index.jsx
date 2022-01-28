@@ -137,7 +137,7 @@ function FileView({ className }) {
                         <SEmbedWrapper>
                             <SEmbed contentType={file['Content-Type']} url={url} />
                             <SFileOverlay>
-                                <SIconLink download={file.filename} href={url}><SDownloadIcon /></SIconLink>
+                                {/*<SIconLink download={file.filename} href={url}><SDownloadIcon /></SIconLink>*/}
                                 <SIconLink onClick={() => onClickAttachment(file, url)}><SOpenIcon /></SIconLink>
                             </SFileOverlay>
                         </SEmbedWrapper>

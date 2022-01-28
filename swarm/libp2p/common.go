@@ -2,7 +2,6 @@ package libp2p
 
 import (
 	"sort"
-	"strings"
 	"sync"
 
 	cid "github.com/ipfs/go-cid"
@@ -15,6 +14,7 @@ import (
 
 	"redwood.dev/errors"
 	"redwood.dev/swarm"
+	"redwood.dev/types"
 )
 
 var (
@@ -51,14 +51,6 @@ func NewPeerSetFromStrings(ss []string) (PeerSet, error) {
 	return set, nil
 }
 
-// func NewPeerSetFromPeerDialInfos(dialInfos []swarm.PeerDialInfo) (PeerSet, error) {
-// 	dialAddrs := make([]string, len(dialInfos))
-// 	for i, dialInfo := range dialInfos {
-// 		dialAddrs[i] = dialInfo.DialAddr
-// 	}
-// 	return NewPeerSetFromStrings(dialAddrs)
-// }
-
 func (set *PeerSet) Peers() PeerSet {
 	return set.Copy()
 }
@@ -71,7 +63,12 @@ func (set *PeerSet) AddString(s string) error {
 	if err != nil {
 		return err
 	}
-	set.set[addrInfo.ID] = addrInfo
+	if existing, exists := set.set[addrInfo.ID]; exists {
+		existing.Addrs = append(existing.Addrs, addrInfo.Addrs...)
+		set.set[addrInfo.ID] = existing
+	} else {
+		set.set[addrInfo.ID] = addrInfo
+	}
 	return nil
 }
 
@@ -83,7 +80,25 @@ func (set *PeerSet) RemoveString(s string) error {
 	if err != nil {
 		return err
 	}
-	delete(set.set, addrInfo.ID)
+	if existing, exists := set.set[addrInfo.ID]; exists {
+		toDelete := types.NewStringSet(nil)
+		for _, addr := range addrInfo.Addrs {
+			toDelete.Add(addr.String())
+		}
+
+		var remaining []ma.Multiaddr
+		for _, multiaddr := range existing.Addrs {
+			if !toDelete.Contains(multiaddr.String()) {
+				remaining = append(remaining, multiaddr)
+			}
+		}
+		existing.Addrs = remaining
+		if len(existing.Addrs) == 0 {
+			delete(set.set, addrInfo.ID)
+		} else {
+			set.set[addrInfo.ID] = existing
+		}
+	}
 	return nil
 }
 
@@ -120,7 +135,11 @@ func (set PeerSet) MultiaddrStrings() []string {
 	var strs []string
 	for _, addrInfo := range set.Slice() {
 		for _, addr := range addrInfo.Addrs {
-			strs = append(strs, addr.String())
+			if multiaddrHasTerminatingPeerID(addr) {
+				strs = append(strs, addr.String()) //+"/p2p/"+addrInfo.ID.String())
+			} else {
+				strs = append(strs, addr.String()+"/p2p/"+addrInfo.ID.String())
+			}
 		}
 	}
 	return strs
@@ -131,8 +150,18 @@ func (set PeerSet) Copy() PeerSet {
 	defer set.mu.RUnlock()
 
 	newSet := make(map[corepeer.ID]corepeer.AddrInfo, len(set.set))
-	for k, v := range set.set {
-		newSet[k] = v
+	for peerID, addrInfo := range set.set {
+		multiaddrs := make([]ma.Multiaddr, len(addrInfo.Addrs))
+		for i, addr := range addrInfo.Addrs {
+			copied, err := ma.NewMultiaddr(addr.String()) // + "/p2p/" + addrInfo.ID.String())
+			if err != nil {
+				continue
+			}
+			multiaddrs[i] = copied
+		}
+		addrInfoCopied := addrInfo
+		addrInfoCopied.Addrs = multiaddrs
+		newSet[peerID] = addrInfoCopied
 	}
 	return PeerSet{set: newSet}
 }
@@ -174,7 +203,10 @@ func multiaddrsFromPeerInfo(pinfo corepeer.AddrInfo) []ma.Multiaddr {
 func filterUselessMultiaddrs(mas []ma.Multiaddr) []ma.Multiaddr {
 	multiaddrs := make([]ma.Multiaddr, 0, len(mas))
 	for _, addr := range mas {
-		if !strings.Contains(addr.String(), "/p2p/") {
+		// if !strings.Contains(addr.String(), "/p2p/") {
+		// 	continue
+		// }
+		if !multiaddrHasTerminatingPeerID(addr) {
 			continue
 		}
 		multiaddrs = append(multiaddrs, addr)
@@ -258,6 +290,18 @@ func multiaddrIsRelayed(multiaddr ma.Multiaddr) (is bool) {
 		return true
 	})
 	return
+}
+
+func multiaddrHasTerminatingPeerID(multiaddr ma.Multiaddr) (is bool) {
+	ma.ForEach(multiaddr, func(cmpt ma.Component) bool {
+		if cmpt.Protocol().Code == ma.P_P2P {
+			is = true
+		} else { //if cmpt.Protocol().Code == ma.P_CIRCUIT {
+			is = false
+		}
+		return true
+	})
+	return is
 }
 
 func deviceUniqueID(peerID corepeer.ID) string {

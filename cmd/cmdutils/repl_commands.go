@@ -176,6 +176,7 @@ var defaultREPLCommands = REPLCommands{
 					"list": CmdLibp2pRelayList,
 				},
 			},
+			"dumpstore": CmdLibp2pStoreDebugPrint,
 		},
 	},
 	"ps": REPLCommand{
@@ -262,6 +263,14 @@ var (
 			for _, relay := range app.Libp2pTransport.StaticRelays().Slice() {
 				fmt.Println(" -", relay)
 			}
+			return nil
+		},
+	}
+
+	CmdLibp2pStoreDebugPrint = REPLCommand{
+		HelpText: "print the contents of the libp2p store",
+		Handler: func(args []string, app *App) error {
+			app.Libp2pStore.DebugPrint()
 			return nil
 		},
 	}

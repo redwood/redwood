@@ -3,6 +3,7 @@ import styled, { useTheme } from 'styled-components'
 import { Avatar, Fab, IconButton, TextField } from '@material-ui/core'
 import { Add as AddIcon, CloudDownloadRounded as ImportIcon, Face as FaceIcon } from '@material-ui/icons'
 import moment from 'moment'
+import { sortBy } from 'lodash'
 
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
@@ -132,6 +133,7 @@ function AddPeerPane({ showPeerList, ...props }) {
 function PeerListPane({ showAddPeer, showPeerDetails, ...props }) {
     let { peersByAddress } = usePeers()
     let peers = Object.keys(peersByAddress).map(addr => peersByAddress[addr]).filter(peer => !peer.isSelf)
+    peers = sortBy(peers, ['address'])
     return (
         <Pane {...props}>
             <PaneContent>
@@ -185,6 +187,7 @@ const TransportsView = styled.div`
     border-radius: 4px;
 
     height: 174px;
+    overflow-x: scroll;
     overflow-y: scroll;
 
     /* Chrome, Safari, Opera */
@@ -225,8 +228,8 @@ function PeerDetailPane({ selectedPeer, showPeerDetails, onClickBack, ...props }
         title: transport,
         content: (
             <TransportsView>
-                {peer.transports[transport].map(addr => (
-                    <div key={addr}>{addr}</div>
+                {peer.transports[transport].sort().map(addr => (
+                    <div key={addr}><nobr>{addr}</nobr></div>
                 ))}
             </TransportsView>
         ),

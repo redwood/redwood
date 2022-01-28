@@ -796,9 +796,9 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	var val interface{}
 	var exists bool
 	if !req.Raw {
-		val, exists, err = nelson.GetValueRecursive(node, nil, nil)
+		val, exists, err = nelson.GetValueRecursive(node, nil, rng)
 	} else {
-		val, exists, err = node.Value(nil, nil)
+		val, exists, err = node.Value(nil, rng)
 	}
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusBadRequest)
@@ -815,6 +815,7 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 		respBuf = ioutil.NopCloser(bytes.NewBuffer(j))
+		anyMissing = true
 	}
 	defer respBuf.Close()
 

@@ -695,7 +695,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 		for _, tpt := range tp.transports {
 			innerCh, err := tpt.ProvidersOfStateURI(ctx, stateURI)
 			if err != nil {
-				tp.Warnf("error fetching providers of State-URI %v on transport %v: %v %+v", stateURI, tpt.Name(), err)
+				tp.Warnf("error fetching providers of State-URI %v on transport %v: %v", stateURI, tpt.Name(), err)
 				continue
 			}
 

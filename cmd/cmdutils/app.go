@@ -60,6 +60,7 @@ type App struct {
 	TreeProtoStore      prototree.Store
 	HTTPTransport       braidhttp.Transport
 	Libp2pTransport     libp2p.Transport
+	Libp2pStore         libp2p.Store
 	HTTPRPCServer       *http.Server
 	HTTPRPCServerConfig rpc.HTTPConfig
 	SharedStateDB       *state.DBTree
@@ -251,6 +252,7 @@ func (app *App) Start() error {
 			if err != nil {
 				return err
 			}
+			app.Libp2pStore = store
 
 			var bootstrapPeers []string
 			for _, bp := range cfg.BootstrapPeers {
