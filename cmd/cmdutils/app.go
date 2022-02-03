@@ -212,6 +212,11 @@ func (app *App) Start() error {
 	app.TreeDB = treedb
 
 	app.PeerStore = swarm.NewPeerStore(app.PeerDB)
+	err = app.Process.SpawnChild(context.TODO(), app.PeerStore)
+	if err != nil {
+		app.Errorf("while starting peer store: %+v", err)
+		return err
+	}
 
 	app.BlobStore = blob.NewBadgerStore(badgerOpts.ForPath(cfg.BlobDataRoot()))
 	err = app.BlobStore.Start()

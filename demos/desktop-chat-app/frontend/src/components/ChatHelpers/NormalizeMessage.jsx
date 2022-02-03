@@ -107,17 +107,17 @@ function NormalizeMessage({ msgText, preview, selected, style = {}, isNotificati
 		maxHeight: 50,
 	}} selected={true}>{content.map((item, idx) => {
 		if ((content.length - 1) === idx) {
-		  return <Fragment>{item}</Fragment> 
+		  return <Fragment key={idx + item}>{item}</Fragment>
 		}
-		return <Fragment>{item}<br /></Fragment>
+		return <Fragment key={idx + item}>{item}<br /></Fragment>
 	  })}</SNormalizeMessage>
   }
 
   return <SNormalizeMessage style={style} selected={true}>{content.map((item, idx) => {
     if ((content.length - 1) === idx) {
-      return <Fragment>{item}</Fragment> 
+      return <Fragment key={idx + item}>{item}</Fragment>
     }
-    return <Fragment>{item}<br /></Fragment>
+    return <Fragment key={idx + item}>{item}<br /></Fragment>
   })}</SNormalizeMessage>
 }
 

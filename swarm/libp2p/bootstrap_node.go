@@ -108,7 +108,8 @@ func (bn *bootstrapNode) Start() error {
 	opts.Options.EncryptionKeyRotationDuration = bn.encryptionConfig.KeyRotationInterval
 	opts.Options.IndexCacheSize = 100 << 20 // @@TODO: make configurable
 	opts.Options.KeepL0InMemory = true      // @@TODO: make configurable
-
+	opts.GcDiscardRatio = 0.5
+	opts.GcInterval = 5 * time.Minute
 	datastore, err := badgerds.NewDatastore(bn.datastorePath, &opts)
 	if err != nil {
 		return err

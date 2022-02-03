@@ -164,7 +164,14 @@ func (t *transport) Start() error {
 
 	t.BandwidthCounter = metrics.NewBandwidthCounter()
 
-	datastore, err := badgerds.NewDatastore(t.datastorePath, nil)
+	opts := badgerds.DefaultOptions
+	opts.Options.EncryptionKey = t.keyStore.LocalSymEncKey().Bytes()
+	opts.Options.EncryptionKeyRotationDuration = 24 * time.Hour
+	opts.Options.IndexCacheSize = 100 << 20 // @@TODO: make configurable
+	opts.Options.KeepL0InMemory = true      // @@TODO: make configurable
+	opts.GcDiscardRatio = 0.5
+	opts.GcInterval = 5 * time.Minute
+	datastore, err := badgerds.NewDatastore(t.datastorePath, &opts)
 	if err != nil {
 		return err
 	}
@@ -600,7 +607,7 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 			writeSub = newWritableSubscription(peer, stateURI)
 			return writeSub, nil
 		})
-		if err != nil {
+		if err != nil && errors.Cause(err) != tree.ErrNoController {
 			peer.Close()
 			t.Errorf("while starting incoming subscription: %v", err)
 			return

@@ -302,19 +302,23 @@ func (s *multiReaderSubscription) getPeer(ctx context.Context) (TreePeerConn, er
 	}
 }
 
-func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, peer TreePeerConn) {
-	err := peer.EnsureConnected(ctx)
+func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, peerConn TreePeerConn) {
+	ctxConnect, cancelConnect := context.WithTimeout(ctx, 10*time.Second)
+	defer cancelConnect()
+
+	err := peerConn.EnsureConnected(ctxConnect)
 	if errors.Cause(err) == errors.ErrConnection {
+		s.Errorf("error connecting to %v peer (stateURI: %v): %v", peerConn.Transport().Name(), s.stateURI, err)
 		return
 	} else if err != nil {
-		s.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
+		s.Errorf("error connecting to %v peer (stateURI: %v): %v", peerConn.Transport().Name(), s.stateURI, err)
 		return
 	}
-	defer peer.Close()
+	defer peerConn.Close()
 
-	peerSub, err := peer.Subscribe(ctx, s.stateURI)
+	peerSub, err := peerConn.Subscribe(ctx, s.stateURI)
 	if err != nil {
-		s.Errorf("error subscribing to peer %v (stateURI: %v): %v", peer.DialInfo(), s.stateURI, err)
+		s.Errorf("error subscribing to peer %v (stateURI: %v): %v", peerConn.DialInfo(), s.stateURI, err)
 		return
 	}
 
@@ -329,11 +333,11 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 
 		msg, err := peerSub.Read()
 		if err != nil {
-			s.Errorf("while reading from peer subscription (%v): %v", peer.DialInfo(), err)
+			s.Errorf("while reading from peer subscription (%v): %v", peerConn.DialInfo(), err)
 			return
 		}
 
-		s.onMessageReceived(msg, peer)
+		s.onMessageReceived(msg, peerConn)
 	}
 }
 

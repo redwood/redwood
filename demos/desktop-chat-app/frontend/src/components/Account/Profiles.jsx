@@ -139,6 +139,8 @@ function SignIn({ password, setPassword, profileNames, selectedProfile, setSelec
                     value={password}
                     onChange={(event) => setPassword(event.currentTarget.value)}
                     type={'password'}
+                    onEnter={onSubmitLogin}
+                    autoFocus
                 />
             </InputLabel>
             <SBackProfiles onClick={() => setSelectedProfile('')}>Select another profile ({profileNames.length})</SBackProfiles>

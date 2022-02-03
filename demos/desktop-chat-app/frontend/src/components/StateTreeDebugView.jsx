@@ -1,23 +1,15 @@
 import React, { Fragment, useState } from 'react'
 import styled from 'styled-components'
 import { useRedwood } from '@redwood.dev/client/react'
+import theme from '../theme'
+import Scrollbars from './Scrollbars'
 
 const SStateTreeDebugView = styled.div`
-    padding: 20px;
-    background-color: #d3d3d3;
     font-family: Consolas, monospace;
     font-weight: 300;
-    height: calc(100vh - 90px);
-    color: black;
-
-    overflow: scroll;
-
-    /* Chrome, Safari, Opera */
-    &::-webkit-scrollbar {
-        display: none;
-    }
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    color: rgba(255,255,255,0.8);
+    background-color: ${_ => theme.color.grey[200]};
+    border-left: 2px solid ${_ => theme.color.grey[300]};
 `
 
 const StateURI = styled.div`
@@ -49,13 +41,16 @@ function StateTreeDebugView({ className }) {
 
     return (
         <SStateTreeDebugView className={className}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <h2 style={{ padding: 0 }}>State trees</h2>
-                <button style={{ marginBottom: 32, cursor: 'pointer' }} onClick={() => setDisableMetadata(!disableMetadata)}>Toggle metadata</button>
-            </div>
-            {Object.keys(trees).map(stateURI => (
-                <SStateTree tree={trees[stateURI]} stateURI={stateURI} key={stateURI} />
-            ))}
+            <Scrollbars shadow style={{ height: '100%' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '20px 20px 0 20px' }}>
+                    <button style={{ marginBottom: 32, cursor: 'pointer' }} onClick={() => setDisableMetadata(!disableMetadata)}>Toggle metadata</button>
+                </div>
+                <div style={{ padding: '0 20px 20px 20px' }}>
+                    {Object.keys(trees).map(stateURI => (
+                        <SStateTree tree={trees[stateURI]} stateURI={stateURI} key={stateURI} />
+                    ))}
+                </div>
+            </Scrollbars>
         </SStateTreeDebugView>
     )
 }

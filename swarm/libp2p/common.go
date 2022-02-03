@@ -47,6 +47,9 @@ func NewPeerSetFromStrings(ss []string) (PeerSet, error) {
 		} else {
 			set.set[addrInfo.ID] = addrInfo
 		}
+		addrInfo = set.set[addrInfo.ID]
+		addrInfo.Addrs = dedupeMultiaddrs(addrInfo.Addrs)
+		set.set[addrInfo.ID] = addrInfo
 	}
 	return set, nil
 }
@@ -69,6 +72,9 @@ func (set *PeerSet) AddString(s string) error {
 	} else {
 		set.set[addrInfo.ID] = addrInfo
 	}
+	addrInfo = set.set[addrInfo.ID]
+	addrInfo.Addrs = dedupeMultiaddrs(addrInfo.Addrs)
+	set.set[addrInfo.ID] = addrInfo
 	return nil
 }
 
@@ -134,9 +140,9 @@ func (set PeerSet) Slice() []corepeer.AddrInfo {
 func (set PeerSet) MultiaddrStrings() []string {
 	var strs []string
 	for _, addrInfo := range set.Slice() {
-		for _, addr := range addrInfo.Addrs {
+		for _, addr := range dedupeMultiaddrs(addrInfo.Addrs) {
 			if multiaddrHasTerminatingPeerID(addr) {
-				strs = append(strs, addr.String()) //+"/p2p/"+addrInfo.ID.String())
+				strs = append(strs, addr.String())
 			} else {
 				strs = append(strs, addr.String()+"/p2p/"+addrInfo.ID.String())
 			}
@@ -152,8 +158,8 @@ func (set PeerSet) Copy() PeerSet {
 	newSet := make(map[corepeer.ID]corepeer.AddrInfo, len(set.set))
 	for peerID, addrInfo := range set.set {
 		multiaddrs := make([]ma.Multiaddr, len(addrInfo.Addrs))
-		for i, addr := range addrInfo.Addrs {
-			copied, err := ma.NewMultiaddr(addr.String()) // + "/p2p/" + addrInfo.ID.String())
+		for i, addr := range dedupeMultiaddrs(addrInfo.Addrs) {
+			copied, err := ma.NewMultiaddr(addr.String())
 			if err != nil {
 				continue
 			}
@@ -302,6 +308,19 @@ func multiaddrHasTerminatingPeerID(multiaddr ma.Multiaddr) (is bool) {
 		return true
 	})
 	return is
+}
+
+func dedupeMultiaddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
+	var uniqueAddrs []ma.Multiaddr
+	strs := types.NewStringSet(nil)
+	for _, addr := range addrs {
+		if strs.Contains(addr.String()) {
+			continue
+		}
+		uniqueAddrs = append(uniqueAddrs, addr)
+		strs.Add(addr.String())
+	}
+	return uniqueAddrs
 }
 
 func deviceUniqueID(peerID corepeer.ID) string {

@@ -69,7 +69,7 @@ function Provider({ children }) {
                     newRooms[roomStateURI] = {
                         rawName: room,
                         members: privateTreeMembers[roomStateURI] || [],
-                        isDirectMessage: true,
+                        isDirectMessage,
                     };
                 }
             }

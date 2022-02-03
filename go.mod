@@ -9,13 +9,19 @@ require (
 	github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae
 	github.com/btcsuite/btcd v0.21.0-beta
 	github.com/btcsuite/btcutil v1.0.2
+	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/deoxxa/otto v0.0.0-20200922221731-ef014fd054ac
-	github.com/dgraph-io/badger/v2 v2.2007.3
+	github.com/dgraph-io/badger/v3 v3.2103.2 // indirect
+	github.com/dgraph-io/ristretto v0.1.0 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/ethereum/go-ethereum v1.9.25
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/gogo/protobuf v1.3.2
+	github.com/golang/glog v1.0.0 // indirect
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2
+	github.com/golang/snappy v0.0.4 // indirect
+	github.com/google/flatbuffers v2.0.5+incompatible // indirect
 	github.com/google/pprof v0.0.0-20200708004538-1a94d8640e99
 	github.com/gorilla/rpc v1.2.0
 	github.com/gorilla/websocket v1.4.2
@@ -25,6 +31,7 @@ require (
 	github.com/ipfs/go-datastore v0.4.5
 	github.com/ipfs/go-ds-badger2 v0.1.1 // indirect
 	github.com/ipfs/go-ipns v0.0.2 // indirect
+	github.com/klauspost/compress v1.14.2 // indirect
 	github.com/libgit2/git2go v27.10.0+incompatible // indirect
 	github.com/libgit2/git2go/v33 v33.0.4 // indirect
 	github.com/libp2p/go-doh-resolver v0.3.1 // indirect
@@ -64,9 +71,10 @@ require (
 	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036
 	go.uber.org/multierr v1.6.0
 	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
-	golang.org/x/net v0.0.0-20210423184538-5f58ad60dda6
+	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 	golang.org/x/oauth2 v0.0.0-20210628180205-a41e5a781914
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sys v0.0.0-20220114195835-da31bd327af9 // indirect
 	google.golang.org/genproto v0.0.0-20210701191553-46259e63a0a9 // indirect
 	google.golang.org/grpc v1.39.0
 	google.golang.org/protobuf v1.27.1

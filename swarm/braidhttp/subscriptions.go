@@ -204,18 +204,23 @@ func (sub *wsWritableSubscription) Start() (err error) {
 		}
 		defer sub.Process.Autoclose()
 
-		ticker := time.NewTicker(wsPingPeriod)
-
 		// Say hello
 		sub.write(websocket.PingMessage, nil)
 
-		sub.Process.Go(nil, "write", func(ctx context.Context) {
-			defer ticker.Stop()
-			defer sub.Close()
+		var (
+			ticker        = time.NewTicker(wsPingPeriod)
+			chWriteClosed = make(chan struct{})
+			chReadClosed  = make(chan struct{})
+		)
 
+		sub.Process.Go(nil, "write", func(ctx context.Context) {
+			defer close(chWriteClosed)
+			defer ticker.Stop()
 			for {
 				select {
 				case <-ctx.Done():
+					return
+				case <-chReadClosed:
 					return
 
 				case <-sub.messages.Notify():
@@ -231,10 +236,12 @@ func (sub *wsWritableSubscription) Start() (err error) {
 		})
 
 		sub.Process.Go(nil, "read", func(ctx context.Context) {
-			defer sub.Close()
+			defer close(chReadClosed)
 			for {
 				select {
 				case <-ctx.Done():
+					return
+				case <-chWriteClosed:
 					return
 				default:
 				}

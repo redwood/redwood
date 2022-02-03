@@ -182,6 +182,8 @@ function ImportServerModal({ onDismiss }) {
 						onChange={onChangeServerName}
 						label={'Server Name'}
 						width={'460px'}
+                        onEnter={onClickImport}
+                        autoFocus
 					/>
 				</InputLabel>
             </ModalContent>

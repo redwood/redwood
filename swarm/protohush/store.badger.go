@@ -187,7 +187,9 @@ func (s *store) OutgoingIndividualSessionProposalByHash(proposalHash types.Hash)
 	node := s.db.State(false)
 	defer node.Close()
 
-	exists, err := node.Exists(outgoingIndividualSessionProposalKeypathForHash(proposalHash))
+	keypath := outgoingIndividualSessionProposalKeypathForHash(proposalHash)
+
+	exists, err := node.Exists(keypath)
 	if err != nil {
 		return IndividualSessionProposal{}, err
 	} else if !exists {
@@ -195,7 +197,7 @@ func (s *store) OutgoingIndividualSessionProposalByHash(proposalHash types.Hash)
 	}
 
 	var proposal IndividualSessionProposal
-	err = node.NodeAt(outgoingIndividualSessionProposalKeypathForHash(proposalHash), nil).Scan(&proposal)
+	err = node.NodeAt(keypath, nil).Scan(&proposal)
 	if err != nil {
 		return IndividualSessionProposal{}, err
 	}
@@ -216,7 +218,7 @@ func (s *store) OutgoingIndividualSessionProposalByUsersAndType(sessionType stri
 	}
 
 	var proposalHash types.Hash
-	err = node.NodeAt(outgoingIndividualSessionProposalKeypathForUsersAndType(sessionType, aliceAddr, bobAddr), nil).Scan(&proposalHash)
+	err = node.NodeAt(keypath, nil).Scan(&proposalHash)
 	if err != nil {
 		return IndividualSessionProposal{}, err
 	}
@@ -283,6 +285,7 @@ func (s *store) IncomingIndividualSessionProposal(hash types.Hash) (EncryptedInd
 	defer node.Close()
 
 	keypath := incomingIndividualSessionProposalKeypathFor(hash)
+
 	exists, err := node.Exists(keypath)
 	if err != nil {
 		return EncryptedIndividualSessionProposal{}, err
@@ -346,6 +349,7 @@ func (s *store) OutgoingIndividualSessionResponse(aliceAddr types.Address, propo
 	defer node.Close()
 
 	keypath := outgoingIndividualSessionResponseKeypathFor(aliceAddr, proposalHash)
+
 	exists, err := node.Exists(keypath)
 	if err != nil {
 		return IndividualSessionResponse{}, err

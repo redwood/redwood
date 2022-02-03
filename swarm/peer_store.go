@@ -1,14 +1,17 @@
 package swarm
 
 import (
+	"bytes"
+	"context"
+	"encoding/gob"
 	"fmt"
 	"math"
-	"net/url"
 	"sync"
 	"time"
 
 	"redwood.dev/crypto"
 	"redwood.dev/log"
+	"redwood.dev/process"
 	"redwood.dev/state"
 	"redwood.dev/types"
 	"redwood.dev/utils"
@@ -16,6 +19,8 @@ import (
 
 //go:generate mockery --name PeerStore --output ./mocks/ --case=underscore
 type PeerStore interface {
+	process.Interface
+
 	AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) PeerEndpoint
 	AddVerifiedCredentials(dialInfo PeerDialInfo, deviceUniqueID string, address types.Address, sigpubkey *crypto.SigningPublicKey, encpubkey *crypto.AsymEncPubkey) PeerEndpoint
 	RemovePeers(deviceUniqueIDs []string) error
@@ -36,6 +41,7 @@ type PeerStore interface {
 }
 
 type peerStore struct {
+	process.Process
 	log.Logger
 
 	state                   *state.DBTree
@@ -51,10 +57,11 @@ type peerStore struct {
 	newVerifiedPeerListenersMu   sync.RWMutex
 }
 
-func NewPeerStore(state *state.DBTree) *peerStore {
+func NewPeerStore(db *state.DBTree) *peerStore {
 	s := &peerStore{
+		Process:                 *process.New("peerstore"),
 		Logger:                  log.NewLogger("peerstore"),
-		state:                   state,
+		state:                   db,
 		peerEndpoints:           make(map[PeerDialInfo]*peerEndpoint),
 		deviceIDsWithAddress:    make(map[types.Address]types.StringSet),
 		peersWithDeviceUniqueID: make(map[string]*peerDevice),
@@ -62,12 +69,26 @@ func NewPeerStore(state *state.DBTree) *peerStore {
 	}
 	s.Infof(0, "opening peer store")
 
-	pds, err := s.fetchAllPeerDevices()
+	node := s.state.State(false)
+	defer node.Close()
+
+	keypath := state.Keypath("peers")
+
+	var peerDevices map[string]*peerDevice
+	err := node.NodeAt(keypath, nil).Scan(&peerDevices)
 	if err != nil {
 		s.Warnf("could not fetch stored peer details from DB: %v", err)
 	} else {
-		for _, pd := range pds {
+		for _, pd := range peerDevices {
+			if pd == nil {
+				continue
+			}
+			pd.peerStore = s
 			for _, e := range pd.Endpts {
+				if e == nil {
+					continue
+				}
+				e.peerDevice = pd
 				s.peerEndpoints[e.Dialinfo] = e
 
 				if len(pd.DeviceUniqID) > 0 {
@@ -88,8 +109,43 @@ func NewPeerStore(state *state.DBTree) *peerStore {
 			}
 		}
 	}
-
 	return s
+}
+
+func (s *peerStore) Start() error {
+	err := s.Process.Start()
+	if err != nil {
+		return err
+	}
+
+	s.Process.Go(nil, "periodically persist to disk", func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			case <-time.After(15 * time.Second):
+				err := func() error {
+					s.muPeers.RLock()
+					defer s.muPeers.RUnlock()
+
+					node := s.state.State(true)
+					defer node.Close()
+
+					err := node.Set(state.Keypath("peers"), nil, s.peersWithDeviceUniqueID)
+					if err != nil {
+						return err
+					}
+					return node.Save()
+				}()
+				if err != nil {
+					s.Errorf("while persisting peer store to disk: %+v", err)
+				}
+			}
+		}
+	})
+
+	return nil
 }
 
 func (s *peerStore) Peers() []PeerDevice {
@@ -157,10 +213,10 @@ func (s *peerStore) AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) Pe
 		}
 
 		if needsSave && deviceUniqueID != "" {
-			err := s.savePeerDevice(pd)
-			if err != nil {
-				s.Warnf("could not save modifications to peerstore DB: %v", err)
-			}
+			// err := s.savePeerDevice(pd)
+			// if err != nil {
+			// 	s.Warnf("could not save modifications to peerstore DB: %v", err)
+			// }
 		}
 		peerEndpoint = pd.Endpts[dialInfo]
 	}()
@@ -279,10 +335,10 @@ func (s *peerStore) AddVerifiedCredentials(
 
 		delete(s.unverifiedPeers, dialInfo)
 
-		err := s.savePeerDevice(pd)
-		if err != nil {
-			s.Warnf("could not save modifications to peerstore DB: %v", err)
-		}
+		// err := s.savePeerDevice(pd)
+		// if err != nil {
+		// 	s.Warnf("could not save modifications to peerstore DB: %v", err)
+		// }
 		peerEndpoint = pd.Endpts[dialInfo]
 	}()
 
@@ -430,60 +486,6 @@ func (s *peerStore) dialInfoHash(dialInfo PeerDialInfo) string {
 	return types.HashBytes([]byte(dialInfo.TransportName + ":" + dialInfo.DialAddr)).Hex()
 }
 
-func (s *peerStore) fetchAllPeerDevices() (map[string]*peerDevice, error) {
-	node := s.state.State(false)
-	defer node.Close()
-
-	keypath := state.Keypath("peers")
-
-	var pds map[string]*peerDevice
-	err := node.NodeAt(keypath, nil).Scan(&pds)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, pd := range pds {
-		pd.peerStore = s
-		for _, e := range pd.Endpts {
-			e.peerDevice = pd
-			e.backoff = utils.ExponentialBackoff{Min: 3 * time.Second, Max: 3 * time.Minute}
-		}
-
-		stateURIs := types.NewStringSet(nil)
-		for stateURI := range pd.Stateuris {
-			x, err := url.QueryUnescape(stateURI)
-			if err != nil {
-				continue
-			}
-			stateURIs.Add(x)
-		}
-		pd.Stateuris = stateURIs
-	}
-	return pds, nil
-}
-
-func (s *peerStore) savePeerDevice(pd *peerDevice) error {
-	// node := s.state.State(true)
-	// defer node.Close()
-
-	// keypath := state.Keypath("peers").Pushs(pd.DeviceUniqID)
-
-	// stateURIs := types.NewStringSet(nil)
-	// for stateURI := range pd.Stateuris {
-	// 	stateURIs.Add(url.QueryEscape(stateURI))
-	// }
-	// old := pd.Stateuris
-	// pd.Stateuris = stateURIs
-	// defer func() { pd.Stateuris = old }()
-
-	// err := node.Set(keypath, nil, pd)
-	// if err != nil {
-	// 	return err
-	// }
-	// return node.Save()
-	return nil
-}
-
 func (s *peerStore) deletePeers(deviceUniqueIDs []string) error {
 	node := s.state.State(true)
 	defer node.Close()
@@ -507,12 +509,12 @@ func (s *peerStore) DebugPrint() {
 
 type PeerDevice interface {
 	DeviceUniqueID() string
-	SetDeviceUniqueID(id string) error
+	SetDeviceUniqueID(id string)
 	Addresses() []types.Address
 	PublicKeys(addr types.Address) (*crypto.SigningPublicKey, *crypto.AsymEncPubkey)
 	StateURIs() types.StringSet
-	AddStateURI(stateURI string) error
-	RemoveStateURI(stateURI string) error
+	AddStateURI(stateURI string)
+	RemoveStateURI(stateURI string)
 	LastContact() time.Time
 	LastFailure() time.Time
 	Failures() uint64
@@ -577,14 +579,13 @@ func (pd *peerDevice) DeviceUniqueID() string {
 	return pd.DeviceUniqID
 }
 
-func (pd *peerDevice) SetDeviceUniqueID(id string) error {
+func (pd *peerDevice) SetDeviceUniqueID(id string) {
 	if id == "" {
-		return nil
+		return
 	}
 	pd.lock()
 	defer pd.unlock()
 	pd.DeviceUniqID = id
-	return pd.peerStore.savePeerDevice(pd)
 }
 
 func (pd *peerDevice) StateURIs() types.StringSet {
@@ -593,18 +594,16 @@ func (pd *peerDevice) StateURIs() types.StringSet {
 	return pd.Stateuris.Copy()
 }
 
-func (pd *peerDevice) AddStateURI(stateURI string) error {
+func (pd *peerDevice) AddStateURI(stateURI string) {
 	pd.lock()
 	defer pd.unlock()
 	pd.Stateuris.Add(stateURI)
-	return pd.peerStore.savePeerDevice(pd)
 }
 
-func (pd *peerDevice) RemoveStateURI(stateURI string) error {
+func (pd *peerDevice) RemoveStateURI(stateURI string) {
 	pd.lock()
 	defer pd.unlock()
 	pd.Stateuris.Remove(stateURI)
-	return pd.peerStore.savePeerDevice(pd)
 }
 
 func (pd *peerDevice) LastContact() time.Time {
@@ -683,6 +682,21 @@ func (pd *peerDevice) Endpoint(dialInfo PeerDialInfo) (PeerEndpoint, bool) {
 	return e, exists
 }
 
+func (pd *peerDevice) MarshalStateBytes() ([]byte, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(pd)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (pd *peerDevice) UnmarshalStateBytes(bs []byte) error {
+	dec := gob.NewDecoder(bytes.NewReader(bs))
+	return dec.Decode(pd)
+}
+
 func (pd *peerDevice) lock()    { pd.peerStore.muPeers.Lock() }
 func (pd *peerDevice) unlock()  { pd.peerStore.muPeers.Unlock() }
 func (pd *peerDevice) rlock()   { pd.peerStore.muPeers.RLock() }
@@ -703,8 +717,8 @@ type PeerEndpoint interface {
 type peerEndpoint struct {
 	*peerDevice `tree:"-"`
 	Dialinfo    PeerDialInfo             `tree:"dialInfo"`
-	Lastcontact types.Time               `tree:"lastContact"`
-	Lastfailure types.Time               `tree:"lastFailure"`
+	Lastcontact time.Time                `tree:"lastContact"`
+	Lastfailure time.Time                `tree:"lastFailure"`
 	Fails       uint64                   `tree:"failures"`
 	backoff     utils.ExponentialBackoff `tree:"-"`
 }
@@ -727,7 +741,7 @@ func (e *peerEndpoint) UpdateConnStats(success bool) {
 	e.lock()
 	defer e.unlock()
 
-	now := types.Time(time.Now())
+	now := time.Now()
 	if success {
 		e.Lastcontact = now
 		e.Fails = 0
@@ -736,7 +750,6 @@ func (e *peerEndpoint) UpdateConnStats(success bool) {
 		e.Fails++
 		e.backoff.Next()
 	}
-	e.peerDevice.peerStore.savePeerDevice(e.peerDevice)
 }
 
 func (e *peerEndpoint) LastContact() time.Time {

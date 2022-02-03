@@ -376,12 +376,14 @@ var (
 			}
 			stateURI := args[0]
 
-			iter := app.TxStore.AllTxsForStateURI(stateURI, tree.GenesisTxID)
-			defer iter.Close()
+			iter, err := app.TxStore.AllTxsForStateURI(stateURI, tree.GenesisTxID)
+			if err != nil {
+				return err
+			}
 
 			var rows [][]string
-			for {
-				tx := iter.Next()
+			for iter.Rewind(); iter.Valid(); iter.Next() {
+				tx := iter.Tx()
 				if tx == nil {
 					break
 				}
@@ -390,6 +392,9 @@ var (
 					parents = append(parents, parent.Hex())
 				}
 				rows = append(rows, []string{tx.ID.Hex(), tx.Status.String(), strings.Join(parents, " ")})
+			}
+			if iter.Err() != nil {
+				app.Errorf("iterator: %v", iter.Err())
 			}
 
 			table := tablewriter.NewWriter(os.Stdout)

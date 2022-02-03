@@ -1,7 +1,7 @@
 package state
 
 import (
-	"github.com/dgraph-io/badger/v2"
+	"github.com/dgraph-io/badger/v3"
 )
 
 type dbIterator struct {

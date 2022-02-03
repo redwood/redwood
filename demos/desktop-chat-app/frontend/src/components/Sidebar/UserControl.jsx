@@ -205,6 +205,8 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL, nodeAddres
 					<SInput
 						value={username}
 						onChange={onChangeUsername}
+                        onEnter={onSave}
+                        autoFocus
 					/>
 				</InputLabel>
                 {/* <div>

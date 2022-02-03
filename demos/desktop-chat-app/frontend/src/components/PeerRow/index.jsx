@@ -6,6 +6,7 @@ import moment from 'moment'
 
 import Input from '../Input'
 import UserAvatar from '../UserAvatar'
+import Tooltip from '../Tooltip'
 import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 import useAPI from '../../hooks/useAPI'
 import usePeers from '../../hooks/usePeers'
@@ -109,6 +110,11 @@ function PeerRow({ address, editable, showLastSeen, boldName, onClick }) {
         setNewNickname(evt.target.value)
     }, [setNewNickname])
 
+    let onBlurNicknameInput = useCallback(() => {
+        setIsEditingNickname(false)
+        setNewNickname(addressBook[address])
+    }, [setIsEditingNickname, setNewNickname, addressBook, address])
+
     let onKeyDownNewNickname = useCallback(evt => {
         if (evt.key === 'Enter') {
             evt.stopPropagation()
@@ -118,7 +124,7 @@ function PeerRow({ address, editable, showLastSeen, boldName, onClick }) {
             setIsEditingNickname(false)
             setNewNickname(addressBook[address])
         }
-    }, [onClickSetNickname])
+    }, [onClickSetNickname, setIsEditingNickname, setNewNickname, addressBook, address])
 
     let onMouseDown = useCallback(() => {
         setClicked(true)
@@ -148,19 +154,21 @@ function PeerRow({ address, editable, showLastSeen, boldName, onClick }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
                 {!isEditingNickname &&
-                    <PeerNameTitle
-                        $bold={boldName}
-                        onClick={onClickEditNickname}
-                    >
-                        {addressBook[peer.address] || user.username || peer.address}
-                        {!!addressBook[peer.address] && user.username &&
-                            <UsernameIfNickname>({user.username})</UsernameIfNickname>
-                        }
-                    </PeerNameTitle>
+                    <Tooltip title="Click to set a nickname" placement="left" arrow>
+                        <PeerNameTitle
+                            $bold={boldName}
+                            onClick={onClickEditNickname}
+                        >
+                            {addressBook[peer.address] || user.username || peer.address}
+                            {!!addressBook[peer.address] && user.username &&
+                                <UsernameIfNickname>({user.username})</UsernameIfNickname>
+                            }
+                        </PeerNameTitle>
+                    </Tooltip>
                 }
                 {isEditingNickname &&
                     <div style={{ display: 'flex' }}>
-                        <SInput autoFocus value={newNickname} onChange={onChangeNewNickname} onKeyDown={onKeyDownNewNickname} />
+                        <SInput autoFocus value={newNickname} onChange={onChangeNewNickname} onKeyDown={onKeyDownNewNickname} onBlur={onBlurNicknameInput} />
                         <SCheckIcon onClick={onClickSetNickname} />
                     </div>
                 }

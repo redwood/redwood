@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/dgraph-io/badger/v2"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 
 	"redwood.dev/crypto"

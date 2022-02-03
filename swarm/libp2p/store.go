@@ -74,14 +74,14 @@ func (s *store) loadData() error {
 }
 
 func (s *store) StaticRelays() PeerSet {
-	s.dataMu.RLock()
-	defer s.dataMu.RUnlock()
-	return s.data.StaticRelays.Copy()
+	// s.dataMu.RLock()
+	// defer s.dataMu.RUnlock()
+	return s.data.StaticRelays
 }
 
 func (s *store) AddStaticRelay(staticRelay string) error {
-	s.dataMu.Lock()
-	defer s.dataMu.Unlock()
+	// s.dataMu.Lock()
+	// defer s.dataMu.Unlock()
 
 	err := s.data.StaticRelays.AddString(staticRelay)
 	if err != nil {
@@ -99,8 +99,8 @@ func (s *store) AddStaticRelay(staticRelay string) error {
 }
 
 func (s *store) RemoveStaticRelay(staticRelay string) error {
-	s.dataMu.Lock()
-	defer s.dataMu.Unlock()
+	// s.dataMu.Lock()
+	// defer s.dataMu.Unlock()
 
 	err := s.data.StaticRelays.RemoveString(staticRelay)
 	if err != nil {

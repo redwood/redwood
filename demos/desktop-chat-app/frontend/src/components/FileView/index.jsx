@@ -4,41 +4,44 @@ import { useRedwood, useStateTree } from '@redwood.dev/client/react'
 import { CloudDownload as DownloadIcon, OpenInNew as OpenIcon } from '@material-ui/icons'
 import AttachmentModal from '../AttachmentModal'
 import Embed from '../Embed'
+import Scrollbars from '../Scrollbars'
 import useModal from '../../hooks/useModal'
 import useNavigation from '../../hooks/useNavigation'
 
-let imageWidth = 250
+let imageWidth = 220
 let imageHeight = 175
 
 const SFileView = styled.div`
-    padding: 20px;
     background-color: ${props => props.backgroundColor};
     border-left: 2px solid ${props => props.borderColor};
     font-weight: 300;
-    height: calc(100vh - 90px);
-
-    overflow: scroll;
-
-    /* Chrome, Safari, Opera */
-    &::-webkit-scrollbar {
-        display: none;
-    }
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    // height: calc(100vh - 90px);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    // box-shadow: inset 1px 3px 14px 0px rgb(0 0 0 / 19%);
 `
 
 const SHeader = styled.h3`
     margin: 0;
-    padding: 0 0 0 16px;
+    padding: 16px;
+    // box-shadow: 0px 10px 11px -2px rgba(0,0,0,0.39);
 `
 
 const SFilesContainer = styled.div`
+    display: flex;
+    flex-grow: 1;
+`
+
+const SFilesContainerInner = styled.div`
+    padding: 20px;
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: flex-start;
     align-items: flex-start;
     align-content: flex-start;
+    flex-grow: 1;
 `
 
 const SIconLink = styled.a`
@@ -48,17 +51,13 @@ const SIconLink = styled.a`
 const SFileContainer = styled.div`
     flex-grow: 0;
     flex-shrink: 0;
-    width: 250px;
-    height: 200px;
+    width: ${_ => imageWidth}px;
+    height: calc(${ _ => imageHeight}px + 25px);
     margin: 8px;
     padding:  8px;
     border-radius: 6px;
     background-color: ${props => props.backgroundColor};
 `
-
-// const SFileContainerInner = styled.div`
-//     position: relative;
-// `
 
 const SFilename = styled.div`
     height: 24px;
@@ -126,24 +125,27 @@ function FileView({ className }) {
 
     return (
         <SFileView borderColor={theme.color.grey[300]} backgroundColor={theme.color.grey[200]} className={className}>
-            <SHeader>Files</SHeader>
-            <SFilesContainer>
-            {files.map((file, i) => {
-                let url = `${httpHost}/files[${i}]?state_uri=${encodeURIComponent(selectedStateURI)}`
-                console.log('file', file)
-                return (
-                    <SFileContainer backgroundColor={theme.color.grey[400]} key={selectedStateURI + file.filename + i}>
-                        <SFilename>{file.filename}</SFilename>
-                        <SEmbedWrapper>
-                            <SEmbed contentType={file['Content-Type']} url={url} />
-                            <SFileOverlay>
-                                {/*<SIconLink download={file.filename} href={url}><SDownloadIcon /></SIconLink>*/}
-                                <SIconLink onClick={() => onClickAttachment(file, url)}><SOpenIcon /></SIconLink>
-                            </SFileOverlay>
-                        </SEmbedWrapper>
-                    </SFileContainer>
-                )
-            })}
+            <SFilesContainer borderColor={theme.color.grey[300]}>
+                <Scrollbars shadow style={{ flexGrow: 1 }}>
+                    <SFilesContainerInner>
+                    {files.map((file, i) => {
+                        let url = `${httpHost}/files[${i}]?state_uri=${encodeURIComponent(selectedStateURI)}`
+                        console.log('file', file)
+                        return (
+                            <SFileContainer backgroundColor={theme.color.grey[400]} key={selectedStateURI + file.filename + i}>
+                                <SFilename>{file.filename}</SFilename>
+                                <SEmbedWrapper>
+                                    <SEmbed contentType={file['Content-Type']} url={url} />
+                                    <SFileOverlay>
+                                        {/*<SIconLink download={file.filename} href={url}><SDownloadIcon /></SIconLink>*/}
+                                        <SIconLink onClick={() => onClickAttachment(file, url)}><SOpenIcon /></SIconLink>
+                                    </SFileOverlay>
+                                </SEmbedWrapper>
+                            </SFileContainer>
+                        )
+                    })}
+                    </SFilesContainerInner>
+                </Scrollbars>
             </SFilesContainer>
         </SFileView>
     )

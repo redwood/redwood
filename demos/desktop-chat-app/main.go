@@ -78,7 +78,7 @@ func main() {
 			http.ListenAndServe(":"+c.String("pprof"), nil)
 		}()
 		// runtime.SetBlockProfileRate(int(time.Millisecond.Nanoseconds()) * 100)
-		runtime.SetCPUProfileRate(1000)
+		// runtime.SetCPUProfileRate(1000)
 
 		var (
 			profileRoot = c.String("root")
@@ -96,6 +96,10 @@ func main() {
 		fmt.Println("config file:", configFile)
 		fmt.Println("profile root:", profileRoot)
 		fmt.Println("port:", port)
+
+		go func() {
+			http.ListenAndServe("localhost:6060", nil)
+		}()
 
 		masterProcess := process.New("root")
 

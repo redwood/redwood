@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/brynbellomy/go-structomancer"
-	"github.com/dgraph-io/badger/v2"
-	badgerpb "github.com/dgraph-io/badger/v2/pb"
+	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/ristretto/z"
 
 	"redwood.dev/errors"
 	"redwood.dev/log"
@@ -1702,7 +1702,12 @@ func (t *VersionedDBTree) CopyVersion(dstVersion, srcVersion Version) error {
 		stream.NumGo = 16
 		stream.Prefix = append(srcVersion[:], ':')
 
-		stream.Send = func(list *badgerpb.KVList) error {
+		stream.Send = func(buf *z.Buffer) error {
+			list, err := badger.BufferToKVList(buf)
+			if err != nil {
+				return err
+			}
+
 			for _, kv := range list.Kv {
 				newKey := kv.Key
 				copy(newKey[:stateKeyPrefixLen], dstVersion[:])

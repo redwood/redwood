@@ -14,6 +14,7 @@ type PeriodicTask struct {
 	abort   context.CancelFunc
 	abortMu sync.Mutex
 	taskFn  func(ctx context.Context)
+	name    string
 }
 
 func NewPeriodicTask(name string, ticker utils.Ticker, taskFn func(ctx context.Context)) *PeriodicTask {
@@ -22,6 +23,7 @@ func NewPeriodicTask(name string, ticker utils.Ticker, taskFn func(ctx context.C
 		ticker:  ticker,
 		mailbox: utils.NewMailbox(1),
 		taskFn:  taskFn,
+		name:    name,
 	}
 }
 
@@ -30,6 +32,8 @@ func (task *PeriodicTask) Start() error {
 	if err != nil {
 		return err
 	}
+	defer task.Process.Autoclose()
+
 	task.ticker.Start()
 
 	task.Process.Go(nil, "ticker", func(ctx context.Context) {
@@ -39,28 +43,25 @@ func (task *PeriodicTask) Start() error {
 				return
 			default:
 			}
-			func() {
-				select {
-				case <-ctx.Done():
-					return
+			select {
+			case <-ctx.Done():
+				return
 
-				case <-task.ticker.Notify():
-					task.Enqueue()
+			case <-task.ticker.Notify():
+				task.Enqueue()
 
-				case <-task.mailbox.Notify():
-					x := task.mailbox.Retrieve()
-					if x == nil {
-						return
-					}
-
-					task.abortMu.Lock()
-					innerCtx, innerCancel := context.WithCancel(ctx)
-					task.abort = innerCancel
-					task.abortMu.Unlock()
-
-					task.taskFn(innerCtx)
+			case <-task.mailbox.Notify():
+				x := task.mailbox.Retrieve()
+				if x == nil {
+					continue
 				}
-			}()
+			}
+			task.abortMu.Lock()
+			innerCtx, innerCancel := context.WithCancel(ctx)
+			task.abort = innerCancel
+			task.abortMu.Unlock()
+
+			task.taskFn(innerCtx)
 		}
 	})
 	return nil
@@ -77,10 +78,10 @@ func (task *PeriodicTask) Enqueue() {
 
 func (task *PeriodicTask) AbortIfRunning() {
 	task.abortMu.Lock()
-	defer task.abortMu.Unlock()
 	if task.abort != nil {
 		task.abort()
 	}
+	task.abortMu.Unlock()
 }
 
 func (task *PeriodicTask) ForceRerun() {

@@ -126,15 +126,22 @@ func (c *controller) Start() (err error) {
 		case <-time.After(5 * time.Second):
 		}
 
-		iter := c.txStore.AllTxsForStateURI(c.stateURI, GenesisTxID)
-		for {
-			tx := iter.Next()
+		iter, err := c.txStore.AllTxsForStateURI(c.stateURI, GenesisTxID)
+		if err != nil {
+			c.Errorf("while readding pending txs to mempool: %v", err)
+			return
+		}
+		for iter.Rewind(); iter.Valid(); iter.Next() {
+			tx := iter.Tx()
 			if tx == nil {
 				break
 			}
 			if tx.Status == TxStatusInMempool {
 				c.mempool.Add(*tx)
 			}
+		}
+		if iter.Err() != nil {
+			c.Errorf("iterator: %v", iter.Err())
 		}
 	}()
 
@@ -215,7 +222,7 @@ func (c *controller) processMempoolTx(tx Tx) processTxOutcome {
 	err := c.tryApplyTx(tx)
 
 	if err == nil {
-		c.Successf("tx added to chain (%v) %v", tx.StateURI, tx.ID.Pretty())
+		c.Successf("tx added to chain (%v) %v %v", tx.StateURI, tx.ID.Pretty(), utils.PrettyJSON(tx))
 		node := c.states.StateAtVersion(nil, false)
 		defer node.Close()
 		return processTxOutcome_Succeeded

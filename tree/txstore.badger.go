@@ -1,15 +1,17 @@
 package tree
 
 import (
+	"bytes"
 	"sync"
 
-	"github.com/dgraph-io/badger/v2"
+	"github.com/dgraph-io/badger/v3"
 
 	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
 	"redwood.dev/utils"
+	"redwood.dev/utils/badgerutils"
 )
 
 type badgerTxStore struct {
@@ -56,6 +58,16 @@ func makeTxKey(stateURI string, txID state.Version) []byte {
 	return append(makeTxPrefixForStateURI(stateURI), txID[:]...)
 }
 
+func decodeTxKey(key []byte) (stateURI string, txID state.Version, _ error) {
+	parts := bytes.SplitN(key, []byte(":"), 3)
+	if len(parts) != 3 {
+		return "", state.Version{}, errors.Errorf("bad tx key: %v (%0x)", string(key), key)
+	}
+	stateURI = string(parts[1])
+	copy(txID[:], parts[2])
+	return
+}
+
 func makeStateURIKey(stateURI string) []byte {
 	return []byte("stateuri:" + stateURI)
 }
@@ -71,7 +83,7 @@ func (p *badgerTxStore) AddTx(tx Tx) (err error) {
 	var isNewStateURI bool
 
 	key := makeTxKey(tx.StateURI, tx.ID)
-	err = p.db.Update(func(txn *badger.Txn) error {
+	err = badgerutils.UpdateWithRetryOnConflict(p.db, func(txn *badger.Txn) error {
 		// Add the tx to the DB
 		err := txn.Set(key, []byte(bs))
 		if err != nil {
@@ -138,7 +150,7 @@ func (p *badgerTxStore) AddTx(tx Tx) (err error) {
 
 func (p *badgerTxStore) RemoveTx(stateURI string, txID state.Version) error {
 	key := makeTxKey(stateURI, txID)
-	return p.db.Update(func(txn *badger.Txn) error {
+	return badgerutils.UpdateWithRetryOnConflict(p.db, func(txn *badger.Txn) error {
 		return txn.Delete(key)
 	})
 }
@@ -186,101 +198,44 @@ func (p *badgerTxStore) FetchTx(stateURI string, txID state.Version) (Tx, error)
 	return tx, err
 }
 
-func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID state.Version) TxIterator {
+func (p *badgerTxStore) AllTxsForStateURI(stateURI string, fromTxID state.Version) (TxIterator, error) {
 	if fromTxID == (state.Version{}) {
 		fromTxID = GenesisTxID
 	}
 
-	txIter := NewTxIterator()
+	var txIDs []state.Version
+	err := p.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		iter := txn.NewIterator(opts)
+		defer iter.Close()
 
-	go func() {
-		defer close(txIter.ch)
+		prefix := makeTxPrefixForStateURI(stateURI)
 
-		txIter.err = p.db.View(func(txn *badger.Txn) error {
-			opts := badger.DefaultIteratorOptions
-			iter := txn.NewIterator(opts)
-			defer iter.Close()
-
-			prefix := makeTxPrefixForStateURI(stateURI)
-
-			for iter.Seek(prefix); iter.ValidForPrefix(prefix); iter.Next() {
-				var tx Tx
-				err := iter.Item().Value(func(val []byte) error {
-					return tx.Unmarshal(val)
-				})
-				if err != nil {
-					return err
-				}
-
-				select {
-				case <-txIter.chClose:
-					return nil
-				case txIter.ch <- &tx:
-				}
+		for iter.Seek(prefix); iter.ValidForPrefix(prefix); iter.Next() {
+			uri, txID, err := decodeTxKey(iter.Item().Key())
+			if err != nil {
+				return err
+			} else if uri != stateURI {
+				return errors.New("wrong stateURI: " + uri)
 			}
-			return nil
-		})
-	}()
 
-	return txIter
+			txIDs = append(txIDs, txID)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	txIter := NewAllTxsIterator(p, stateURI, txIDs)
+	return txIter, nil
 }
 
 func (p *badgerTxStore) AllValidTxsForStateURIOrdered(stateURI string, fromTxID state.Version) TxIterator {
 	if fromTxID == (state.Version{}) {
 		fromTxID = GenesisTxID
 	}
-
-	txIter := NewTxIterator()
-
-	go func() {
-		defer close(txIter.ch)
-
-		stack := []state.Version{fromTxID}
-		sent := make(map[state.Version]struct{})
-
-		txIter.err = p.db.View(func(txn *badger.Txn) error {
-			for len(stack) > 0 {
-				txID := stack[0]
-				stack = stack[1:]
-
-				if _, wasSent := sent[txID]; wasSent {
-					continue
-				}
-
-				item, err := txn.Get(makeTxKey(stateURI, txID))
-				if err != nil {
-					return err
-				}
-
-				var tx Tx
-				err = item.Value(func(val []byte) error {
-					return tx.Unmarshal(val)
-				})
-				if err != nil {
-					return err
-				}
-
-				// for _, parentID := range tx.Parents {
-				// 	if _, wasSent := sent[parentID]; !wasSent {
-				// 		stack = append(stack, tx.ID)
-				// 		continue OuterLoop
-				// 	}
-				// }
-
-				select {
-				case <-txIter.chClose:
-					return nil
-				case txIter.ch <- &tx:
-				}
-
-				sent[txID] = struct{}{}
-				stack = append(stack, tx.Children...)
-			}
-			return nil
-		})
-	}()
-
-	return txIter
+	return NewAllValidTxsForStateURIOrderedIterator(p, stateURI, fromTxID)
 }
 
 func (s *badgerTxStore) StateURIsWithData() (types.StringSet, error) {
@@ -326,13 +281,13 @@ func (s *badgerTxStore) OnNewStateURIWithData(fn NewStateURIWithDataCallback) {
 }
 
 func (s *badgerTxStore) MarkLeaf(stateURI string, txID state.Version) error {
-	return s.db.Update(func(txn *badger.Txn) error {
+	return badgerutils.UpdateWithRetryOnConflict(s.db, func(txn *badger.Txn) error {
 		return txn.Set(append([]byte("leaf:"+stateURI+":"), txID[:]...), nil)
 	})
 }
 
 func (s *badgerTxStore) UnmarkLeaf(stateURI string, txID state.Version) error {
-	return s.db.Update(func(txn *badger.Txn) error {
+	return badgerutils.UpdateWithRetryOnConflict(s.db, func(txn *badger.Txn) error {
 		return txn.Delete(append([]byte("leaf:"+stateURI+":"), txID[:]...))
 	})
 }

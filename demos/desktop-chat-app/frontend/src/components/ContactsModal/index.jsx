@@ -12,6 +12,7 @@ import UserAvatar from '../UserAvatar'
 import Tabs from '../Tabs'
 import Select from '../Select'
 import Input, { InputLabel } from '../Input'
+import Scrollbars from '../Scrollbars'
 import { ServerFab } from '../ServerFab'
 import PeerRow from '../PeerRow'
 import { useRedwood, useStateTree } from '@redwood.dev/client/react'
@@ -25,7 +26,7 @@ import theme from '../../theme'
 
 function ContactsModal({ onDismiss }) {
     let { activeModalProps: { initiallyFocusedContact } } = useModal('contacts')
-    let [activeStep, setActiveStep] = useState(initiallyFocusedContact ? 1 : 0)
+    let [activeStep, setActiveStep] = useState(initiallyFocusedContact ? 2 : 1)
     let [selectedPeer, setSelectedPeer] = useState(initiallyFocusedContact)
 
     useEffect(() => {
@@ -52,7 +53,7 @@ function ContactsModal({ onDismiss }) {
     }, [setActiveStep, activeStep])
 
     let handleDismiss = useCallback(() => {
-        setActiveStep(0)
+        setActiveStep(1)
         setSelectedPeer(null)
         onDismiss()
     }, [onDismiss, setActiveStep, setSelectedPeer])
@@ -63,7 +64,7 @@ function ContactsModal({ onDismiss }) {
         content: <AddPeerPane key="one" showPeerList={showPeerList} />,
     }, {
         width: 480,
-        height: 190,
+        height: 390,
         content: <PeerListPane key="two" showAddPeer={showAddPeer} showPeerDetails={showPeerDetails} />,
     }, {
         width: 800,
@@ -72,7 +73,7 @@ function ContactsModal({ onDismiss }) {
     }]
 
     return (
-        <Modal modalKey="contacts">
+        <Modal modalKey="contacts" closeModal={handleDismiss}>
             <ModalTitle closeModal={handleDismiss}>Contacts</ModalTitle>
             <ModalContent>
                 <SlidingPane activePane={activeStep} panes={panes} />
@@ -137,9 +138,11 @@ function PeerListPane({ showAddPeer, showPeerDetails, ...props }) {
     return (
         <Pane {...props}>
             <PaneContent>
-                {peers.map(peer => (
-                    <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
-                ))}
+                <Scrollbars style={{ height: 332 }}>
+                    {peers.map(peer => (
+                        <PeerRow address={peer.address} onClick={() => showPeerDetails(peer.address)} key={peer.address} />
+                    ))}
+                </Scrollbars>
             </PaneContent>
             <PaneActions>
                 <Button onClick={showAddPeer}>Add peer</Button>
@@ -186,7 +189,7 @@ const TransportsView = styled.div`
     padding: 8px;
     border-radius: 4px;
 
-    height: 174px;
+    height: 174px !important;
     overflow-x: scroll;
     overflow-y: scroll;
 

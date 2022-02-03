@@ -140,7 +140,7 @@ func (tp *treeProtocol) Start() error {
 	}
 
 	tp.Process.Go(nil, "initial subscribe", func(ctx context.Context) {
-		for _, stateURI := range tp.store.SubscribedStateURIs().Slice() {
+		for stateURI := range tp.store.SubscribedStateURIs() {
 			err := tp.Subscribe(ctx, stateURI)
 			if err != nil {
 				tp.Errorf("error subscribing to %v: %v", stateURI, err)
@@ -366,13 +366,10 @@ func (tp *treeProtocol) handleFetchHistoryRequest(stateURI string, opts FetchHis
 	isPrivate := tp.acl.TypeOf(stateURI) == StateURIType_Private
 
 	iter := tp.controllerHub.FetchValidTxsOrdered(stateURI, opts.FromTxID)
-	defer iter.Close()
 
-	for {
-		tx := iter.Next()
-		if iter.Error() != nil {
-			return iter.Error()
-		} else if tx == nil {
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		tx := iter.Tx()
+		if tx == nil {
 			break
 		}
 
@@ -403,6 +400,9 @@ func (tp *treeProtocol) handleFetchHistoryRequest(stateURI string, opts FetchHis
 			Leaves:      leaves,
 		}
 		writeSub.EnqueueWrite(msg)
+	}
+	if iter.Err() != nil {
+		return iter.Err()
 	}
 	return nil
 }
@@ -657,6 +657,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 				for addr := range members {
 					peerInfos = append(peerInfos, tp.peerStore.PeersWithAddress(addr)...)
 				}
+
 				peerConns := tp.peerInfosToPeerConns(ctx, peerInfos)
 				for _, peerConn := range peerConns {
 					if _, exists := alreadySent.LoadOrStore(peerConn.DialInfo(), struct{}{}); exists {
@@ -825,9 +826,6 @@ func (tp *treeProtocol) broadcastToWritableSubscribers(
 
 	isPrivate := tp.acl.TypeOf(stateURI) == StateURIType_Private
 
-	startTime := time.Now()
-	defer func() { tp.Warnf("%v %v", len(tp.writableSubscriptions[stateURI]), time.Now().Sub(startTime)) }()
-
 	for writeSub := range tp.writableSubscriptions[stateURI] {
 		allowed, err := tp.acl.HasReadAccess(stateURI, nil, types.NewAddressSet(writeSub.Addresses()))
 		if err != nil {
@@ -889,6 +887,7 @@ func (t *announceP2PStateURIsTask) announceP2PStateURIs(ctx context.Context) {
 		t.Errorf("while fetching state URIs from tx store: %v", err)
 		return
 	}
+
 	for stateURI := range stateURIs {
 		if t.treeProto.acl.TypeOf(stateURI) != StateURIType_Private {
 			continue

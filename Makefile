@@ -11,9 +11,17 @@ redwood.js/dist:
 
 
 .PHONY: hush
-hush: demos/desktop-chat-app/frontend/build
+hush:
 	cd ./demos/desktop-chat-app && \
-	go build -o $(GOPATH)/bin/hush .
+	rm -rf ./output && \
+	astilectron-bundler && \
+	cd ./output/linux-amd64 && zip -r ../hush-linux.zip ./Hush && \
+	cd ../windows-amd64 && zip -r ../hush-windows.zip ./Hush.exe && \
+	cd ../darwin-amd64 && zip -r ../hush-macos.zip ./Hush.app
+
+.PHONY: hush-upload
+hush-upload:
+	gh release upload $(TAG) ./demos/desktop-chat-app/output/hush-linux.zip ./demos/desktop-chat-app/output/hush-windows.zip ./demos/desktop-chat-app/output/hush-macos.zip --clobber
 
 demos/desktop-chat-app/frontend/node_modules:
 	cd demos/desktop-chat-app/frontend && \

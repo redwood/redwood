@@ -71,18 +71,26 @@ func (pubkey *AsymEncPubkey) String() string {
 	return pubkey.Hex()
 }
 
-func (pubkey *AsymEncPubkey) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + pubkey.Hex() + `"`), nil
-}
-
-func (pubkey *AsymEncPubkey) UnmarshalStateBytes(bs []byte) error {
+func (pubkey *AsymEncPubkey) UnmarshalBinary(bs []byte) error {
 	k := AsymEncPubkeyFromBytes(bs)
 	*pubkey = *k
 	return nil
 }
 
-func (pubkey AsymEncPubkey) MarshalStateBytes() ([]byte, error) {
+func (pubkey *AsymEncPubkey) MarshalBinary() ([]byte, error) {
 	return pubkey.Bytes(), nil
+}
+
+func (pubkey *AsymEncPubkey) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + pubkey.Hex() + `"`), nil
+}
+
+func (pubkey *AsymEncPubkey) UnmarshalStateBytes(bs []byte) error {
+	return pubkey.UnmarshalBinary(bs)
+}
+
+func (pubkey AsymEncPubkey) MarshalStateBytes() ([]byte, error) {
+	return pubkey.MarshalBinary()
 }
 
 func AsymEncPrivkeyFromBytes(bs []byte) *AsymEncPrivkey {

@@ -84,14 +84,18 @@ func (ap *authProtocol) Start() error {
 		ap.poolWorker.Add(verifyPeer{dialInfo, ap})
 	})
 
-	go func() {
+	ap.Process.Go(nil, "periodically verify unverified peers", func(ctx context.Context) {
 		for {
 			for _, dialInfo := range ap.peerStore.UnverifiedPeers() {
 				ap.poolWorker.Add(verifyPeer{dialInfo, ap})
 			}
-			time.Sleep(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+			}
 		}
-	}()
+	})
 
 	for _, tpt := range ap.transports {
 		ap.Infof(0, "registering %v", tpt.Name())

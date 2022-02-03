@@ -69,6 +69,17 @@ function SignIn({ profileNames, mnemonic, setMnemonic, profileName, setProfileNa
 	let { login } = useLoginStatus()
 
     let onSubmitLogin = useCallback(async (event) => {
+        if (!profileName) {
+            setErrorMessage('Profile name is required.')
+            return
+        } else if (!mnemonic) {
+            setErrorMessage('Mnemonic is required.')
+            return
+        } else if (!password) {
+            setErrorMessage('Password is required.')
+            return
+        }
+
 		event.preventDefault()
         setErrorMessage('')
         setLoadingText('Validating and generating mnemonic...')
@@ -89,6 +100,8 @@ function SignIn({ profileNames, mnemonic, setMnemonic, profileName, setProfileNa
                     value={profileName}
                     onChange={(event) => setProfileName(event.currentTarget.value)}
                     type={'text'}
+                    autoFocus
+                    onEnter={onSubmitLogin}
                 />
             </InputLabel>
             <InputLabel label={'Mnemonic'}>
@@ -96,6 +109,7 @@ function SignIn({ profileNames, mnemonic, setMnemonic, profileName, setProfileNa
                     value={mnemonic}
                     onChange={(event) => setMnemonic(event.currentTarget.value)}
                     type={'password'}
+                    onEnter={onSubmitLogin}
                 />
             </InputLabel>
             <InputLabel label={'Password'}>
@@ -103,6 +117,7 @@ function SignIn({ profileNames, mnemonic, setMnemonic, profileName, setProfileNa
                     value={password}
                     onChange={(event) => setPassword(event.currentTarget.value)}
                     type={'password'}
+                    onEnter={onSubmitLogin}
                 />
             </InputLabel>
             <SLink to={'/profiles'}>Existing Profiles ({profileNames.length}).</SLink>

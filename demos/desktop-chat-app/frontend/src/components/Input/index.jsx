@@ -19,7 +19,7 @@ function Input(props, ref) {
 
     const onKeyDownInner = useCallback(event => {
         if (event.key === 'Enter' && !!onEnter) {
-            onEnter()
+            onEnter(event)
         }
         if (onKeyDown) {
             onKeyDown(event)

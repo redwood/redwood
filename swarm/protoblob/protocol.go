@@ -153,7 +153,6 @@ func (bp *blobProtocol) periodicallyFetchMissingBlobs() {
 				}
 				bp.fetchBlobs(allBlobs)
 
-				// case <-ticker.Tick():
 			case <-ticker.C:
 				blobs, err := bp.blobStore.BlobsNeeded()
 				if err != nil {

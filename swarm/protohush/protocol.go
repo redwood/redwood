@@ -565,12 +565,11 @@ func (hp *hushProtocol) handleIncomingIndividualSessionProposal(ctx context.Cont
 		hp.Errorf("while saving incoming individual session proposal: %v", err)
 		return
 	}
-	hp.Debugf("Add handleIncomingIndividualSession")
 	hp.poolWorker.Add(handleIncomingIndividualSession{proposal.Hash(), hp})
 }
 
 func (hp *hushProtocol) handleIncomingIndividualSessionResponse(ctx context.Context, response IndividualSessionResponse, bob HushPeerConn) {
-	hp.Warnf("incoming individual session response (hash=%v approved=%v)", response.ProposalHash, response.Approved)
+	hp.Infof(0, "incoming individual session response (hash=%v approved=%v)", response.ProposalHash, response.Approved)
 
 	proposal, err := hp.store.OutgoingIndividualSessionProposalByHash(response.ProposalHash)
 	if errors.Cause(err) == errors.Err404 {
@@ -718,7 +717,6 @@ type exchangeDHPubkeysTask struct {
 	process.PeriodicTask
 	log.Logger
 	hushProto *hushProtocol
-	x         map[string]time.Time
 }
 
 func NewExchangeDHPubkeysTask(
@@ -796,7 +794,7 @@ func (t proposeIndividualSession) Work(ctx context.Context) (retry bool) {
 
 	session, err := t.hushProto.store.OutgoingIndividualSessionProposalByHash(t.proposalHash)
 	if errors.Cause(err) == errors.Err404 {
-		t.hushProto.Errorf("while proposing individual session %v: %v", t.proposalHash, err)
+		// Done
 		return false
 	} else if err != nil {
 		t.hushProto.Errorf("while fetching outgoing individual session proposal: %v", err)
@@ -858,9 +856,12 @@ func (t proposeIndividualSession) Work(ctx context.Context) (retry bool) {
 	defer cancel()
 
 	t.hushProto.withPeers(ctx, t.hushProto.peerStore.PeersWithAddress(bobAddr), func(ctx context.Context, peerConn HushPeerConn) error {
-		_, bobAsymEncPubkey := peerConn.PublicKeys(session.SessionID.BobAddr)
+		_, bobAsymEncPubkey := peerConn.PublicKeys(bobAddr)
 
-		encryptedProposalBytes, err := t.hushProto.keyStore.SealMessageFor(identity.Address(), bobAsymEncPubkey, sessionBytes)
+		copiedSessionBytes := make([]byte, len(sessionBytes))
+		copy(copiedSessionBytes, sessionBytes)
+
+		encryptedProposalBytes, err := t.hushProto.keyStore.SealMessageFor(identity.Address(), bobAsymEncPubkey, copiedSessionBytes)
 		if err != nil {
 			return err
 		}
@@ -886,11 +887,12 @@ var _ process.PoolWorkerItem = handleIncomingIndividualSession{}
 func (t handleIncomingIndividualSession) ID() process.PoolUniqueID { return t }
 
 func (t handleIncomingIndividualSession) Work(ctx context.Context) (retry bool) {
+	var proposedSession IndividualSessionProposal
 	defer func() {
 		if retry {
-			t.hushProto.Warnf("handle incoming individual session %v: retrying later", t.proposalHash)
+			t.hushProto.Warnf("handle incoming individual session (hash=%v sessionID=%v): retrying later", t.proposalHash, proposedSession.SessionID)
 		} else {
-			t.hushProto.Successf("handle incoming individual session %v: done", t.proposalHash)
+			t.hushProto.Successf("handle incoming individual session (hash=%v sessionID=%v): done", t.proposalHash, proposedSession.SessionID)
 		}
 	}()
 
@@ -899,7 +901,7 @@ func (t handleIncomingIndividualSession) Work(ctx context.Context) (retry bool) 
 		// Done
 		return false
 	} else if err != nil {
-		t.hushProto.Errorf("while fetching incoming individual session proposal from database: %v", err)
+		t.hushProto.Errorf("while fetching incoming individual session proposal (hash=%v) from database: %v", t.proposalHash, err)
 		return true
 	}
 
@@ -909,33 +911,33 @@ func (t handleIncomingIndividualSession) Work(ctx context.Context) (retry bool) 
 		return true
 	}
 
-	proposedSession, err := t.decryptProposal(proposal)
+	proposedSession, err = t.decryptProposal(proposal)
 	if err != nil {
-		t.hushProto.Errorf("while decrypting incoming individual session proposal: %v", err)
+		t.hushProto.Errorf("while decrypting incoming individual session proposal (hash=%v): %v", t.proposalHash, err)
 		return true
 	}
-	t.hushProto.Debugf("incoming individual session proposal: %v", proposedSession.SessionID)
+	t.hushProto.Debugf("incoming individual session proposal %v", utils.PrettyJSON(proposedSession))
 
 	err = t.validateProposal(proposal.AliceAddr, proposedSession)
 	switch errors.Cause(err) {
 	case ErrInvalidSignature:
-		t.hushProto.Errorf("invalid signature on incoming individual session proposal")
+		t.hushProto.Errorf("invalid signature on incoming individual session proposal (hash=%v sessionID=%v)", t.proposalHash, proposedSession.SessionID)
 		t.handleInvalidProposal(proposal, proposedSession)
 		return false
 
 	case ErrEpochTooLow:
-		t.hushProto.Errorf("epoch too low on incoming individual session proposal")
+		t.hushProto.Errorf("epoch too low on incoming individual session proposal (hash=%v sessionID=%v)", t.proposalHash, proposedSession.SessionID)
 		t.handleInvalidProposal(proposal, proposedSession)
 		return false
 
 	case ErrInvalidDHPubkey:
-		t.hushProto.Debugf("ignoring session proposal: DH pubkey %v does not match our latest", proposedSession.RemoteDHPubkey)
+		t.hushProto.Debugf("ignoring session proposal: DH pubkey %v does not match our latest (hash=%v sessionID=%v)", proposedSession.RemoteDHPubkey, t.proposalHash, proposedSession.SessionID)
 		t.handleInvalidProposal(proposal, proposedSession)
 		// t.proposeReplacementSession(myAddr, proposal, proposedSession)
 		return false
 
 	default:
-		t.hushProto.Errorf("while validating incoming individual session proposal: %v", err)
+		t.hushProto.Errorf("while validating incoming individual session proposal (hash=%v sessionID=%v): %v", t.proposalHash, proposedSession.SessionID, err)
 		return true
 
 	case nil:
@@ -1006,7 +1008,6 @@ func (t handleIncomingIndividualSession) Work(ctx context.Context) (retry bool) 
 		return true
 	}
 
-	t.hushProto.Debugf("Add respondToIndividualSession")
 	t.hushProto.poolWorker.Add(respondToIndividualSession{proposedSession.SessionID.AliceAddr, proposalHash, t.hushProto})
 	return false
 }
