@@ -95,6 +95,9 @@ func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
 			var value string
 			var unmarshal func(fieldName, value string, fieldVal reflect.Value) error
 			switch source {
+			case "method":
+				value = r.Method
+				unmarshal = unmarshalHTTPMethod
 			case "header":
 				value = r.Header.Get(name)
 				unmarshal = unmarshalHTTPHeader
@@ -176,6 +179,10 @@ func UnmarshalHTTPResponse(into interface{}, r *http.Response) error {
 		}
 	}
 	return nil
+}
+
+func unmarshalHTTPMethod(fieldName, method string, fieldVal reflect.Value) error {
+	return unmarshalHTTPField(fieldName, method, fieldVal)
 }
 
 type URLPathUnmarshaler interface {

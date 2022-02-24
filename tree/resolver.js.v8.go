@@ -3,7 +3,6 @@ package tree
 
 import (
 	"encoding/json"
-	"io/ioutil"
 
 	"rogchap.com/v8go"
 
@@ -13,7 +12,6 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/state"
-	"redwood.dev/tree/nelson"
 	"redwood.dev/types"
 )
 
@@ -30,27 +28,27 @@ func NewJSResolver(config state.Node, internalState map[string]interface{}) (_ R
 	defer errors.Annotate(&err, "NewJSResolver")
 
 	// srcval, exists, err := nelson.GetValueRecursive(config, state.Keypath("src"), nil)
-	srcval, exists, err := config.Value(state.Keypath("src"), nil)
+	// srcval, exists, err := config.Value(state.Keypath("src"), nil)
+	// if err != nil {
+	// 	return nil, err
+	// } else if !exists {
+	// 	return nil, errors.Errorf("js resolver needs a 'src' param")
+	// }
+
+	// readableSrc, ok := nelson.GetReadCloser(srcval)
+	// if !ok {
+	// 	return nil, errors.Errorf("js resolver needs a 'src' param of type string, []byte, or io.ReadCloser (got %T)", srcval)
+	// }
+	src, _, err := config.StringValue(state.Keypath("src"))
 	if err != nil {
 		return nil, err
-	} else if !exists {
+	} else if len(src) == 0 {
 		return nil, errors.Errorf("js resolver needs a 'src' param")
-	}
-
-	readableSrc, ok := nelson.GetReadCloser(srcval)
-	if !ok {
-		return nil, errors.Errorf("js resolver needs a 'src' param of type string, []byte, or io.ReadCloser (got %T)", srcval)
-	}
-	defer readableSrc.Close()
-
-	srcStr, err := ioutil.ReadAll(readableSrc)
-	if err != nil {
-		return nil, errors.WithStack(err)
 	}
 
 	v8ctx, _ := v8go.NewContext(nil)
 
-	_, err = v8ctx.RunScript("var global = {}; var newStateJSON; "+string(srcStr), "")
+	_, err = v8ctx.RunScript("var global = {}; var newStateJSON; "+src, "")
 	if err != nil {
 		return nil, err
 	}

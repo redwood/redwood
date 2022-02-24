@@ -26,10 +26,10 @@ type ControllerHub interface {
 	IsStateURIWithData(stateURI string) (bool, error)
 	OnNewStateURIWithData(fn NewStateURIWithDataCallback)
 	StateAtVersion(stateURI string, version *state.Version) (state.Node, error)
-	QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
+	// QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
 	Leaves(stateURI string) ([]state.Version, error)
 
-	BlobReader(refID blob.ID) (io.ReadCloser, int64, error)
+	BlobReader(refID blob.ID, rng *types.Range) (io.ReadCloser, int64, error)
 
 	OnNewState(fn NewStateCallback)
 	DebugPrint(stateURI string)
@@ -49,10 +49,6 @@ type controllerHub struct {
 	newStateListeners   []NewStateCallback
 	newStateListenersMu sync.RWMutex
 }
-
-var (
-	ErrNoController = errors.New("no controller for that stateURI")
-)
 
 func NewControllerHub(dbRootPath string, txStore TxStore, blobStore blob.Store, badgerOpts badgerutils.OptsBuilder) ControllerHub {
 	return &controllerHub{
@@ -153,24 +149,24 @@ func (m *controllerHub) StateAtVersion(stateURI string, version *state.Version) 
 
 	ctrl := m.controllers[stateURI]
 	if ctrl == nil {
-		return nil, errors.Wrapf(ErrNoController, stateURI)
+		return nil, errors.Wrapf(errors.Err404, stateURI)
 	}
 	return ctrl.StateAtVersion(version), nil
 }
 
-func (m *controllerHub) QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error) {
-	m.controllersMu.RLock()
-	defer m.controllersMu.RUnlock()
+// func (m *controllerHub) QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error) {
+// 	m.controllersMu.RLock()
+// 	defer m.controllersMu.RUnlock()
 
-	ctrl := m.controllers[stateURI]
-	if ctrl == nil {
-		return nil, errors.Wrapf(ErrNoController, stateURI)
-	}
-	return ctrl.QueryIndex(version, keypath, indexName, queryParam, rng)
-}
+// 	ctrl := m.controllers[stateURI]
+// 	if ctrl == nil {
+// 		return nil, errors.Wrapf(errors.Err404, stateURI)
+// 	}
+// 	return ctrl.QueryIndex(version, keypath, indexName, queryParam, rng)
+// }
 
-func (m *controllerHub) BlobReader(refID blob.ID) (io.ReadCloser, int64, error) {
-	return m.blobStore.BlobReader(refID)
+func (m *controllerHub) BlobReader(refID blob.ID, rng *types.Range) (io.ReadCloser, int64, error) {
+	return m.blobStore.BlobReader(refID, rng)
 }
 
 func (m *controllerHub) Leaves(stateURI string) ([]state.Version, error) {
@@ -183,7 +179,7 @@ func (m *controllerHub) OnNewState(fn NewStateCallback) {
 	m.newStateListeners = append(m.newStateListeners, fn)
 }
 
-func (m *controllerHub) notifyNewStateListeners(tx Tx, root state.Node, leaves []state.Version) {
+func (m *controllerHub) notifyNewStateListeners(tx Tx, root state.Node, leaves []state.Version, diff *state.Diff) {
 	m.newStateListenersMu.RLock()
 	defer m.newStateListenersMu.RUnlock()
 
@@ -194,7 +190,7 @@ func (m *controllerHub) notifyNewStateListeners(tx Tx, root state.Node, leaves [
 		handler := handler
 		go func() {
 			defer wg.Done()
-			handler(tx, root, leaves)
+			handler(tx, root, leaves, diff)
 		}()
 	}
 	wg.Wait()

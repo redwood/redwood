@@ -70,7 +70,7 @@ func (f *fetcher) Start() error {
 			return
 		}
 
-		err = f.startWorkPool(manifest.ChunkSHA3s)
+		err = f.startWorkPool(manifest.Chunks)
 		if err != nil {
 			f.Errorf("while starting work pool: %v", err)
 			return
@@ -157,15 +157,15 @@ func (f *fetcher) fetchManifest(ctx context.Context) (_ blob.Manifest, err error
 	}
 }
 
-func (f *fetcher) startWorkPool(chunkSHA3s []types.Hash) error {
+func (f *fetcher) startWorkPool(chunks []blob.ManifestChunk) error {
 	var jobs []interface{}
-	for _, chunkSHA3 := range chunkSHA3s {
-		have, err := f.blobStore.HaveChunk(chunkSHA3)
+	for _, chunk := range chunks {
+		have, err := f.blobStore.HaveChunk(chunk.SHA3)
 		if err != nil {
 			return errors.Wrap(err, "while reading from blob store")
 		}
 		if !have {
-			jobs = append(jobs, chunkSHA3)
+			jobs = append(jobs, chunk.SHA3)
 		}
 	}
 

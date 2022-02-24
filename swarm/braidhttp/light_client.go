@@ -264,7 +264,7 @@ func (c *LightClient) Head(stateURI string, keypath state.Keypath) (HeadResponse
 	}, nil
 }
 
-func (c *LightClient) Get(stateURI string, version *state.Version, keypath state.Keypath, rng *state.Range, raw bool) (io.ReadCloser, int64, []state.Version, error) {
+func (c *LightClient) Get(stateURI string, version *state.Version, keypath state.Keypath, rangeReq *RangeRequest, raw bool) (io.ReadCloser, int64, []state.Version, error) {
 	client := c.client()
 	url := c.dialAddr + "/" + string(keypath)
 	if raw {
@@ -281,8 +281,14 @@ func (c *LightClient) Get(stateURI string, version *state.Version, keypath state
 	if version != nil {
 		req.Header.Set("Version", version.Hex())
 	}
-	if rng != nil {
-		req.Header.Set("Range", fmt.Sprintf("json=%d:%d", rng.Start, rng.End))
+	if rangeReq != nil {
+		headerValue, ok, err := rangeReq.MarshalHTTPHeader()
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		if ok {
+			req.Header.Set("Range", headerValue)
+		}
 	}
 
 	resp, err := client.Do(req)

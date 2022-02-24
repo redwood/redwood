@@ -83,13 +83,13 @@ func TestStore(t *testing.T) {
 		defer store.Close()
 
 		expectedManifest := blob.Manifest{
-			Size: 12345,
-			ChunkSHA3s: []types.Hash{
-				testutils.RandomHash(t),
-				testutils.RandomHash(t),
-				testutils.RandomHash(t),
-				testutils.RandomHash(t),
-				testutils.RandomHash(t),
+			TotalSize: 12345,
+			Chunks: []blob.ManifestChunk{
+				{testutils.RandomHash(t), types.Range{0, 100, false}},
+				{testutils.RandomHash(t), types.Range{101, 200, false}},
+				{testutils.RandomHash(t), types.Range{201, 300, false}},
+				{testutils.RandomHash(t), types.Range{301, 400, false}},
+				{testutils.RandomHash(t), types.Range{401, 500, false}},
 			},
 		}
 
@@ -299,8 +299,11 @@ func TestStore(t *testing.T) {
 		fooHash := types.HashBytes(foo)
 		barHash := types.HashBytes(bar)
 		manifest := blob.Manifest{
-			Size:       uint64(len(foo) + len(bar)),
-			ChunkSHA3s: []types.Hash{fooHash, barHash},
+			TotalSize: uint64(len(foo) + len(bar)),
+			Chunks: []blob.ManifestChunk{
+				{fooHash, types.Range{12, 34, false}},
+				{barHash, types.Range{56, 78, false}},
+			},
 		}
 		blobID := blob.ID{
 			HashAlg: types.SHA3,
@@ -348,8 +351,11 @@ func TestStore(t *testing.T) {
 		blob2SHA3 := types.HashBytes(append(bar, baz...))
 		blob2SHA1 := sha1(append(bar, baz...))
 		manifest2 := blob.Manifest{
-			Size:       uint64(len(bar) + len(baz)),
-			ChunkSHA3s: []types.Hash{barSHA3, bazSHA3},
+			TotalSize: uint64(len(bar) + len(baz)),
+			Chunks: []blob.ManifestChunk{
+				{barSHA3, types.Range{12, 34, false}},
+				{bazSHA3, types.Range{56, 78, false}},
+			},
 		}
 		blobID2 := blob.ID{HashAlg: types.SHA3, Hash: blob2SHA3}
 		err = store.StoreManifest(blobID2, manifest2)
@@ -370,8 +376,11 @@ func TestStore(t *testing.T) {
 		blob3SHA3 := types.HashBytes(append(quux, zork...))
 		blob3SHA1 := sha1(append(quux, zork...))
 		manifest3 := blob.Manifest{
-			Size:       uint64(len(quux) + len(zork)),
-			ChunkSHA3s: []types.Hash{quuxSHA3, zorkSHA3},
+			TotalSize: uint64(len(quux) + len(zork)),
+			Chunks: []blob.ManifestChunk{
+				{quuxSHA3, types.Range{12, 34, false}},
+				{zorkSHA3, types.Range{56, 78, false}},
+			},
 		}
 		blobID3 := blob.ID{HashAlg: types.SHA3, Hash: blob3SHA3}
 		err = store.StoreManifest(blobID3, manifest3)

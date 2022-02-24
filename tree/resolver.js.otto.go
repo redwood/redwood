@@ -4,7 +4,6 @@ package tree
 
 import (
 	"encoding/json"
-	"io/ioutil"
 
 	"github.com/deoxxa/otto"
 
@@ -12,7 +11,6 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/state"
-	"redwood.dev/tree/nelson"
 	"redwood.dev/types"
 )
 
@@ -28,29 +26,17 @@ var _ Resolver = (*jsResolver)(nil)
 func NewJSResolver(config state.Node, internalState map[string]interface{}) (_ Resolver, err error) {
 	defer errors.Annotate(&err, "NewJSResolver")
 
-	// srcval, exists, err := nelson.GetValueRecursive(config, state.Keypath("src"), nil)
-	srcval, exists, err := config.Value(state.Keypath("src"), nil)
+	src, _, err := config.StringValue(state.Keypath("src"))
 	if err != nil {
 		return nil, err
-	} else if !exists {
+	} else if len(src) == 0 {
 		return nil, errors.Errorf("js resolver needs a 'src' param")
-	}
-
-	readableSrc, ok := nelson.GetReadCloser(srcval)
-	if !ok {
-		return nil, errors.Errorf("js resolver needs a 'src' param of type string, []byte, or io.ReadCloser (got %T)", srcval)
-	}
-	defer readableSrc.Close()
-
-	srcStr, err := ioutil.ReadAll(readableSrc)
-	if err != nil {
-		return nil, errors.WithStack(err)
 	}
 
 	vm := otto.New()
 	vm.Set("global", map[string]interface{}{})
 
-	_, err = vm.Run(srcStr)
+	_, err = vm.Run(src)
 	if err != nil {
 		return nil, err
 	}

@@ -473,7 +473,7 @@ func (tp *treeProtocol) handleWritableSubscriptionOpened(
 
 		// Immediately write the current state to the subscriber
 		node, err := tp.controllerHub.StateAtVersion(req.StateURI, nil)
-		if err != nil && errors.Cause(err) != tree.ErrNoController {
+		if err != nil && errors.Cause(err) != errors.Err404 {
 			tp.Errorf("error writing initial state to peer: %v", err)
 			writeSub.Close()
 			return nil, err
@@ -752,7 +752,7 @@ func (tp *treeProtocol) peerInfosToPeerConns(ctx context.Context, peerInfos []sw
 	return conns
 }
 
-func (tp *treeProtocol) handleNewState(tx tree.Tx, node state.Node, leaves []state.Version) {
+func (tp *treeProtocol) handleNewState(tx tree.Tx, node state.Node, leaves []state.Version, diff *state.Diff) {
 	switch tp.acl.TypeOf(tx.StateURI) {
 	case StateURIType_Invalid:
 		panic("invariant violation")

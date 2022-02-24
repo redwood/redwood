@@ -3,16 +3,48 @@ package braidhttp
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"redwood.dev/errors"
+	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/tree"
 )
+
+func jsonReadCloser(node state.Node, rangeReq *RangeRequest) (io.ReadCloser, int64, error) {
+	var bs []byte
+	var err error
+	if rangeReq != nil {
+		if rangeReq.RangeType == RangeTypeJSON {
+			node = node.NodeAt(nil, &state.Range{Start: rangeReq.Range.Start, End: rangeReq.Range.End})
+		}
+
+		bs, err = json.Marshal(node)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		if rangeReq.RangeType == RangeTypeBytes {
+			if uint64(len(bs)) < rangeReq.Range.Start || uint64(len(bs)) < rangeReq.Range.End {
+				return nil, 0, state.ErrInvalidRange
+			}
+			bs = bs[rangeReq.Range.Start:rangeReq.Range.End]
+		}
+	} else {
+		bs, err = json.Marshal(node)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	return ioutil.NopCloser(bytes.NewReader(bs)), int64(len(bs)), nil
+}
 
 var altSvcRegexp1 = regexp.MustCompile(`\s*(\w+)="([^"]+)"\s*(;[^,]*)?`)
 var altSvcRegexp2 = regexp.MustCompile(`\s*;\s*(\w+)=(\w+)`)

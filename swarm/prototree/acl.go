@@ -72,7 +72,7 @@ func (acl DefaultACL) MembersOf(stateURI string) (types.AddressSet, error) {
 	addrs := types.NewAddressSet(nil)
 
 	state, err := acl.ControllerHub.StateAtVersion(stateURI, nil)
-	if errors.Cause(err) == tree.ErrNoController {
+	if errors.Cause(err) == errors.Err404 {
 		return nil, nil
 	} else if err != nil {
 		return nil, err

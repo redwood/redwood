@@ -1,11 +1,32 @@
 syntax = "proto3";
 
 package Redwood.types;
-
 option go_package = "redwood.dev/types/pb";
 
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option (gogoproto.gostring_all) = true;
+option (gogoproto.equal_all) = true;
+option (gogoproto.verbose_equal_all) = true;
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.stringer_all) =  true;
+option (gogoproto.populate_all) = true;
+option (gogoproto.testgen_all) = true;
+option (gogoproto.benchgen_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
 enum HashAlg {
-    Unknown = 0;
+    option (gogoproto.enum_stringer) = false;
+
+    Unknown = 0 [(gogoproto.enumvalue_customname) = "HashAlgUnknown"];
     SHA1 = 1;
     SHA3 = 2;
+}
+
+message Range {
+    uint64 start = 1   [(gogoproto.moretags) = "tree:\"start\"",   (gogoproto.jsontag) = "start"];
+    uint64 end = 2     [(gogoproto.moretags) = "tree:\"end\"",     (gogoproto.jsontag) = "end"];
+    bool   reverse = 3 [(gogoproto.moretags) = "tree:\"reverse\"", (gogoproto.jsontag) = "reverse"];
 }

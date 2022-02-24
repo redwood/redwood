@@ -24,7 +24,7 @@ type Controller interface {
 
 	AddTx(tx Tx) error
 	StateAtVersion(version *state.Version) state.Node
-	QueryIndex(version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
+	// QueryIndex(version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
 	Leaves() ([]state.Version, error)
 	OnNewState(fn NewStateCallback)
 	DebugPrint()
@@ -38,9 +38,10 @@ type controller struct {
 	stateDBRootPath string
 	badgerOpts      badgerutils.OptsBuilder
 
-	controllerHub ControllerHub
-	txStore       TxStore
-	blobStore     blob.Store
+	controllerHub  ControllerHub
+	txStore        TxStore
+	blobStore      blob.Store
+	nelsonResolver nelson.Resolver
 
 	behaviorTree *behaviorTree
 
@@ -54,7 +55,7 @@ type controller struct {
 	addTxMu sync.Mutex
 }
 
-type NewStateCallback func(tx Tx, state state.Node, leaves []state.Version)
+type NewStateCallback func(tx Tx, state state.Node, leaves []state.Version, diff *state.Diff)
 
 var (
 	MergeTypeKeypath = state.Keypath("Merge-Type")
@@ -78,6 +79,7 @@ func NewController(
 		controllerHub:   controllerHub,
 		txStore:         txStore,
 		blobStore:       blobStore,
+		nelsonResolver:  nelson.NewResolver(controllerHub, blobStore, nil),
 		behaviorTree:    newBehaviorTree(),
 	}
 	return c, nil
@@ -399,6 +401,7 @@ func (c *controller) tryApplyTx(tx Tx) (err error) {
 		}
 	}
 
+	diff := root.Diff()
 	c.handleNewBlobs(root)
 
 	err = c.updateBehaviorTree(root)
@@ -446,7 +449,7 @@ func (c *controller) tryApplyTx(tx Tx) (err error) {
 
 	root = c.states.StateAtVersion(nil, false)
 	defer root.Close()
-	c.notifyNewStateListeners(tx, root, leaves)
+	c.notifyNewStateListeners(tx, root, leaves, diff)
 
 	return nil
 }
@@ -465,21 +468,26 @@ func (c *controller) handleNewBlobs(root state.Node) {
 	for kp := range diff.Added {
 		keypath := state.Keypath(kp)
 		parentKeypath, key := keypath.Pop()
-		switch {
-		case key.Equals(nelson.ValueKey):
-			contentType, err := nelson.GetContentType(root.NodeAt(parentKeypath, nil))
-			if err != nil && errors.Cause(err) != errors.Err404 {
-				c.Errorf("error getting ref content type: %v", err)
+		fmt.Println("   -", parentKeypath, "::", key)
+		if key.Equals(nelson.ValueKey) {
+			parent := root.NodeAt(parentKeypath, nil)
+
+			contentType, is, err := parent.StringValue(nelson.ContentTypeKey)
+			if err != nil {
+				c.Errorf("error getting blob link value: %v", err)
 				continue
-			} else if contentType != "link" {
+			} else if !is || contentType != "link" {
 				continue
 			}
 
-			linkStr, _, err := root.StringValue(keypath)
+			linkStr, is, err := parent.StringValue(nelson.ValueKey)
 			if err != nil {
-				c.Errorf("error getting ref link value: %v", err)
+				c.Errorf("error getting blob link value: %v", err)
+				continue
+			} else if !is {
 				continue
 			}
+
 			linkType, linkValue := nelson.DetermineLinkType(linkStr)
 			if linkType == nelson.LinkTypeBlob {
 				var blobID blob.ID
@@ -550,11 +558,11 @@ func (c *controller) updateBehaviorTree(root state.Node) error {
 				return err
 			}
 
-		case key.Equals(state.Keypath("Indices")):
-			err := c.initializeIndexer(newBehaviorTree, root, keypath)
-			if err != nil {
-				return err
-			}
+			// case key.Equals(state.Keypath("Indices")):
+			// 	err := c.initializeIndexer(newBehaviorTree, root, keypath)
+			// 	if err != nil {
+			// 		return err
+			// 	}
 		}
 
 		for parentKeypath != nil {
@@ -586,18 +594,18 @@ func (c *controller) initializeResolver(behaviorTree *behaviorTree, root state.N
 		return err
 	}
 
-	config, anyMissing, err := nelson.Resolve(config, c.controllerHub, c.blobStore)
+	config, anyMissing, err := c.nelsonResolver.Resolve(config)
 	if err != nil {
 		return err
 	} else if anyMissing {
 		return errors.WithStack(ErrMissingCriticalBlobs)
 	}
 
-	contentType, err := nelson.GetContentType(config)
+	contentType, err := nelson.ContentTypeOf(config)
 	if err != nil {
 		return err
 	} else if contentType == "" {
-		return errors.New("cannot initialize resolver without a 'Content-Type' key")
+		return errors.New("cannot initialize validator without a 'Content-Type' key")
 	}
 
 	ctor, exists := resolverRegistry[contentType]
@@ -637,14 +645,14 @@ func (c *controller) initializeValidator(behaviorTree *behaviorTree, root state.
 		return err
 	}
 
-	config, anyMissing, err := nelson.Resolve(config, c.controllerHub, c.blobStore)
+	config, anyMissing, err := c.nelsonResolver.Resolve(config)
 	if err != nil {
 		return err
 	} else if anyMissing {
 		return errors.WithStack(ErrMissingCriticalBlobs)
 	}
 
-	contentType, err := nelson.GetContentType(config)
+	contentType, err := nelson.ContentTypeOf(config)
 	if err != nil {
 		return err
 	} else if contentType == "" {
@@ -667,47 +675,48 @@ func (c *controller) initializeValidator(behaviorTree *behaviorTree, root state.
 	return nil
 }
 
-func (c *controller) initializeIndexer(behaviorTree *behaviorTree, root state.Node, indexerConfigKeypath state.Keypath) error {
-	// Resolve any blobs (to code) in the indexer config object.  We copy the config so
-	// that we don't inject any blobs into the state tree itself
-	indexConfigs, err := root.CopyToMemory(indexerConfigKeypath, nil)
-	if err != nil {
-		return err
-	}
+// func (c *controller) initializeIndexer(behaviorTree *behaviorTree, root state.Node, indexerConfigKeypath state.Keypath) error {
+// 	// Resolve any blobs (to code) in the indexer config object.  We copy the config so
+// 	// that we don't inject any blobs into the state tree itself
+// 	indexConfigs, err := root.CopyToMemory(indexerConfigKeypath, nil)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	subkeys := indexConfigs.Subkeys()
+// 	subkeys := indexConfigs.Subkeys()
 
-	for _, indexName := range subkeys {
-		config, anyMissing, err := nelson.Resolve(indexConfigs.NodeAt(indexName, nil), c.controllerHub, c.blobStore)
-		if err != nil {
-			return err
-		} else if anyMissing {
-			return errors.WithStack(ErrMissingCriticalBlobs)
-		}
+// 	for _, indexName := range subkeys {
 
-		contentType, err := nelson.GetContentType(config)
-		if err != nil {
-			return err
-		} else if contentType == "" {
-			return errors.New("cannot initialize indexer without a 'Content-Type' key")
-		}
+// 		config, anyMissing, err := nelson.Resolve(indexConfigs.NodeAt(indexName, nil), c.controllerHub, c.blobStore)
+// 		if err != nil {
+// 			return err
+// 		} else if anyMissing {
+// 			return errors.WithStack(ErrMissingCriticalBlobs)
+// 		}
 
-		ctor, exists := indexerRegistry[contentType]
-		if !exists {
-			return errors.Errorf("unknown indexer type '%v'", contentType)
-		}
+// 		contentType, err := nelson.GetContentType(config)
+// 		if err != nil {
+// 			return err
+// 		} else if contentType == "" {
+// 			return errors.New("cannot initialize indexer without a 'Content-Type' key")
+// 		}
 
-		indexer, err := ctor(config)
-		if err != nil {
-			return err
-		}
+// 		ctor, exists := indexerRegistry[contentType]
+// 		if !exists {
+// 			return errors.Errorf("unknown indexer type '%v'", contentType)
+// 		}
 
-		indexerNodeKeypath, _ := indexerConfigKeypath.Pop()
+// 		indexer, err := ctor(config)
+// 		if err != nil {
+// 			return err
+// 		}
 
-		behaviorTree.addIndexer(indexerNodeKeypath, indexName, indexer)
-	}
-	return nil
-}
+// 		indexerNodeKeypath, _ := indexerConfigKeypath.Pop()
+
+// 		behaviorTree.addIndexer(indexerNodeKeypath, indexName, indexer)
+// 	}
+// 	return nil
+// }
 
 func (c *controller) OnNewState(fn NewStateCallback) {
 	c.newStateListenersMu.Lock()
@@ -715,7 +724,7 @@ func (c *controller) OnNewState(fn NewStateCallback) {
 	c.newStateListeners = append(c.newStateListeners, fn)
 }
 
-func (c *controller) notifyNewStateListeners(tx Tx, root state.Node, leaves []state.Version) {
+func (c *controller) notifyNewStateListeners(tx Tx, root state.Node, leaves []state.Version, diff *state.Diff) {
 	c.newStateListenersMu.RLock()
 	defer c.newStateListenersMu.RUnlock()
 
@@ -726,65 +735,65 @@ func (c *controller) notifyNewStateListeners(tx Tx, root state.Node, leaves []st
 		handler := handler
 		go func() {
 			defer wg.Done()
-			handler(tx, root, leaves)
+			handler(tx, root, leaves, diff)
 		}()
 	}
 	wg.Wait()
 }
 
-func (c *controller) QueryIndex(version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (node state.Node, err error) {
-	defer errors.Annotate(&err, "keypath=%v index=%v index_arg=%v rng=%v", keypath, indexName, queryParam, rng)
+// func (c *controller) QueryIndex(version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (node state.Node, err error) {
+// 	defer errors.Annotate(&err, "keypath=%v index=%v index_arg=%v rng=%v", keypath, indexName, queryParam, rng)
 
-	indexNode := c.indices.IndexAtVersion(version, keypath, indexName, false)
+// 	indexNode := c.indices.IndexAtVersion(version, keypath, indexName, false)
 
-	exists, err := indexNode.Exists(queryParam)
-	if err != nil {
-		return nil, err
+// 	exists, err := indexNode.Exists(queryParam)
+// 	if err != nil {
+// 		return nil, err
 
-	} else if !exists {
-		indexNode.Close()
-		indexNode = c.indices.IndexAtVersion(version, keypath, indexName, true)
+// 	} else if !exists {
+// 		indexNode.Close()
+// 		indexNode = c.indices.IndexAtVersion(version, keypath, indexName, true)
 
-		indices, exists := c.behaviorTree.indexers[string(keypath)]
-		if !exists {
-			return nil, errors.Err404
-		}
-		indexer, exists := indices[string(indexName)]
-		if !exists {
-			return nil, errors.Err404
-		}
+// 		indices, exists := c.behaviorTree.indexers[string(keypath)]
+// 		if !exists {
+// 			return nil, errors.Err404
+// 		}
+// 		indexer, exists := indices[string(indexName)]
+// 		if !exists {
+// 			return nil, errors.Err404
+// 		}
 
-		if version == nil {
-			version = &state.CurrentVersion
-		}
+// 		if version == nil {
+// 			version = &state.CurrentVersion
+// 		}
 
-		nodeToIndex, err := c.states.StateAtVersion(version, false).NodeAt(keypath, nil).CopyToMemory(nil, nil)
-		if err != nil {
-			return nil, err
-		}
+// 		nodeToIndex, err := c.states.StateAtVersion(version, false).NodeAt(keypath, nil).CopyToMemory(nil, nil)
+// 		if err != nil {
+// 			return nil, err
+// 		}
 
-		nodeToIndex, err = nelson.FirstNonFrameNode(nodeToIndex, 10)
-		if err != nil {
-			return nil, err
-		}
+// 		nodeToIndex, err = nelson.FirstNonFrameNode(nodeToIndex, 10)
+// 		if err != nil {
+// 			return nil, err
+// 		}
 
-		err = c.indices.BuildIndex(version, nodeToIndex, indexName, indexer)
-		if err != nil {
-			return nil, err
-		}
+// 		err = c.indices.BuildIndex(version, nodeToIndex, indexName, indexer)
+// 		if err != nil {
+// 			return nil, err
+// 		}
 
-		indexNode = c.indices.IndexAtVersion(version, keypath, indexName, false)
+// 		indexNode = c.indices.IndexAtVersion(version, keypath, indexName, false)
 
-		exists, err = indexNode.Exists(queryParam)
-		if err != nil {
-			return nil, err
-		} else if !exists {
-			return nil, errors.Err404
-		}
-	}
+// 		exists, err = indexNode.Exists(queryParam)
+// 		if err != nil {
+// 			return nil, err
+// 		} else if !exists {
+// 			return nil, errors.Err404
+// 		}
+// 	}
 
-	return indexNode.NodeAt(queryParam, rng), nil
-}
+// 	return indexNode.NodeAt(queryParam, rng), nil
+// }
 
 func (c *controller) DebugPrint() {
 	node := c.states.StateAtVersion(nil, false)

@@ -359,7 +359,7 @@ func setValueAtKeypath(x interface{}, keypath Keypath, val interface{}, clobber 
 	var key Keypath
 	for {
 		key, keypath = keypath.Shift()
-		if keypath == nil {
+		if len(keypath) == 0 {
 			break
 		}
 
@@ -394,8 +394,4 @@ func setValueAtKeypath(x interface{}, keypath Keypath, val interface{}, clobber 
 		panic(fmt.Sprintf("bad 3: %T %v", cur, key))
 	}
 	return x
-}
-
-func debugPrint(inFormat string, args ...interface{}) {
-	fmt.Printf(inFormat, args...)
 }

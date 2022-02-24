@@ -18,7 +18,6 @@ import Button from './Button'
 import Input from './Input'
 import Attachment from './Attachment'
 import AttachmentModal from './AttachmentModal'
-import Embed from './Embed'
 import EmojiQuickSearch from './EmojiQuickSearch'
 import TextBox from './TextBox'
 import NormalizeMessage from './ChatHelpers/NormalizeMessage'
@@ -33,9 +32,6 @@ import useNavigation from '../hooks/useNavigation'
 import useAddressBook from '../hooks/useAddressBook'
 import useUsers from '../hooks/useUsers'
 import emojiSheet from './../assets/emoji-mart-twitter-images.png'
-
-// import strToColor from '../utils/strToColor'
-
 
 const Container = styled.div`
     display: flex;
@@ -98,7 +94,6 @@ const AddAttachmentButton = styled(AddIcon)`
 
 const UserAvatarPlaceholder = styled.div`
     padding-left: 40px;
-    // width: 40px;
 `
 
 const MessageDetails = styled.div`
@@ -678,7 +673,7 @@ function Chat({ className }) {
                 { showEmojiKeyboard ? <EmojiWrapper>
                   <Picker
                     useButton={false}
-					title={'Redwood Chat'}
+					title={'Hush'}
 					backgroundImageFn={(set, sheetSize) => {
 						return emojiSheet
 					}}

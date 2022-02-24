@@ -28,16 +28,16 @@ message BlobMessage {
     }
 
     message FetchManifest {
-        Redwood.blob.BlobID id = 1;
+        Redwood.blob.ID blobID = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "BlobID"];
     }
 
     message SendManifest {
-        Redwood.blob.Manifest manifest = 1;
+        Redwood.blob.Manifest manifest = 1 [(gogoproto.nullable) = false];
         bool exists = 2;
     }
 
     message FetchChunk {
-        bytes sha3 = 1;
+        bytes sha3 = 1 [(gogoproto.customname) = "SHA3"];
     }
 
     message SendChunk {

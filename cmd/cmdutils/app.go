@@ -542,7 +542,7 @@ func (app *App) Close() error {
 
 func (app *App) EnsureInitialState(stateURI string, checkKeypath string, value interface{}) {
 	node, err := app.ControllerHub.StateAtVersion(stateURI, nil)
-	if err != nil && errors.Cause(err) != tree.ErrNoController {
+	if err != nil && errors.Cause(err) != errors.Err404 {
 		panic(err)
 	} else if err == nil {
 		defer node.Close()

@@ -521,15 +521,10 @@ func (t *transport) handleBlobStream(stream netp2p.Stream) {
 	}
 
 	if msg := proto.GetFetchManifest(); msg != nil {
-		blobID, err := blob.IDFromProtobuf(msg.Id)
-		if err != nil {
-			t.Errorf("while parsing blob ID: %v", err)
-			return
-		}
-		t.HandleBlobManifestRequest(blobID, peerConn)
+		t.HandleBlobManifestRequest(msg.BlobID, peerConn)
 
 	} else if msg := proto.GetFetchChunk(); msg != nil {
-		sha3, err := types.HashFromBytes(msg.Sha3)
+		sha3, err := types.HashFromBytes(msg.SHA3)
 		if err != nil {
 			t.Errorf("while parsing blob hash: %v", err)
 			return
@@ -607,7 +602,7 @@ func (t *transport) handleIncomingStream(stream netp2p.Stream) {
 			writeSub = newWritableSubscription(peer, stateURI)
 			return writeSub, nil
 		})
-		if err != nil && errors.Cause(err) != tree.ErrNoController {
+		if err != nil && errors.Cause(err) != errors.Err404 {
 			peer.Close()
 			t.Errorf("while starting incoming subscription: %v", err)
 			return
@@ -772,6 +767,7 @@ func (t *transport) ProvidersOfBlob(ctx context.Context, refID blob.ID) (<-chan 
 			}
 
 			for pinfo := range t.dht.FindProvidersAsync(ctx, refCid, 8) {
+				t.Debugf("PROVIDER %v", pinfo.ID.Pretty())
 				if pinfo.ID == t.libp2pHost.ID() {
 					continue
 				}
@@ -904,8 +900,12 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 	}
 
 	for _, sha3 := range sha3s {
+		t.Debugf("ANNOUNCE %v", sha3)
 		t.Process.Go(ctx, sha3.String(), func(ctx context.Context) {
 			err := t.transport.AnnounceBlob(ctx, sha3)
+			if err != nil {
+				t.Debugf("ANNOUNCE ERR %v", err)
+			}
 			if err != nil && errors.Cause(err) != context.DeadlineExceeded && errors.Cause(err) != context.Canceled {
 				t.Errorf("announce: error: %v", err)
 			}

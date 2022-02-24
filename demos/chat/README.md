@@ -20,20 +20,20 @@ Then, build the Redwood binary and place it in your `$PATH`:
 
 ```sh
 cd ../cmd/redwood
-go build --tags static -o /usr/local/bin/redwood .
+go build -o ~/redwood .
 ```
 
 Then, start the first Redwood node:
 
 ```sh
 $ cd ../demos/chat
-$ redwood --config ./node1.redwoodrc --password-file ./password.txt
+$ ~/redwood --config ./node1.redwoodrc --password-file ./password.txt
 ```
 
 Then, open another terminal and start the second Redwood node:
 
 ```sh
-$ redwood --config ./node2.redwoodrc --password-file ./password.txt
+$ ~/redwood --config ./node2.redwoodrc --password-file ./password.txt
 ```
 
 Lastly, open another terminal and run the `setup.js` script:

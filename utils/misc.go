@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"strconv"
 )
@@ -64,4 +65,8 @@ func DeepCopyJSValue(val interface{}) interface{} {
 func PrettyJSON(x interface{}) string {
 	j, _ := json.MarshalIndent(x, "", "    ")
 	return string(j)
+}
+
+func PrintfDebugPrinter(msg string, args ...interface{}) {
+	fmt.Printf(msg, args...)
 }

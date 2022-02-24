@@ -13,6 +13,8 @@ import (
 	"redwood.dev/utils"
 )
 
+type Range = pb.Range
+
 type ID [32]byte
 
 var EmptyID = ID{}
@@ -366,34 +368,13 @@ func (h *Hash) UnmarshalJSON(data []byte) error {
 func (h Hash) Compare(other Hash) int { return bytes.Compare(h[:], other[:]) }
 func (h Hash) Equal(other Hash) bool  { return bytes.Equal(h[:], other[:]) }
 
-type HashAlg int
+type HashAlg = pb.HashAlg
 
 const (
-	HashAlgUnknown HashAlg = iota
-	SHA1
-	SHA3
+	HashAlgUnknown = pb.HashAlgUnknown
+	SHA1           = pb.SHA1
+	SHA3           = pb.SHA3
 )
-
-func HashAlgFromProtobuf(proto pb.HashAlg) HashAlg {
-	return HashAlg(proto)
-}
-
-func (alg HashAlg) ToProtobuf() pb.HashAlg {
-	return pb.HashAlg(alg)
-}
-
-func (alg HashAlg) String() string {
-	switch alg {
-	case HashAlgUnknown:
-		return "unknown"
-	case SHA1:
-		return "sha1"
-	case SHA3:
-		return "sha3"
-	default:
-		return "ERR:(bad value for HashAlg)"
-	}
-}
 
 type gogoprotobufTest interface {
 	Float32() float32

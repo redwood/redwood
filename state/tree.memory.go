@@ -9,6 +9,7 @@ import (
 
 	"redwood.dev/errors"
 	"redwood.dev/log"
+	"redwood.dev/utils"
 )
 
 var logger = log.NewLogger("memory node")
@@ -58,9 +59,7 @@ func (n *MemoryNode) DebugContents(keypathPrefix Keypath, rng *[2]uint64) ([]Key
 	return n.keypaths, values, n.nodeTypes, nil
 }
 
-// CopyToMemory returns a copy of the node at the given keypath.  However, it uses
-// copy-on-write under the hood, so that if the node and its children are not
-// modified, no actual copying is done.
+// CopyToMemory returns a copy of the node at the given keypath.
 func (t *MemoryNode) CopyToMemory(keypath Keypath, rng *Range) (Node, error) {
 	if rng == nil {
 		rng = t.rng
@@ -160,6 +159,10 @@ func (n *MemoryNode) NumSubkeys() uint64 {
 // returned, but calling .Value on it will return a result with
 // NodeTypeInvalid.
 func (n *MemoryNode) NodeAt(relKeypath Keypath, rng *Range) Node {
+	if node, relKeypath := n.ParentNodeFor(relKeypath); n != node {
+		return node.NodeAt(relKeypath, rng)
+	}
+
 	absKeypath := n.keypath.Push(relKeypath.Normalized())
 
 	if node, relKeypath := n.ParentNodeFor(relKeypath); n != node {
@@ -186,15 +189,18 @@ func (n *MemoryNode) NodeAt(relKeypath Keypath, rng *Range) Node {
 // the case where another tree.Node has been .Set into the receiver's
 // state tree at some point in the provided keypath, it will return the
 // deepest tree.Node corresponding to that keypath.  The returned keypath
-// is provided keypath, relative to the deepest tree.Node.
-func (n *MemoryNode) ParentNodeFor(relKeypath Keypath) (Node, Keypath) {
+// is the provided keypath, relative to the deepest tree.Node.
+func (n *MemoryNode) ParentNodeFor(relKeypath Keypath) (x Node, y Keypath) {
+	// defer func() {
+	// 	fmt.Println("PARENT", n.keypath, "::", relKeypath, ":: parent:", x.Keypath(), ":: relKeypath:", y)
+	// }()
 	if len(relKeypath) == 0 {
 		return n, relKeypath
 	}
 
 	parts := append([]Keypath{nil}, relKeypath.Parts()...)
-	absKeypath := n.keypath.Push(relKeypath)
 	currentKeypath := n.keypath.Copy()
+	absKeypath := currentKeypath.Copy().Push(relKeypath)
 	for _, part := range parts {
 		currentKeypath = currentKeypath.Push(part)
 
@@ -271,11 +277,15 @@ func (n *MemoryNode) NodeInfo(relKeypath Keypath) (NodeType, ValueType, uint64, 
 // been set in the subtree for this node.  For a MemoryNode, it never
 // returns an error.
 func (n *MemoryNode) Exists(keypath Keypath) (bool, error) {
+	// fmt.Println("FOOOO", n.keypath, keypath)
 	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		// fmt.Println("FOOOO 2", n.keypath, keypath)
 		return node.Exists(relKeypath)
 	}
+	// fmt.Println("FOOOO 3", n.keypath, keypath)
 
 	absKeypath := n.keypath.Push(keypath)
+	// n.DebugPrint(utils.PrintfDebugPrinter, true, 0)
 
 	_, exists := n.nodeTypes[string(absKeypath)]
 	return exists, nil
@@ -392,7 +402,37 @@ func (n *MemoryNode) BytesValue(keypath Keypath) ([]byte, bool, error) {
 }
 
 func (n *MemoryNode) MapValue(keypath Keypath) (map[string]interface{}, bool, error) {
-	panic("@@TODO: unimplemented")
+	if node, relKeypath := n.ParentNodeFor(keypath); n != node {
+		return node.MapValue(relKeypath)
+	}
+	absKeypath := n.keypath.Push(keypath)
+
+	if n.nodeTypes[string(absKeypath)] != NodeTypeMap {
+		return nil, false, nil
+	}
+
+	m := make(map[string]interface{})
+	err := n.scanKeypathsWithPrefix(absKeypath, nil, func(currentKeypath Keypath, i int) error {
+		relKeypath := currentKeypath.RelativeTo(absKeypath)
+		if len(relKeypath) == 0 {
+			return nil
+		}
+		switch n.nodeTypes[string(currentKeypath)] {
+		case NodeTypeValue:
+			m = setValueAtKeypath(m, relKeypath, n.values[string(currentKeypath)], false).(map[string]interface{})
+
+		case NodeTypeMap:
+			m = setValueAtKeypath(m, relKeypath, make(map[string]interface{}, n.contentLengths[string(currentKeypath)]), false).(map[string]interface{})
+
+		case NodeTypeSlice:
+			m = setValueAtKeypath(m, relKeypath, make([]interface{}, n.contentLengths[string(currentKeypath)]), false).(map[string]interface{})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return m, true, nil
 }
 
 func (n *MemoryNode) SliceValue(keypath Keypath) ([]interface{}, bool, error) {
@@ -460,7 +500,8 @@ func (n *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 					if err != nil {
 						return err
 					} else if !exists {
-						panic("wat")
+						node.DebugPrint(utils.PrintfDebugPrinter, true, 0)
+						panic(fmt.Sprintf("wat (%T) %v", node, node.Keypath()))
 					}
 					setValueAtKeypath(m, relKp, val, false)
 				case NodeTypeValue:
@@ -1112,11 +1153,14 @@ func (t *MemoryNode) DebugPrint(printFn func(inFormat string, args ...interface{
 		printFn = func(inFormat string, args ...interface{}) { oldPrintFn(inFormat+"\n", args...) }
 	}
 
+	start, end := t.findPrefixRange(t.keypath)
+	keypaths := t.keypaths[start:end]
+
 	indent := strings.Repeat(" ", 4*indentLevel)
 
 	file, line := getFileAndLine()
 	printFn(indent+"MemoryNode (root keypath: %v) (%v:%v) {", t.keypath, file, line)
-	for _, kp := range t.keypaths {
+	for _, kp := range keypaths {
 		if t.nodeTypes[string(kp)] == NodeTypeSlice || t.nodeTypes[string(kp)] == NodeTypeMap {
 			printFn(indent+"    %v: %v %v %v", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.contentLengths[string(kp)])
 
@@ -1129,8 +1173,4 @@ func (t *MemoryNode) DebugPrint(printFn func(inFormat string, args ...interface{
 		}
 	}
 	printFn(indent + "}")
-}
-
-func (t *MemoryNode) DebugFmtPrint(indentLevel int) {
-	t.DebugPrint(func(inFormat string, args ...interface{}) { fmt.Printf(inFormat, args...) }, true, indentLevel)
 }

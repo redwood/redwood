@@ -134,6 +134,7 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 }
 
 func (bp *blobProtocol) periodicallyFetchMissingBlobs() {
+	bp.Warnf("periodicallyFetchMissingBlobs")
 	bp.Process.Go(nil, "periodicallyFetchMissingBlobs", func(ctx context.Context) {
 		// ticker := utils.NewExponentialBackoffTicker(10*time.Second, 2*time.Minute) // @@TODO: configurable?
 		ticker := time.NewTicker(10 * time.Second)
@@ -143,22 +144,27 @@ func (bp *blobProtocol) periodicallyFetchMissingBlobs() {
 		for {
 			select {
 			case <-ctx.Done():
+				bp.Warnf("periodicallyFetchMissingBlobs DONE")
 				return
 
 			case <-bp.blobsNeeded.Notify():
+				bp.Warnf("periodicallyFetchMissingBlobs NOTIFY")
 				blobsBlobs := bp.blobsNeeded.RetrieveAll()
 				var allBlobs []blob.ID
 				for _, blobs := range blobsBlobs {
 					allBlobs = append(allBlobs, blobs.([]blob.ID)...)
 				}
+				bp.Warnf("periodicallyFetchMissingBlobs    - %v", utils.PrettyJSON(allBlobs))
 				bp.fetchBlobs(allBlobs)
 
 			case <-ticker.C:
+				bp.Warnf("periodicallyFetchMissingBlobs TICKER")
 				blobs, err := bp.blobStore.BlobsNeeded()
 				if err != nil {
 					bp.Errorf("error fetching list of needed blobs: %v", err)
 					continue
 				}
+				bp.Warnf("periodicallyFetchMissingBlobs    - %v", utils.PrettyJSON(blobs))
 
 				if len(blobs) > 0 {
 					bp.fetchBlobs(blobs)

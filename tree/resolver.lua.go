@@ -1,7 +1,6 @@
 package tree
 
 import (
-	"io/ioutil"
 	"reflect"
 
 	"github.com/brynbellomy/go-luaconv"
@@ -10,7 +9,6 @@ import (
 	"redwood.dev/blob"
 	"redwood.dev/errors"
 	"redwood.dev/state"
-	"redwood.dev/tree/nelson"
 	"redwood.dev/types"
 )
 
@@ -19,26 +17,33 @@ type luaResolver struct {
 }
 
 func NewLuaResolver(config state.Node, internalState map[string]interface{}) (Resolver, error) {
-	srcval, exists, err := nelson.GetValueRecursive(config, state.Keypath("src"), nil)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	} else if !exists {
-		return nil, errors.Errorf("lua resolver needs a 'src' param")
-	}
+	// srcval, exists, err := nelson.GetValueRecursive(config, state.Keypath("src"), nil)
+	// if err != nil {
+	// 	return nil, errors.WithStack(err)
+	// } else if !exists {
+	// 	return nil, errors.Errorf("lua resolver needs a 'src' param")
+	// }
 
-	readableSrc, ok := nelson.GetReadCloser(srcval)
-	if !ok {
-		return nil, errors.Errorf("lua resolver needs a 'src' param of type string, []byte, or io.ReadCloser (got %T)", srcval)
-	}
-	defer readableSrc.Close()
+	// readableSrc, ok := nelson.GetReadCloser(srcval)
+	// if !ok {
+	// 	return nil, errors.Errorf("lua resolver needs a 'src' param of type string, []byte, or io.ReadCloser (got %T)", srcval)
+	// }
+	// defer readableSrc.Close()
 
-	srcStr, err := ioutil.ReadAll(readableSrc)
+	// srcStr, err := ioutil.ReadAll(readableSrc)
+	// if err != nil {
+	// 	return nil, errors.WithStack(err)
+	// }
+
+	src, is, err := config.NodeAt(state.Keypath("src"), nil).StringValue(nil)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, err
+	} else if !is {
+		return nullResolver{}, nil
 	}
 
 	L := lua.NewState()
-	err = L.DoString(string(srcStr))
+	err = L.DoString(src)
 	if err != nil {
 		return nil, err
 	}

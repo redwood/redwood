@@ -350,7 +350,7 @@ var (
 
 			_, err := app.ControllerHub.StateAtVersion(stateURI, nil)
 			var txID state.Version
-			if errors.Cause(err) == tree.ErrNoController {
+			if errors.Cause(err) == errors.Err404 {
 				txID = tree.GenesisTxID
 			} else {
 				txID = state.RandomVersion()

@@ -177,12 +177,7 @@ func (peer *peerConn) FetchBlobManifest(blobID blob.ID) (blob.Manifest, error) {
 	if payload == nil {
 		return blob.Manifest{}, swarm.ErrProtocol
 	}
-
-	m, err := blob.ManifestFromProtobuf(payload.Manifest)
-	if err != nil {
-		return blob.Manifest{}, err
-	}
-	return m, nil
+	return payload.Manifest, nil
 }
 
 func (peer *peerConn) SendBlobManifest(manifest blob.Manifest, exists bool) error {

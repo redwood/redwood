@@ -15,6 +15,7 @@ const SImage = styled(Image)`
 `
 
 function Embed({ contentType, url, width, className }) {
+    console.log(contentType, url, width)
     let content
     if (isImage(contentType)) {
         return <SImage src={url} width={width} className={className} />
