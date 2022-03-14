@@ -2,7 +2,6 @@ package protoblob
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"redwood.dev/blob"
@@ -24,7 +23,7 @@ type BlobProtocol interface {
 type BlobTransport interface {
 	swarm.Transport
 	ProvidersOfBlob(ctx context.Context, blobID blob.ID) (<-chan BlobPeerConn, error)
-	AnnounceBlob(ctx context.Context, blobID blob.ID) error
+	AnnounceBlobs(ctx context.Context, blobIDs types.Set[blob.ID])
 	OnBlobManifestRequest(handler func(blobID blob.ID, peer BlobPeerConn))
 	OnBlobChunkRequest(handler func(sha3 types.Hash, peer BlobPeerConn))
 }
@@ -39,15 +38,15 @@ type BlobPeerConn interface {
 }
 
 type blobProtocol struct {
-	process.Process
-	log.Logger
+	swarm.BaseProtocol[BlobTransport, BlobPeerConn]
 
-	blobStore   blob.Store
-	transports  map[string]BlobTransport
-	blobsNeeded *utils.Mailbox
+	blobStore         blob.Store
+	transports        map[string]BlobTransport
+	blobsNeeded       *utils.Mailbox[[]blob.ID]
+	blobsBeingFetched types.SyncSet[blob.ID]
 
-	blobsBeingFetched   map[blob.ID]struct{}
-	blobsBeingFetchedMu sync.Mutex
+	// fetchBlobsTask    *fetchBlobsTask
+	announceBlobsTask *announceBlobsTask
 }
 
 const (
@@ -61,14 +60,36 @@ func NewBlobProtocol(transports []swarm.Transport, blobStore blob.Store) *blobPr
 			transportsMap[tpt.Name()] = tpt
 		}
 	}
-	return &blobProtocol{
-		Process:           *process.New(ProtocolName),
-		Logger:            log.NewLogger(ProtocolName),
+	bp := &blobProtocol{
+		BaseProtocol: swarm.BaseProtocol[BlobTransport, BlobPeerConn]{
+			Process:    *process.New(ProtocolName),
+			Logger:     log.NewLogger(ProtocolName),
+			Transports: transportsMap,
+		},
 		blobStore:         blobStore,
 		transports:        transportsMap,
-		blobsNeeded:       utils.NewMailbox(0),
-		blobsBeingFetched: make(map[blob.ID]struct{}),
+		blobsNeeded:       utils.NewMailbox[[]blob.ID](0),
+		blobsBeingFetched: types.NewSyncSet[blob.ID](nil),
 	}
+
+	// bp.fetchBlobsTask = NewFetchBlobsTask(15*time.Second, bp)
+	bp.announceBlobsTask = NewAnnounceBlobsTask(15*time.Second, bp)
+
+	bp.blobStore.OnBlobsNeeded(func(blobs []blob.ID) {
+		bp.blobsNeeded.Deliver(blobs)
+		// bp.fetchBlobsTask.Enqueue()
+	})
+	bp.blobStore.OnBlobsSaved(func() {
+		bp.announceBlobsTask.Enqueue()
+	})
+
+	for _, tpt := range bp.transports {
+		bp.Infof(0, "registering %v", tpt.Name())
+		tpt.OnBlobManifestRequest(bp.handleBlobManifestRequest)
+		tpt.OnBlobChunkRequest(bp.handleBlobChunkRequest)
+	}
+
+	return bp
 }
 
 func (bp *blobProtocol) Name() string {
@@ -76,18 +97,24 @@ func (bp *blobProtocol) Name() string {
 }
 
 func (bp *blobProtocol) Start() error {
-	bp.Process.Start()
-	bp.blobStore.OnBlobsNeeded(func(blobs []blob.ID) {
-		bp.blobsNeeded.Deliver(blobs)
-	})
+	err := bp.Process.Start()
+	if err != nil {
+		return err
+	}
 
 	bp.periodicallyFetchMissingBlobs()
 
-	for _, tpt := range bp.transports {
-		bp.Infof(0, "registering %v", tpt.Name())
-		tpt.OnBlobManifestRequest(bp.handleBlobManifestRequest)
-		tpt.OnBlobChunkRequest(bp.handleBlobChunkRequest)
+	// err = bp.Process.SpawnChild(nil, bp.fetchBlobsTask)
+	// if err != nil {
+	// 	return err
+	// }
+
+	err = bp.Process.SpawnChild(nil, bp.announceBlobsTask)
+	if err != nil {
+		return err
 	}
+	bp.announceBlobsTask.Enqueue()
+
 	return nil
 }
 
@@ -107,11 +134,11 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 	for _, tpt := range bp.transports {
 		innerCh, err := tpt.ProvidersOfBlob(ctx, blobID)
 		if err != nil {
-			// bp.Warnf("transport %v could not fetch providers of blob %v", tpt.Name(), blobID)
+			bp.Warnf("transport %v could not fetch providers of blob %v", tpt.Name(), blobID)
 			continue
 		}
 
-		child.Go(nil, tpt.Name(), func(ctx context.Context) {
+		child.Go(ctx, tpt.Name(), func(ctx context.Context) {
 			for {
 				select {
 				case <-ctx.Done():
@@ -134,38 +161,29 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 }
 
 func (bp *blobProtocol) periodicallyFetchMissingBlobs() {
-	bp.Warnf("periodicallyFetchMissingBlobs")
 	bp.Process.Go(nil, "periodicallyFetchMissingBlobs", func(ctx context.Context) {
-		// ticker := utils.NewExponentialBackoffTicker(10*time.Second, 2*time.Minute) // @@TODO: configurable?
 		ticker := time.NewTicker(10 * time.Second)
-		// ticker.Start()
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ctx.Done():
-				bp.Warnf("periodicallyFetchMissingBlobs DONE")
 				return
 
 			case <-bp.blobsNeeded.Notify():
-				bp.Warnf("periodicallyFetchMissingBlobs NOTIFY")
 				blobsBlobs := bp.blobsNeeded.RetrieveAll()
 				var allBlobs []blob.ID
 				for _, blobs := range blobsBlobs {
-					allBlobs = append(allBlobs, blobs.([]blob.ID)...)
+					allBlobs = append(allBlobs, blobs...)
 				}
-				bp.Warnf("periodicallyFetchMissingBlobs    - %v", utils.PrettyJSON(allBlobs))
 				bp.fetchBlobs(allBlobs)
 
 			case <-ticker.C:
-				bp.Warnf("periodicallyFetchMissingBlobs TICKER")
 				blobs, err := bp.blobStore.BlobsNeeded()
 				if err != nil {
 					bp.Errorf("error fetching list of needed blobs: %v", err)
 					continue
 				}
-				bp.Warnf("periodicallyFetchMissingBlobs    - %v", utils.PrettyJSON(blobs))
-
 				if len(blobs) > 0 {
 					bp.fetchBlobs(blobs)
 				}
@@ -178,6 +196,7 @@ func (bp *blobProtocol) periodicallyFetchMissingBlobs() {
 func (bp *blobProtocol) fetchBlobs(blobs []blob.ID) {
 	for _, blobID := range blobs {
 		if !bp.claimBlobForFetcher(blobID) {
+			bp.Errorf("could not claim blob %v for fetcher", blobID)
 			continue
 		}
 
@@ -193,49 +212,18 @@ func (bp *blobProtocol) fetchBlobs(blobs []blob.ID) {
 		go func() {
 			defer bp.unclaimBlobForFetcher(blobID)
 			<-fetcher.Done()
+			bp.Successf("fetcher finished (%v)", blobID)
 		}()
 	}
 }
 
-func (bp *blobProtocol) claimBlobForFetcher(blobID blob.ID) bool {
-	bp.blobsBeingFetchedMu.Lock()
-	defer bp.blobsBeingFetchedMu.Unlock()
-	if _, exists := bp.blobsBeingFetched[blobID]; exists {
-		return false
-	}
-	bp.blobsBeingFetched[blobID] = struct{}{}
-	return true
+func (bp *blobProtocol) claimBlobForFetcher(blobID blob.ID) (ok bool) {
+	claimed := bp.blobsBeingFetched.Add(blobID)
+	return !claimed
 }
 
 func (bp *blobProtocol) unclaimBlobForFetcher(blobID blob.ID) {
-	bp.blobsBeingFetchedMu.Lock()
-	defer bp.blobsBeingFetchedMu.Unlock()
-	delete(bp.blobsBeingFetched, blobID)
-}
-
-func (bp *blobProtocol) announceBlobs(blobIDs []blob.ID) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	child := bp.Process.NewChild(ctx, "announceBlobs")
-	defer child.Autoclose()
-
-	for _, transport := range bp.transports {
-		for _, blobID := range blobIDs {
-			transport := transport
-			blobID := blobID
-
-			child.Go(nil, blobID.String(), func(ctx context.Context) {
-				err := transport.AnnounceBlob(ctx, blobID)
-				if errors.Cause(err) == errors.ErrUnimplemented {
-					return
-				} else if err != nil {
-					bp.Warnf("error announcing blob %v over transport %v: %v", blobID, transport.Name(), err)
-				}
-			})
-		}
-	}
-	<-child.Done()
+	bp.blobsBeingFetched.Remove(blobID)
 }
 
 func (bp *blobProtocol) handleBlobManifestRequest(blobID blob.ID, peer BlobPeerConn) {
@@ -286,5 +274,44 @@ func (bp *blobProtocol) handleBlobChunkRequest(sha3 types.Hash, peer BlobPeerCon
 	if err != nil {
 		bp.Errorf("while sending blob chunk response: %v", err)
 		return
+	}
+}
+
+type announceBlobsTask struct {
+	process.PeriodicTask
+	log.Logger
+	blobProto *blobProtocol
+	interval  time.Duration
+}
+
+func NewAnnounceBlobsTask(
+	interval time.Duration,
+	blobProto *blobProtocol,
+) *announceBlobsTask {
+	t := &announceBlobsTask{
+		Logger:    log.NewLogger(ProtocolName),
+		blobProto: blobProto,
+		interval:  interval,
+	}
+	t.PeriodicTask = *process.NewPeriodicTask("AnnounceBlobsTask", utils.NewStaticTicker(interval), t.announceBlobs)
+	return t
+}
+
+func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, t.interval)
+
+	child := t.Process.NewChild(ctx, "announceBlobs")
+	defer child.AutocloseWithCleanup(cancel)
+
+	sha1s, sha3s, err := t.blobProto.blobStore.BlobIDs()
+	if err != nil {
+		t.Errorf("while fetching blob IDs from blob store: %v", err)
+		return
+	}
+
+	blobIDs := types.NewSet[blob.ID](append(sha1s, sha3s...))
+
+	for _, tpt := range t.blobProto.Transports {
+		tpt.AnnounceBlobs(ctx, blobIDs)
 	}
 }

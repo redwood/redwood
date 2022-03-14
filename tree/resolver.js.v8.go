@@ -1,4 +1,5 @@
 //go:build !otto && !raspi
+
 package tree
 
 import (
@@ -18,6 +19,8 @@ import (
 type jsResolver struct {
 	log.Logger
 	vm            *v8go.Context
+	iso           *v8go.Isolate
+	global        *v8go.ObjectTemplate
 	internalState map[string]interface{}
 }
 
@@ -27,18 +30,6 @@ var _ Resolver = (*jsResolver)(nil)
 func NewJSResolver(config state.Node, internalState map[string]interface{}) (_ Resolver, err error) {
 	defer errors.Annotate(&err, "NewJSResolver")
 
-	// srcval, exists, err := nelson.GetValueRecursive(config, state.Keypath("src"), nil)
-	// srcval, exists, err := config.Value(state.Keypath("src"), nil)
-	// if err != nil {
-	// 	return nil, err
-	// } else if !exists {
-	// 	return nil, errors.Errorf("js resolver needs a 'src' param")
-	// }
-
-	// readableSrc, ok := nelson.GetReadCloser(srcval)
-	// if !ok {
-	// 	return nil, errors.Errorf("js resolver needs a 'src' param of type string, []byte, or io.ReadCloser (got %T)", srcval)
-	// }
 	src, _, err := config.StringValue(state.Keypath("src"))
 	if err != nil {
 		return nil, err
@@ -46,9 +37,11 @@ func NewJSResolver(config state.Node, internalState map[string]interface{}) (_ R
 		return nil, errors.Errorf("js resolver needs a 'src' param")
 	}
 
-	v8ctx, _ := v8go.NewContext(nil)
+	iso := v8go.NewIsolate()
+	global := v8go.NewObjectTemplate(iso)
+	vm := v8go.NewContext(iso, global)
 
-	_, err = v8ctx.RunScript("var global = {}; var newStateJSON; "+src, "")
+	_, err = vm.RunScript("var newStateJSON; "+src, "")
 	if err != nil {
 		return nil, err
 	}
@@ -58,13 +51,13 @@ func NewJSResolver(config state.Node, internalState map[string]interface{}) (_ R
 		return nil, err
 	}
 
-	internalStateScript := "global.init(" + string(internalStateBytes) + ")"
-	_, err = v8ctx.RunScript(internalStateScript, "")
+	internalStateScript := "init(" + string(internalStateBytes) + ")"
+	_, err = vm.RunScript(internalStateScript, "")
 	if err != nil {
 		return nil, err
 	}
 
-	return &jsResolver{Logger: log.NewLogger("resolver:js"), vm: v8ctx, internalState: internalState}, nil
+	return &jsResolver{Logger: log.NewLogger("resolver:js"), vm: vm, iso: iso, global: global, internalState: internalState}, nil
 }
 
 func (r *jsResolver) InternalState() map[string]interface{} {
@@ -104,7 +97,7 @@ func (r *jsResolver) ResolveState(node state.Node, blobStore blob.Store, sender 
 	parentsArrJSON, _ := json.Marshal(parentsArr)
 	convertedPatchesJSON, _ := json.Marshal(convertedPatches)
 
-	script := "newStateJSON = global.resolve_state(" + string(stateJSON) + ", '" + sender.String() + "', '" + txID.String() + "', " + string(parentsArrJSON) + ", " + string(convertedPatchesJSON) + ")"
+	script := "newStateJSON = resolve_state(" + string(stateJSON) + ", '" + sender.String() + "', '" + txID.String() + "', " + string(parentsArrJSON) + ", " + string(convertedPatchesJSON) + ")"
 	_, err = r.vm.RunScript(script, "")
 	if err != nil {
 		return err

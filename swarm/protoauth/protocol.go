@@ -50,13 +50,30 @@ func NewAuthProtocol(transports []swarm.Transport, keyStore identity.KeyStore, p
 			transportsMap[tpt.Name()] = tpt
 		}
 	}
-	return &authProtocol{
+
+	ap := &authProtocol{
 		Process:    *process.New("AuthProtocol"),
 		Logger:     log.NewLogger(ProtocolName),
 		transports: transportsMap,
 		keyStore:   keyStore,
 		peerStore:  peerStore,
 	}
+
+	ap.poolWorker = process.NewPoolWorker("pool worker", 16, process.NewStaticScheduler(5*time.Second, 10*time.Second))
+
+	ap.peerStore.OnNewUnverifiedPeer(func(dialInfo swarm.PeerDialInfo) {
+		ap.Debugf("new unverified peer: %+v", dialInfo)
+		// @@TODO: the following line causes some kind of infinite loop when > 1 peer is online
+		// announcePeersTask.Enqueue()
+		ap.poolWorker.Add(verifyPeer{dialInfo, ap})
+	})
+
+	for _, tpt := range ap.transports {
+		ap.Infof(0, "registering %v", tpt.Name())
+		tpt.OnChallengeIdentity(ap.handleChallengeIdentity)
+	}
+
+	return ap
 }
 
 const ProtocolName = "protoauth"
@@ -71,18 +88,10 @@ func (ap *authProtocol) Start() error {
 		return err
 	}
 
-	ap.poolWorker = process.NewPoolWorker("pool worker", 16, process.NewStaticScheduler(5*time.Second, 10*time.Second))
 	err = ap.Process.SpawnChild(nil, ap.poolWorker)
 	if err != nil {
 		return err
 	}
-
-	ap.peerStore.OnNewUnverifiedPeer(func(dialInfo swarm.PeerDialInfo) {
-		ap.Debugf("new unverified peer: %+v", dialInfo)
-		// @@TODO: the following line causes some kind of infinite loop when > 1 peer is online
-		// announcePeersTask.Enqueue()
-		ap.poolWorker.Add(verifyPeer{dialInfo, ap})
-	})
 
 	ap.Process.Go(nil, "periodically verify unverified peers", func(ctx context.Context) {
 		for {
@@ -97,10 +106,6 @@ func (ap *authProtocol) Start() error {
 		}
 	})
 
-	for _, tpt := range ap.transports {
-		ap.Infof(0, "registering %v", tpt.Name())
-		tpt.OnChallengeIdentity(ap.handleChallengeIdentity)
-	}
 	return nil
 }
 

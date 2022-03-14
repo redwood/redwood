@@ -14,7 +14,7 @@ type Store interface {
 	SaveDHPubkeyAttestations(attestations []DHPubkeyAttestation) error
 
 	// Individual session handshake protocol
-	OutgoingIndividualSessionProposalHashes() (types.HashSet, error)
+	OutgoingIndividualSessionProposalHashes() (types.Set[types.Hash], error)
 	OutgoingIndividualSessionProposalByHash(proposalHash types.Hash) (IndividualSessionProposal, error)
 	OutgoingIndividualSessionProposalsForUsers(aliceAddr, bobAddr types.Address) ([]IndividualSessionProposal, error)
 	OutgoingIndividualSessionProposalByUsersAndType(sessionType string, aliceAddr, bobAddr types.Address) (IndividualSessionProposal, error)
@@ -40,7 +40,7 @@ type Store interface {
 
 	// Individual messages
 	OutgoingIndividualMessageIntents() ([]IndividualMessageIntent, error)
-	OutgoingIndividualMessageIntentIDsForTypeAndRecipient(sessionType string, recipient types.Address) (types.IDSet, error)
+	OutgoingIndividualMessageIntentIDsForTypeAndRecipient(sessionType string, recipient types.Address) (types.Set[types.ID], error)
 	OutgoingIndividualMessageIntent(sessionType string, recipient types.Address, id types.ID) (IndividualMessageIntent, error)
 	SaveOutgoingIndividualMessageIntent(intent IndividualMessageIntent) error
 	DeleteOutgoingIndividualMessageIntent(intent IndividualMessageIntent) error
@@ -50,8 +50,8 @@ type Store interface {
 	DeleteIncomingIndividualMessage(msg IndividualMessage) error
 
 	// Group messages
-	OutgoingGroupMessageSessionTypes() (types.StringSet, error)
-	OutgoingGroupMessageIntentIDsForSessionType(sessionType string) (types.StringSet, error)
+	OutgoingGroupMessageSessionTypes() (types.Set[string], error)
+	OutgoingGroupMessageIntentIDsForSessionType(sessionType string) (types.Set[string], error)
 	OutgoingGroupMessageIntent(sessionType, id string) (GroupMessageIntent, error)
 	SaveOutgoingGroupMessageIntent(intent GroupMessageIntent) error
 	DeleteOutgoingGroupMessageIntent(sessionType, id string) error

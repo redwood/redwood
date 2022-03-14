@@ -18,7 +18,7 @@ import (
 
 //go:generate mockery --name Store --output ./mocks/ --case=underscore
 type Store interface {
-	SubscribedStateURIs() types.StringSet
+	SubscribedStateURIs() types.Set[string]
 	AddSubscribedStateURI(stateURI string) error
 	RemoveSubscribedStateURI(stateURI string) error
 	OnNewSubscribedStateURI(handler func(stateURI string)) (unsubscribe func())
@@ -54,7 +54,7 @@ type subscribedStateURIListener struct {
 }
 
 type storeData struct {
-	SubscribedStateURIs     types.StringSet                                       `tree:"subscribedStateURIs"`
+	SubscribedStateURIs     types.Set[string]                                     `tree:"subscribedStateURIs"`
 	MaxPeersPerSubscription uint64                                                `tree:"maxPeersPerSubscription"`
 	TxsSeenByPeers          map[string]map[tree.StateURI]map[state.Version]uint64 `tree:"txsSeenByPeers"`
 	EncryptedTxs            map[tree.StateURI]map[state.Version]EncryptedTx       `tree:"encryptedTxs"`
@@ -108,12 +108,12 @@ func (s *store) loadData() error {
 		}
 		stateURIs = append(stateURIs, stateURI)
 	}
-	s.data.SubscribedStateURIs = types.NewStringSet(stateURIs)
+	s.data.SubscribedStateURIs = types.NewSet[string](stateURIs)
 
 	return nil
 }
 
-func (s *store) SubscribedStateURIs() types.StringSet {
+func (s *store) SubscribedStateURIs() types.Set[string] {
 	s.dataMu.RLock()
 	defer s.dataMu.RUnlock()
 	return s.data.SubscribedStateURIs.Copy()

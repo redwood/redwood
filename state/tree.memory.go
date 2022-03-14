@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
 	"redwood.dev/errors"
 	"redwood.dev/log"
-	"redwood.dev/utils"
 )
 
 var logger = log.NewLogger("memory node")
@@ -191,9 +191,6 @@ func (n *MemoryNode) NodeAt(relKeypath Keypath, rng *Range) Node {
 // deepest tree.Node corresponding to that keypath.  The returned keypath
 // is the provided keypath, relative to the deepest tree.Node.
 func (n *MemoryNode) ParentNodeFor(relKeypath Keypath) (x Node, y Keypath) {
-	// defer func() {
-	// 	fmt.Println("PARENT", n.keypath, "::", relKeypath, ":: parent:", x.Keypath(), ":: relKeypath:", y)
-	// }()
 	if len(relKeypath) == 0 {
 		return n, relKeypath
 	}
@@ -500,7 +497,6 @@ func (n *MemoryNode) Value(keypath Keypath, rng *Range) (interface{}, bool, erro
 					if err != nil {
 						return err
 					} else if !exists {
-						node.DebugPrint(utils.PrintfDebugPrinter, true, 0)
 						panic(fmt.Sprintf("wat (%T) %v", node, node.Keypath()))
 					}
 					setValueAtKeypath(m, relKp, val, false)
@@ -866,6 +862,14 @@ func (iter *memoryIterator) Node() Node {
 	return iter.iterNode
 }
 
+func (iter *memoryIterator) NodeCopy() Node {
+	if iter.done || iter.noItems() {
+		return nil
+	}
+	cp := *iter.iterNode
+	return &cp
+}
+
 func (iter *memoryIterator) Next() {
 	if iter.done || iter.noItems() {
 		return
@@ -892,9 +896,9 @@ func (n *MemoryNode) ChildIterator(keypath Keypath, prefetchValues bool, prefetc
 	return &memoryChildIterator{n.Iterator(keypath, prefetchValues, prefetchSize).(*memoryIterator)}
 }
 
-func (iter *memoryChildIterator) Node() Node {
-	return iter.memoryIterator.Node()
-}
+// func (iter *memoryChildIterator) Node() Node {
+// 	return iter.memoryIterator.Node()
+// }
 
 func (iter *memoryChildIterator) Rewind() {
 	iter.memoryIterator.Rewind()
@@ -994,6 +998,14 @@ func (iter *memoryDepthFirstIterator) Node() Node {
 	return iter.iterNode
 }
 
+func (iter *memoryDepthFirstIterator) NodeCopy() Node {
+	if iter.done || iter.noItems() {
+		return nil
+	}
+	cp := *iter.iterNode
+	return &cp
+}
+
 func (iter *memoryDepthFirstIterator) Next() {
 	if iter.done || iter.noItems() {
 		return
@@ -1025,8 +1037,6 @@ func (n *MemoryNode) UnmarshalJSON(bs []byte) error {
 }
 
 func (n *MemoryNode) MarshalJSON() ([]byte, error) {
-	// n.DebugPrint(debugPrint, true, 0)
-
 	v, _, err := n.Value(nil, nil)
 	if err != nil {
 		return nil, err
@@ -1165,12 +1175,25 @@ func (t *MemoryNode) DebugPrint(printFn func(inFormat string, args ...interface{
 			printFn(indent+"    %v: %v %v %v", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.contentLengths[string(kp)])
 
 		} else if t.nodeTypes[string(kp)] == NodeTypeNode {
-			printFn(indent+"    %v: %v (%T) %v", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.contentLengths[string(kp)])
-			t.values[string(kp)].(Node).DebugPrint(printFn, false, indentLevel+1)
+			buf := bytes.NewBuffer(nil)
+			bufPrintFn := printFnBuffer(buf)
+
+			t.values[string(kp)].(Node).DebugPrint(bufPrintFn, true, indentLevel+1)
+
+			printFn(indent+"    %v: %v (%T) %v %v", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.contentLengths[string(kp)], buf.String())
 
 		} else {
 			printFn(indent+"    %v: %v %v (%T)", kp, t.nodeTypes[string(kp)], t.values[string(kp)], t.values[string(kp)])
 		}
 	}
 	printFn(indent + "}")
+}
+
+func printFnBuffer(buf io.Writer) func(inFormat string, args ...interface{}) {
+	return func(inFormat string, args ...interface{}) {
+		_, err := buf.Write([]byte(fmt.Sprintf(inFormat, args...)))
+		if err != nil {
+			panic(err)
+		}
+	}
 }

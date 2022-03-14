@@ -10,7 +10,7 @@ import (
 type PeriodicTask struct {
 	Process
 	ticker  utils.Ticker
-	mailbox *utils.Mailbox
+	mailbox *utils.Mailbox[struct{}]
 	abort   context.CancelFunc
 	abortMu sync.Mutex
 	taskFn  func(ctx context.Context)
@@ -21,7 +21,7 @@ func NewPeriodicTask(name string, ticker utils.Ticker, taskFn func(ctx context.C
 	return &PeriodicTask{
 		Process: *New(name),
 		ticker:  ticker,
-		mailbox: utils.NewMailbox(1),
+		mailbox: utils.NewMailbox[struct{}](1),
 		taskFn:  taskFn,
 		name:    name,
 	}
@@ -41,30 +41,30 @@ func (task *PeriodicTask) Start() error {
 			select {
 			case <-ctx.Done():
 				return
-			default:
-			}
-			select {
-			case <-ctx.Done():
-				return
-
 			case <-task.ticker.Notify():
 				task.Enqueue()
-
 			case <-task.mailbox.Notify():
-				x := task.mailbox.Retrieve()
-				if x == nil {
-					continue
-				}
+				task.handle(ctx, task.mailbox.RetrieveAll())
 			}
-			task.abortMu.Lock()
-			innerCtx, innerCancel := context.WithCancel(ctx)
-			task.abort = innerCancel
-			task.abortMu.Unlock()
-
-			task.taskFn(innerCtx)
 		}
 	})
 	return nil
+}
+
+func (task *PeriodicTask) handle(ctx context.Context, items []struct{}) {
+	for range items {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		task.abortMu.Lock()
+		innerCtx, innerCancel := context.WithCancel(ctx)
+		task.abort = innerCancel
+		task.abortMu.Unlock()
+
+		task.taskFn(innerCtx)
+	}
 }
 
 func (task *PeriodicTask) Close() error {

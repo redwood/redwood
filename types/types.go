@@ -254,6 +254,16 @@ func (sig *Signature) Unmarshal(data []byte) error {
 	return nil
 }
 
+func (sig *Signature) UnmarshalText(bs []byte) error {
+	bytes, err := hex.DecodeString(string(bs))
+	if err != nil {
+		return err
+	}
+	*sig = make(Signature, len(bytes))
+	copy(*sig, bytes)
+	return nil
+}
+
 func (sig *Signature) Size() int { return len(*sig) }
 func (sig Signature) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + sig.Hex() + `"`), nil

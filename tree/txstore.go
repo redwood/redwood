@@ -18,7 +18,7 @@ type TxStore interface {
 	AllTxsForStateURI(stateURI string, fromTxID state.Version) (TxIterator, error)
 	AllValidTxsForStateURIOrdered(stateURI string, fromTxID state.Version) TxIterator
 	IsStateURIWithData(stateURI string) (bool, error)
-	StateURIsWithData() (types.StringSet, error)
+	StateURIsWithData() (types.Set[string], error)
 	OnNewStateURIWithData(fn NewStateURIWithDataCallback)
 	MarkLeaf(stateURI string, txID state.Version) error
 	UnmarkLeaf(stateURI string, txID state.Version) error

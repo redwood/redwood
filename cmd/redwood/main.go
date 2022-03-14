@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"path/filepath"
@@ -20,12 +19,6 @@ import (
 var logger = log.NewLogger("redwood")
 
 func main() {
-	go func() {
-		http.ListenAndServe(":6060", nil)
-	}()
-	// runtime.SetBlockProfileRate(1)
-	// runtime.SetMutexProfileFraction(1)
-
 	defer klog.Flush()
 
 	cliApp := cli.NewApp()

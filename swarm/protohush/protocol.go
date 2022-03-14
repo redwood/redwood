@@ -64,13 +64,11 @@ type HushPeerConn interface {
 }
 
 type hushProtocol struct {
-	process.Process
-	log.Logger
+	swarm.BaseProtocol[HushTransport, HushPeerConn]
 
-	store      Store
-	keyStore   identity.KeyStore
-	peerStore  swarm.PeerStore
-	transports map[string]HushTransport
+	store     Store
+	keyStore  identity.KeyStore
+	peerStore swarm.PeerStore
 
 	groupMessageEncryptedListeners        map[string][]GroupMessageEncryptedCallback
 	groupMessageEncryptedListenersMu      sync.RWMutex
@@ -99,21 +97,45 @@ func NewHushProtocol(
 ) *hushProtocol {
 	transportsMap := make(map[string]HushTransport)
 	for _, tpt := range transports {
+		_, is := tpt.(HushTransport)
+		log.NewLogger("protohush").Infof(0, "TPT %v: %v", tpt.Name(), is)
 		if tpt, is := tpt.(HushTransport); is {
 			transportsMap[tpt.Name()] = tpt
 		}
 	}
-	return &hushProtocol{
-		Process:                             *process.New(ProtocolName),
-		Logger:                              log.NewLogger(ProtocolName),
+	hp := &hushProtocol{
+		BaseProtocol: swarm.BaseProtocol[HushTransport, HushPeerConn]{
+			Process:    *process.New(ProtocolName),
+			Logger:     log.NewLogger(ProtocolName),
+			Transports: transportsMap,
+		},
 		store:                               store,
 		keyStore:                            keyStore,
 		peerStore:                           peerStore,
-		transports:                          transportsMap,
 		groupMessageEncryptedListeners:      make(map[string][]GroupMessageEncryptedCallback),
 		individualMessageDecryptedListeners: make(map[string][]IndividualMessageDecryptedCallback),
 		groupMessageDecryptedListeners:      make(map[string][]GroupMessageDecryptedCallback),
 	}
+
+	hp.exchangeDHPubkeysTask = NewExchangeDHPubkeysTask(10*time.Second, hp)
+	hp.poolWorker = process.NewPoolWorker("pool worker", 8, process.NewStaticScheduler(3*time.Second, 3*time.Second))
+	hp.decryptIncomingIndividualMessagesTask = NewDecryptIncomingIndividualMessagesTask(10*time.Second, hp)
+	hp.decryptIncomingGroupMessagesTask = NewDecryptIncomingGroupMessagesTask(10*time.Second, hp)
+
+	for _, tpt := range hp.Transports {
+		hp.Infof(0, "registering %v", tpt.Name())
+		tpt.OnIncomingDHPubkeyAttestations(hp.handleIncomingDHPubkeyAttestations)
+		tpt.OnIncomingIndividualSessionProposal(hp.handleIncomingIndividualSessionProposal)
+		tpt.OnIncomingIndividualSessionResponse(hp.handleIncomingIndividualSessionResponse)
+		tpt.OnIncomingIndividualMessage(hp.handleIncomingIndividualMessage)
+		tpt.OnIncomingGroupMessage(hp.handleIncomingGroupMessage)
+	}
+
+	hp.peerStore.OnNewVerifiedPeer(func(peer swarm.PeerDevice) {
+		hp.poolWorker.Add(exchangeDHPubkeys{peer.DeviceUniqueID(), hp})
+	})
+
+	return hp
 }
 
 func (hp *hushProtocol) Start() error {
@@ -143,50 +165,30 @@ func (hp *hushProtocol) Start() error {
 	}
 
 	// Start our workers
-	hp.exchangeDHPubkeysTask = NewExchangeDHPubkeysTask(10*time.Second, hp)
-	err = hp.Process.SpawnChild(nil, hp.exchangeDHPubkeysTask)
-	if err != nil {
-		return err
-	}
-
-	hp.poolWorker = process.NewPoolWorker("pool worker", 8, process.NewStaticScheduler(3*time.Second, 3*time.Second))
 	err = hp.Process.SpawnChild(nil, hp.poolWorker)
 	if err != nil {
 		return err
 	}
-
-	hp.decryptIncomingIndividualMessagesTask = NewDecryptIncomingIndividualMessagesTask(10*time.Second, hp)
+	err = hp.Process.SpawnChild(nil, hp.exchangeDHPubkeysTask)
+	if err != nil {
+		return err
+	}
 	err = hp.Process.SpawnChild(nil, hp.decryptIncomingIndividualMessagesTask)
 	if err != nil {
 		return err
 	}
-
-	hp.decryptIncomingGroupMessagesTask = NewDecryptIncomingGroupMessagesTask(10*time.Second, hp)
 	err = hp.Process.SpawnChild(nil, hp.decryptIncomingGroupMessagesTask)
 	if err != nil {
 		return err
 	}
 
-	for _, tpt := range hp.transports {
-		hp.Infof(0, "registering %v", tpt.Name())
-		tpt.OnIncomingDHPubkeyAttestations(hp.handleIncomingDHPubkeyAttestations)
-		tpt.OnIncomingIndividualSessionProposal(hp.handleIncomingIndividualSessionProposal)
-		tpt.OnIncomingIndividualSessionResponse(hp.handleIncomingIndividualSessionResponse)
-		tpt.OnIncomingIndividualMessage(hp.handleIncomingIndividualMessage)
-		tpt.OnIncomingGroupMessage(hp.handleIncomingGroupMessage)
-	}
-
-	hp.peerStore.OnNewVerifiedPeer(func(peer swarm.PeerDevice) {
-		hp.poolWorker.Add(exchangeDHPubkeys{peer.DeviceUniqueID(), hp})
-	})
-
-	// Transports start before protocols, which means that we may not receive
-	// the `OnNewVerifiedPeer` notification if some transports authenticate
-	// quickly enough that protohush has not started up yet. Therefore, we must
-	// manually exchange DH pubkeys with verified peers on startup.
-	for _, peer := range hp.peerStore.VerifiedPeers() {
-		hp.poolWorker.Add(exchangeDHPubkeys{peer.DeviceUniqueID(), hp})
-	}
+	// // Transports start before protocols, which means that we may not receive
+	// // the `OnNewVerifiedPeer` notification if some transports authenticate
+	// // quickly enough that protohush has not started up yet. Therefore, we must
+	// // manually exchange DH pubkeys with verified peers on startup.
+	// for _, peer := range hp.peerStore.VerifiedPeers() {
+	// 	hp.poolWorker.Add(exchangeDHPubkeys{peer.DeviceUniqueID(), hp})
+	// }
 
 	// Add unfulfilled outgoing individual session proposals to the pool worker queue
 	proposalHashes, err := hp.store.OutgoingIndividualSessionProposalHashes()
@@ -426,7 +428,6 @@ func (hp *hushProtocol) ProposeIndividualSession(ctx context.Context, sessionTyp
 		return IndividualSessionProposal{}, err
 	}
 
-	hp.Debugf("Add proposeIndividualSession %+v", errors.New(""))
 	hp.poolWorker.Add(proposeIndividualSession{proposalHash, hp})
 	return proposal, nil
 }
@@ -489,7 +490,7 @@ func (hp *hushProtocol) DecryptGroupMessage(msg GroupMessage) error {
 
 func (hp *hushProtocol) handleIncomingDHPubkeyAttestations(ctx context.Context, attestations []DHPubkeyAttestation, peer HushPeerConn) {
 	var valid []DHPubkeyAttestation
-	addrs := types.NewAddressSet(nil)
+	addrs := types.NewSet[types.Address](nil)
 	for _, a := range attestations {
 		addr, err := a.Address()
 		if err != nil {
@@ -505,7 +506,7 @@ func (hp *hushProtocol) handleIncomingDHPubkeyAttestations(ctx context.Context, 
 		return
 	}
 
-	duIDs := types.NewStringSet(nil)
+	duIDs := types.NewSet[string](nil)
 	for _, p := range hp.peerStore.VerifiedPeers() {
 		duIDs.Add(p.DeviceUniqueID())
 	}
@@ -557,7 +558,7 @@ func (hp *hushProtocol) handleIncomingIndividualSessionProposal(ctx context.Cont
 		hp.Errorf("while handling incoming individual session proposal: not authenticated")
 		return
 	}
-	aliceAddr := aliceAddrs[0]
+	aliceAddr := aliceAddrs.Any()
 	proposal := EncryptedIndividualSessionProposal{aliceAddr, encryptedProposal}
 
 	err := hp.store.SaveIncomingIndividualSessionProposal(proposal)
@@ -630,7 +631,7 @@ func (hp *hushProtocol) handleIncomingIndividualMessage(ctx context.Context, msg
 	if len(peerAddrs) == 0 {
 		panic("impossible") // @@TODO
 	}
-	sender := peerAddrs[0]
+	sender := peerAddrs.Any()
 
 	hp.Debugf("received encrypted individual message from %v", sender)
 
@@ -732,7 +733,7 @@ func NewExchangeDHPubkeysTask(
 }
 
 func (t *exchangeDHPubkeysTask) exchangeDHPubkeys(ctx context.Context) {
-	duIDs := types.NewStringSet(nil)
+	duIDs := types.NewSet[string](nil)
 	for _, peer := range t.hushProto.peerStore.VerifiedPeers() {
 		duIDs.Add(peer.DeviceUniqueID())
 	}
@@ -763,14 +764,17 @@ func (t exchangeDHPubkeys) Work(ctx context.Context) (retry bool) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	t.hushProto.withPeers(ctx, []swarm.PeerDevice{peer}, func(ctx context.Context, peerConn HushPeerConn) error {
+	retry = true
+	chDone := t.hushProto.TryPeerDevices(ctx, &t.hushProto.Process, []swarm.PeerDevice{peer}, func(ctx context.Context, peerConn HushPeerConn) error {
 		err = peerConn.SendDHPubkeyAttestations(ctx, attestations)
 		if err != nil {
 			t.hushProto.Errorf("while exchanging DH pubkey: %v", err)
-			retry = true
+		} else {
+			retry = false
 		}
 		return err
 	})
+	<-chDone
 	return retry
 }
 
@@ -855,7 +859,7 @@ func (t proposeIndividualSession) Work(ctx context.Context) (retry bool) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	t.hushProto.withPeers(ctx, t.hushProto.peerStore.PeersWithAddress(bobAddr), func(ctx context.Context, peerConn HushPeerConn) error {
+	t.hushProto.TryPeerDevices(ctx, &t.hushProto.Process, t.hushProto.peerStore.PeersWithAddress(bobAddr), func(ctx context.Context, peerConn HushPeerConn) error {
 		_, bobAsymEncPubkey := peerConn.PublicKeys(bobAddr)
 
 		copiedSessionBytes := make([]byte, len(sessionBytes))
@@ -952,6 +956,25 @@ func (t handleIncomingIndividualSession) Work(ctx context.Context) (retry bool) 
 	// 	}
 	// }
 
+	proposalHash, err := proposedSession.Hash()
+	if err != nil {
+		t.hushProto.Errorf("while hashing individual session proposal: %v", err)
+		return true
+	}
+
+	// If we've already approved this session, ignore it except to respond to it again in the same way
+	{
+		_, err = t.hushProto.store.IndividualSessionIDBySessionHash(proposalHash)
+		if err != nil && errors.Cause(err) != errors.Err404 {
+			t.hushProto.Errorf("while fetching existing individual session: %v", err)
+			return true
+		} else if err == nil {
+			// Done, but let's respond again just in case
+			t.hushProto.poolWorker.Add(respondToIndividualSession{proposedSession.SessionID.AliceAddr, proposalHash, t.hushProto})
+			return false
+		}
+	}
+
 	dhPair, err := t.hushProto.store.EnsureDHPair()
 	if err != nil {
 		t.hushProto.Errorf("while fetching DH pair: %v", err)
@@ -980,11 +1003,6 @@ func (t handleIncomingIndividualSession) Work(ctx context.Context) (retry bool) 
 	t.hushProto.onSessionOpened(t.proposalHash, proposedSession.SessionID.AliceAddr)
 
 	// Prepare the approval message for sending
-	proposalHash, err := proposedSession.Hash()
-	if err != nil {
-		t.hushProto.Errorf("while hashing individual session proposal: %v", err)
-		return true
-	}
 	sig, err := identity.SignHash(proposalHash)
 	if err != nil {
 		t.hushProto.Errorf("while signing individual session proposal hash: %v", err)
@@ -1230,7 +1248,7 @@ func (t respondToIndividualSession) Work(ctx context.Context) (retry bool) {
 		return true
 	}
 
-	t.hushProto.Warnf("approving individual incoming session with %v (hash: %v)", t.aliceAddr, t.proposalHash)
+	t.hushProto.Infof(0, "approving individual incoming session with %v (hash: %v)", t.aliceAddr, t.proposalHash)
 	defer func() {
 		if retry {
 			t.hushProto.Warnf("approve incoming individual session %v: retrying later", t.proposalHash)
@@ -1239,7 +1257,10 @@ func (t respondToIndividualSession) Work(ctx context.Context) (retry bool) {
 		}
 	}()
 
-	t.hushProto.withPeers(ctx, t.hushProto.peerStore.PeersWithAddress(t.aliceAddr), func(ctx context.Context, alice HushPeerConn) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	chDone := t.hushProto.TryPeerDevices(ctx, &t.hushProto.Process, t.hushProto.peerStore.PeersWithAddress(t.aliceAddr), func(ctx context.Context, alice HushPeerConn) error {
 		err = alice.RespondToIndividualSession(ctx, response)
 		if err != nil {
 			return err
@@ -1250,7 +1271,8 @@ func (t respondToIndividualSession) Work(ctx context.Context) (retry bool) {
 		}
 		return nil
 	})
-	return false
+	<-chDone
+	return true
 }
 
 type sendIndividualMessage struct {
@@ -1309,7 +1331,7 @@ func (t sendIndividualMessage) Work(ctx context.Context) (retry bool) {
 		return true
 	}
 
-	t.hushProto.withPeers(ctx, t.hushProto.peerStore.PeersWithAddress(intent.Recipient), func(ctx context.Context, recipient HushPeerConn) error {
+	chDone := t.hushProto.TryPeerDevices(ctx, &t.hushProto.Process, t.hushProto.peerStore.PeersWithAddress(intent.Recipient), func(ctx context.Context, recipient HushPeerConn) error {
 		err = recipient.SendHushIndividualMessage(ctx, IndividualMessageFromDoubleRatchetMessage(msg, sessionHash))
 		if err != nil {
 			return err
@@ -1326,7 +1348,9 @@ func (t sendIndividualMessage) Work(ctx context.Context) (retry bool) {
 		t.hushProto.Errorf("while sending outgoing individual message (sessionID=%v): %v", session.SessionID, err)
 		return true
 	}
-	return false
+	<-chDone
+	// Retry until success
+	return true
 }
 
 type decryptIncomingIndividualMessagesTask struct {
@@ -1714,31 +1738,4 @@ func (hp *hushProtocol) onSessionOpened(proposalHash types.Hash, peerAddr types.
 	// Incoming individual + group messages
 	hp.decryptIncomingIndividualMessagesTask.Enqueue()
 	hp.decryptIncomingGroupMessagesTask.Enqueue()
-}
-
-func (hp *hushProtocol) withPeers(
-	ctx context.Context,
-	peers []swarm.PeerDevice,
-	fn func(ctx context.Context, hushPeerConn HushPeerConn) error,
-) {
-	tpts := make(map[string]swarm.Transport)
-	for k, v := range hp.transports {
-		tpts[k] = v
-	}
-
-	var chDones []<-chan struct{}
-	for _, peer := range peers {
-		chDone := swarm.TryEndpoints(ctx, tpts, peer.Endpoints(), func(ctx context.Context, peerConn swarm.PeerConn) error {
-			return fn(ctx, peerConn.(HushPeerConn))
-		})
-		chDones = append(chDones, chDone)
-	}
-
-	for _, chDone := range chDones {
-		select {
-		case <-chDone:
-		case <-ctx.Done():
-			return
-		}
-	}
 }

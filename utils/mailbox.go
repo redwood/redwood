@@ -4,34 +4,34 @@ import (
 	"sync"
 )
 
-type Mailbox struct {
+type Mailbox[T any] struct {
 	chNotify chan struct{}
 	mu       sync.Mutex
-	queue    []interface{}
+	queue    []T
 	capacity uint64
 }
 
-func NewMailbox(capacity uint64) *Mailbox {
+func NewMailbox[T any](capacity uint64) *Mailbox[T] {
 	queueCap := capacity
 	if queueCap == 0 {
 		queueCap = 100
 	}
-	return &Mailbox{
+	return &Mailbox[T]{
 		chNotify: make(chan struct{}, 1),
-		queue:    make([]interface{}, 0, queueCap),
+		queue:    make([]T, 0, queueCap),
 		capacity: capacity,
 	}
 }
 
-func (m *Mailbox) Notify() chan struct{} {
+func (m *Mailbox[T]) Notify() chan struct{} {
 	return m.chNotify
 }
 
-func (m *Mailbox) Deliver(x interface{}) {
+func (m *Mailbox[T]) Deliver(x T) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.queue = append([]interface{}{x}, m.queue...)
+	m.queue = append([]T{x}, m.queue...)
 	if uint64(len(m.queue)) > m.capacity && m.capacity > 0 {
 		m.queue = m.queue[:len(m.queue)-1]
 	}
@@ -42,19 +42,20 @@ func (m *Mailbox) Deliver(x interface{}) {
 	}
 }
 
-func (m *Mailbox) Retrieve() interface{} {
+func (m *Mailbox[T]) Retrieve() T {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if len(m.queue) == 0 {
-		return nil
+		var x T
+		return x
 	}
 	x := m.queue[len(m.queue)-1]
 	m.queue = m.queue[:len(m.queue)-1]
 	return x
 }
 
-func (m *Mailbox) RetrieveAll() []interface{} {
+func (m *Mailbox[T]) RetrieveAll() []T {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	queue := m.queue
@@ -65,7 +66,7 @@ func (m *Mailbox) RetrieveAll() []interface{} {
 	return queue
 }
 
-func (m *Mailbox) Clear() {
+func (m *Mailbox[T]) Clear() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -73,5 +74,5 @@ func (m *Mailbox) Clear() {
 	if queueCap == 0 {
 		queueCap = 100
 	}
-	m.queue = make([]interface{}, 0, queueCap)
+	m.queue = make([]T, 0, queueCap)
 }

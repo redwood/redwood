@@ -8,6 +8,6 @@ func (r Resolver) HelperDrillDownUntilFrame(node state.Node, keypath state.Keypa
 	return r.drillDownUntilFrame(node, keypath)
 }
 
-func (r Resolver) HelperCollapseBasicFrame(node state.Node, keypath state.Keypath) (frame Frame, _ error) {
+func (r Resolver) HelperCollapseBasicFrame(node state.Node, keypath state.Keypath) (Frame, state.Keypath, error) {
 	return r.collapseBasicFrame(node, keypath)
 }

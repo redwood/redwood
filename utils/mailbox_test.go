@@ -12,7 +12,7 @@ import (
 func TestMailbox(t *testing.T) {
 	t.Parallel()
 
-	m := utils.NewMailbox(10)
+	m := utils.NewMailbox[int](10)
 
 	var (
 		expected  = []int{2, 3, 4, 5, 6, 7, 8, 9, 10, 11}

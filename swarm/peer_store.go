@@ -47,7 +47,7 @@ type peerStore struct {
 	state                   *state.DBTree
 	muPeers                 sync.RWMutex
 	peerEndpoints           map[PeerDialInfo]*peerEndpoint
-	deviceIDsWithAddress    map[types.Address]types.StringSet
+	deviceIDsWithAddress    map[types.Address]types.Set[string]
 	peersWithDeviceUniqueID map[string]*peerDevice
 	unverifiedPeers         map[PeerDialInfo]struct{}
 
@@ -63,7 +63,7 @@ func NewPeerStore(db *state.DBTree) *peerStore {
 		Logger:                  log.NewLogger("peerstore"),
 		state:                   db,
 		peerEndpoints:           make(map[PeerDialInfo]*peerEndpoint),
-		deviceIDsWithAddress:    make(map[types.Address]types.StringSet),
+		deviceIDsWithAddress:    make(map[types.Address]types.Set[string]),
 		peersWithDeviceUniqueID: make(map[string]*peerDevice),
 		unverifiedPeers:         make(map[PeerDialInfo]struct{}),
 	}
@@ -98,7 +98,7 @@ func NewPeerStore(db *state.DBTree) *peerStore {
 				if len(pd.Addrs) > 0 {
 					for addr := range pd.Addrs {
 						if _, exists := s.deviceIDsWithAddress[addr]; !exists {
-							s.deviceIDsWithAddress[addr] = types.NewStringSet(nil)
+							s.deviceIDsWithAddress[addr] = types.NewSet[string](nil)
 						}
 						s.deviceIDsWithAddress[addr].Add(pd.DeviceUniqID)
 					}
@@ -255,7 +255,7 @@ func (s *peerStore) ensurePeerDevice(dialInfo PeerDialInfo, deviceUniqueID strin
 		if pd.DeviceUniqID != deviceUniqueID && pd.DeviceUniqID != "" {
 			for addr := range pd.Addrs {
 				if _, exists := s.deviceIDsWithAddress[addr]; !exists {
-					s.deviceIDsWithAddress[addr] = types.NewStringSet(nil)
+					s.deviceIDsWithAddress[addr] = types.NewSet[string](nil)
 				}
 				s.deviceIDsWithAddress[addr].Add(deviceUniqueID)
 			}
@@ -281,7 +281,7 @@ func (s *peerStore) AddVerifiedCredentials(
 ) PeerEndpoint {
 	if deviceUniqueID == "" || dialInfo.DialAddr == "" {
 		pd := newPeerDevice(s, "")
-		pd.Addrs = types.NewAddressSet([]types.Address{address})
+		pd.Addrs = types.NewSet[types.Address]([]types.Address{address})
 		pd.Sigpubkeys = map[types.Address]*crypto.SigningPublicKey{address: sigpubkey}
 		pd.Encpubkeys = map[types.Address]*crypto.AsymEncPubkey{address: encpubkey}
 		e := &peerEndpoint{
@@ -510,9 +510,9 @@ func (s *peerStore) DebugPrint() {
 type PeerDevice interface {
 	DeviceUniqueID() string
 	SetDeviceUniqueID(id string)
-	Addresses() []types.Address
+	Addresses() types.Set[types.Address]
 	PublicKeys(addr types.Address) (*crypto.SigningPublicKey, *crypto.AsymEncPubkey)
-	StateURIs() types.StringSet
+	StateURIs() types.Set[string]
 	AddStateURI(stateURI string)
 	RemoveStateURI(stateURI string)
 	LastContact() time.Time
@@ -528,10 +528,10 @@ type PeerDevice interface {
 type peerDevice struct {
 	peerStore    *peerStore                                 `tree:"-"`
 	DeviceUniqID string                                     `tree:"deviceUniqueID"`
-	Addrs        types.AddressSet                           `tree:"addresses"`
+	Addrs        types.Set[types.Address]                   `tree:"addresses"`
 	Sigpubkeys   map[types.Address]*crypto.SigningPublicKey `tree:"sigpubkeys"`
 	Encpubkeys   map[types.Address]*crypto.AsymEncPubkey    `tree:"encpubkeys"`
-	Stateuris    types.StringSet                            `tree:"stateURIs"`
+	Stateuris    types.Set[string]                          `tree:"stateURIs"`
 	Endpts       map[PeerDialInfo]*peerEndpoint             `tree:"peerEndpoints"`
 }
 
@@ -539,10 +539,10 @@ func newPeerDevice(peerStore *peerStore, deviceUniqueID string) *peerDevice {
 	return &peerDevice{
 		peerStore:    peerStore,
 		DeviceUniqID: deviceUniqueID,
-		Addrs:        types.NewAddressSet(nil),
+		Addrs:        types.NewSet[types.Address](nil),
 		Sigpubkeys:   make(map[types.Address]*crypto.SigningPublicKey),
 		Encpubkeys:   make(map[types.Address]*crypto.AsymEncPubkey),
-		Stateuris:    types.NewStringSet(nil),
+		Stateuris:    types.NewSet[string](nil),
 		Endpts:       make(map[PeerDialInfo]*peerEndpoint),
 	}
 }
@@ -561,10 +561,10 @@ func (pd *peerDevice) ensureEndpoint(dialInfo PeerDialInfo) (*peerEndpoint, bool
 	return e, false
 }
 
-func (pd *peerDevice) Addresses() []types.Address {
+func (pd *peerDevice) Addresses() types.Set[types.Address] {
 	pd.rlock()
 	defer pd.runlock()
-	return pd.Addrs.Slice()
+	return pd.Addrs
 }
 
 func (pd *peerDevice) PublicKeys(addr types.Address) (*crypto.SigningPublicKey, *crypto.AsymEncPubkey) {
@@ -588,7 +588,7 @@ func (pd *peerDevice) SetDeviceUniqueID(id string) {
 	pd.DeviceUniqID = id
 }
 
-func (pd *peerDevice) StateURIs() types.StringSet {
+func (pd *peerDevice) StateURIs() types.Set[string] {
 	pd.rlock()
 	defer pd.runlock()
 	return pd.Stateuris.Copy()

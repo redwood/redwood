@@ -391,7 +391,7 @@ func (s *HTTPServer) Peers(r *http.Request, args *PeersArgs, resp *PeersResponse
 	for _, peer := range s.peerStore.Peers() {
 		for _, endpoint := range peer.Endpoints() {
 			var identities []PeerIdentity
-			for _, addr := range peer.Addresses() {
+			for addr := range peer.Addresses() {
 				sigpubkey, encpubkey := peer.PublicKeys(addr)
 				identities = append(identities, PeerIdentity{
 					Address:          addr,

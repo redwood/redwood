@@ -1,4 +1,4 @@
-const Redwood = require('../../redwood.js').default
+const Redwood = require('@redwood.dev/client').default
 const fs = require('fs')
 
 //
@@ -35,7 +35,7 @@ async function genesis() {
     // Upload our index.html into the state tree so that the HTTP transport will serve it to browsers.
     // Also upload the sync9 JS code so that we can use it as our merge resolver.
     let indexHTML = fs.createReadStream('./index.html')
-    let sync9JS = fs.createReadStream('../../redwood.js/dist/resolver.sync9.redwood.js')
+    let sync9JS = fs.createReadStream('./node_modules/@redwood.dev/client/cjs/resolver.sync9.v8.js')
     let { sha3: indexHTMLSha3 } = await node1Client.storeBlob(indexHTML)
     let { sha3: sync9JSSha3 } = await node1Client.storeBlob(sync9JS)
 

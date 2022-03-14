@@ -13,7 +13,7 @@ import (
 
 type Pool struct {
 	Process
-	itemsAvailable *utils.Mailbox
+	itemsAvailable *utils.Mailbox[PoolUniqueID]
 	chItems        chan PoolUniqueID
 	sem            *semaphore.Weighted
 	retryInterval  time.Duration
@@ -24,7 +24,7 @@ type Pool struct {
 func NewPool(name string, concurrency uint64, retryInterval time.Duration) *Pool {
 	return &Pool{
 		Process:        *New(name),
-		itemsAvailable: utils.NewMailbox(1000),
+		itemsAvailable: utils.NewMailbox[PoolUniqueID](1000),
 		chItems:        make(chan PoolUniqueID),
 		sem:            semaphore.NewWeighted(int64(concurrency)),
 		retryInterval:  retryInterval,

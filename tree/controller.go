@@ -468,7 +468,6 @@ func (c *controller) handleNewBlobs(root state.Node) {
 	for kp := range diff.Added {
 		keypath := state.Keypath(kp)
 		parentKeypath, key := keypath.Pop()
-		fmt.Println("   -", parentKeypath, "::", key)
 		if key.Equals(nelson.ValueKey) {
 			parent := root.NodeAt(parentKeypath, nil)
 

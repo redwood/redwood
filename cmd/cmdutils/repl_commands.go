@@ -489,7 +489,7 @@ var (
 			var data [][]string
 			for _, peer := range app.PeerStore.Peers() {
 				for _, e := range peer.Endpoints() {
-					for _, addr := range peer.Addresses() {
+					for addr := range peer.Addresses() {
 						data = append(data, fmtPeerRow(addr.Hex(), e.DeviceUniqueID(), e.DialInfo().DialAddr, e.LastContact(), e.LastFailure(), e.Failures(), e.RemainingBackoff(), e.StateURIs().Slice()))
 					}
 					if len(e.Addresses()) == 0 {

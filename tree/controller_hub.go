@@ -22,7 +22,7 @@ type ControllerHub interface {
 	FetchTx(stateURI string, txID state.Version) (Tx, error)
 	FetchValidTxsOrdered(stateURI string, fromTxID state.Version) TxIterator
 
-	StateURIsWithData() (types.StringSet, error)
+	StateURIsWithData() (types.Set[string], error)
 	IsStateURIWithData(stateURI string) (bool, error)
 	OnNewStateURIWithData(fn NewStateURIWithDataCallback)
 	StateAtVersion(stateURI string, version *state.Version) (state.Node, error)
@@ -115,7 +115,7 @@ func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
 	return ctrl, nil
 }
 
-func (m *controllerHub) StateURIsWithData() (types.StringSet, error) {
+func (m *controllerHub) StateURIsWithData() (types.Set[string], error) {
 	return m.txStore.StateURIsWithData()
 }
 

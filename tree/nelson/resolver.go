@@ -1,7 +1,6 @@
 package nelson
 
 import (
-	"fmt"
 	"io"
 	"net/url"
 
@@ -9,6 +8,7 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type Resolver struct {
@@ -39,10 +39,13 @@ type HTTPResolver interface {
 // Drills down to the provided keypath, resolving links as necessary. If the
 // keypath resolves to a NelSON frame, the frame is returned as a nelson.Frame.
 // Otherwise, a regular state.Node is returned.
-func (r Resolver) Seek(node state.Node, keypath state.Keypath) (sought state.Node, exists bool, _ error) {
+func (r Resolver) Seek(node state.Node, keypath state.Keypath) (sought state.Node, exists bool, err error) {
+	defer errors.AddStack(&err)
 	for len(keypath) > 0 {
 		frameNode, nonFrameNode, remainingKeypath, err := r.drillDownUntilFrame(node, keypath)
-		if err != nil {
+		if errors.Cause(err) == errors.Err404 {
+			return nil, false, nil
+		} else if err != nil {
 			return nil, false, err
 		}
 		keypath = remainingKeypath
@@ -58,11 +61,12 @@ func (r Resolver) Seek(node state.Node, keypath state.Keypath) (sought state.Nod
 		}
 
 		// We have a frame
-		frameNode, err = r.collapseBasicFrame(frameNode, keypath)
+		frameNode, remainingKeypath, err = r.collapseBasicFrame(frameNode, keypath)
 		if err != nil {
 			return nil, false, err
 		}
 		node = frameNode
+		keypath = remainingKeypath
 	}
 	return node, true, nil
 }
@@ -72,7 +76,8 @@ func (r Resolver) Seek(node state.Node, keypath state.Keypath) (sought state.Nod
 func (r Resolver) drillDownUntilFrame(
 	node state.Node,
 	keypath state.Keypath,
-) (frameNode, nonFrameNode state.Node, remaining state.Keypath, _ error) {
+) (frameNode, nonFrameNode state.Node, remaining state.Keypath, err error) {
+	defer errors.AddStack(&err)
 	for {
 		is, err := isNelSONFrame(node)
 		if err != nil {
@@ -106,34 +111,35 @@ func (r Resolver) drillDownUntilFrame(
 func (r Resolver) collapseBasicFrame(
 	node state.Node,
 	keypath state.Keypath,
-) (frame Frame, _ error) {
-	// fmt.Println("collapse", keypath, utils.PrettyJSON(node))
+) (frame Frame, remainingKeypath state.Keypath, err error) {
+	defer errors.AddStack(&err)
+
+	remainingKeypath = keypath
 
 	if frame, is := node.(Frame); is {
-		return frame, nil
+		return frame, remainingKeypath, nil
 	}
 
 	is, err := isNelSONFrame(node)
 	if err != nil {
-		return Frame{}, err
+		return Frame{}, nil, err
 	} else if !is {
 		panic("collapseBasicFrame was not passed a state.Node representing a NelSON frame")
 	}
 
 	var contentType string
 	for {
-		// fmt.Println("xyzzy NODE", utils.PrettyJSON(node))
 		is, err := isNelSONFrame(node)
 		if err != nil {
-			return Frame{}, err
+			return Frame{}, nil, err
 		} else if !is {
 			frame := Frame{Node: node, contentType: contentType}
-			return frame, nil
+			return frame, remainingKeypath, nil
 		}
 
 		thisContentType, _, err := node.StringValue(ContentTypeKey)
 		if err != nil && errors.Cause(err) != errors.Err404 {
-			return Frame{}, err
+			return Frame{}, nil, err
 		}
 
 		// Simple frame
@@ -149,51 +155,54 @@ func (r Resolver) collapseBasicFrame(
 		// Link frame
 		linkStr, isString, err := node.StringValue(ValueKey)
 		if err != nil && errors.Cause(err) != errors.Err404 {
-			return Frame{}, err
+			return Frame{}, nil, err
 		} else if !isString {
-			return Frame{}, errors.Err404
+			return Frame{}, nil, errors.Err404
 		}
 
 		linkType, linkValue := DetermineLinkType(linkStr)
 
 		switch linkType {
 		case LinkTypeBlob:
-			if len(keypath) > 0 {
-				return Frame{}, errors.Err404
+			if len(remainingKeypath) > 0 {
+				return Frame{}, nil, errors.Err404
 			}
-			return Frame{Node: node, contentType: contentType, linkType: linkType, linkValue: linkValue}, nil
+			return Frame{Node: node, contentType: contentType, linkType: linkType, linkValue: linkValue}, nil, nil
 
 		case LinkTypeHTTP:
-			if len(keypath) > 0 {
-				return Frame{}, errors.Err404
+			if len(remainingKeypath) > 0 {
+				return Frame{}, nil, errors.Err404
 			}
-			return Frame{Node: node, contentType: contentType, linkType: linkType, linkValue: linkValue}, nil
+			return Frame{Node: node, contentType: contentType, linkType: linkType, linkValue: linkValue}, nil, nil
 
 		case LinkTypeState:
 			stateURI, linkedKeypath, version, err := ParseStateLink(linkValue)
 			if err != nil {
-				return Frame{}, err
+				return Frame{}, nil, err
 			}
-			fmt.Println("xyzzy state link", stateURI, linkedKeypath)
 
-			node.Close()
+			// node.Close()
 			root, err := r.stateResolver.StateAtVersion(stateURI, version)
 			if err != nil {
-				return Frame{}, err
+				return Frame{}, nil, err
 			}
 
-			exists, err := root.Exists(linkedKeypath)
-			if err != nil {
-				return Frame{}, err
-			} else if !exists {
-				return Frame{}, errors.Err404
-			}
+			node = root
+			remainingKeypath = linkedKeypath.Push(keypath)
+			continue
 
-			node = root.NodeAt(linkedKeypath, nil)
-			return Frame{Node: node, contentType: contentType, linkType: linkType, linkValue: linkValue}, nil
+			// exists, err := root.Exists(linkedKeypath)
+			// if err != nil {
+			// 	return Frame{}, err
+			// } else if !exists {
+			// 	return Frame{}, errors.Err404
+			// }
+
+			// node = root.NodeAt(linkedKeypath, nil)
+			// return Frame{Node: node, contentType: contentType, linkType: linkType, linkValue: linkValue}, nil
 
 		default:
-			return Frame{}, errors.Errorf("unknown link type (%v)", linkStr)
+			return Frame{}, nil, errors.Errorf("unknown link type (%v)", linkStr)
 		}
 	}
 }
@@ -212,17 +221,22 @@ func (r Resolver) Resolve(stateNode state.Node) (resolved state.Node, anyMissing
 		}
 	}
 
-	stack := []state.Keypath{nil}
+	type stackItem struct {
+		node    state.Node
+		parent  state.Node
+		keypath state.Keypath
+	}
+	stack := []stackItem{{stateNode, nil, nil}}
 
 	resolved = stateNode
 
 	for len(stack) > 0 {
-		keypath := stack[0]
+		item := stack[0]
 		stack = stack[1:]
 
-		node := stateNode.NodeAt(keypath, nil)
+		item.node.DebugPrint(utils.PrintfDebugPrinter, true, 0)
 
-		switch typedNode := node.(type) {
+		switch typedNode := item.node.(type) {
 		case Frame:
 			resolvedFrame, innerAnyMissing, err := r.resolveFrame(typedNode)
 			if err != nil {
@@ -230,8 +244,8 @@ func (r Resolver) Resolve(stateNode state.Node) (resolved state.Node, anyMissing
 			}
 			anyMissing = anyMissing || innerAnyMissing
 
-			if len(keypath) > 0 {
-				parentKeypath, childKey := keypath.Pop()
+			if len(item.keypath) > 0 {
+				parentKeypath, childKey := item.keypath.Pop()
 				err = stateNode.NodeAt(parentKeypath, nil).Set(childKey, nil, resolvedFrame)
 				if err != nil {
 					return nil, false, err
@@ -239,7 +253,6 @@ func (r Resolver) Resolve(stateNode state.Node) (resolved state.Node, anyMissing
 			} else {
 				resolved = resolvedFrame
 			}
-			node = resolvedFrame
 
 		case state.Node:
 			is, err := isNelSONFrame(typedNode)
@@ -247,7 +260,7 @@ func (r Resolver) Resolve(stateNode state.Node) (resolved state.Node, anyMissing
 				return nil, false, err
 			}
 			if is {
-				frame, err := r.collapseBasicFrame(typedNode, nil)
+				frame, remainingKeypath, err := r.collapseBasicFrame(typedNode, nil)
 				if errors.Cause(err) == errors.Err404 {
 					anyMissing = true
 					continue
@@ -255,7 +268,15 @@ func (r Resolver) Resolve(stateNode state.Node) (resolved state.Node, anyMissing
 					return nil, false, err
 				}
 
-				// frame.DebugPrint(utils.PrintfDebugPrinter, true, 0)
+				if len(remainingKeypath) > 0 {
+					sought, exists, err := r.Seek(frame.Node, remainingKeypath)
+					if err != nil {
+						return nil, false, err
+					} else if !exists {
+						return nil, true, nil
+					}
+					frame.Node = sought
+				}
 
 				copied, err := frame.Node.CopyToMemory(nil, nil)
 				if err != nil {
@@ -267,18 +288,18 @@ func (r Resolver) Resolve(stateNode state.Node) (resolved state.Node, anyMissing
 				if err != nil {
 					return nil, false, err
 				}
+				item.node = resolvedFrame
 
 				anyMissing = anyMissing || innerAnyMissing
 
-				if len(keypath) > 0 {
-					err = stateNode.Set(keypath, nil, resolvedFrame)
+				if item.parent != nil {
+					err = item.parent.Set(item.keypath, nil, resolvedFrame)
 					if err != nil {
 						return nil, false, err
 					}
 				} else {
 					resolved = resolvedFrame
 				}
-				node = resolvedFrame
 			}
 
 		default:
@@ -286,18 +307,40 @@ func (r Resolver) Resolve(stateNode state.Node) (resolved state.Node, anyMissing
 		}
 
 		err := func() error {
-			iter := node.ChildIterator(nil, false, 0)
+			var innerParent state.Node
+			switch x := item.node.(type) {
+			case Frame:
+				innerParent = x.Node
+			case BlobFrame, HTTPFrame:
+				return nil
+			case state.Node:
+				innerParent = x
+			default:
+				panic("unknown node type")
+			}
+
+			iter := innerParent.ChildIterator(nil, false, 0)
 			defer iter.Close()
 
 			for iter.Rewind(); iter.Valid(); iter.Next() {
-				nodeType, _, _, err := iter.Node().NodeInfo(nil)
+				childNode := iter.Node()
+
+				nodeType, _, _, err := childNode.NodeInfo(nil)
 				if err != nil {
 					return err
 				} else if nodeType != state.NodeTypeMap && nodeType != state.NodeTypeSlice {
 					continue
 				}
-				childNode := iter.Node()
-				stack = append(stack, childNode.Keypath())
+
+				// The iterator reuses a single Node struct to reduce
+				// allocations. That will break the Resolve algorithm.
+				childNode = iter.NodeCopy()
+
+				stack = append(stack, stackItem{
+					node:    childNode,
+					keypath: childNode.Keypath().RelativeTo(innerParent.Keypath()).Copy(),
+					parent:  innerParent,
+				})
 			}
 			return nil
 		}()
@@ -320,6 +363,7 @@ func (r Resolver) resolveFrame(frame Frame) (resolved Node, anyMissing bool, _ e
 		if err != nil {
 			return nil, false, err
 		}
+		// frame.Node = nil
 		return BlobFrame{Frame: frame, resolver: r, blobID: blobID}, !have, nil
 
 	case LinkTypeHTTP:
@@ -331,6 +375,7 @@ func (r Resolver) resolveFrame(frame Frame) (resolved Node, anyMissing bool, _ e
 		if err != nil {
 			return nil, false, err
 		}
+		// frame.Node = nil
 		return HTTPFrame{Frame: frame, resolver: r, url: *u}, !exists, nil
 
 	case LinkTypeState:
@@ -371,7 +416,10 @@ func (r Resolver) resolveFrame(frame Frame) (resolved Node, anyMissing bool, _ e
 			panic("no")
 		}
 
-	default:
+	case LinkTypeInvalid:
 		return frame, false, nil
+
+	default:
+		panic("no")
 	}
 }

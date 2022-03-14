@@ -13,7 +13,7 @@ type KeyStore interface {
 
 	Mnemonic() (string, error)
 	Identities() ([]Identity, error)
-	Addresses() (types.AddressSet, error)
+	Addresses() (types.Set[types.Address], error)
 	PublicIdentities() ([]Identity, error)
 	DefaultPublicIdentity() (Identity, error)
 	IdentityWithAddress(address types.Address) (Identity, error)

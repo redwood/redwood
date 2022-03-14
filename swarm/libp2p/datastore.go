@@ -1,6 +1,7 @@
 package libp2p
 
 import (
+	"context"
 	"strings"
 
 	"github.com/gogo/protobuf/proto"
@@ -14,8 +15,8 @@ type notifyingDatastore struct {
 	dstore.Batching
 }
 
-func (ds *notifyingDatastore) Put(k dstore.Key, v []byte) error {
-	err := ds.Batching.Put(k, v)
+func (ds *notifyingDatastore) Put(ctx context.Context, k dstore.Key, v []byte) error {
+	err := ds.Batching.Put(ctx, k, v)
 	if err != nil {
 		return err
 	}

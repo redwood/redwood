@@ -22,9 +22,9 @@ type fetcher struct {
 	blobID         blob.ID
 	blobStore      blob.Store
 	searchForPeers func(ctx context.Context, blobID blob.ID) <-chan BlobPeerConn
-	peerPool       swarm.PeerPool
+	peerPool       swarm.PeerPool[BlobPeerConn]
 	workPool       *workPool
-	getPeerBackoff utils.ExponentialBackoff
+	// getPeerBackoff utils.ExponentialBackoff
 }
 
 func newFetcher(
@@ -34,13 +34,13 @@ func newFetcher(
 ) *fetcher {
 	return &fetcher{
 		Process:        *process.New("fetcher " + blobID.String()),
-		Logger:         log.NewLogger("blob proto"),
+		Logger:         log.NewLogger("protoblob"),
 		blobID:         blobID,
 		blobStore:      blobStore,
 		searchForPeers: searchForPeers,
 		peerPool:       nil,
 		workPool:       nil,
-		getPeerBackoff: utils.ExponentialBackoff{Min: 1 * time.Second, Max: 10 * time.Second},
+		// getPeerBackoff: utils.ExponentialBackoff{Min: 1 * time.Second, Max: 10 * time.Second},
 	}
 }
 
@@ -52,7 +52,7 @@ func (f *fetcher) Start() error {
 	defer f.Process.AutocloseWithCleanup(func() {
 		err := f.blobStore.VerifyBlobOrPrune(f.blobID)
 		if err != nil {
-			f.Errorf("while verifying blob %v: %v", f.blobID, err)
+			f.Errorf("while verifying blob %v: %+v", f.blobID, err)
 		}
 	})
 
@@ -91,32 +91,27 @@ func (f *fetcher) Close() error {
 	)
 }
 
-func (f *fetcher) startPeerPool() error {
-	restartSearchBackoff := utils.ExponentialBackoff{Min: 3 * time.Second, Max: 10 * time.Second}
+func (f *fetcher) startPeerPool() (err error) {
+	defer errors.AddStack(&err)
 
 	maxConns, err := f.blobStore.MaxFetchConns()
 	if err != nil {
 		return err
 	}
 
-	f.peerPool = swarm.NewPeerPool(
+	f.peerPool = swarm.NewPeerPool[BlobPeerConn](
 		maxConns,
-		func(ctx context.Context) (<-chan swarm.PeerConn, error) {
-			select {
-			case <-ctx.Done():
-				return nil, nil
-			case <-f.peerPool.Done():
-				return nil, nil
-			case <-time.After(restartSearchBackoff.Next()):
-			}
-			chBlobPeers := f.searchForPeers(ctx, f.blobID)
-			return f.convertBlobPeerChan(ctx, chBlobPeers), nil // Can't wait for generics
+		func(ctx context.Context) (<-chan BlobPeerConn, error) {
+			ctx, _ = context.WithTimeout(ctx, 10*time.Second)
+			return f.searchForPeers(ctx, f.blobID), nil
 		},
 	)
 	return f.Process.SpawnChild(nil, f.peerPool)
 }
 
 func (f *fetcher) fetchManifest(ctx context.Context) (_ blob.Manifest, err error) {
+	defer errors.AddStack(&err)
+
 	manifest, err := f.blobStore.Manifest(f.blobID)
 	if err != nil && errors.Cause(err) != errors.Err404 {
 		return blob.Manifest{}, err
@@ -134,10 +129,10 @@ func (f *fetcher) fetchManifest(ctx context.Context) (_ blob.Manifest, err error
 		blobPeer, err := f.getPeer(ctx)
 		if err != nil {
 			f.Errorf("error getting peer from pool: %v", err)
-			time.Sleep(f.getPeerBackoff.Next())
+			// time.Sleep(f.getPeerBackoff.Next())
 			continue
 		}
-		f.getPeerBackoff.Reset()
+		// f.getPeerBackoff.Reset()
 
 		manifest, err := blobPeer.FetchBlobManifest(f.blobID)
 		if err != nil {
@@ -157,7 +152,9 @@ func (f *fetcher) fetchManifest(ctx context.Context) (_ blob.Manifest, err error
 	}
 }
 
-func (f *fetcher) startWorkPool(chunks []blob.ManifestChunk) error {
+func (f *fetcher) startWorkPool(chunks []blob.ManifestChunk) (err error) {
+	defer errors.AddStack(&err)
+
 	var jobs []interface{}
 	for _, chunk := range chunks {
 		have, err := f.blobStore.HaveChunk(chunk.SHA3)
@@ -173,7 +170,9 @@ func (f *fetcher) startWorkPool(chunks []blob.ManifestChunk) error {
 	return f.Process.SpawnChild(nil, f.workPool)
 }
 
-func (f *fetcher) fetchChunks(ctx context.Context) error {
+func (f *fetcher) fetchChunks(ctx context.Context) (err error) {
+	defer errors.AddStack(&err)
+
 	ctx, cancel := utils.CombinedContext(ctx, f.workPool.Done())
 	defer cancel()
 
@@ -191,10 +190,10 @@ func (f *fetcher) fetchChunks(ctx context.Context) error {
 			return err
 		} else if err != nil {
 			f.Errorf("error getting peer from pool: %v", err)
-			time.Sleep(f.getPeerBackoff.Next())
+			// time.Sleep(f.getPeerBackoff.Next())
 			continue
 		}
-		f.getPeerBackoff.Reset()
+		// f.getPeerBackoff.Reset()
 
 		f.Process.Go(nil, "readUntilErrorOrShutdown "+blobPeer.DialInfo().String(), func(ctx context.Context) {
 			defer f.peerPool.ReturnPeer(blobPeer, false)
@@ -208,12 +207,15 @@ func (f *fetcher) fetchChunks(ctx context.Context) error {
 	}
 }
 
-func (f *fetcher) getPeer(ctx context.Context) (BlobPeerConn, error) {
+func (f *fetcher) getPeer(ctx context.Context) (_ BlobPeerConn, err error) {
+	defer errors.AddStack(&err)
+
 	for {
 		peer, err := f.peerPool.GetPeer(ctx)
 		if err != nil {
 			return nil, err
-		} else if peer == nil || reflect.ValueOf(peer).IsNil() {
+		}
+		if peer == nil || reflect.ValueOf(peer).IsNil() {
 			panic("peer is nil")
 		} else if !peer.Dialable() {
 			f.peerPool.ReturnPeer(peer, true)
@@ -223,14 +225,7 @@ func (f *fetcher) getPeer(ctx context.Context) (BlobPeerConn, error) {
 			continue
 		}
 
-		// Ensure the peer supports the blob protocol
-		blobPeer, is := peer.(BlobPeerConn)
-		if !is {
-			// If not, strike it so the pool doesn't return it again
-			f.peerPool.ReturnPeer(peer, true)
-			continue
-		}
-		return blobPeer, nil
+		return peer, nil
 	}
 }
 
@@ -281,34 +276,6 @@ func (f *fetcher) readUntilErrorOrShutdown(ctx context.Context, peer BlobPeerCon
 	}
 }
 
-func (f *fetcher) convertBlobPeerChan(ctx context.Context, ch <-chan BlobPeerConn) <-chan swarm.PeerConn {
-	chPeer := make(chan swarm.PeerConn)
-	go func() {
-		defer close(chPeer)
-		for {
-			select {
-			case <-f.Process.Done():
-				return
-			case <-ctx.Done():
-				return
-			case peer, open := <-ch:
-				if !open {
-					return
-				}
-
-				select {
-				case <-f.Process.Done():
-					return
-				case <-ctx.Done():
-					return
-				case chPeer <- peer:
-				}
-			}
-		}
-	}()
-	return chPeer
-}
-
 type workPool struct {
 	process.Process
 	jobs           map[interface{}]int
@@ -338,7 +305,7 @@ func (p *workPool) Start() error {
 	defer p.Process.Autoclose()
 
 	p.Process.Go(nil, "await completion", func(ctx context.Context) {
-		numJobs := len(p.chJobs)
+		numJobs := len(p.jobs)
 		for i := 0; i < numJobs; i++ {
 			select {
 			case <-p.chJobsComplete:

@@ -138,7 +138,7 @@ func (r *RangeRequest) UnmarshalHTTPHeader(header string) error {
 	return nil
 }
 
-type AcceptHeader types.StringSet
+type AcceptHeader types.Set[string]
 
 func (h *AcceptHeader) UnmarshalHTTPHeader(header string) error {
 	var trimmedAndFiltered []string
@@ -149,12 +149,12 @@ func (h *AcceptHeader) UnmarshalHTTPHeader(header string) error {
 		}
 		trimmedAndFiltered = append(trimmedAndFiltered, trimmed)
 	}
-	*h = AcceptHeader(types.NewStringSet(trimmedAndFiltered))
+	*h = AcceptHeader(types.NewSet[string](trimmedAndFiltered))
 	return nil
 }
 
 func (h AcceptHeader) Contains(s string) bool {
-	return types.StringSet(h).Contains(s)
+	return types.Set[string](h).Contains(s)
 }
 
 type resourceResponse struct {
@@ -168,4 +168,23 @@ type resourceResponse struct {
 type StoreBlobResponse struct {
 	SHA1 types.Hash `json:"sha1"`
 	SHA3 types.Hash `json:"sha3"`
+}
+
+type ParentsHeader types.Set[state.Version]
+
+func (h *ParentsHeader) UnmarshalHTTPHeader(header string) error {
+	ids := types.NewSet[state.Version](nil)
+	for _, idStr := range strings.Split(header, ",") {
+		id, err := state.VersionFromHex(strings.TrimSpace(idStr))
+		if err != nil {
+			return err
+		}
+		ids.Add(id)
+	}
+	*h = ParentsHeader(ids)
+	return nil
+}
+
+func (h ParentsHeader) Slice() []state.Version {
+	return types.Set[state.Version](h).Slice()
 }

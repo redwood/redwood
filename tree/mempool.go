@@ -27,8 +27,13 @@ type mempool struct {
 	txs   *txSortedSet
 	chAdd chan Tx
 
-	processMempoolWorkQueue *utils.Mailbox
+	processMempoolWorkQueue *utils.Mailbox[mempoolWorkItem]
 	processCallback         func(tx Tx) processTxOutcome
+}
+
+type mempoolWorkItem struct {
+	tx    Tx
+	addTx bool
 }
 
 func NewMempool(processCallback func(tx Tx) processTxOutcome) *mempool {
@@ -39,7 +44,7 @@ func NewMempool(processCallback func(tx Tx) processTxOutcome) *mempool {
 		chDone:                  make(chan struct{}),
 		txs:                     newTxSortedSet(),
 		chAdd:                   make(chan Tx, 100),
-		processMempoolWorkQueue: utils.NewMailbox(0),
+		processMempoolWorkQueue: utils.NewMailbox[mempoolWorkItem](0),
 		processCallback:         processCallback,
 	}
 }
@@ -56,15 +61,9 @@ func (m *mempool) Start() error {
 			case <-ctx.Done():
 				return
 			case <-m.processMempoolWorkQueue.Notify():
-				for {
-					x := m.processMempoolWorkQueue.Retrieve()
-					if x == nil {
-						break
-					}
-					switch tx := x.(type) {
-					case Tx:
-						m.txs.add(tx)
-					case struct{}:
+				for _, item := range m.processMempoolWorkQueue.RetrieveAll() {
+					if item.addTx {
+						m.txs.add(item.tx)
 					}
 				}
 				m.processMempool(ctx)
@@ -80,11 +79,11 @@ func (m *mempool) Get() *txSortedSet {
 }
 
 func (m *mempool) Add(tx Tx) {
-	m.processMempoolWorkQueue.Deliver(tx)
+	m.processMempoolWorkQueue.Deliver(mempoolWorkItem{tx, true})
 }
 
 func (m *mempool) ForceReprocess() {
-	m.processMempoolWorkQueue.Deliver(struct{}{})
+	m.processMempoolWorkQueue.Deliver(mempoolWorkItem{Tx{}, false})
 }
 
 type processTxOutcome int

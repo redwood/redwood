@@ -24,6 +24,7 @@ type Config struct {
 	DevMode         bool            `yaml:"-"`
 	Nurse           NurseConfig     `yaml:"Nurse"`
 	KeyStore        KeyStoreConfig  `yaml:"-"`
+	PprofPort       uint32          `yaml:"PprofPort"`
 
 	Libp2pTransport    Libp2pTransportConfig    `yaml:"Libp2pTransport"`
 	BraidHTTPTransport BraidHTTPTransportConfig `yaml:"BraidHTTPTransport"`

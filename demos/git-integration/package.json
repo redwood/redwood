@@ -1,0 +1,9 @@
+{
+  "name": "demo-git-integration",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@redwood.dev/client": "0.3.3"
+  }
+}

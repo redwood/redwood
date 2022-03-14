@@ -84,6 +84,14 @@ func NewApp(name string, config Config) *App {
 }
 
 func (app *App) Start() error {
+	if app.Config.PprofPort > 0 {
+		go func() {
+			http.ListenAndServe(fmt.Sprintf(":%v", app.Config.PprofPort), nil)
+		}()
+		// runtime.SetBlockProfileRate(1)
+		// runtime.SetMutexProfileFraction(1)
+	}
+
 	err := app.Process.Start()
 	if err != nil {
 		return err
@@ -296,7 +304,7 @@ func (app *App) Start() error {
 			httpTransport, err := braidhttp.NewTransport(
 				cfg.BraidHTTPTransport.ListenHost,
 				cfg.BraidHTTPTransport.ListenHostSSL,
-				types.NewStringSet(nil), // @@TODO
+				types.NewSet[string](nil), // @@TODO
 				cfg.BraidHTTPTransport.DefaultStateURI,
 				app.ControllerHub,
 				app.KeyStore,

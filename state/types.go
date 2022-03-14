@@ -133,6 +133,7 @@ type Iterator interface {
 	Valid() bool
 	Next()
 	Node() Node
+	NodeCopy() Node
 	Close()
 
 	seekTo(absKeypath Keypath)

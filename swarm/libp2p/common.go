@@ -12,6 +12,7 @@ import (
 	multihash "github.com/multiformats/go-multihash"
 	"go.uber.org/multierr"
 
+	"redwood.dev/blob"
 	"redwood.dev/errors"
 	"redwood.dev/swarm"
 	"redwood.dev/types"
@@ -87,7 +88,7 @@ func (set *PeerSet) RemoveString(s string) error {
 		return err
 	}
 	if existing, exists := set.set[addrInfo.ID]; exists {
-		toDelete := types.NewStringSet(nil)
+		toDelete := types.NewSet[string](nil)
 		for _, addr := range addrInfo.Addrs {
 			toDelete.Add(addr.String())
 		}
@@ -184,6 +185,14 @@ func cidForString(s string) (cid.Cid, error) {
 		return cid.Cid{}, errors.Wrap(err, "could not create cid")
 	}
 	return c, nil
+}
+
+func makeBlobCid(blobID blob.ID) (cid.Cid, error) {
+	return cidForString("blob:" + blobID.String())
+}
+
+func makeStateURICid(stateURI string) (cid.Cid, error) {
+	return cidForString("stateuri:" + stateURI)
 }
 
 func multiaddrsFromPeerInfo(pinfo corepeer.AddrInfo) []ma.Multiaddr {
@@ -312,7 +321,7 @@ func multiaddrHasTerminatingPeerID(multiaddr ma.Multiaddr) (is bool) {
 
 func dedupeMultiaddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
 	var uniqueAddrs []ma.Multiaddr
-	strs := types.NewStringSet(nil)
+	strs := types.NewSet[string](nil)
 	for _, addr := range addrs {
 		if strs.Contains(addr.String()) {
 			continue

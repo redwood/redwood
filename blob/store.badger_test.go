@@ -51,7 +51,7 @@ func TestStore(t *testing.T) {
 		require.Equal(t, foo, bs)
 	})
 
-	t.Run("will not store a chunk with the hash doesn't match", func(t *testing.T) {
+	t.Run("will not store a chunk when the hash doesn't match", func(t *testing.T) {
 		t.Parallel()
 
 		store := blob.NewBadgerStore(badgerOpts.ForPath(t.TempDir()))

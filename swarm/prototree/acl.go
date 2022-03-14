@@ -12,8 +12,8 @@ import (
 
 type ACL interface {
 	TypeOf(stateURI string) StateURIType
-	MembersOf(stateURI string) (types.AddressSet, error)
-	HasReadAccess(stateURI string, keypath state.Keypath, addresses types.AddressSet) (bool, error)
+	MembersOf(stateURI string) (types.Set[types.Address], error)
+	HasReadAccess(stateURI string, keypath state.Keypath, addresses types.Set[types.Address]) (bool, error)
 }
 
 type StateURIType int
@@ -68,8 +68,8 @@ func (acl DefaultACL) TypeOf(stateURI string) StateURIType {
 	}
 }
 
-func (acl DefaultACL) MembersOf(stateURI string) (types.AddressSet, error) {
-	addrs := types.NewAddressSet(nil)
+func (acl DefaultACL) MembersOf(stateURI string) (types.Set[types.Address], error) {
+	addrs := types.NewSet[types.Address](nil)
 
 	state, err := acl.ControllerHub.StateAtVersion(stateURI, nil)
 	if errors.Cause(err) == errors.Err404 {
@@ -94,7 +94,7 @@ func (acl DefaultACL) MembersOf(stateURI string) (types.AddressSet, error) {
 	return addrs, nil
 }
 
-func (acl DefaultACL) HasReadAccess(stateURI string, keypath state.Keypath, addresses types.AddressSet) (bool, error) {
+func (acl DefaultACL) HasReadAccess(stateURI string, keypath state.Keypath, addresses types.Set[types.Address]) (bool, error) {
 	switch acl.TypeOf(stateURI) {
 	case StateURIType_Invalid:
 		return false, errors.Errorf(`bad state URI: "%v"`, stateURI)
@@ -110,7 +110,7 @@ func (acl DefaultACL) HasReadAccess(stateURI string, keypath state.Keypath, addr
 	}
 }
 
-func (acl DefaultACL) isMemberOfPrivateStateURI(stateURI string, addresses types.AddressSet) (bool, error) {
+func (acl DefaultACL) isMemberOfPrivateStateURI(stateURI string, addresses types.Set[types.Address]) (bool, error) {
 	state, err := acl.ControllerHub.StateAtVersion(stateURI, nil)
 	if err != nil {
 		return false, err

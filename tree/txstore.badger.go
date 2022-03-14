@@ -238,8 +238,8 @@ func (p *badgerTxStore) AllValidTxsForStateURIOrdered(stateURI string, fromTxID 
 	return NewAllValidTxsForStateURIOrderedIterator(p, stateURI, fromTxID)
 }
 
-func (s *badgerTxStore) StateURIsWithData() (types.StringSet, error) {
-	stateURIs := types.NewStringSet(nil)
+func (s *badgerTxStore) StateURIsWithData() (types.Set[string], error) {
+	stateURIs := types.NewSet[string](nil)
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false

@@ -27,11 +27,11 @@ import (
 
 	"redwood.dev/blob"
 	"redwood.dev/crypto"
+	"redwood.dev/embed"
 	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/process"
-	"redwood.dev/redwood.js/embed/redwoodjs"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/protoauth"
@@ -60,7 +60,7 @@ type transport struct {
 	prototree.BaseTreeTransport
 
 	defaultStateURI string
-	ownURLs         types.StringSet
+	ownURLs         types.Set[string]
 	listenAddr      string
 	listenAddrSSL   string
 	cookieSecret    [32]byte
@@ -94,7 +94,7 @@ const (
 func NewTransport(
 	listenAddr string,
 	listenAddrSSL string,
-	ownURLs types.StringSet,
+	ownURLs types.Set[string],
 	defaultStateURI string,
 	controllerHub tree.ControllerHub,
 	keyStore identity.KeyStore,
@@ -543,7 +543,7 @@ func (t *transport) serveHTTPSubscription(w http.ResponseWriter, r *http.Request
 		Keypath:          state.Keypath(req.Keypath),
 		Type:             req.SubType,
 		FetchHistoryOpts: &fetchHistoryOpts,
-		Addresses:        types.NewAddressSet([]types.Address{address}),
+		Addresses:        types.NewSet[types.Address]([]types.Address{address}),
 	}
 	chSubClosed, err := t.HandleWritableSubscriptionOpened(subRequest, func() (prototree.WritableSubscriptionImpl, error) {
 		return newHTTPWritableSubscription(req.StateURI, w, r), nil
@@ -595,7 +595,7 @@ func (t *transport) serveWSSubscription(w http.ResponseWriter, r *http.Request, 
 		Keypath:          req.Keypath,
 		Type:             req.SubType,
 		FetchHistoryOpts: &fetchHistoryOpts,
-		Addresses:        types.NewAddressSet([]types.Address{address}),
+		Addresses:        types.NewSet[types.Address]([]types.Address{address}),
 	}
 	chSubClosed, err := t.HandleWritableSubscriptionOpened(subRequest, func() (prototree.WritableSubscriptionImpl, error) {
 		wsConn, err := wsUpgrader.Upgrade(w, r, nil)
@@ -623,7 +623,7 @@ func (t *transport) serveWSSubscription(w http.ResponseWriter, r *http.Request, 
 }
 
 func (t *transport) serveRedwoodJS(w http.ResponseWriter, r *http.Request) {
-	http.ServeContent(w, r, "./redwood.js", time.Now(), bytes.NewReader(redwoodjs.BrowserSrc))
+	http.ServeContent(w, r, "./redwood.js", time.Now(), bytes.NewReader(embed.BrowserSrc))
 }
 
 func (t *transport) serveGetTx(w http.ResponseWriter, r *http.Request) {
@@ -748,7 +748,13 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 			response.Body = readCloser
 			response.ContentType = node.ContentType()
 			if response.ContentType == "" {
-				response.ContentType = "application/octet-stream"
+				newReadCloser, contentType, err := utils.SniffContentType(string(node.Keypath().Part(-1)), readCloser)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+					return
+				}
+				response.Body = newReadCloser
+				response.ContentType = contentType
 			}
 			response.ContentLength = contentLength
 
@@ -880,64 +886,27 @@ func (t *transport) servePostBlob(w http.ResponseWriter, r *http.Request) {
 
 func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, peerConn *peerConn) {
 	type request struct {
-		StateURI   string
-		Signature  types.Signature
-		Version    state.Version
-		Parents    []state.Version
-		Checkpoint bool
+		StateURI   string          `header:"State-URI"`
+		Version    state.Version   `header:"Version"`
+		Parents    ParentsHeader   `header:"Parents"`
+		Checkpoint bool            `header:"Checkpoint"`
+		Signature  types.Signature `header:"Signature"`
 	}
 
-	t.Infof(0, "incoming tx")
-
-	var err error
-
-	var sig types.Signature
-	sigHeaderStr := r.Header.Get("Signature")
-	if sigHeaderStr == "" {
-		http.Error(w, "missing Signature header", http.StatusBadRequest)
+	var req request
+	err := utils.UnmarshalHTTPRequest(&req, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
-	} else {
-		sig, err = types.SignatureFromHex(sigHeaderStr)
-		if err != nil {
-			http.Error(w, "bad Signature header", http.StatusBadRequest)
-			return
-		}
 	}
 
-	var txID state.Version
-	txIDStr := r.Header.Get("Version")
-	if txIDStr == "" {
-		txID = state.RandomVersion()
-	} else {
-		txID, err = state.VersionFromHex(txIDStr)
-		if err != nil {
-			http.Error(w, "bad Version header", http.StatusBadRequest)
-			return
-		}
-	}
+	t.Infof(0, "incoming tx %v", utils.PrettyJSON(req))
 
-	var parents []state.Version
-	parentsStr := r.Header.Get("Parents")
-	if parentsStr != "" {
-		parentsStrs := strings.Split(parentsStr, ",")
-		for _, pstr := range parentsStrs {
-			parentID, err := state.VersionFromHex(strings.TrimSpace(pstr))
-			if err != nil {
-				http.Error(w, "bad Parents header", http.StatusBadRequest)
-				return
-			}
-			parents = append(parents, parentID)
-		}
+	if req.StateURI == "" {
+		req.StateURI = t.defaultStateURI
 	}
-
-	var checkpoint bool
-	if checkpointStr := r.Header.Get("Checkpoint"); checkpointStr == "true" {
-		checkpoint = true
-	}
-
-	stateURI := r.Header.Get("State-URI")
-	if stateURI == "" {
-		stateURI = t.defaultStateURI
+	if req.Version == (state.Version{}) {
+		req.Version = state.RandomVersion()
 	}
 
 	var attachment []byte
@@ -997,22 +966,41 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, peerConn
 	}
 
 	tx := tree.Tx{
-		ID:         txID,
-		Parents:    parents,
-		Sig:        sig,
+		ID:         req.Version,
+		Parents:    req.Parents.Slice(),
 		Patches:    patches,
 		Attachment: attachment,
-		StateURI:   stateURI,
-		Checkpoint: checkpoint,
+		StateURI:   req.StateURI,
+		Checkpoint: req.Checkpoint,
 	}
 
-	// @@TODO: remove .From entirely
-	pubkey, err := crypto.RecoverSigningPubkey(tx.Hash(), sig)
+	// If no signature was provided, we're going through the UCAN
+	// mechanism. Let prototree sign the tx for the requester.
+	if len(req.Signature) == 0 {
+		myAddrs, err := t.keyStore.Addresses()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if myAddrs.Contains(peerConn.addressFromRequest) {
+			tx.From = peerConn.addressFromRequest
+			t.HandleTxReceived(tx, peerConn)
+			return
+
+		} else {
+			http.Error(w, fmt.Sprintf("bad signature, no local address (%v) matches UCAN %v", myAddrs, peerConn.addressFromRequest.Hex()), http.StatusBadRequest)
+			return
+		}
+	}
+
+	// @@TODO: remove .From entirely?
+	pubkey, err := crypto.RecoverSigningPubkey(tx.Hash(), req.Signature)
 	if err != nil {
 		http.Error(w, "bad signature", http.StatusBadRequest)
 		return
 	}
 	tx.From = pubkey.Address()
+	tx.Sig = req.Signature
 	////////////////////////////////
 
 	t.Process.Go(nil, "HandleTxReceived", func(ctx context.Context) {
@@ -1039,12 +1027,13 @@ func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Pee
 	return t.makePeerConn(nil, nil, dialAddr, types.ID{}, "", types.Address{}), nil
 }
 
+func (t *transport) AnnounceStateURIs(ctx context.Context, stateURIs types.Set[string]) {}
+
 func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_ <-chan prototree.TreePeerConn, err error) {
 	defer errors.AddStack(&err)
 
 	providers, err := t.tryFetchProvidersFromAuthoritativeHost(stateURI)
 	if err != nil {
-		t.Warnf("could not fetch providers of state URI '%v' from authoritative host: %v", stateURI, err)
 		return nil, err
 	}
 
@@ -1114,9 +1103,7 @@ func (t *transport) ProvidersOfBlob(ctx context.Context, blobID blob.ID) (<-chan
 	return nil, errors.ErrUnimplemented
 }
 
-func (t *transport) AnnounceBlob(ctx context.Context, blobID blob.ID) error {
-	return errors.ErrUnimplemented
-}
+func (t *transport) AnnounceBlobs(ctx context.Context, blobIDs types.Set[blob.ID]) {}
 
 var (
 	ErrBadCookie = errors.New("bad cookie")
@@ -1218,7 +1205,7 @@ func (t *transport) signedCookie(r *http.Request, name string) ([]byte, error) {
 }
 
 func (t *transport) makePeerConn(writer io.Writer, flusher http.Flusher, dialAddr string, sessionID types.ID, deviceUniqueID string, address types.Address) *peerConn {
-	peer := &peerConn{t: t, sessionID: sessionID}
+	peer := &peerConn{t: t, sessionID: sessionID, addressFromRequest: address}
 	peer.stream.Writer = writer
 	peer.stream.Flusher = flusher
 

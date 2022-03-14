@@ -66,6 +66,19 @@ func (frame Frame) Value(keypath state.Keypath, rng *state.Range) (interface{}, 
 	return frame.Node.Value(keypath, rng)
 }
 
+func (frame Frame) CopyToMemory(keypath state.Keypath, rng *state.Range) (state.Node, error) {
+	copiedNode, err := frame.Node.CopyToMemory(keypath, rng)
+	if err != nil {
+		return nil, err
+	}
+	return Frame{
+		Node:        copiedNode,
+		contentType: frame.contentType,
+		linkType:    frame.linkType,
+		linkValue:   frame.linkValue,
+	}, nil
+}
+
 func (f Frame) BytesReader(rng *types.Range) (io.ReadCloser, int64, error) {
 	bs, err := json.Marshal(f.Node)
 	if err != nil {
@@ -112,7 +125,12 @@ func (frame Frame) DebugPrint(printFn func(inFormat string, args ...interface{})
 	indent := strings.Repeat(" ", 4*indentLevel)
 
 	printFn(indent + "NelSON Frame {")
-	frame.Node.DebugPrint(printFn, false, indentLevel+1)
+	printFn(indent+"    [contentType: %v]", frame.contentType)
+	printFn(indent+"    [linkType: %v]", frame.linkType)
+	printFn(indent+"    [linkValue: %v]", frame.linkValue)
+	if frame.Node != nil {
+		frame.Node.DebugPrint(printFn, false, indentLevel+1)
+	}
 	printFn(indent + "}")
 }
 

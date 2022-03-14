@@ -294,13 +294,19 @@ func (c *LightClient) Get(stateURI string, version *state.Version, keypath state
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0, nil, errors.WithStack(err)
-	} else if resp.StatusCode == 404 {
+	}
+
+	if resp.StatusCode == 404 {
 		return nil, 0, nil, errors.Err404
 	} else if resp.StatusCode != 200 {
 		if version != nil {
 			return nil, 0, nil, errors.Errorf("error getting state@%v: (%v) %v", version.Hex(), resp.StatusCode, resp.Status)
 		}
-		return nil, 0, nil, errors.Errorf("error getting state@HEAD (%v) %v", resp.StatusCode, resp.Status)
+		bs, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, 0, nil, errors.Wrapf(err, "error getting state@HEAD (%v) %v", resp.StatusCode, resp.Status)
+		}
+		return nil, 0, nil, errors.Errorf("error getting state@HEAD (%v) %v / %v", resp.StatusCode, resp.Status, string(bs))
 	}
 
 	var contentLength int

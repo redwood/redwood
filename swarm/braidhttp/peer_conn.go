@@ -25,8 +25,9 @@ import (
 type peerConn struct {
 	swarm.PeerEndpoint
 
-	t         *transport
-	sessionID types.ID
+	t                  *transport
+	sessionID          types.ID
+	addressFromRequest types.Address
 
 	// stream
 	stream struct {
@@ -151,7 +152,6 @@ func (p *peerConn) Ack(stateURI string, txID state.Version) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
 	if p.DialInfo().DialAddr == "" {
-		p.t.Warn("peer has no DialAddr")
 		return nil
 	}
 

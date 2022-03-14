@@ -155,6 +155,7 @@ function SignUp({ profileNames, setMnemonic, profileName, setProfileName, passwo
                 primary
                 style={{ width: '100%', marginTop: 12 }}
                 disabled={!(!!profileName && !!password & !!confirmPassword)}
+                onClick={onSubmitSignUp}
             >
                 Sign Up
             </Button>

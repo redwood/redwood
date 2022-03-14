@@ -32,7 +32,7 @@ type storeData struct {
 }
 
 type storeDataCodec struct {
-	StaticRelays types.StringSet `tree:"staticRelays"`
+	StaticRelays types.Set[string] `tree:"staticRelays"`
 }
 
 func NewStore(db *state.DBTree) (*store, error) {

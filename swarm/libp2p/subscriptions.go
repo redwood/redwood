@@ -54,6 +54,10 @@ func newWritableSubscription(peerConn *peerConn, stateURI string) *writableSubsc
 	}
 }
 
+func (sub *writableSubscription) Start() error {
+	return sub.Process.Start()
+}
+
 func (sub *writableSubscription) Close() error {
 	sub.Infof(0, "libp2p writable subscription closed (%v)", sub.stateURI)
 	return multierr.Append(

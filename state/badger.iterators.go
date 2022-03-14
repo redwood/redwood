@@ -106,6 +106,14 @@ func (iter *dbIterator) Node() Node {
 	return iter.iterNode
 }
 
+func (iter *dbIterator) NodeCopy() Node {
+	if !iter.Valid() {
+		return nil
+	}
+	cp := *iter.iterNode
+	return &cp
+}
+
 func (iter *dbIterator) Valid() bool {
 	if iter.rootItem != nil {
 		return true
@@ -242,6 +250,14 @@ func (iter *dbDepthFirstIterator) Node() Node {
 		return nil
 	}
 	return iter.iterNode
+}
+
+func (iter *dbDepthFirstIterator) NodeCopy() Node {
+	if !iter.Valid() {
+		return nil
+	}
+	cp := *iter.iterNode
+	return &cp
 }
 
 func (iter *dbDepthFirstIterator) Next() {

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	netp2p "github.com/libp2p/go-libp2p-core/network"
-	peerstore "github.com/libp2p/go-libp2p-peerstore"
+	"github.com/libp2p/go-libp2p-core/peer"
 	protocol "github.com/libp2p/go-libp2p-protocol"
 
 	"redwood.dev/blob"
@@ -26,11 +26,11 @@ import (
 )
 
 type peerConn struct {
-	swarm.PeerEndpoint
-	t      *transport
-	pinfo  peerstore.PeerInfo
-	stream netp2p.Stream
-	mu     sync.Mutex
+	swarm.PeerEndpoint // @@TODO: Consider changing this to hold a swarm.PeerDevice
+	t                  *transport
+	pinfo              peer.AddrInfo
+	stream             netp2p.Stream
+	mu                 sync.Mutex
 }
 
 var (
@@ -283,7 +283,10 @@ type protobufUnmarshaler interface {
 func (peer *peerConn) readProtobuf(proto protobufUnmarshaler) (err error) {
 	defer func() { peer.UpdateConnStats(err == nil) }()
 
-	// peer.stream.SetReadDeadline(time.Now().Add(10 * time.Second))
+	err = peer.stream.SetReadDeadline(time.Now().Add(10 * time.Second))
+	if err != nil {
+		return err
+	}
 
 	size, err := readUint64(peer.stream)
 	if err != nil {
@@ -317,10 +320,10 @@ func (peer *peerConn) writeProtobuf(msg protobufMarshaler) error {
 
 	buflen := uint64(len(bs))
 
-	// err = peer.stream.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	// if err != nil {
-	// 	return err
-	// }
+	err = peer.stream.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	if err != nil {
+		return err
+	}
 
 	err = writeUint64(peer.stream, buflen)
 	if err != nil {
@@ -346,10 +349,10 @@ func (p *peerConn) writeMsg(msg Msg) (err error) {
 
 	buflen := uint64(len(bs))
 
-	// err = p.stream.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	// if err != nil {
-	// 	return err
-	// }
+	err = p.stream.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	if err != nil {
+		return err
+	}
 
 	err = writeUint64(p.stream, buflen)
 	if err != nil {
@@ -367,7 +370,26 @@ func (p *peerConn) writeMsg(msg Msg) (err error) {
 
 func (p *peerConn) readMsg() (msg Msg, err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
-	return readMsg(p.stream)
+
+	// err = p.stream.SetReadDeadline(time.Now().Add(10 * time.Second))
+	// if err != nil {
+	//  return Msg{}, err
+	// }
+
+	size, err := readUint64(p.stream)
+	if err != nil {
+		return Msg{}, err
+	}
+
+	buf := &bytes.Buffer{}
+	_, err = io.CopyN(buf, p.stream, int64(size))
+	if err != nil {
+		return Msg{}, err
+	}
+	bs := buf.Bytes()
+
+	err = json.Unmarshal(bs, &msg)
+	return msg, errors.Wrapf(err, `while decoding libp2p message "%v"`, string(bs))
 }
 
 func (p *peerConn) Close() error {

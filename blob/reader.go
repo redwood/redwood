@@ -18,6 +18,8 @@ type Reader struct {
 	eof          bool
 }
 
+var _ io.ReadCloser = (*Reader)(nil)
+
 type readerSpan struct {
 	ChunkIdx int
 	Rng      types.Range
@@ -46,7 +48,8 @@ func NewReader(db *state.DBTree, manifest Manifest, rng *types.Range) *Reader {
 		}
 	} else {
 		for i, chunk := range manifest.Chunks {
-			spans = append(spans, readerSpan{ChunkIdx: i, Rng: chunk.Range})
+			rng := types.Range{Start: 0, End: chunk.Range.End - chunk.Range.Start}
+			spans = append(spans, readerSpan{ChunkIdx: i, Rng: rng})
 		}
 	}
 	return &Reader{db: db, manifest: manifest, spans: spans}

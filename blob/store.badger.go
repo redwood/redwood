@@ -197,7 +197,9 @@ func (s *badgerStore) HaveBlob(blobID ID) (bool, error) {
 	return haveAllChunks(rootNode, manifest.Chunks)
 }
 
-func (s *badgerStore) VerifyBlobOrPrune(blobID ID) error {
+func (s *badgerStore) VerifyBlobOrPrune(blobID ID) (err error) {
+	defer errors.AddStack(&err)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -208,8 +210,8 @@ func (s *badgerStore) VerifyBlobOrPrune(blobID ID) error {
 
 	if !valid {
 		// @@TODO
-		// s.DeleteBlob()
-		return errors.Err404
+		err := s.DeleteBlob(blobID)
+		return err
 	}
 
 	err = s.markBlobPresentAndValid(sha1, sha3)
@@ -221,6 +223,8 @@ func (s *badgerStore) VerifyBlobOrPrune(blobID ID) error {
 }
 
 func (s *badgerStore) verifyBlob(blobID ID) (valid bool, sha1Hash types.Hash, sha3Hash types.Hash, err error) {
+	defer errors.AddStack(&err)
+
 	blobReader, length, err := s.BlobReader(blobID, nil)
 	if err != nil {
 		return false, types.Hash{}, types.Hash{}, err
@@ -235,7 +239,7 @@ func (s *badgerStore) verifyBlob(blobID ID) (valid bool, sha1Hash types.Hash, sh
 	if err != nil {
 		return false, types.Hash{}, types.Hash{}, err
 	} else if int64(len(bs)) != length {
-		return false, types.Hash{}, types.Hash{}, err
+		return false, types.Hash{}, types.Hash{}, errors.Errorf("length incorrect (expected: %v, got: %v)", length, int64(len(bs)))
 	}
 
 	sha1Hasher.Sum(sha1Hash[:0])
@@ -413,6 +417,16 @@ Outer:
 		sha1s = append(sha1s, ID{HashAlg: types.SHA1, Hash: sha1})
 	}
 	return sha1s, sha3s, nil
+}
+
+func (s *badgerStore) DeleteBlob(blobID ID) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	node := s.db.State(true)
+	defer node.Close()
+
+	return nil
 }
 
 func (s *badgerStore) BlobsNeeded() ([]ID, error) {

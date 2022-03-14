@@ -157,8 +157,8 @@ type wsWritableSubscription struct {
 	addresses                  []types.Address
 	writableSubscriptionOpener writableSubscriptionOpener
 
-	stateURIs types.StringSet
-	messages  *utils.Mailbox
+	stateURIs types.Set[string]
+	messages  *utils.Mailbox[wsMessage]
 	writeMu   sync.Mutex
 	startOnce sync.Once
 	closed    bool
@@ -188,11 +188,11 @@ func newWSWritableSubscription(
 	return &wsWritableSubscription{
 		Process:                    *process.New("sub impl (ws) " + stateURI),
 		Logger:                     log.NewLogger(TransportName),
-		stateURIs:                  types.NewStringSet([]string{stateURI}),
+		stateURIs:                  types.NewSet[string]([]string{stateURI}),
 		wsConn:                     wsConn,
 		addresses:                  addresses,
 		writableSubscriptionOpener: writableSubscriptionOpener,
-		messages:                   utils.NewMailbox(300), // @@TODO: configurable?
+		messages:                   utils.NewMailbox[wsMessage](300), // @@TODO: configurable?
 	}
 }
 
@@ -300,7 +300,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 						Keypath:          addSubMsg.Params.Keypath,
 						Type:             addSubMsg.Params.SubscriptionType,
 						FetchHistoryOpts: &fetchHistoryOpts,
-						Addresses:        types.NewAddressSet(sub.addresses),
+						Addresses:        types.NewSet[types.Address](sub.addresses),
 					},
 					func() (prototree.WritableSubscriptionImpl, error) { return sub, nil },
 				)
@@ -347,19 +347,13 @@ func (sub *wsWritableSubscription) read() (m wsMessage, err error) {
 }
 
 func (sub *wsWritableSubscription) writePendingMessages(ctx context.Context) error {
-	for {
+	for _, msg := range sub.messages.RetrieveAll() {
 		select {
 		case <-ctx.Done():
 			return context.Canceled
 		default:
 		}
 
-		x := sub.messages.Retrieve()
-		if x == nil {
-			return nil
-		}
-
-		msg := x.(wsMessage)
 		err := sub.write(msg.msgType, msg.data)
 		if err != nil {
 			return err

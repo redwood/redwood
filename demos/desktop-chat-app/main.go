@@ -97,9 +97,9 @@ func main() {
 		fmt.Println("profile root:", profileRoot)
 		fmt.Println("port:", port)
 
-		go func() {
-			http.ListenAndServe("localhost:6060", nil)
-		}()
+		// go func() {
+		// 	http.ListenAndServe("localhost:6060", nil)
+		// }()
 
 		masterProcess := process.New("root")
 
@@ -126,7 +126,10 @@ func main() {
 			case <-gui.chDone:
 			}
 		}()
-		gui.Start()
+		err = gui.Start()
+		if err != nil {
+			return err
+		}
 		return nil
 	}
 

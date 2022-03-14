@@ -3,7 +3,7 @@
 
 **Prerequisites**
 
-- Go 1.16
+- Go 1.18
 - Node.js 10+
 - Ensure that you've run `npm i` inside the `braidjs` directory (located in the repository root)
 - Build the Git remote helper and install it into your `$PATH` (feel free to choose a different location, as long as it's in `$PATH`):
