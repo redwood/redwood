@@ -25,5 +25,5 @@ jobs:
               run: make redwood.js/dist
 
             - name: Run tests
-              run: go test -v --tags static ./...
+              run: go test -v ./...
 

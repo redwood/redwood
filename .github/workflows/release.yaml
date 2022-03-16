@@ -58,7 +58,7 @@ jobs:
 
             - uses: actions/setup-go@v2
               with:
-                go-version: '^1.17.x'
+                go-version: '^1.18.x'
 
             - name: Set GOPATH
               run:  echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
@@ -88,13 +88,14 @@ jobs:
               uses: actions/cache@v2
               with:
                   path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-                  key: yarn-redwood.js-${{ hashFiles('./redwood.js/yarn.lock') }}
+                  key: yarn-redwood.js-${{ hashFiles('./embed/yarn.lock') }}
                   restore-keys: |
-                    yarn-redwood.js-${{ hashFiles('./redwood.js/yarn.lock') }}
+                    yarn-redwood.js-${{ hashFiles('./embed/yarn.lock') }}
                     yarn-redwood.js-
 
-            - name: Build redwood.js
-              run:  make redwood.js/dist
+            - name: Download redwood.js
+              run:  yarn
+              working-directory: embed
 
             - name: Build redwood
               run:  ${{ matrix.go_exe }} build ${{ matrix.build_flags }} -o ./${{ matrix.app_name }} .
@@ -162,7 +163,7 @@ jobs:
 
             - uses: actions/setup-go@v2
               with:
-                go-version: '^1.17.x'
+                go-version: '^1.18.x'
 
             - name: Set GOPATH
               run:  echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
@@ -197,13 +198,14 @@ jobs:
               uses: actions/cache@v2
               with:
                   path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-                  key: yarn-redwood.js-${{ hashFiles('./redwood.js/yarn.lock') }}
+                  key: yarn-redwood.js-${{ hashFiles('./embed/yarn.lock') }}
                   restore-keys: |
-                    yarn-redwood.js-${{ hashFiles('./redwood.js/yarn.lock') }}
+                    yarn-redwood.js-${{ hashFiles('./embed/yarn.lock') }}
                     yarn-redwood.js-
 
-            - name: Build redwood.js
-              run: make redwood.js/dist
+            - name: Download redwood.js
+              run: yarn
+              working-directory: embed
 
             - name: Cache desktop-chat-app/frontend dependencies
               uses: actions/cache@v2
