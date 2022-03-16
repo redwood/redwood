@@ -195,6 +195,9 @@ jobs:
             - name: Install go-astilectron-bundler
               run:  go get -u github.com/asticode/go-astilectron-bundler/... && go install github.com/asticode/go-astilectron-bundler/astilectron-bundler
 
+            - name: go mod tidy
+              run:  go mod tidy
+
             - name: Build Hush
               run:  astilectron-bundler
               working-directory: demos/desktop-chat-app
