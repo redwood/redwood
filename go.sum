@@ -111,6 +111,8 @@ github.com/brynbellomy/ginkgo-reporter v0.0.0-20160306174404-9bf14cb7c4ae h1:GWG
 github.com/brynbellomy/ginkgo-reporter v0.0.0-20160306174404-9bf14cb7c4ae/go.mod h1:6MDsFO0MznmCRIEQ3XuCueBzJTf9uii2Dwog4y/B1XA=
 github.com/brynbellomy/git2go v0.0.0-20220103011358-0816142080de h1:7yp/CK6rOd98V2PD4SRssfUk7e7Af87Yseu4yExLxQM=
 github.com/brynbellomy/git2go v0.0.0-20220103011358-0816142080de/go.mod h1:1/Eu1xGrlzTutwe0OyDCL5NnG1Yu4C9mWx64+Zhzadg=
+github.com/brynbellomy/go-luaconv v0.0.0-20191017194522-3988d33620f3 h1:oZ6q6N0zd6KX8ST9eNAc5Hd+pQTkYwIs6LNTU+lgzdE=
+github.com/brynbellomy/go-luaconv v0.0.0-20191017194522-3988d33620f3/go.mod h1:sSvVVQ2xz/klz5ycbK8j29ee7eIPgRIgnxSyMynB7Xo=
 github.com/brynbellomy/go-structomancer v1.0.3 h1:3ZLfREEbriZ53XhmQ5/ZXUq32c798u1oOKqa6JKAcuc=
 github.com/brynbellomy/go-structomancer v1.0.3/go.mod h1:ksDiqWcC0cdNSgSCeza3WdV5ffC9gkkKk1EXEakqrPM=
 github.com/brynbellomy/klog v0.0.0-20200414031930-87fbf2e555ae h1:FO8VxsnMvWNRzx3vGjBmS2kotWl9f455Yj0H+9k01zk=

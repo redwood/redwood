@@ -390,7 +390,7 @@ func (tp *treeProtocol) handleFetchHistoryRequest(stateURI string, opts FetchHis
 	// @@TODO: respect the `opts.ToTxID` param
 	// @@TODO: if .FromTxID == 0, set it to GenesisTxID
 
-	allowed, err := tp.acl.HasReadAccess(stateURI, nil, types.NewSet[types.Address](writeSub.Addresses()))
+	allowed, err := tp.acl.HasReadAccess(stateURI, nil, writeSub.Addresses())
 	if err != nil {
 		return errors.Wrapf(err, "while querying ACL for read access (stateURI=%v)", stateURI)
 	} else if !allowed {
@@ -469,7 +469,7 @@ func (tp *treeProtocol) handleWritableSubscriptionOpened(
 		return nil, err
 	}
 
-	writeSub := newWritableSubscription(req.StateURI, req.Keypath, req.Type, isPrivate, req.Addresses.Slice(), writeSubImpl)
+	writeSub := newWritableSubscription(req.StateURI, req.Keypath, req.Type, isPrivate, req.Addresses, writeSubImpl)
 	err = tp.Process.SpawnChild(nil, writeSub)
 	if err != nil {
 		tp.Errorf("while spawning writable subscription: %v", err)
@@ -861,7 +861,7 @@ func (tp *treeProtocol) broadcastToWritableSubscribers(
 	isPrivate := tp.acl.TypeOf(stateURI) == StateURIType_Private
 
 	for writeSub := range tp.writableSubscriptions[stateURI] {
-		allowed, err := tp.acl.HasReadAccess(stateURI, nil, types.NewSet(writeSub.Addresses()))
+		allowed, err := tp.acl.HasReadAccess(stateURI, nil, writeSub.Addresses())
 		if err != nil {
 			tp.Errorf("while checking ACL of state URI %v", stateURI)
 			continue
