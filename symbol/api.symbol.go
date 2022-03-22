@@ -48,14 +48,13 @@ type Table interface {
 	// If ID == 0, then this is the equivalent to GetSymbolID(value, true).
 	SetSymbolID(value []byte, ID ID) ID
 
-	// Returns the byte string previously associated with the given symbol ID.
-	// If the ID is <= 0 or not found, nil is returned.
-	// 
-	// The buf returned conveniently retains scope until Close() is called (and is read-only). 
+	// Looks up and returns the byte string previously associated with the given symbol ID.
+	// The returned buf conveniently retains scope indefinitely (and is read only).
+	// If ID is invalid or not found, nil is returned.
 	LookupID(ID ID) []byte
 
-	// Flushes any changes and internally closes
-	// Any subsequent access to this interface is undefined.
+	// Releases internal references to the underlying database.
+	// Subsequent access to this Table instance is defined but limited to what is already cached.
 	Close()
 }
 
