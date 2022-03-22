@@ -105,7 +105,7 @@ func fillTable(db *badger.DB, vals [][]byte, IDs []symbol.ID) {
 	// Populate the table with multiple workers all setting values at once
 	{
 		running := &sync.WaitGroup{}
-		numWorkers := 2
+		numWorkers := 5
 		for i := 0; i < numWorkers; i++ {
 			running.Add(1)
 			startAt := len(vals) * i / numWorkers
