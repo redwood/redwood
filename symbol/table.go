@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 
 	"github.com/dgraph-io/badger/v3"
-	"github.com/planet5d/go-cedar/bufs"
 )
 
 func (id ID) WriteTo(io []byte) []byte {
@@ -125,7 +124,7 @@ type symbolTable struct {
 }
 
 func (st *symbolTable) getIDFromCache(buf []byte) ID {
-	hash := bufs.HashBuf(buf)
+	hash := HashBuf(buf)
 
 	st.valueCacheMu.RLock()
 	defer st.valueCacheMu.RUnlock()
@@ -143,7 +142,7 @@ func (st *symbolTable) getIDFromCache(buf []byte) ID {
 }
 
 func (st *symbolTable) allocAndBindToID(buf []byte, bindTo ID) kvEntry {
-	hash := bufs.HashBuf(buf)
+	hash := HashBuf(buf)
 
 	st.valueCacheMu.Lock()
 	defer st.valueCacheMu.Unlock()
