@@ -1,7 +1,7 @@
 package symbol
 
 import (
-	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v2"
 )
 
 // Creates a new symbol.Table and attaches it to the given db.
@@ -35,7 +35,7 @@ const MinIssuedID = 1000
 // All calls are threadsafe.
 type Table interface {
 
-	// Returns the symbol ID associated with the given string/buffer value.
+	// Returns the symbol ID previously associated with the given string/buffer value.
 	// The given buffer is never retained.
 	//
 	// If not found and autoIssue == true, a new entry is created and the new ID returned.
@@ -48,8 +48,10 @@ type Table interface {
 	// If ID == 0, then this is the equivalent to GetSymbolID(value, true).
 	SetSymbolID(value []byte, ID ID) ID
 
-	// Returns the string/buffer value associated with the given symbol ID.
+	// Returns the byte string previously associated with the given symbol ID.
 	// If the ID is <= 0 or not found, nil is returned.
+	// 
+	// The buf returned conveniently retains scope until Close() is called (and is read-only). 
 	LookupID(ID ID) []byte
 
 	// Flushes any changes and internally closes

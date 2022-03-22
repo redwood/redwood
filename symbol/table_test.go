@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/dgraph-io/badger/v3"
-	"github.com/planet5d/go-planet/symbol"
+	"github.com/dgraph-io/badger/v2"
+	"redwood.dev/symbol"
 )
 
 var gTest = make(chan error)
