@@ -19,7 +19,6 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/log"
-	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/libp2p"
 	"redwood.dev/swarm/protoauth"
@@ -327,39 +326,6 @@ func (s *HTTPServer) StoreBlob(r *http.Request, args *StoreBlobArgs, resp *Store
 	}
 	resp.SHA1 = sha1
 	resp.SHA3 = sha3
-	return nil
-}
-
-type (
-	PrivateTreeMembersArgs struct {
-		StateURI string
-	}
-	PrivateTreeMembersResponse struct {
-		Members []types.Address
-	}
-)
-
-func (s *HTTPServer) PrivateTreeMembers(r *http.Request, args *PrivateTreeMembersArgs, resp *PrivateTreeMembersResponse) error {
-	if s.controllerHub == nil {
-		return errors.ErrUnsupported
-	}
-	node, err := s.controllerHub.StateAtVersion(args.StateURI, nil)
-	if err != nil {
-		return err
-	}
-	defer node.Close()
-
-	subkeys := node.NodeAt(state.Keypath("Members"), nil).Subkeys()
-	var addrs []types.Address
-	for _, k := range subkeys {
-		addr, err := types.AddressFromHex(string(k))
-		if err != nil {
-			continue
-		}
-		addrs = append(addrs, addr)
-	}
-	resp.Members = addrs
-
 	return nil
 }
 

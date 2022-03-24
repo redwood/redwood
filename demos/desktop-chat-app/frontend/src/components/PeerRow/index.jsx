@@ -7,7 +7,7 @@ import moment from 'moment'
 import Input from '../Input'
 import UserAvatar from '../UserAvatar'
 import Tooltip from '../Tooltip'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 import useAPI from '../../hooks/useAPI'
 import usePeers from '../../hooks/usePeers'
 import useUsers from '../../hooks/useUsers'
@@ -102,7 +102,7 @@ function PeerRow({ address, editable, showLastSeen, boldName, onClick }) {
     }, [editable, setIsEditingNickname])
 
     let onClickSetNickname = useCallback(async () => {
-        await api.setNickname(address, newNickname)
+        await api.setPeerNickname(address, newNickname)
         setIsEditingNickname(false)
     }, [api, address, setIsEditingNickname, newNickname])
 

@@ -5,7 +5,7 @@ import { Code as CodeIcon, InsertDriveFile as FileIcon } from '@material-ui/icon
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 
 import ServerBar from './components/Sidebar/ServerBar'
 import Loading from './components/Account/Loading'
@@ -276,7 +276,7 @@ function fireNotificationAlert({
 
 // Used to mount the room state and notify users when new messages come in
 function NotificationMount(props) {
-	const roomState = useStateTree(props.roomPath)
+	const [roomState] = useStateTree(props.roomPath)
 	let { users } = useUsers(props.roomPath)
 	const messages = (roomState || {}).messages || []
 	const numMessages = messages.length

@@ -211,6 +211,14 @@ func (tp *treeProtocol) SendTx(ctx context.Context, tx tree.Tx) (err error) {
 			return errors.New("keystore has no public identities")
 		}
 		tx.From = publicIdentities[0].Address()
+
+	} else {
+		exists, err := tp.keyStore.IdentityExists(tx.From)
+		if err != nil {
+			return errors.Wrapf(err, "while checking key store for address %v", tx.From.Hex())
+		} else if !exists {
+			return errors.Errorf("address %v is not controlled by this node", tx.From.Hex())
+		}
 	}
 
 	if len(tx.Parents) == 0 && tx.ID != tree.GenesisTxID {
@@ -222,7 +230,7 @@ func (tp *treeProtocol) SendTx(ctx context.Context, tx tree.Tx) (err error) {
 		tx.Parents = parents
 	}
 
-	if len(tx.Sig) == 0 && !tx.From.IsZero() {
+	if len(tx.Sig) == 0 {
 		tx.Sig, err = tp.keyStore.SignHash(tx.From, tx.Hash())
 		if err != nil {
 			return err

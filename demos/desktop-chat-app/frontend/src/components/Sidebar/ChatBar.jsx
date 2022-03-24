@@ -14,7 +14,7 @@ import Button from '../Button'
 import Input, { InputLabel } from '../Input'
 import PeerRow from '../PeerRow'
 import Scrollbars from '../Scrollbars'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
@@ -103,7 +103,7 @@ function ChatBar({ className }) {
         await logout()
     }, [isLoggedIn, logout])
 
-    const registryState = useStateTree(registryStateURI)
+    const [registryState] = useStateTree(registryStateURI)
     const serverRooms = Object.keys((!!registryState ? registryState.rooms : {}) || {}).filter(room => !!room).map(room => `${selectedServer}/${room}`)
 
     return (
@@ -138,7 +138,7 @@ function ChatBar({ className }) {
 }
 
 function ChatBarItem({ stateURI, selected, onClick }) {
-    const chatState = useStateTree(stateURI)
+    const [chatState] = useStateTree(stateURI)
     const [latestMessageTime, setLatestMessageTime] = useState(null)
     const [server, room] = stateURI.split('/')
 	const roomName = useRoomName(server, room)

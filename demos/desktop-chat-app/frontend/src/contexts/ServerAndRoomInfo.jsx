@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useState, useEffect, useDebugValue } from 'react'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 import useAddressBook from '../hooks/useAddressBook'
 import useNavigation from '../hooks/useNavigation'
 import useAPI from '../hooks/useAPI'
@@ -18,12 +18,12 @@ function Provider({ children }) {
     const [servers, setServers] = useState({})
     const [rooms, setRooms] = useState({})
 
-    const { nodeIdentities, privateTreeMembers, subscribe, stateTrees, subscribedStateURIs } = useRedwood()
+    const { nodeIdentities, subscribe, stateTrees, subscribedStateURIs } = useRedwood()
     const addressBook = useAddressBook()
     const api = useAPI()
 
     useEffect(() => {
-        if (!stateTrees || !privateTreeMembers) {
+        if (!stateTrees) {
             return
         }
 
@@ -59,18 +59,17 @@ function Provider({ children }) {
                 registryStateURI,
             }
 
-            if (room === "registry" || stateURI === "chat.local/dms") {
+            if (room === 'registry' || stateURI === 'chat.local/dms') {
                 for (let room of Object.keys((stateTrees[stateURI] || {}).rooms || {})) {
-                    let roomStateURI = `${stateURI === "chat.local/dms" ? "chat.p2p" : server}/${room}`;
+                    let roomStateURI = `${stateURI === 'chat.local/dms' ? 'chat.p2p' : server}/${room}`
                     if (!subscribedStateURIs[roomStateURI]) {
-                        subscribe(roomStateURI);
-                        api.subscribe(roomStateURI);
+                        subscribe(roomStateURI)
+                        api.subscribe(roomStateURI)
                     }
                     newRooms[roomStateURI] = {
                         rawName: room,
-                        members: privateTreeMembers[roomStateURI] || [],
-                        isDirectMessage,
-                    };
+                        isDirectMessage: stateURI === 'chat.local/dms',
+                    }
                 }
             }
         }
@@ -84,7 +83,7 @@ function Provider({ children }) {
 
         setServers(newServers)
         setRooms(newRooms)
-    }, [stateTrees, privateTreeMembers, nodeIdentities, addressBook, subscribedStateURIs])
+    }, [stateTrees, nodeIdentities, addressBook, subscribedStateURIs])
 
     return (
       <Context.Provider value={{ servers, rooms }}>

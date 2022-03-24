@@ -1,4 +1,4 @@
-FROM golang:1.17-buster AS build
+FROM golang:1.18.0-buster AS build
 
 RUN apt update
 RUN apt -y install build-essential
@@ -13,7 +13,7 @@ RUN go build -o /bootstrapnode .
 
 
 
-FROM golang:1.17-buster
+FROM golang:1.18.0-buster
 
 COPY --from=build /bootstrapnode /bootstrapnode
 WORKDIR /

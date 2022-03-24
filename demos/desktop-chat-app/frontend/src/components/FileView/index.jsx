@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react'
 import styled, { useTheme } from 'styled-components'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 import { CloudDownload as DownloadIcon, OpenInNew as OpenIcon } from '@material-ui/icons'
 import AttachmentModal from '../AttachmentModal'
 import Embed from '../Embed'
@@ -113,7 +113,7 @@ const SOpenIcon = styled(OpenIcon)`
 function FileView({ className }) {
     const theme = useTheme()
     const { selectedStateURI } = useNavigation()
-    const roomState = useStateTree(selectedStateURI)
+    const [roomState] = useStateTree(selectedStateURI)
     const { httpHost } = useRedwood()
     const { onPresent: onPresentPreviewModal } = useModal('attachment preview')
 

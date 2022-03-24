@@ -1,6 +1,6 @@
 import React, { Fragment, useState } from 'react'
 import styled from 'styled-components'
-import { useRedwood } from '@redwood.dev/client/react'
+import { useRedwood } from '@redwood.dev/react'
 import theme from '../theme'
 import Scrollbars from './Scrollbars'
 

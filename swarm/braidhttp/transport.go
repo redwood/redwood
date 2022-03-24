@@ -419,6 +419,11 @@ func (t *transport) serveHeadRequest(w http.ResponseWriter, r *http.Request) {
 	if req.StateURI == "" {
 		req.StateURI = t.defaultStateURI
 	}
+	if req.StateURI == "" {
+		// Maybe the client doesn't care about state data (they just want the Alt-Svc header)
+		return
+	}
+
 	isKnown, err := t.controllerHub.IsStateURIWithData(req.StateURI)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -441,6 +446,7 @@ func (t *transport) serveHeadRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	defer node.Close()
 
+	// @@TODO
 }
 
 // Respond to a request from another node challenging our identity.

@@ -4,12 +4,6 @@
 redwood: redwood.js/dist
 	go build ./cmd/redwood
 
-redwood.js/dist:
-	cd redwood.js && \
-	yarn && \
-	yarn build:main
-
-
 .PHONY: hush
 hush:
 	cd ./demos/desktop-chat-app && \
@@ -38,3 +32,4 @@ redwood-docker:
 .PHONY: bootstrapnode-docker
 bootstrapnode-docker:
 	docker build -t redwoodp2p/bootstrapnode --file ./cmd/bootstrapnode/Dockerfile .
+

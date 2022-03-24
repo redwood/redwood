@@ -145,6 +145,7 @@ var defaultREPLCommands = REPLCommands{
 				Subcommands: REPLCommands{
 					"list":      CmdListTxs,
 					"dumpstore": CmdTxStoreDebugPrint,
+					"leaves":    CmdTxStoreLeaves,
 				},
 			},
 			"subscribe": CmdSubscribe,
@@ -405,6 +406,23 @@ var (
 			table.SetHeader([]string{"ID", "Status", "Parents"})
 			table.AppendBulk(rows)
 			table.Render()
+			return nil
+		},
+	}
+
+	CmdTxStoreLeaves = REPLCommand{
+		HelpText: "print the leaves of the given state URI",
+		Handler: func(args []string, app *App) error {
+			if len(args) < 1 {
+				return errors.New("requires 1 argument: leaves <state URI>")
+			}
+			leaves, err := app.TxStore.Leaves(args[0])
+			if err != nil {
+				return err
+			}
+			for _, leaf := range leaves {
+				app.Infof(0, "- %v", leaf.Hex())
+			}
 			return nil
 		},
 	}

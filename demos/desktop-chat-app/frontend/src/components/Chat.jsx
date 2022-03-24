@@ -27,7 +27,7 @@ import Scrollbars from './Scrollbars'
 import useModal from '../hooks/useModal'
 import useServerRegistry from '../hooks/useServerRegistry'
 import useAPI from '../hooks/useAPI'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 import useNavigation from '../hooks/useNavigation'
 import useAddressBook from '../hooks/useAddressBook'
 import useUsers from '../hooks/useUsers'
@@ -188,7 +188,7 @@ function Chat({ className }) {
     const { users } = useUsers(selectedStateURI)
 
     const registry = useServerRegistry(selectedServer)
-    const roomState = useStateTree(selectedStateURI)
+    const [roomState] = useStateTree(selectedStateURI)
     const initialMessageText = [
       {
         type: 'paragraph',

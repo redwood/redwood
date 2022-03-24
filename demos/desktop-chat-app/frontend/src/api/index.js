@@ -248,7 +248,7 @@ export default function(redwoodClient, ownAddress) {
         await redwoodClient.rpc.sendTx(tx)
     }
 
-    async function setNickname(peerAddress, nickname) {
+    async function setPeerNickname(peerAddress, nickname) {
         await redwoodClient.rpc.sendTx({
             id: Redwood.utils.randomID(),
             stateURI: 'chat.local/address-book',
@@ -271,7 +271,7 @@ export default function(redwoodClient, ownAddress) {
         createNewDM,
         sendMessage,
         updateProfile,
-        setNickname,
+        setPeerNickname,
         createCloudStackOptions,
     }
 }
