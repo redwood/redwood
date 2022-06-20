@@ -21,6 +21,11 @@ jobs:
             - name: Download Go vendor packages
               run: go mod download
 
+            - name: Mock out embedded redwood.js
+              run: |
+                mkdir -p embed/node_modules/@redwood.dev/client/browser
+                touch embed/node_modules/@redwood.dev/client/browser/index.js
+
             - name: Run tests
               run: go test -v ./...
 
