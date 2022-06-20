@@ -33,8 +33,6 @@ type App struct {
 	devMode     bool
 }
 
-const AppName = "redwood-chat"
-
 func newApp(password, mnemonic, profileRoot, profileName, configPath string, devMode bool) (*App, error) {
 	app := &App{
 		Process:     *process.New("hush"),
@@ -48,8 +46,8 @@ func newApp(password, mnemonic, profileRoot, profileName, configPath string, dev
 	}
 
 	// Copy the default config and unmarshal the config file over it
-	cfg := cmdutils.DefaultConfig(AppName)
-	err := cmdutils.FindOrCreateConfigAtPath(&cfg, AppName, configPath)
+	cfg := cmdutils.DefaultConfig("hush")
+	err := cmdutils.FindOrCreateConfigAtPath(&cfg, "hush", configPath)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +80,7 @@ func newApp(password, mnemonic, profileRoot, profileName, configPath string, dev
 		return nil, err
 	}
 
-	app.app = cmdutils.NewApp(AppName, cfg)
+	app.app = cmdutils.NewApp("hush", cfg)
 
 	app.Info(0, utils.PrettyJSON(cfg))
 
@@ -100,10 +98,28 @@ func (app *App) Start() error {
 		return err
 	}
 
+	app.addDefaultRelays()
 	app.initializeLocalState()
 	app.monitorForDMs()
 
 	return nil
+}
+
+func (app *App) addDefaultRelays() {
+	relays := []string{
+		"/dns6/saturn.saplings.redwood.garden/tcp/21231/p2p/12D3KooWA1UxxSiQLVGzjkdQReCD3mT8zCN4fGYr5uYzdGqt1BPX",
+		"/dns4/saturn.saplings.redwood.garden/tcp/21231/p2p/12D3KooWA1UxxSiQLVGzjkdQReCD3mT8zCN4fGYr5uYzdGqt1BPX",
+		"/dns6/hera.saplings.redwood.garden/tcp/21231/p2p/12D3KooWMBq642cwMfbQ5rLCJg2ryKgir8Rng6xa1SCKJkZQ9gUn",
+		"/dns4/hera.saplings.redwood.garden/tcp/21231/p2p/12D3KooWMBq642cwMfbQ5rLCJg2ryKgir8Rng6xa1SCKJkZQ9gUn",
+		"/dns6/jupiter.saplings.redwood.garden/tcp/21231/p2p/12D3KooWD9RbdYFdWQHBRmFN5q2bCgPFiYeAnbTs1fmBAzVujpWL",
+		"/dns4/jupiter.saplings.redwood.garden/tcp/21231/p2p/12D3KooWD9RbdYFdWQHBRmFN5q2bCgPFiYeAnbTs1fmBAzVujpWL",
+		"/dns6/seattle.saplings.redwood.garden/tcp/21231/p2p/12D3KooWESjXuJZbgcuxEQRSK6WzxF9xjHMgJSpMEBm1qX2pveNn",
+		"/dns4/seattle.saplings.redwood.garden/tcp/21231/p2p/12D3KooWESjXuJZbgcuxEQRSK6WzxF9xjHMgJSpMEBm1qX2pveNn",
+	}
+
+	for _, relay := range relays {
+		app.app.Libp2pStore.AddStaticRelay(relay)
+	}
 }
 
 func (app *App) monitorForDMs() {

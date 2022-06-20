@@ -7,7 +7,6 @@ import (
 
 	"redwood.dev/errors"
 	"redwood.dev/state"
-	"redwood.dev/tree/nelson"
 	"redwood.dev/tree/pb"
 	"redwood.dev/utils"
 )
@@ -17,19 +16,15 @@ type permissionsValidator struct {
 }
 
 func NewPermissionsValidator(config state.Node) (Validator, error) {
-	cfg, exists, err := nelson.GetValueRecursive(config, nil, nil)
+	cfg, is, err := config.MapValue(nil)
 	if err != nil {
 		return nil, err
-	} else if !exists {
-		return nil, errors.New("permissions validator needs a map of permissions as its config")
+	} else if !is {
+		cfg = make(map[string]interface{})
 	}
 
-	asMap, isMap := cfg.(map[string]interface{})
-	if !isMap {
-		return nil, errors.New("permissions validator needs a map of permissions as its config")
-	}
-	lowercasePerms := make(map[string]interface{}, len(asMap))
-	for address, perms := range asMap {
+	lowercasePerms := make(map[string]interface{}, len(cfg))
+	for address, perms := range cfg {
 		lowercasePerms[strings.ToLower(address)] = perms
 	}
 	return &permissionsValidator{permissions: lowercasePerms}, nil

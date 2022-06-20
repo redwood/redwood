@@ -47,10 +47,10 @@ func TestPeerPool(t *testing.T) {
 	peer2.On("Ready").Return(true)
 	peer3.On("Ready").Return(true)
 	peer4.On("Ready").Return(true)
-	peer1.On("Addresses").Return([]types.Address{{0x1}})
-	peer2.On("Addresses").Return([]types.Address{{0x2}})
-	peer3.On("Addresses").Return([]types.Address{{0x3}})
-	peer4.On("Addresses").Return([]types.Address{{0x4}})
+	peer1.On("Addresses").Return(types.NewSet([]types.Address{{0x1}}))
+	peer2.On("Addresses").Return(types.NewSet([]types.Address{{0x2}}))
+	peer3.On("Addresses").Return(types.NewSet([]types.Address{{0x3}}))
+	peer4.On("Addresses").Return(types.NewSet([]types.Address{{0x4}}))
 	peer1.On("Close").Return(nil)
 	peer2.On("Close").Return(nil)
 	peer3.On("Close").Return(nil)
@@ -261,7 +261,7 @@ func TestPeerPool_Integration(t *testing.T) {
 					peer.On("DialInfo").Return(swarm.PeerDialInfo{TransportName: testutils.RandomString(t, 5), DialAddr: testutils.RandomString(t, 5)}).Maybe()
 					peer.On("DeviceUniqueID").Return(fmt.Sprintf("%v", j))
 					peer.On("Ready").Return(true).Maybe()
-					peer.On("Addresses").Return([]types.Address{testutils.RandomAddress(t)}).Maybe()
+					peer.On("Addresses").Return(types.NewSet([]types.Address{testutils.RandomAddress(t)})).Maybe()
 					peer.On("Close").Return(nil).Maybe()
 
 					var abort bool

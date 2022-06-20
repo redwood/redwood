@@ -1,7 +1,7 @@
 import React, { Fragment, useState, useEffect, useCallback } from 'react'
 import styled from 'styled-components'
 import { Link, Redirect, useHistory } from 'react-router-dom'
-import { useRedwood } from '@redwood.dev/client/react'
+import { useRedwood } from '@redwood.dev/react'
 
 import Input, { InputLabel } from './../Input'
 import Button from './../Button'
@@ -139,6 +139,8 @@ function SignIn({ password, setPassword, profileNames, selectedProfile, setSelec
                     value={password}
                     onChange={(event) => setPassword(event.currentTarget.value)}
                     type={'password'}
+                    onEnter={onSubmitLogin}
+                    autoFocus
                 />
             </InputLabel>
             <SBackProfiles onClick={() => setSelectedProfile('')}>Select another profile ({profileNames.length})</SBackProfiles>

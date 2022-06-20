@@ -20,15 +20,16 @@ type ControllerHub interface {
 
 	AddTx(tx Tx) error
 	FetchTx(stateURI string, txID state.Version) (Tx, error)
-	FetchTxs(stateURI string, fromTxID state.Version) TxIterator
+	FetchValidTxsOrdered(stateURI string, fromTxID state.Version) TxIterator
 
-	EnsureController(stateURI string) (Controller, error)
-	KnownStateURIs() (types.StringSet, error)
+	StateURIsWithData() (types.Set[string], error)
+	IsStateURIWithData(stateURI string) (bool, error)
+	OnNewStateURIWithData(fn NewStateURIWithDataCallback)
 	StateAtVersion(stateURI string, version *state.Version) (state.Node, error)
-	QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
+	// QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
 	Leaves(stateURI string) ([]state.Version, error)
 
-	BlobReader(refID blob.ID) (io.ReadCloser, int64, error)
+	BlobReader(refID blob.ID, rng *types.Range) (io.ReadCloser, int64, error)
 
 	OnNewState(fn NewStateCallback)
 	DebugPrint(stateURI string)
@@ -37,7 +38,6 @@ type ControllerHub interface {
 type controllerHub struct {
 	process.Process
 	log.Logger
-	chStop chan struct{}
 
 	controllers   map[string]Controller
 	controllersMu sync.RWMutex
@@ -50,15 +50,10 @@ type controllerHub struct {
 	newStateListenersMu sync.RWMutex
 }
 
-var (
-	ErrNoController = errors.New("no controller for that stateURI")
-)
-
 func NewControllerHub(dbRootPath string, txStore TxStore, blobStore blob.Store, badgerOpts badgerutils.OptsBuilder) ControllerHub {
 	return &controllerHub{
 		Process:     *process.New("controller hub"),
 		Logger:      log.NewLogger("controller hub"),
-		chStop:      make(chan struct{}),
 		controllers: make(map[string]Controller),
 		dbRootPath:  dbRootPath,
 		badgerOpts:  badgerOpts,
@@ -79,13 +74,13 @@ func (m *controllerHub) Start() (err error) {
 		return err
 	}
 
-	stateURIs, err := m.txStore.KnownStateURIs()
+	stateURIs, err := m.txStore.StateURIsWithData()
 	if err != nil {
 		return err
 	}
 
 	for stateURI := range stateURIs {
-		_, err := m.EnsureController(stateURI)
+		_, err := m.ensureController(stateURI)
 		if err != nil {
 			return err
 		}
@@ -94,7 +89,7 @@ func (m *controllerHub) Start() (err error) {
 	return nil
 }
 
-func (m *controllerHub) EnsureController(stateURI string) (Controller, error) {
+func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
 	m.controllersMu.Lock()
 	defer m.controllersMu.Unlock()
 
@@ -120,20 +115,28 @@ func (m *controllerHub) EnsureController(stateURI string) (Controller, error) {
 	return ctrl, nil
 }
 
-func (m *controllerHub) KnownStateURIs() (types.StringSet, error) {
-	return m.txStore.KnownStateURIs()
+func (m *controllerHub) StateURIsWithData() (types.Set[string], error) {
+	return m.txStore.StateURIsWithData()
+}
+
+func (m *controllerHub) IsStateURIWithData(stateURI string) (bool, error) {
+	return m.txStore.IsStateURIWithData(stateURI)
+}
+
+func (m *controllerHub) OnNewStateURIWithData(fn NewStateURIWithDataCallback) {
+	m.txStore.OnNewStateURIWithData(fn)
 }
 
 func (m *controllerHub) AddTx(tx Tx) error {
-	ctrl, err := m.EnsureController(tx.StateURI)
+	ctrl, err := m.ensureController(tx.StateURI)
 	if err != nil {
 		return err
 	}
 	return ctrl.AddTx(tx)
 }
 
-func (m *controllerHub) FetchTxs(stateURI string, fromTxID state.Version) TxIterator {
-	return m.txStore.AllTxsForStateURI(stateURI, fromTxID)
+func (m *controllerHub) FetchValidTxsOrdered(stateURI string, fromTxID state.Version) TxIterator {
+	return m.txStore.AllValidTxsForStateURIOrdered(stateURI, fromTxID)
 }
 
 func (m *controllerHub) FetchTx(stateURI string, txID state.Version) (Tx, error) {
@@ -146,24 +149,24 @@ func (m *controllerHub) StateAtVersion(stateURI string, version *state.Version) 
 
 	ctrl := m.controllers[stateURI]
 	if ctrl == nil {
-		return nil, errors.Wrapf(ErrNoController, stateURI)
+		return nil, errors.Wrapf(errors.Err404, stateURI)
 	}
 	return ctrl.StateAtVersion(version), nil
 }
 
-func (m *controllerHub) QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error) {
-	m.controllersMu.RLock()
-	defer m.controllersMu.RUnlock()
+// func (m *controllerHub) QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error) {
+// 	m.controllersMu.RLock()
+// 	defer m.controllersMu.RUnlock()
 
-	ctrl := m.controllers[stateURI]
-	if ctrl == nil {
-		return nil, errors.Wrapf(ErrNoController, stateURI)
-	}
-	return ctrl.QueryIndex(version, keypath, indexName, queryParam, rng)
-}
+// 	ctrl := m.controllers[stateURI]
+// 	if ctrl == nil {
+// 		return nil, errors.Wrapf(errors.Err404, stateURI)
+// 	}
+// 	return ctrl.QueryIndex(version, keypath, indexName, queryParam, rng)
+// }
 
-func (m *controllerHub) BlobReader(refID blob.ID) (io.ReadCloser, int64, error) {
-	return m.blobStore.BlobReader(refID)
+func (m *controllerHub) BlobReader(refID blob.ID, rng *types.Range) (io.ReadCloser, int64, error) {
+	return m.blobStore.BlobReader(refID, rng)
 }
 
 func (m *controllerHub) Leaves(stateURI string) ([]state.Version, error) {
@@ -176,7 +179,7 @@ func (m *controllerHub) OnNewState(fn NewStateCallback) {
 	m.newStateListeners = append(m.newStateListeners, fn)
 }
 
-func (m *controllerHub) notifyNewStateListeners(tx Tx, root state.Node, leaves []state.Version) {
+func (m *controllerHub) notifyNewStateListeners(tx Tx, root state.Node, leaves []state.Version, diff *state.Diff) {
 	m.newStateListenersMu.RLock()
 	defer m.newStateListenersMu.RUnlock()
 
@@ -187,7 +190,7 @@ func (m *controllerHub) notifyNewStateListeners(tx Tx, root state.Node, leaves [
 		handler := handler
 		go func() {
 			defer wg.Done()
-			handler(tx, root, leaves)
+			handler(tx, root, leaves, diff)
 		}()
 	}
 	wg.Wait()

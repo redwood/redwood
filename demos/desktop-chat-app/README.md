@@ -7,7 +7,7 @@
 
 **Prerequisites**
 
-- Go 1.16
+- Go 1.18
 
 **Running the demo**
 

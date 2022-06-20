@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import styled, { useTheme } from 'styled-components'
-import { Avatar, Fab, IconButton, TextField } from '@material-ui/core'
-import { Add as AddIcon, CloudDownloadRounded as ImportIcon, Face as FaceIcon } from '@material-ui/icons'
+import { Avatar, Fab, IconButton, TextField, List, ListItem, ListItemText, ListItemSecondaryAction } from '@material-ui/core'
+import { Add as AddIcon, CloudDownloadRounded as ImportIcon, Face as FaceIcon, Delete as DeleteIcon } from '@material-ui/icons'
 import moment from 'moment'
 
 import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
@@ -13,7 +13,7 @@ import Select from '../Select'
 import Input, { InputLabel } from '../Input'
 import { ServerFab } from '../ServerFab'
 import PeerRow from '../PeerRow'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
@@ -75,6 +75,7 @@ function SettingsModal({ onDismiss }) {
         (async function() {
             try {
                 setStaticRelays(await redwoodClient.rpc.staticRelays())
+                setErrorMsg('')
             } catch (err) {
                 setErrorMsg(err.toString())
             }
@@ -89,6 +90,20 @@ function SettingsModal({ onDismiss }) {
             await redwoodClient.rpc.addStaticRelay(newStaticRelayRef.current.value)
             setStaticRelays(await redwoodClient.rpc.staticRelays())
             newStaticRelayRef.current.value = ''
+            setErrorMsg('')
+        } catch (err) {
+            setErrorMsg(err.toString())
+        }
+    }, [redwoodClient, setStaticRelays, setErrorMsg])
+
+    const onClickDeleteStaticRelay = useCallback(async (relayAddr) => {
+        if (!redwoodClient) {
+            return
+        }
+        try {
+            await redwoodClient.rpc.removeStaticRelay(relayAddr)
+            setStaticRelays(await redwoodClient.rpc.staticRelays())
+            setErrorMsg('')
         } catch (err) {
             setErrorMsg(err.toString())
         }
@@ -108,15 +123,22 @@ function SettingsModal({ onDismiss }) {
                     <SNoStaticRelaysText>No static relays configured.</SNoStaticRelaysText>
                 }
                 {(staticRelays || []).length > 0 &&
-                    <SStaticRelaysContainer>
+                    <List dense>
                         {(staticRelays || []).map(relayAddr => (
-                            <li>{relayAddr}</li>
+                            <ListItem>
+                                <ListItemText primary={relayAddr} />
+                                <ListItemSecondaryAction>
+                                    <IconButton onClick={() => onClickDeleteStaticRelay(relayAddr)} edge="end" aria-label="delete">
+                                        <DeleteIcon style={{ color: theme.color.green[500] }} />
+                                    </IconButton>
+                                </ListItemSecondaryAction>
+                            </ListItem>
                         ))}
-                    </SStaticRelaysContainer>
+                    </List>
                 }
 
                 <SStaticRelayFormWrapper>
-                    <SAddStaticRelayInput ref={newStaticRelayRef} />
+                    <SAddStaticRelayInput onEnter={onClickAddStaticRelay} ref={newStaticRelayRef} />
                     <Button primary onClick={onClickAddStaticRelay}>Add</Button>
                 </SStaticRelayFormWrapper>
 

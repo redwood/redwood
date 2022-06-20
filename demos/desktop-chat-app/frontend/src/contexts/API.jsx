@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useState, useEffect } from 'react'
-import { useRedwood } from '@redwood.dev/client/react'
+import { useRedwood } from '@redwood.dev/react'
 import createAPI from '../api'
 
 export const Context = createContext(null)

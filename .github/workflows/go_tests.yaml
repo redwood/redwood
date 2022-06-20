@@ -16,14 +16,19 @@ jobs:
 
             - uses: actions/setup-go@v2
               with:
-                go-version: '^1.16.7'
+                go-version: '^1.18.3'
 
             - name: Download Go vendor packages
               run: go mod download
 
-            - name: Build redwood.js
-              run: make redwood.js/dist
+            - name: Mock out embedded redwood.js
+              run: |
+                mkdir -p embed/node_modules/@redwood.dev/client/browser
+                touch embed/node_modules/@redwood.dev/client/browser/index.js
+
+            - name: Remove git-remote-helper
+              run: rm -rf cmd/git-remote-helper
 
             - name: Run tests
-              run: go test -v --tags static ./...
+              run: go test -v -tags=test ./...
 

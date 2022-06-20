@@ -21,7 +21,7 @@ type SubscriptionRequest struct {
 	Keypath          state.Keypath
 	Type             SubscriptionType
 	FetchHistoryOpts *FetchHistoryOpts
-	Addresses        types.AddressSet
+	Addresses        types.Set[types.Address]
 }
 
 type ReadableSubscription interface {
@@ -34,7 +34,7 @@ type WritableSubscription interface {
 	StateURI() string
 	Keypath() state.Keypath
 	Type() SubscriptionType
-	Addresses() []types.Address
+	Addresses() types.Set[types.Address]
 	EnqueueWrite(msg SubscriptionMsg)
 	String() string
 }
@@ -46,11 +46,11 @@ type writableSubscription struct {
 	stateURI         string
 	keypath          state.Keypath
 	subscriptionType SubscriptionType
-	addresses        []types.Address
+	addresses        types.Set[types.Address]
 	isPrivate        bool
 	treeProtocol     *treeProtocol
 	subImpl          WritableSubscriptionImpl
-	messages         *utils.Mailbox
+	messages         *utils.Mailbox[SubscriptionMsg]
 	stopOnce         sync.Once
 }
 
@@ -66,7 +66,7 @@ func newWritableSubscription(
 	keypath state.Keypath,
 	subscriptionType SubscriptionType,
 	isPrivate bool,
-	addresses []types.Address,
+	addresses types.Set[types.Address],
 	subImpl WritableSubscriptionImpl,
 ) *writableSubscription {
 	return &writableSubscription{
@@ -78,7 +78,7 @@ func newWritableSubscription(
 		isPrivate:        isPrivate,
 		addresses:        addresses,
 		subImpl:          subImpl,
-		messages:         utils.NewMailbox(10000),
+		messages:         utils.NewMailbox[SubscriptionMsg](10000),
 	}
 }
 
@@ -119,8 +119,12 @@ func (sub *writableSubscription) Start() error {
 	return nil
 }
 
+func (sub *writableSubscription) Close() error {
+	return sub.Process.Close()
+}
+
 func (sub *writableSubscription) writeMessages(ctx context.Context) (err error) {
-	for {
+	for _, msg := range sub.messages.RetrieveAll() {
 		select {
 		case <-ctx.Done():
 			return context.Canceled
@@ -129,11 +133,6 @@ func (sub *writableSubscription) writeMessages(ctx context.Context) (err error) 
 		default:
 		}
 
-		x := sub.messages.Retrieve()
-		if x == nil {
-			return nil
-		}
-		msg := x.(SubscriptionMsg)
 		if !sub.subscriptionType.Includes(SubscriptionType_Txs) {
 			msg.Tx = nil
 			msg.EncryptedTx = nil
@@ -151,12 +150,13 @@ func (sub *writableSubscription) writeMessages(ctx context.Context) (err error) 
 			return err
 		}
 	}
+	return nil
 }
 
-func (sub *writableSubscription) StateURI() string           { return sub.stateURI }
-func (sub *writableSubscription) Type() SubscriptionType     { return sub.subscriptionType }
-func (sub *writableSubscription) Keypath() state.Keypath     { return sub.keypath }
-func (sub *writableSubscription) Addresses() []types.Address { return sub.addresses }
+func (sub *writableSubscription) StateURI() string                    { return sub.stateURI }
+func (sub *writableSubscription) Type() SubscriptionType              { return sub.subscriptionType }
+func (sub *writableSubscription) Keypath() state.Keypath              { return sub.keypath }
+func (sub *writableSubscription) Addresses() types.Set[types.Address] { return sub.addresses }
 
 func (sub *writableSubscription) EnqueueWrite(msg SubscriptionMsg) {
 	sub.messages.Deliver(msg)
@@ -173,7 +173,7 @@ type multiReaderSubscription struct {
 	maxConns          uint64
 	onMessageReceived func(msg SubscriptionMsg, peer TreePeerConn)
 	searchForPeers    func(ctx context.Context, stateURI string) <-chan TreePeerConn
-	peerPool          swarm.PeerPool
+	peerPool          swarm.PeerPool[TreePeerConn]
 }
 
 func newMultiReaderSubscription(
@@ -199,23 +199,11 @@ func (s *multiReaderSubscription) Start() error {
 	}
 	defer s.Process.Autoclose()
 
-	var (
-		restartSearchBackoff = utils.ExponentialBackoff{Min: 3 * time.Second, Max: 10 * time.Second}
-		getPeerBackoff       = utils.ExponentialBackoff{Min: 1 * time.Second, Max: 10 * time.Second}
-	)
-
-	s.peerPool = swarm.NewPeerPool(
+	s.peerPool = swarm.NewPeerPool[TreePeerConn](
 		s.maxConns,
-		func(ctx context.Context) (<-chan swarm.PeerConn, error) {
-			select {
-			case <-ctx.Done():
-				return nil, nil
-			case <-s.Process.Done():
-				return nil, nil
-			case <-time.After(restartSearchBackoff.Next()):
-			}
-			chTreePeers := s.searchForPeers(ctx, s.stateURI)
-			return convertTreePeerChan(ctx, chTreePeers), nil // Can't wait for generics
+		func(ctx context.Context) (<-chan TreePeerConn, error) {
+			ctx, _ = context.WithTimeout(ctx, 10*time.Second)
+			return s.searchForPeers(ctx, s.stateURI), nil
 		},
 	)
 
@@ -235,43 +223,18 @@ func (s *multiReaderSubscription) Start() error {
 			treePeer, err := s.getPeer(ctx)
 			if err != nil {
 				s.Errorf("error getting peer from pool: %v", err)
-				time.Sleep(getPeerBackoff.Next())
+				// time.Sleep(getPeerBackoff.Next())
 				continue
 			}
-			getPeerBackoff.Reset()
+			// getPeerBackoff.Reset()
 
-			s.Process.Go(nil, "readUntilErrorOrShutdown "+treePeer.DialInfo().String(), func(ctx context.Context) {
+			s.Process.Go(ctx, "readUntilErrorOrShutdown "+treePeer.DialInfo().String(), func(ctx context.Context) {
 				defer s.peerPool.ReturnPeer(treePeer, false)
 				s.readUntilErrorOrShutdown(ctx, treePeer)
 			})
 		}
 	})
 	return nil
-}
-
-func convertTreePeerChan(ctx context.Context, ch <-chan TreePeerConn) <-chan swarm.PeerConn {
-	chPeer := make(chan swarm.PeerConn)
-	go func() {
-		defer close(chPeer)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-
-			case peer, open := <-ch:
-				if !open {
-					return
-				}
-
-				select {
-				case <-ctx.Done():
-					return
-				case chPeer <- peer:
-				}
-			}
-		}
-	}()
-	return chPeer
 }
 
 func (s *multiReaderSubscription) getPeer(ctx context.Context) (TreePeerConn, error) {
@@ -290,31 +253,27 @@ func (s *multiReaderSubscription) getPeer(ctx context.Context) (TreePeerConn, er
 			s.peerPool.ReturnPeer(peer, false)
 			continue
 		}
-
-		// Ensure the peer supports the tree protocol
-		treePeer, is := peer.(TreePeerConn)
-		if !is {
-			// If not, strike it so the pool doesn't return it again
-			s.peerPool.ReturnPeer(peer, true)
-			continue
-		}
-		return treePeer, nil
+		return peer, nil
 	}
 }
 
-func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, peer TreePeerConn) {
-	err := peer.EnsureConnected(ctx)
+func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, peerConn TreePeerConn) {
+	ctxConnect, cancelConnect := context.WithTimeout(ctx, 10*time.Second)
+	defer cancelConnect()
+
+	err := peerConn.EnsureConnected(ctxConnect)
 	if errors.Cause(err) == errors.ErrConnection {
+		s.Errorf("error connecting to %v peer (stateURI: %v): %v", peerConn.Transport().Name(), s.stateURI, err)
 		return
 	} else if err != nil {
-		s.Errorf("error connecting to %v peer (stateURI: %v): %v", peer.Transport().Name(), s.stateURI, err)
+		s.Errorf("error connecting to %v peer (stateURI: %v): %v", peerConn.Transport().Name(), s.stateURI, err)
 		return
 	}
-	defer peer.Close()
+	defer peerConn.Close()
 
-	peerSub, err := peer.Subscribe(ctx, s.stateURI)
+	peerSub, err := peerConn.Subscribe(ctx, s.stateURI)
 	if err != nil {
-		s.Errorf("error subscribing to peer %v (stateURI: %v): %v", peer.DialInfo(), s.stateURI, err)
+		s.Errorf("error subscribing to peer %v (stateURI: %v): %v", peerConn.DialInfo(), s.stateURI, err)
 		return
 	}
 
@@ -329,11 +288,11 @@ func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, 
 
 		msg, err := peerSub.Read()
 		if err != nil {
-			s.Errorf("while reading from peer subscription (%v): %v", peer.DialInfo(), err)
+			s.Errorf("while reading from peer subscription (%v): %v", peerConn.DialInfo(), err)
 			return
 		}
 
-		s.onMessageReceived(msg, peer)
+		s.onMessageReceived(msg, peerConn)
 	}
 }
 
@@ -412,7 +371,7 @@ type StateURISubscription interface {
 type stateURISubscription struct {
 	process.Process
 	store       Store
-	mailbox     *utils.Mailbox
+	mailbox     *utils.Mailbox[string]
 	ch          chan string
 	unsubscribe func()
 }
@@ -421,7 +380,7 @@ func newStateURISubscription(store Store) *stateURISubscription {
 	return &stateURISubscription{
 		Process: *process.New("stateURI subscription"),
 		store:   store,
-		mailbox: utils.NewMailbox(0),
+		mailbox: utils.NewMailbox[string](0),
 		ch:      make(chan string),
 	}
 }
@@ -443,8 +402,7 @@ func (sub *stateURISubscription) Start() error {
 			case <-ctx.Done():
 				return
 			case <-sub.mailbox.Notify():
-				for _, x := range sub.mailbox.RetrieveAll() {
-					stateURI := x.(string)
+				for _, stateURI := range sub.mailbox.RetrieveAll() {
 					select {
 					case sub.ch <- stateURI:
 					case <-ctx.Done():

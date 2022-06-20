@@ -69,22 +69,6 @@ message IndividualMessage {
     }
 }
 
-// message GroupSessionID {
-//     option (gogoproto.stringer) = false;
-
-//     string sessionType = 1 [(gogoproto.moretags) = "tree:\"sessionType\""];
-//     string sessionName = 2 [(gogoproto.moretags) = "tree:\"sessionName\""];
-//     // uint64 epoch = 3       [(gogoproto.moretags) = "tree:\"epoch\""];
-
-//     // @@TODO: use this to prevent the parties from starting sessions that overwrite one another
-//     // bytes randomness = 4;
-// }
-
-// message GroupSessionProposal {
-//     GroupSessionID sessionID = 1 [(gogoproto.moretags) = "tree:\"sessionID\"", (gogoproto.nullable) = false];
-//     repeated bytes members = 2   [(gogoproto.moretags) = "tree:\"members\"",   (gogoproto.customtype) = "redwood.dev/types.Address"];
-// }
-
 message GroupMessage {
     string sessionType = 1                    [(gogoproto.moretags) = "tree:\"sessionType\""];
     string id = 2                             [(gogoproto.moretags) = "tree:\"id\"", (gogoproto.customname) = "ID"];
@@ -97,16 +81,3 @@ message GroupMessage {
         IndividualMessage key = 2 [(gogoproto.moretags) = "tree:\"key\"", (gogoproto.nullable) = false];
     }
 }
-
-// message GroupSessionID {
-//     string sessionType = 1;
-//     string name = 2;
-//     uint64 epoch = 3;
-// }
-
-// message GroupSession {
-//     GroupSessionID sessionID = 1;
-//     repeated bytes members = 2;
-// }
-
-

@@ -1,4 +1,4 @@
-const Redwood = require('../../redwood.js').default
+const Redwood = require('@redwood.dev/client').default
 const fs = require('fs')
 
 //

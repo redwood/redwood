@@ -6,7 +6,7 @@ import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Input, { InputLabel } from '../Input'
 import Button from '../Button'
 import UserAvatar from '../UserAvatar'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
@@ -205,6 +205,8 @@ function UserProfileModal({ onDismiss, currentUsername, userPhotoURL, nodeAddres
 					<SInput
 						value={username}
 						onChange={onChangeUsername}
+                        onEnter={onSave}
+                        autoFocus
 					/>
 				</InputLabel>
                 {/* <div>

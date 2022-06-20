@@ -1,0 +1,8 @@
+{
+  "name": "redwood-demos",
+  "version": "1.0.0",
+  "license": "MIT",
+  "dependencies": {
+    "@redwood.dev/client": "0.3.12"
+  }
+}

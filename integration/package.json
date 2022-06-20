@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@redwood.dev/client": "0.2.15",
+    "@redwood.dev/client": "0.3.12",
     "isomorphic-ws": "^4.0.1",
     "ws": "^8.2.3"
   },

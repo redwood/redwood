@@ -6,8 +6,7 @@ import (
 	"io/ioutil"
 	"sync"
 
-	"github.com/dgraph-io/badger/v2"
-	"go.uber.org/multierr"
+	"github.com/dgraph-io/badger/v3"
 	"golang.org/x/crypto/sha3"
 
 	"redwood.dev/errors"
@@ -67,7 +66,7 @@ func (s *badgerStore) Close() {
 	_ = s.db.Close()
 }
 
-func (s *badgerStore) BlobReader(blobID ID) (io.ReadCloser, int64, error) {
+func (s *badgerStore) BlobReader(blobID ID, rng *types.Range) (io.ReadCloser, int64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -100,7 +99,7 @@ func (s *badgerStore) BlobReader(blobID ID) (io.ReadCloser, int64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	return NewReader(s.db, manifest), int64(manifest.Size), nil
+	return NewReader(s.db, manifest, rng), int64(manifest.TotalSize), nil
 }
 
 func (s *badgerStore) StoreBlob(reader io.ReadCloser) (types.Hash, types.Hash, error) {
@@ -109,24 +108,22 @@ func (s *badgerStore) StoreBlob(reader io.ReadCloser) (types.Hash, types.Hash, e
 
 	chunker := NewChunker(reader)
 	defer chunker.Close()
-	for {
-		chunkBytes, chunkSha3, err := chunker.Next()
-		if err == io.EOF {
-			break
-		} else if err != nil {
+
+	for !chunker.Done() {
+		chunkBytes, chunk, err := chunker.Next()
+		if err != nil {
 			return types.Hash{}, types.Hash{}, err
 		}
 
-		err = s.storePrehashedChunk(chunkSha3, chunkBytes)
+		err = s.storePrehashedChunk(chunk.SHA3, chunkBytes)
 		if err != nil {
 			return types.Hash{}, types.Hash{}, err
 		}
 	}
 
-	sha1, sha3, chunkSHA3s := chunker.Hashes()
-	size := chunker.Size()
+	manifest, sha1, sha3 := chunker.Summary()
 
-	err := s.StoreManifest(ID{types.SHA3, sha3}, Manifest{Size: size, ChunkSHA3s: chunkSHA3s})
+	err := s.StoreManifest(ID{types.SHA3, sha3}, manifest)
 	if err != nil {
 		return types.Hash{}, types.Hash{}, err
 	}
@@ -197,10 +194,12 @@ func (s *badgerStore) HaveBlob(blobID ID) (bool, error) {
 	} else if err != nil {
 		return false, err
 	}
-	return haveAllChunks(rootNode, manifest.ChunkSHA3s)
+	return haveAllChunks(rootNode, manifest.Chunks)
 }
 
-func (s *badgerStore) VerifyBlobOrPrune(blobID ID) error {
+func (s *badgerStore) VerifyBlobOrPrune(blobID ID) (err error) {
+	defer errors.AddStack(&err)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -211,8 +210,8 @@ func (s *badgerStore) VerifyBlobOrPrune(blobID ID) error {
 
 	if !valid {
 		// @@TODO
-		// s.DeleteBlob()
-		return errors.Err404
+		err := s.DeleteBlob(blobID)
+		return err
 	}
 
 	err = s.markBlobPresentAndValid(sha1, sha3)
@@ -224,7 +223,9 @@ func (s *badgerStore) VerifyBlobOrPrune(blobID ID) error {
 }
 
 func (s *badgerStore) verifyBlob(blobID ID) (valid bool, sha1Hash types.Hash, sha3Hash types.Hash, err error) {
-	blobReader, length, err := s.BlobReader(blobID)
+	defer errors.AddStack(&err)
+
+	blobReader, length, err := s.BlobReader(blobID, nil)
 	if err != nil {
 		return false, types.Hash{}, types.Hash{}, err
 	}
@@ -238,7 +239,7 @@ func (s *badgerStore) verifyBlob(blobID ID) (valid bool, sha1Hash types.Hash, sh
 	if err != nil {
 		return false, types.Hash{}, types.Hash{}, err
 	} else if int64(len(bs)) != length {
-		return false, types.Hash{}, types.Hash{}, err
+		return false, types.Hash{}, types.Hash{}, errors.Errorf("length incorrect (expected: %v, got: %v)", length, int64(len(bs)))
 	}
 
 	sha1Hasher.Sum(sha1Hash[:0])
@@ -365,9 +366,9 @@ func (s *badgerStore) storePrehashedChunk(chunkSha3 types.Hash, chunkBytes []byt
 	return node.Save()
 }
 
-func haveAllChunks(rootNode state.Node, chunkSHA3s []types.Hash) (bool, error) {
-	for _, chunkSHA3 := range chunkSHA3s {
-		exists, err := rootNode.Exists(chunkKeypath(chunkSHA3))
+func haveAllChunks(rootNode state.Node, chunks []ManifestChunk) (bool, error) {
+	for _, chunk := range chunks {
+		exists, err := rootNode.Exists(chunkKeypath(chunk.SHA3))
 		if err != nil {
 			return false, err
 		} else if !exists {
@@ -390,20 +391,42 @@ func (s *badgerStore) BlobIDs() (sha1s, sha3s []ID, _ error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	iter := newIDIterator(s.db)
-	defer iter.Close()
-
-	var errs error
-	for iter.Rewind(); iter.Valid(); iter.Next() {
-		if iter.Err() != nil {
-			errs = multierr.Append(errs, iter.Err())
-			continue
-		}
-		sha1, sha3 := iter.Current()
-		sha1s = append(sha1s, sha1)
-		sha3s = append(sha3s, sha3)
+	contents, err := s.Contents()
+	if err != nil {
+		return nil, nil, err
 	}
-	return sha1s, sha3s, errs
+
+Outer:
+	for sha3, chunks := range contents {
+		for _, have := range chunks {
+			if !have {
+				continue Outer
+			}
+		}
+		sha3s = append(sha3s, ID{HashAlg: types.SHA3, Hash: sha3})
+	}
+
+	node := s.db.State(false)
+	defer node.Close()
+
+	for _, id := range sha3s {
+		sha1, err := sha1ForSHA3(id.Hash, node)
+		if err != nil {
+			return nil, nil, err
+		}
+		sha1s = append(sha1s, ID{HashAlg: types.SHA1, Hash: sha1})
+	}
+	return sha1s, sha3s, nil
+}
+
+func (s *badgerStore) DeleteBlob(blobID ID) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	node := s.db.State(true)
+	defer node.Close()
+
+	return nil
 }
 
 func (s *badgerStore) BlobsNeeded() ([]ID, error) {
@@ -627,12 +650,12 @@ func (s *badgerStore) Contents() (map[types.Hash]map[types.Hash]bool, error) {
 			return nil, err
 		}
 
-		for _, chunkSHA3 := range manifest.ChunkSHA3s {
-			exists, err := rootNode.Exists(state.Keypath(chunkSHA3.Hex()).Push(chunkKey))
+		for _, chunk := range manifest.Chunks {
+			exists, err := rootNode.Exists(state.Keypath(chunk.SHA3.Hex()).Push(chunkKey))
 			if err != nil {
 				return nil, err
 			}
-			m[sha3Hash][chunkSHA3] = exists
+			m[sha3Hash][chunk.SHA3] = exists
 		}
 	}
 	return m, nil

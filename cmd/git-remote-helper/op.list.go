@@ -26,6 +26,7 @@ func listRefs(w io.Writer, client *braidhttp.LightClient) error {
 	var heads map[string]map[string]interface{}
 	err = json.NewDecoder(stateReader).Decode(&heads)
 	if err != nil {
+		logf("ERR: %v", err)
 		return err
 	}
 

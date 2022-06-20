@@ -58,6 +58,13 @@ type Node interface {
 	innerNode(relKeypath Keypath) Node
 }
 
+type NodeRange interface {
+	Length() (uint64, error)
+	Subkeys() []Keypath
+	NumSubkeys() uint64
+	Value(keypath Keypath, rng *Range) (interface{}, bool, error)
+}
+
 type NodeType uint8
 
 const (
@@ -126,6 +133,7 @@ type Iterator interface {
 	Valid() bool
 	Next()
 	Node() Node
+	NodeCopy() Node
 	Close()
 
 	seekTo(absKeypath Keypath)

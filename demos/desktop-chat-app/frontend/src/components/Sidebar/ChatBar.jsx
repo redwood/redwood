@@ -13,7 +13,8 @@ import Modal, { ModalTitle, ModalContent, ModalActions } from '../Modal'
 import Button from '../Button'
 import Input, { InputLabel } from '../Input'
 import PeerRow from '../PeerRow'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import Scrollbars from '../Scrollbars'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
@@ -66,6 +67,11 @@ const Spacer = styled.div`
     flex-grow: 1;
 `
 
+const SControlsWrapper = styled.div`
+    // box-shadow: 0px -10px 11px -2px rgba(0,0,0,0.39);
+    z-index: 9999;
+`
+
 const SAddIcon = styled(AddIcon)`
     margin-right: 10px;
 `
@@ -97,32 +103,34 @@ function ChatBar({ className }) {
         await logout()
     }, [isLoggedIn, logout])
 
-    const registryState = useStateTree(registryStateURI)
+    const [registryState] = useStateTree(registryStateURI)
     const serverRooms = Object.keys((!!registryState ? registryState.rooms : {}) || {}).filter(room => !!room).map(room => `${selectedServer}/${room}`)
 
     return (
         <ChatBarWrapper className={className}>
-            {serverRooms.map(roomStateURI => (
-                rooms[roomStateURI] && !!stateTrees[roomStateURI]
-                    ? <ChatBarItem
-                        key={roomStateURI}
-                        stateURI={roomStateURI}
-                        selected={roomStateURI === selectedStateURI}
-                        onClick={() => navigate(selectedServer, rooms[roomStateURI].rawName)}
-                      />
-                    : null
-            ))}
+            <Scrollbars shadow style={{ flexGrow: 1 }}>
+                {serverRooms.map(roomStateURI => (
+                    rooms[roomStateURI] && !!stateTrees[roomStateURI]
+                        ? <ChatBarItem
+                            key={roomStateURI}
+                            stateURI={roomStateURI}
+                            selected={roomStateURI === selectedStateURI}
+                            onClick={() => navigate(selectedServer, rooms[roomStateURI].rawName)}
+                          />
+                        : null
+                ))}
+            </Scrollbars>
 
-            <Spacer />
-
-            {!!selectedServer &&
-                <SControlWrapper onClick={onClickCreateNewChat}>
-                    <SAddIcon style={{ color: theme.color.indigo[500] }} /> {isDirectMessage ? 'New message' : 'New chat'}
+            <SControlsWrapper>
+                {!!selectedServer &&
+                    <SControlWrapper onClick={onClickCreateNewChat}>
+                        <SAddIcon style={{ color: theme.color.indigo[500] }} /> {isDirectMessage ? 'New message' : 'New chat'}
+                    </SControlWrapper>
+                }
+                <SControlWrapper onClick={onClickLogout}>
+                    <SExitToApp style={{ color: theme.color.indigo[500] }} /> Logout
                 </SControlWrapper>
-            }
-            <SControlWrapper onClick={onClickLogout}>
-                <SExitToApp style={{ color: theme.color.indigo[500] }} /> Logout
-            </SControlWrapper>
+            </SControlsWrapper>
             <NewChatModal selectedServer={selectedServer} serverRooms={serverRooms} onDismiss={onDismissNewChatModal} navigate={navigate} />
             <NewDMModal serverRooms={serverRooms} onDismiss={onDismissNewDMModal} navigate={navigate} />
         </ChatBarWrapper>
@@ -130,7 +138,7 @@ function ChatBar({ className }) {
 }
 
 function ChatBarItem({ stateURI, selected, onClick }) {
-    const chatState = useStateTree(stateURI)
+    const [chatState] = useStateTree(stateURI)
     const [latestMessageTime, setLatestMessageTime] = useState(null)
     const [server, room] = stateURI.split('/')
 	const roomName = useRoomName(server, room)
@@ -187,20 +195,10 @@ function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
     const { rooms } = useServerAndRoomInfo()
     const { nodeIdentities } = useRedwood()
 
-            // console.log(Object.keys(rooms).split('/')[selectedServer])
     const onClickCreate = useCallback(async () => {
         if (!api) { return }
         try {
             await api.createNewChat(selectedServer, newChatName, serverRooms)
-
-            // Check if this is the first room created by user
-            const roomsFound = !!Object.keys(rooms).filter((room) => {
-              return room.split('/')[0] === selectedServer
-            }).length
-
-            if (!roomsFound) {
-              await api.updateProfile(nodeIdentities[0].address, `${selectedServer}/registry`, null, null, 'creator')
-            }
 
             setNewChatName('')
             onDismiss()
@@ -236,6 +234,8 @@ function NewChatModal({ selectedServer, serverRooms, onDismiss, navigate }) {
 						value={newChatName}
 						onChange={onChangeNewChatName}
 						onKeyDown={onKeyDown}
+                        onEnter={onClickCreate}
+                        autoFocus
 					/>
 				</InputLabel>
             </ModalContent>
@@ -257,15 +257,12 @@ const useCheckboxStyles = makeStyles(muiTheme => ({
 
 const SNewDMModalContent = styled(ModalContent)`
     max-height: 60vh;
-	overflow: scroll;
 	min-width: 400px;
+`
 
-    /* Chrome, Safari, Opera */
-    &::-webkit-scrollbar {
-        display: none;
-    }
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+const SNewDMModalScrollbars = styled(Scrollbars)`
+    max-height: 60vh;
+    min-width: 400px;
 `
 
 const SEmptyPeers = styled.div`
@@ -324,15 +321,17 @@ function NewDMModal({ serverRooms, onDismiss, navigate }) {
     return (
         <Modal modalKey="new dm">
             <ModalTitle closeModal={onDismiss}>Start a DM</ModalTitle>
-            <SNewDMModalContent>
-				{emptyPeers}
-                {peers.map(peer => (
-                    <div style={{ display: 'flex' }} key={peer.address}>
-                        <Checkbox checked={!!selectedPeers[peer.address]} onChange={() => onClickPeer(peer.address)} classes={checkboxStyles} />
-                        <PeerRow address={peer.address} onClick={() => onClickPeer(peer.address)} />
-                    </div>
-                ))}
-            </SNewDMModalContent>
+            <ModalContent>
+                <Scrollbars autoHeight autoHeightMin="10vh" autoHeightMax="60vh" style={{ minWidth: '400px' }}>
+    				{emptyPeers}
+                    {peers.map(peer => (
+                        <div style={{ display: 'flex' }} key={peer.address}>
+                            <Checkbox checked={!!selectedPeers[peer.address]} onChange={() => onClickPeer(peer.address)} classes={checkboxStyles} />
+                            <PeerRow address={peer.address} onClick={() => onClickPeer(peer.address)} />
+                        </div>
+                    ))}
+                </Scrollbars>
+            </ModalContent>
             <ModalActions>
                 <Button primary onClick={onClickCreate} disabled={noSelectedPeers}>Create</Button>
             </ModalActions>

@@ -5,40 +5,103 @@ import (
 
 	"redwood.dev/errors"
 	"redwood.dev/state"
+	"redwood.dev/types"
 )
 
 type Reader struct {
-	db       *state.DBTree
-	manifest Manifest
-	i, j     int
+	db           *state.DBTree
+	manifest     Manifest
+	spans        []readerSpan
+	spanIdx      uint64
+	chunkBytes   []byte
+	chunkByteIdx uint64
+	eof          bool
 }
 
-func NewReader(db *state.DBTree, manifest Manifest) *Reader {
-	return &Reader{db: db, manifest: manifest}
+var _ io.ReadCloser = (*Reader)(nil)
+
+type readerSpan struct {
+	ChunkIdx int
+	Rng      types.Range
+}
+
+func NewReader(db *state.DBTree, manifest Manifest, rng *types.Range) *Reader {
+	var spans []readerSpan
+
+	if rng != nil {
+		normalizedRange := rng.NormalizedForLength(manifest.TotalSize)
+
+		var totalBytes uint64
+		for i, chunk := range manifest.Chunks {
+			intersection, exists := chunk.Range.Intersection(normalizedRange)
+			if !exists {
+				if len(spans) > 0 {
+					break
+				}
+				totalBytes += chunk.Range.Length()
+				continue
+			}
+			intersection.Start -= chunk.Range.Start
+			intersection.End -= chunk.Range.Start
+			spans = append(spans, readerSpan{ChunkIdx: i, Rng: intersection})
+			totalBytes += intersection.Length()
+		}
+	} else {
+		for i, chunk := range manifest.Chunks {
+			rng := types.Range{Start: 0, End: chunk.Range.End - chunk.Range.Start}
+			spans = append(spans, readerSpan{ChunkIdx: i, Rng: rng})
+		}
+	}
+	return &Reader{db: db, manifest: manifest, spans: spans}
 }
 
 func (r *Reader) Read(buf []byte) (int, error) {
-	if r.i == len(r.manifest.ChunkSHA3s) {
+	if r.eof {
 		return 0, io.EOF
 	}
+
+	var copiedIntoBuf int
+	for copiedIntoBuf < len(buf) {
+		if r.spanIdx >= uint64(len(r.spans)) {
+			r.eof = true
+			break
+		}
+
+		if r.chunkBytes == nil {
+			err := r.readNextChunk()
+			if err != nil {
+				return 0, err
+			}
+		}
+
+		n := copy(buf[copiedIntoBuf:], r.chunkBytes[r.chunkByteIdx:])
+		r.chunkByteIdx += uint64(n)
+		copiedIntoBuf += n
+		if r.chunkByteIdx >= uint64(len(r.chunkBytes)) {
+			r.spanIdx++
+			r.chunkBytes = nil
+			r.chunkByteIdx = 0
+		}
+	}
+	return copiedIntoBuf, nil
+}
+
+func (r *Reader) readNextChunk() error {
 	node := r.db.State(false)
 	defer node.Close()
 
-	chunkSHA3 := r.manifest.ChunkSHA3s[r.i]
+	span := r.spans[r.spanIdx]
+	chunk := r.manifest.Chunks[span.ChunkIdx]
 
-	bytes, is, err := node.BytesValue(state.Keypath(chunkSHA3.Hex()).Pushs("chunk"))
+	bytes, is, err := node.BytesValue(state.Keypath(chunk.SHA3.Hex()).Pushs("chunk"))
 	if err != nil {
-		return 0, err
+		return err
 	} else if !is {
-		return 0, errors.New("value is not bytes")
+		return errors.New("value is not bytes")
 	}
-	n := copy(buf, bytes[r.j:])
-	r.j += n
-	if r.j >= len(bytes) {
-		r.i++
-		r.j = 0
-	}
-	return n, nil
+	bytesRange := span.Rng.NormalizedForLength(uint64(len(bytes)))
+	r.chunkBytes = bytes[bytesRange.Start:bytesRange.End]
+	return nil
 }
 
 func (r *Reader) Close() error {

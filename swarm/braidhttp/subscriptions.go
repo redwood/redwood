@@ -157,8 +157,8 @@ type wsWritableSubscription struct {
 	addresses                  []types.Address
 	writableSubscriptionOpener writableSubscriptionOpener
 
-	stateURIs types.StringSet
-	messages  *utils.Mailbox
+	stateURIs types.Set[string]
+	messages  *utils.Mailbox[wsMessage]
 	writeMu   sync.Mutex
 	startOnce sync.Once
 	closed    bool
@@ -188,11 +188,11 @@ func newWSWritableSubscription(
 	return &wsWritableSubscription{
 		Process:                    *process.New("sub impl (ws) " + stateURI),
 		Logger:                     log.NewLogger(TransportName),
-		stateURIs:                  types.NewStringSet([]string{stateURI}),
+		stateURIs:                  types.NewSet[string]([]string{stateURI}),
 		wsConn:                     wsConn,
 		addresses:                  addresses,
 		writableSubscriptionOpener: writableSubscriptionOpener,
-		messages:                   utils.NewMailbox(300), // @@TODO: configurable?
+		messages:                   utils.NewMailbox[wsMessage](300), // @@TODO: configurable?
 	}
 }
 
@@ -204,20 +204,23 @@ func (sub *wsWritableSubscription) Start() (err error) {
 		}
 		defer sub.Process.Autoclose()
 
-		chGotCloseMsg := make(chan struct{})
-		ticker := time.NewTicker(wsPingPeriod)
-
 		// Say hello
 		sub.write(websocket.PingMessage, nil)
 
-		sub.Process.Go(nil, "write", func(ctx context.Context) {
-			defer ticker.Stop()
+		var (
+			ticker        = time.NewTicker(wsPingPeriod)
+			chWriteClosed = make(chan struct{})
+			chReadClosed  = make(chan struct{})
+		)
 
+		sub.Process.Go(nil, "write", func(ctx context.Context) {
+			defer close(chWriteClosed)
+			defer ticker.Stop()
 			for {
 				select {
 				case <-ctx.Done():
 					return
-				case <-chGotCloseMsg:
+				case <-chReadClosed:
 					return
 
 				case <-sub.messages.Notify():
@@ -233,9 +236,12 @@ func (sub *wsWritableSubscription) Start() (err error) {
 		})
 
 		sub.Process.Go(nil, "read", func(ctx context.Context) {
+			defer close(chReadClosed)
 			for {
 				select {
 				case <-ctx.Done():
+					return
+				case <-chWriteClosed:
 					return
 				default:
 				}
@@ -247,7 +253,6 @@ func (sub *wsWritableSubscription) Start() (err error) {
 				}
 
 				if msg.msgType == websocket.CloseMessage {
-					close(chGotCloseMsg)
 					return
 				} else if msg.msgType == websocket.PingMessage {
 					sub.messages.Deliver(wsMessage{websocket.PongMessage, nil})
@@ -295,7 +300,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 						Keypath:          addSubMsg.Params.Keypath,
 						Type:             addSubMsg.Params.SubscriptionType,
 						FetchHistoryOpts: &fetchHistoryOpts,
-						Addresses:        types.NewAddressSet(sub.addresses),
+						Addresses:        types.NewSet[types.Address](sub.addresses),
 					},
 					func() (prototree.WritableSubscriptionImpl, error) { return sub, nil },
 				)
@@ -342,19 +347,13 @@ func (sub *wsWritableSubscription) read() (m wsMessage, err error) {
 }
 
 func (sub *wsWritableSubscription) writePendingMessages(ctx context.Context) error {
-	for {
+	for _, msg := range sub.messages.RetrieveAll() {
 		select {
 		case <-ctx.Done():
 			return context.Canceled
 		default:
 		}
 
-		x := sub.messages.Retrieve()
-		if x == nil {
-			return nil
-		}
-
-		msg := x.(wsMessage)
 		err := sub.write(msg.msgType, msg.data)
 		if err != nil {
 			return err
@@ -392,18 +391,22 @@ func (sub *wsWritableSubscription) write(messageType int, bytes []byte) error {
 }
 
 func (sub *wsWritableSubscription) Close() error {
-	sub.writeMu.Lock()
-	sub.closed = true
-	sub.writeMu.Unlock()
+	var err error
+	sub.closeOnce.Do(func() {
+		sub.writeMu.Lock()
+		sub.closed = true
+		sub.writeMu.Unlock()
 
-	sub.Infof(0, "ws writable subscription closed")
+		sub.Infof(0, "ws writable subscription closed")
 
-	_ = sub.write(websocket.CloseMessage, []byte{})
+		_ = sub.write(websocket.CloseMessage, []byte{})
 
-	return multierr.Combine(
-		sub.wsConn.Close(),
-		sub.Process.Close(),
-	)
+		err = multierr.Combine(
+			sub.wsConn.Close(),
+			sub.Process.Close(),
+		)
+	})
+	return err
 }
 
 func (sub *wsWritableSubscription) Put(ctx context.Context, msg prototree.SubscriptionMsg) (err error) {

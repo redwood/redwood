@@ -1,4 +1,4 @@
-const Redwood = require('../../redwood.js').default
+const Redwood = require('@redwood.dev/client').default
 const fs = require('fs')
 
 //
@@ -67,14 +67,14 @@ async function genesis() {
                 },
                 'messages': {
                     'value': [],
-                    'Indices': {
-                        'sender': {
-                            'Content-Type': 'indexer/keypath',
-                            'value': {
-                                'keypath': 'sender'
-                            }
-                        }
-                    }
+                    // 'Indices': {
+                    //     'sender': {
+                    //         'Content-Type': 'indexer/keypath',
+                    //         'value': {
+                    //             'keypath': 'sender'
+                    //         }
+                    //     }
+                    // }
                 },
                 'index.html': {
                     'Content-Type': 'text/html',
@@ -115,7 +115,7 @@ async function genesis() {
                     'Content-Type': 'validator/permissions',
                     'value': {
                         '*': {
-                            '^\\.$(sender).*$': {
+                            '^\\.$(sender)\\.*$': {
                                 'write': true
                             }
                         }

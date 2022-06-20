@@ -1,5 +1,6 @@
 import { useRef, useState, useMemo, useContext, useEffect } from 'react'
-import { useStateTree } from '@redwood.dev/client/react'
+import { useStateTree } from '@redwood.dev/react'
+import { get } from 'lodash'
 import useNavigation from './useNavigation'
 import useServerAndRoomInfo from './useServerAndRoomInfo'
 import useAddressBook from './useAddressBook'
@@ -11,7 +12,7 @@ function useUsers(stateURI) {
     const addressBook = useAddressBook()
 
     const [server, room] = (stateURI || '').split('/')
-    const isDirectMessage = (rooms[stateURI] || {}).isDirectMessage
+    const isDirectMessage = get(rooms, [stateURI, 'isDirectMessage'], false)
 
     let usersStateURI
     if (isDirectMessage && !!stateURI) {
@@ -19,7 +20,7 @@ function useUsers(stateURI) {
     } else if (!isDirectMessage && server && server.length > 0) {
         usersStateURI = `${server}/registry`
     }
-    const usersTree = useStateTree(usersStateURI)
+    const [usersTree] = useStateTree(usersStateURI)
     const users = (usersTree || {}).users || defaultValue.current
 
     useEffect(() => {

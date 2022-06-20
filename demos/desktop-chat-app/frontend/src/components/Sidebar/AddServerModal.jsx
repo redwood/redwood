@@ -10,7 +10,7 @@ import SlidingPane, { Pane, PaneContent, PaneActions } from '../SlidingPane'
 import Select from '../Select'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
-import { useStateTree } from '@redwood.dev/client/react'
+import { useStateTree } from '@redwood.dev/react'
 import useNavigation from '../../hooks/useNavigation'
 import useCreateCloudStackOptions from '../../hooks/useCreateCloudStackOptions'
 import theme from '../../theme'
@@ -164,21 +164,33 @@ function NameAndIconPane({ setRequestValues, onClickBack, onClickNext, ...props 
                     setIconImg={setIconImg}
                     setIconFile={setIconFile}
                 />
+
+                <PaneSubtitle>
+                    Server names are similar to domain names. They must be of the form "name.extension". Any extension
+                    is allowed other than "p2p" and "local".
+                </PaneSubtitle>
+
                 <Input
                     value={serverName}
                     onChange={onChangeServerName}
+                    onEnter={handleNext}
                     label={'Server Name'}
                     width={'100%'}
+                    autoFocus
                 />
             </PaneContent>
 
             <PaneActions>
-                <Button onClick={handleBack}>Back</Button>
+                <Button onClick={handleBack} disabled>Back</Button>
                 <Button onClick={handleNext} primary disabled={(serverName || '').trim().length === 0}>Next</Button>
             </PaneActions>
         </Pane>
     )
 }
+
+const SNextButton = styled(Button)`
+    justify-self: flex-end;
+`
 
 const HostingProviderContainer = styled.div`
     display: flex;

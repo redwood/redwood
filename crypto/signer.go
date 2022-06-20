@@ -67,6 +67,14 @@ func (pubkey *SigningPublicKey) MarshalText() ([]byte, error) {
 	return crypto.FromECDSAPub(pubkey.PublicKey), nil
 }
 
+func (pubkey *SigningPublicKey) UnmarshalBinary(bs []byte) error {
+	return pubkey.UnmarshalText(bs)
+}
+
+func (pubkey *SigningPublicKey) MarshalBinary() ([]byte, error) {
+	return pubkey.MarshalText()
+}
+
 func (pubkey *SigningPublicKey) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + pubkey.Hex() + `"`), nil
 }
@@ -189,7 +197,7 @@ func derivePrivateKey(masterKey *hdkeychain.ExtendedKey, path accounts.Derivatio
 	var err error
 	key := masterKey
 	for _, n := range path {
-		key, err = key.Child(n)
+		key, err = key.Derive(n)
 		if err != nil {
 			return nil, err
 		}

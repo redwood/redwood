@@ -2,10 +2,9 @@ package identity
 
 import (
 	"encoding/json"
-	"sort"
 	"sync"
 
-	"github.com/dgraph-io/badger/v2"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 
 	"redwood.dev/crypto"
@@ -13,6 +12,7 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type BadgerKeyStore struct {
@@ -162,41 +162,27 @@ func (ks *BadgerKeyStore) Identities() (_ []Identity, err error) {
 	return identities, nil
 }
 
-func (ks *BadgerKeyStore) Addresses() (types.AddressSet, error) {
+func (ks *BadgerKeyStore) Addresses() (types.Set[types.Address], error) {
 	ks.mu.RLock()
 	defer ks.mu.RUnlock()
 
 	if ks.unlockedUser == nil {
 		return nil, errors.WithStack(ErrLocked)
 	}
-	addrs := types.NewAddressSet(nil)
-	for _, i := range ks.unlockedUser.Identities {
-		addrs.Add(i.Address())
-	}
+	addrs := types.NewSet(utils.Map(ks.unlockedUser.Identities, func(identity Identity) types.Address {
+		return identity.Address()
+	}))
 	return addrs, nil
 }
 
 func (ks *BadgerKeyStore) PublicIdentities() (_ []Identity, err error) {
 	defer errors.AddStack(&err)
 
-	ks.mu.RLock()
-	defer ks.mu.RUnlock()
-
-	if ks.unlockedUser == nil {
-		return nil, errors.WithStack(ErrLocked)
+	identities, err := ks.Identities()
+	if err != nil {
+		return nil, err
 	}
-
-	var idxs []uint32
-	for idx := range ks.unlockedUser.PublicIdentities {
-		idxs = append(idxs, idx)
-	}
-	sort.Slice(idxs, func(i, j int) bool { return idxs[i] < idxs[j] })
-
-	var publicIdentities []Identity
-	for idx := range idxs {
-		publicIdentities = append(publicIdentities, ks.unlockedUser.Identities[idx])
-	}
-	return publicIdentities, nil
+	return utils.Filter(identities, func(identity Identity) bool { return identity.Public }), nil
 }
 
 func (ks *BadgerKeyStore) DefaultPublicIdentity() (_ Identity, err error) {
@@ -358,6 +344,7 @@ func (ks *BadgerKeyStore) SaveExtraUserData(key string, value interface{}) error
 type encryptedBadgerUser struct {
 	Mnemonic         string
 	NumIdentities    uint32
+	Identities       map[uint32]struct{}
 	PublicIdentities map[uint32]struct{}
 	AsymEncKeypair   map[uint32]dbAsymEncKeypair
 	LocalSymEncKey   []byte
@@ -370,9 +357,11 @@ type dbAsymEncKeypair struct {
 }
 
 func (ks *BadgerKeyStore) saveUser(user *badgerUser, password string) error {
+	identities := make(map[uint32]struct{})
 	publicIdentities := make(map[uint32]struct{})
 	asymEncKeys := make(map[uint32]dbAsymEncKeypair, len(user.Identities))
 	for i, identity := range user.Identities {
+		identities[uint32(i)] = struct{}{}
 		if identity.Public {
 			publicIdentities[uint32(i)] = struct{}{}
 		}
@@ -385,6 +374,7 @@ func (ks *BadgerKeyStore) saveUser(user *badgerUser, password string) error {
 	encryptedUser := encryptedBadgerUser{
 		Mnemonic:         user.Mnemonic,
 		NumIdentities:    uint32(len(user.Identities)),
+		Identities:       identities,
 		PublicIdentities: publicIdentities,
 		AsymEncKeypair:   asymEncKeys,
 		LocalSymEncKey:   user.LocalSymEncKey[:],

@@ -5,7 +5,7 @@ import { Code as CodeIcon, InsertDriveFile as FileIcon } from '@material-ui/icon
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 
 import ServerBar from './components/Sidebar/ServerBar'
 import Loading from './components/Account/Loading'
@@ -74,7 +74,7 @@ const SFileView = styled(FileView)`
 `
 
 const SStateTreeDebugView = styled(StateTreeDebugView)`
-    width: 600px;
+    width: 564px;
 `
 
 const MainContentArea = styled.div`
@@ -276,7 +276,7 @@ function fireNotificationAlert({
 
 // Used to mount the room state and notify users when new messages come in
 function NotificationMount(props) {
-	const roomState = useStateTree(props.roomPath)
+	const [roomState] = useStateTree(props.roomPath)
 	let { users } = useUsers(props.roomPath)
 	const messages = (roomState || {}).messages || []
 	const numMessages = messages.length
@@ -351,6 +351,8 @@ const ChatTitle = styled.div`
 	white-space: nowrap;
 	text-overflow: none;
 	height: calc(100% - 12px);
+    flex-grow: 1;
+    border-right: ${props => props.showDivider ? '2px solid ' + props.theme.color.grey[300] : 'none'};
 `
 
 const SCodeIcon = styled(CodeIcon)`
@@ -363,18 +365,49 @@ const SFileIcon = styled(FileIcon)`
     cursor: pointer;
 `
 
+const RightSidebarHeader = styled.div`
+    width: 564px;
+    justify-self: flex-end;
+    display: flex;
+`
+
+const RightSidebarTitle = styled.div`
+    font-size: 1.1rem;
+    font-weight: 500;
+    padding-top: 12px;
+    padding-left: 18px;
+    color: ${props => props.theme.color.white};
+    flex-grow: 1;
+`
+
+const RightSidebarButtons = styled.div`
+`
+
 function HeaderBar({ showFileView, onClickShowFileView, showDebugView, onClickShowDebugView, className }) {
     const theme = useTheme()
     const { selectedServer, selectedRoom } = useNavigation()
     const { currentRoom, currentServer } = useCurrentServerAndRoom()
     const roomName = useRoomName(selectedServer, selectedRoom)
+
+    let rightSidebarTitle
+    if (showFileView) {
+        rightSidebarTitle = 'Files'
+    } else if (showDebugView) {
+        rightSidebarTitle = 'State Debugger'
+    }
+
     return (
         <HeaderBarContainer className={className}>
             <ServerTitle>{currentServer && currentServer.name} /</ServerTitle>
-            <ChatTitle>{currentRoom && roomName}</ChatTitle>
+            <ChatTitle showDivider={!!rightSidebarTitle}>{currentRoom && roomName}</ChatTitle>
             {/* <Spacer size="flex" /> */}
-            <SFileIcon style={{ color: showFileView  ? theme.color.green[500] : 'white', marginLeft: 'auto' }} onClick={onClickShowFileView} />
-            <SCodeIcon style={{ color: showDebugView ? theme.color.green[500] : 'white' }} onClick={onClickShowDebugView} />
+            <RightSidebarHeader>
+                <RightSidebarTitle>{rightSidebarTitle}</RightSidebarTitle>
+                <RightSidebarButtons>
+                    <SFileIcon style={{ color: showFileView  ? theme.color.green[500] : 'white', marginLeft: 'auto' }} onClick={onClickShowFileView} />
+                    <SCodeIcon style={{ color: showDebugView ? theme.color.green[500] : 'white' }} onClick={onClickShowDebugView} />
+                </RightSidebarButtons>
+            </RightSidebarHeader>
         </HeaderBarContainer>
     )
 }

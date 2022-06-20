@@ -7,3 +7,5 @@ dist/
 .envrc
 lib/
 cmd/bootstrapnode/data/
+.vscode
+blah.go

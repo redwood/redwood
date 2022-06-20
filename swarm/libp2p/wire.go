@@ -1,7 +1,6 @@
 package libp2p
 
 import (
-	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"io"
@@ -37,24 +36,6 @@ const (
 type ackMsg struct {
 	StateURI string        `json:"stateURI"`
 	TxID     state.Version `json:"txID"`
-}
-
-func readMsg(r io.Reader) (msg Msg, err error) {
-	size, err := readUint64(r)
-	if err != nil {
-		return Msg{}, err
-	}
-
-	buf := &bytes.Buffer{}
-	_, err = io.CopyN(buf, r, int64(size))
-	if err != nil {
-		return Msg{}, err
-	}
-	bs := buf.Bytes()
-
-	// err = json.NewDecoder(buf).Decode(&msg)
-	err = json.Unmarshal(bs, &msg)
-	return msg, errors.Wrapf(err, `while decoding libp2p message "%v"`, string(bs))
 }
 
 func readUint64(r io.Reader) (uint64, error) {

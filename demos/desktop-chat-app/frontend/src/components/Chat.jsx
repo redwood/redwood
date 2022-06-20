@@ -18,23 +18,20 @@ import Button from './Button'
 import Input from './Input'
 import Attachment from './Attachment'
 import AttachmentModal from './AttachmentModal'
-import Embed from './Embed'
 import EmojiQuickSearch from './EmojiQuickSearch'
 import TextBox from './TextBox'
 import NormalizeMessage from './ChatHelpers/NormalizeMessage'
 import Modal, { ModalTitle, ModalContent, ModalActions } from './Modal'
 import UserAvatar from './UserAvatar'
+import Scrollbars from './Scrollbars'
 import useModal from '../hooks/useModal'
 import useServerRegistry from '../hooks/useServerRegistry'
 import useAPI from '../hooks/useAPI'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 import useNavigation from '../hooks/useNavigation'
 import useAddressBook from '../hooks/useAddressBook'
 import useUsers from '../hooks/useUsers'
 import emojiSheet from './../assets/emoji-mart-twitter-images.png'
-
-// import strToColor from '../utils/strToColor'
-
 
 const Container = styled.div`
     display: flex;
@@ -44,7 +41,7 @@ const Container = styled.div`
     background-color: ${props => props.theme.color.grey[200]};
 `
 
-const MessageContainer = styled.div`
+const MessageContainer = styled(Scrollbars)`
     display: flex;
     flex-direction: column;
     flex-grow: 1;
@@ -97,7 +94,6 @@ const AddAttachmentButton = styled(AddIcon)`
 
 const UserAvatarPlaceholder = styled.div`
     padding-left: 40px;
-    // width: 40px;
 `
 
 const MessageDetails = styled.div`
@@ -192,7 +188,7 @@ function Chat({ className }) {
     const { users } = useUsers(selectedStateURI)
 
     const registry = useServerRegistry(selectedServer)
-    const roomState = useStateTree(selectedStateURI)
+    const [roomState] = useStateTree(selectedStateURI)
     const initialMessageText = [
       {
         type: 'paragraph',
@@ -240,6 +236,20 @@ function Chat({ className }) {
     const initFocusPoint = { path: [0, 0], offset: 0 }
     const [editorFocusPoint, setEditorFocusPoint] = useState(initFocusPoint)
 
+    // Focus message input every time we change state URIs
+    useEffect(() => {
+        if (!editorRef.current) {
+            return
+        }
+        try {
+            const point = { path: [0, 0], offset: 0 };
+            setEditorFocusPoint(point)
+            editorRef.current.selection = { anchor: point, focus: point };
+            ReactEditor.focus(editorRef.current)
+        } catch (err) {}
+
+    }, [selectedStateURI])
+
     function onEditorBlur() {
       try {
         setEditorFocusPoint(editor.selection.focus)
@@ -251,7 +261,7 @@ function Chat({ className }) {
     let mentionUsers = []
     const userAddresses = Object.keys(users || {})
     if (userAddresses.length) {
-      mentionUsers = userAddresses.map((address) => ({ ...users[address], address })).filter(user => {
+        mentionUsers = userAddresses.map((address) => ({ ...users[address], address })).filter(user => {
         if (!user.username && !user.nickname) {
           return user.address.includes(searchMention.toLowerCase())
         }
@@ -266,17 +276,6 @@ function Chat({ className }) {
       }
       ).slice(0, 10)
     }
-
-    useEffect(async () => {
-      if (nodeIdentities) {
-        if (Object.keys(users || {}).length > 0) {
-          if (!users[nodeIdentities[0].address]) {
-            await api.updateProfile(nodeIdentities[0].address, `${selectedServer}/registry`, null, null, 'member')
-          }
-        }
-      }
-    }, [selectedStateURI, users, nodeIdentities])
-
 
     useEffect(() => {
       if (targetMention && mentionUsers.length > 0) {
@@ -302,7 +301,7 @@ function Chat({ className }) {
             return msg
         })
         setMessages(messages)
-    }, [numMessages])
+    }, [numMessages, selectedStateURI])
 
     const onOpenEmojis = (event) => {
       if (showEmojiKeyboard) {
@@ -432,18 +431,15 @@ function Chat({ className }) {
 		attachmentsInput.current.value = ''
     }, [messageText, nodeIdentities, attachments, selectedServer, selectedRoom, numMessages, numFiles, api, previews])
 
+    // Scroll on new messages
     useEffect(() => {
-        // Scrolls on new messages
-        if (messageTextContainer.current) {
-          setTimeout(() => {
-            if (!messageTextContainer.current) {
-                return
-            }
-			messageTextContainer.current.scrollTop = messageTextContainer.current.scrollHeight
-			// fireNotificationAlert()
-          }, 0)
+      setTimeout(() => {
+        if (!messageTextContainer.current) {
+            return
         }
-    }, [numMessages])
+        messageTextContainer.current.scrollToBottom()
+      }, 0)
+    }, [numMessages, selectedStateURI])
 
     const serializeMessageText = useCallback(() => {
       let isEmpty = true
@@ -460,7 +456,6 @@ function Chat({ className }) {
               }]
             }
           }
-          console.log(JSON.stringify(initialMessageText[0]), JSON.stringify(trimmedNode))
 
           if (JSON.stringify(initialMessageText[0]) === JSON.stringify(trimmedNode)) {
             if (!isEmpty) {
@@ -628,16 +623,18 @@ function Chat({ className }) {
 
     return (
         <Container className={className}>
-            <MessageContainer ref={messageTextContainer}>
-                {messages.map((msg, i) => (
+            <MessageContainer innerRef={messageTextContainer}>
+                {messages.map((msg, i) => {
+                    return (
                     <Message
                         msg={msg}
                         isOwnMessage={msg.sender === ownAddress}
                         onClickAttachment={onClickAttachment}
                         messageIndex={i}
-                        key={msg.sender + msg.timestamp + i}
+                        key={selectedStateURI + msg.sender + msg.timestamp + i}
                     />
-                ))}
+                )
+                })}
             </MessageContainer>
 
             <AttachmentModal />
@@ -676,7 +673,7 @@ function Chat({ className }) {
                 { showEmojiKeyboard ? <EmojiWrapper>
                   <Picker
                     useButton={false}
-					title={'Redwood Chat'}
+					title={'Hush'}
 					backgroundImageFn={(set, sheetSize) => {
 						return emojiSheet
 					}}
@@ -781,7 +778,7 @@ function Message({ msg, isOwnMessage, onClickAttachment, messageIndex }) {
     }, [onPresentContactsModal, onPresentUserProfileModal, msg, msg && msg.sender, isOwnMessage])
 
     return (
-        <MessageWrapper firstByUser={msg.firstByUser} key={selectedStateURI + messageIndex}>
+        <MessageWrapper firstByUser={msg.firstByUser} key={selectedStateURI + msg.sender + msg.timestamp + messageIndex}>
           {msg.firstByUser
               ? <SUserAvatar address={userAddress} onClick={showContactsModal} />
               : <UserAvatarPlaceholder />

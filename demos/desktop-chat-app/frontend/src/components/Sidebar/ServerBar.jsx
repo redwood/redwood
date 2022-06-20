@@ -12,7 +12,7 @@ import Input, { InputLabel } from '../Input'
 import { ServerFab, DMButton } from '../ServerFab'
 import SettingsModal from '../SettingsModal'
 import AddServerModal from './AddServerModal'
-import { useRedwood, useStateTree } from '@redwood.dev/client/react'
+import { useRedwood, useStateTree } from '@redwood.dev/react'
 import useModal from '../../hooks/useModal'
 import useAPI from '../../hooks/useAPI'
 import useNavigation from '../../hooks/useNavigation'
@@ -182,6 +182,8 @@ function ImportServerModal({ onDismiss }) {
 						onChange={onChangeServerName}
 						label={'Server Name'}
 						width={'460px'}
+                        onEnter={onClickImport}
+                        autoFocus
 					/>
 				</InputLabel>
             </ModalContent>

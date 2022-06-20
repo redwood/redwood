@@ -38,10 +38,11 @@ var validatorRegistry = map[string]ValidatorConstructor{
 	"validator/permissions": NewPermissionsValidator,
 	// "stack":       NewStackValidator,
 }
-var indexerRegistry = map[string]IndexerConstructor{
-	"indexer/keypath": NewKeypathIndexer,
-	"indexer/js":      NewJSIndexer,
-}
+
+// var indexerRegistry = map[string]IndexerConstructor{
+// 	"indexer/keypath": NewKeypathIndexer,
+// 	"indexer/js":      NewJSIndexer,
+// }
 
 type behaviorTree struct {
 	log.Logger
@@ -49,7 +50,7 @@ type behaviorTree struct {
 	validators        map[string]Validator
 	resolverKeypaths  []state.Keypath
 	resolvers         map[string]Resolver
-	indexers          map[string]map[string]Indexer
+	// indexers          map[string]map[string]Indexer
 }
 
 func newBehaviorTree() *behaviorTree {
@@ -57,7 +58,7 @@ func newBehaviorTree() *behaviorTree {
 		Logger:     log.NewLogger(""),
 		validators: make(map[string]Validator),
 		resolvers:  make(map[string]Resolver),
-		indexers:   make(map[string]map[string]Indexer),
+		// indexers:   make(map[string]map[string]Indexer),
 	}
 }
 
@@ -67,7 +68,7 @@ func (t *behaviorTree) copy() *behaviorTree {
 		validators:        make(map[string]Validator, len(t.validators)),
 		resolverKeypaths:  make([]state.Keypath, len(t.resolverKeypaths)),
 		resolvers:         make(map[string]Resolver, len(t.resolvers)),
-		indexers:          make(map[string]map[string]Indexer, len(t.indexers)),
+		// indexers:          make(map[string]map[string]Indexer, len(t.indexers)),
 	}
 	for i, v := range t.validatorKeypaths {
 		cp.validatorKeypaths[i] = v
@@ -81,12 +82,12 @@ func (t *behaviorTree) copy() *behaviorTree {
 	for k, v := range t.resolvers {
 		cp.resolvers[k] = v
 	}
-	for k, v := range t.indexers {
-		cp.indexers[k] = make(map[string]Indexer, len(t.indexers[k]))
-		for kk, vv := range v {
-			cp.indexers[k][kk] = vv
-		}
-	}
+	// for k, v := range t.indexers {
+	// 	cp.indexers[k] = make(map[string]Indexer, len(t.indexers[k]))
+	// 	for kk, vv := range v {
+	// 		cp.indexers[k][kk] = vv
+	// 	}
+	// }
 	return cp
 }
 
@@ -156,19 +157,19 @@ func (t *behaviorTree) removeValidator(keypath state.Keypath) {
 	t.validatorKeypaths = t.validatorKeypaths[:len(t.validatorKeypaths)-1]
 }
 
-func (t *behaviorTree) addIndexer(keypath state.Keypath, indexName state.Keypath, indexer Indexer) {
-	if _, exists := t.indexers[string(keypath)]; !exists {
-		t.indexers[string(keypath)] = make(map[string]Indexer)
-	}
-	t.indexers[string(keypath)][string(indexName)] = indexer
-}
+// func (t *behaviorTree) addIndexer(keypath state.Keypath, indexName state.Keypath, indexer Indexer) {
+// 	if _, exists := t.indexers[string(keypath)]; !exists {
+// 		t.indexers[string(keypath)] = make(map[string]Indexer)
+// 	}
+// 	t.indexers[string(keypath)][string(indexName)] = indexer
+// }
 
-func (t *behaviorTree) removeIndexer(keypath state.Keypath, indexName state.Keypath) {
-	if _, exists := t.indexers[string(keypath)]; !exists {
-		return
-	}
-	delete(t.indexers[string(keypath)], string(indexName))
-}
+// func (t *behaviorTree) removeIndexer(keypath state.Keypath, indexName state.Keypath) {
+// 	if _, exists := t.indexers[string(keypath)]; !exists {
+// 		return
+// 	}
+// 	delete(t.indexers[string(keypath)], string(indexName))
+// }
 
 func (t *behaviorTree) nearestResolverForKeypath(keypath state.Keypath) (Resolver, state.Keypath) {
 	for i := len(t.resolverKeypaths) - 1; i >= 0; i-- {

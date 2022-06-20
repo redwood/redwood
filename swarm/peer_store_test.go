@@ -9,7 +9,7 @@ import (
 	"redwood.dev/swarm"
 )
 
-func TestPeerStore_EnsurePeerDetails(t *testing.T) {
+func TestPeerStore_PeerDeviceAggregation(t *testing.T) {
 	db := testutils.SetupDBTree(t)
 	defer db.DeleteDB()
 
@@ -72,7 +72,7 @@ func TestPeerStore_EnsurePeerDetails(t *testing.T) {
 // 	require.NoError(t, err)
 // 	require.Len(t, pds, 1)
 
-// 	requirePeerDetailsEqual(t, pd1, pds[0])
+// 	requirePeerDevicesEqual(t, pd1, pds[0])
 
 // 	addr2 := testutils.RandomAddress(t)
 // 	pd2 := swarm.NewPeerDetails(
@@ -116,39 +116,39 @@ func TestPeerStore_EnsurePeerDetails(t *testing.T) {
 // 	requireExpectedPeers(t, p, []swarm.PeerInfo{})
 // }
 
-func requireExpectedPeers(t *testing.T, p *swarm.ConcretePeerStore, expected []swarm.PeerInfo) {
-	t.Helper()
+// func requireExpectedPeers(t *testing.T, p *swarm.ConcretePeerStore, expected []swarm.PeerInfo) {
+// 	t.Helper()
 
-	pds, err := p.FetchAllPeerDetails()
-	require.NoError(t, err)
-	require.Len(t, pds, len(expected))
+// 	pds, err := p.FetchAllPeerDetails()
+// 	require.NoError(t, err)
+// 	require.Len(t, pds, len(expected))
 
-	expectedMap := make(map[string]swarm.PeerInfo)
-	for _, x := range expected {
-		expectedMap[x.DeviceUniqueID()] = x
-	}
-	for _, pd := range pds {
-		requirePeerDetailsEqual(t, expectedMap[pd.DeviceUniqueID()], pd)
-	}
-}
+// 	expectedMap := make(map[string]swarm.PeerInfo)
+// 	for _, x := range expected {
+// 		expectedMap[x.DeviceUniqueID()] = x
+// 	}
+// 	for _, pd := range pds {
+// 		requirePeerDevicesEqual(t, expectedMap[pd.DeviceUniqueID()], pd)
+// 	}
+// }
 
-func requirePeerDetailsEqual(t *testing.T, pd1, pd2 swarm.PeerInfo) {
-	t.Helper()
+// func requirePeerDevicesEqual(t *testing.T, pd1, pd2 swarm.PeerInfo) {
+// 	t.Helper()
 
-	endpoints1 := pd1.Endpoints()
-	endpoints2 := pd2.Endpoints()
+// 	endpoints1 := pd1.Endpoints()
+// 	endpoints2 := pd2.Endpoints()
 
-	for i := range endpoints1 {
-		e1, e2 := endpoints1[i], endpoints2[i]
-		require.Equal(t, e1.DialInfo(), e2.DialInfo())
-		require.Equal(t, e1.Addresses()[0], e2.Addresses()[0])
-		sigpubkey1, encpubkey1 := e1.PublicKeys(e1.Addresses()[0])
-		sigpubkey2, encpubkey2 := e2.PublicKeys(e2.Addresses()[0])
-		require.Equal(t, sigpubkey1, sigpubkey2)
-		require.Equal(t, encpubkey1, encpubkey2)
-		require.True(t, e1.StateURIs().Equal(e2.StateURIs()))
-		require.True(t, e1.LastContact().Equal(e2.LastContact()))
-		require.True(t, e1.LastFailure().Equal(e2.LastFailure()))
-		require.Equal(t, e1.Failures(), e2.Failures())
-	}
-}
+// 	for i := range endpoints1 {
+// 		e1, e2 := endpoints1[i], endpoints2[i]
+// 		require.Equal(t, e1.DialInfo(), e2.DialInfo())
+// 		require.Equal(t, e1.Addresses()[0], e2.Addresses()[0])
+// 		sigpubkey1, encpubkey1 := e1.PublicKeys(e1.Addresses()[0])
+// 		sigpubkey2, encpubkey2 := e2.PublicKeys(e2.Addresses()[0])
+// 		require.Equal(t, sigpubkey1, sigpubkey2)
+// 		require.Equal(t, encpubkey1, encpubkey2)
+// 		require.True(t, e1.StateURIs().Equal(e2.StateURIs()))
+// 		require.True(t, e1.LastContact().Equal(e2.LastContact()))
+// 		require.True(t, e1.LastFailure().Equal(e2.LastFailure()))
+// 		require.Equal(t, e1.Failures(), e2.Failures())
+// 	}
+// }

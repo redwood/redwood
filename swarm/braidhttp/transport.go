@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httputil"
@@ -28,11 +27,11 @@ import (
 
 	"redwood.dev/blob"
 	"redwood.dev/crypto"
+	"redwood.dev/embed"
 	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/process"
-	"redwood.dev/redwood.js/embed/redwoodjs"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/protoauth"
@@ -60,9 +59,8 @@ type transport struct {
 	protoblob.BaseBlobTransport
 	prototree.BaseTreeTransport
 
-	controllerHub   tree.ControllerHub
 	defaultStateURI string
-	ownURLs         types.StringSet
+	ownURLs         types.Set[string]
 	listenAddr      string
 	listenAddrSSL   string
 	cookieSecret    [32]byte
@@ -79,10 +77,12 @@ type transport struct {
 
 	pendingAuthorizations map[types.ID][]byte
 
-	treeACL   prototree.ACL
-	peerStore swarm.PeerStore
-	keyStore  identity.KeyStore
-	blobStore blob.Store
+	treeACL        prototree.ACL
+	peerStore      swarm.PeerStore
+	keyStore       identity.KeyStore
+	blobStore      blob.Store
+	controllerHub  tree.ControllerHub
+	nelsonResolver nelson.Resolver
 }
 
 var _ Transport = (*transport)(nil)
@@ -94,7 +94,7 @@ const (
 func NewTransport(
 	listenAddr string,
 	listenAddrSSL string,
-	ownURLs types.StringSet,
+	ownURLs types.Set[string],
 	defaultStateURI string,
 	controllerHub tree.ControllerHub,
 	keyStore identity.KeyStore,
@@ -122,6 +122,7 @@ func NewTransport(
 		keyStore:              keyStore,
 		blobStore:             blobStore,
 		peerStore:             peerStore,
+		nelsonResolver:        nelson.NewResolver(controllerHub, blobStore, nil),
 	}
 	return t, nil
 }
@@ -418,11 +419,16 @@ func (t *transport) serveHeadRequest(w http.ResponseWriter, r *http.Request) {
 	if req.StateURI == "" {
 		req.StateURI = t.defaultStateURI
 	}
-	stateURIs, err := t.controllerHub.KnownStateURIs()
+	if req.StateURI == "" {
+		// Maybe the client doesn't care about state data (they just want the Alt-Svc header)
+		return
+	}
+
+	isKnown, err := t.controllerHub.IsStateURIWithData(req.StateURI)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	} else if !stateURIs.Contains(req.StateURI) {
+	} else if !isKnown {
 		http.Error(w, "state URI not found", http.StatusNotFound)
 		return
 	}
@@ -440,11 +446,7 @@ func (t *transport) serveHeadRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	defer node.Close()
 
-	err = t.addResourceHeaders(req.StateURI, node, w)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	// @@TODO
 }
 
 // Respond to a request from another node challenging our identity.
@@ -547,7 +549,7 @@ func (t *transport) serveHTTPSubscription(w http.ResponseWriter, r *http.Request
 		Keypath:          state.Keypath(req.Keypath),
 		Type:             req.SubType,
 		FetchHistoryOpts: &fetchHistoryOpts,
-		Addresses:        types.NewAddressSet([]types.Address{address}),
+		Addresses:        types.NewSet[types.Address]([]types.Address{address}),
 	}
 	chSubClosed, err := t.HandleWritableSubscriptionOpened(subRequest, func() (prototree.WritableSubscriptionImpl, error) {
 		return newHTTPWritableSubscription(req.StateURI, w, r), nil
@@ -599,7 +601,7 @@ func (t *transport) serveWSSubscription(w http.ResponseWriter, r *http.Request, 
 		Keypath:          req.Keypath,
 		Type:             req.SubType,
 		FetchHistoryOpts: &fetchHistoryOpts,
-		Addresses:        types.NewAddressSet([]types.Address{address}),
+		Addresses:        types.NewSet[types.Address]([]types.Address{address}),
 	}
 	chSubClosed, err := t.HandleWritableSubscriptionOpened(subRequest, func() (prototree.WritableSubscriptionImpl, error) {
 		wsConn, err := wsUpgrader.Upgrade(w, r, nil)
@@ -627,7 +629,7 @@ func (t *transport) serveWSSubscription(w http.ResponseWriter, r *http.Request, 
 }
 
 func (t *transport) serveRedwoodJS(w http.ResponseWriter, r *http.Request) {
-	http.ServeContent(w, r, "./redwood.js", time.Now(), bytes.NewReader(redwoodjs.BrowserSrc))
+	http.ServeContent(w, r, "./redwood.js", time.Now(), bytes.NewReader(embed.BrowserSrc))
 }
 
 func (t *transport) serveGetTx(w http.ResponseWriter, r *http.Request) {
@@ -659,79 +661,8 @@ func (t *transport) serveGetTx(w http.ResponseWriter, r *http.Request) {
 	utils.RespondJSON(w, tx)
 }
 
-type keypathAndRangePath struct {
-	Keypath state.Keypath
-	Range   *state.Range
-}
-
-func (k *keypathAndRangePath) UnmarshalURLPath(path string) error {
-	keypath, rng, err := state.ParseKeypathAndRange([]byte(path), byte('/'))
-	if err != nil {
-		return err
-	}
-	k.Keypath = keypath
-	k.Range = rng
-	return nil
-}
-
-type httpRangeHeader struct {
-	RangeType string
-	Range     *state.Range
-}
-
-func (h *httpRangeHeader) UnmarshalHTTPHeader(header string) error {
-	*h = httpRangeHeader{}
-
-	// Range: -10:-5
-	// @@TODO: real json Range parsing
-	parts := strings.SplitN(header, "=", 2)
-	if len(parts) != 2 {
-		return errors.Errorf("bad Range header: '%v'", header)
-	}
-	h.RangeType = parts[0]
-
-	switch h.RangeType {
-	case "json":
-		parts = strings.SplitN(parts[1], ":", 2)
-		if len(parts) != 2 {
-			return errors.Errorf("bad Range header: '%v'", header)
-		}
-	case "bytes":
-		parts = strings.SplitN(parts[1], "-", 2)
-		if len(parts) != 2 {
-			return errors.Errorf("bad Range header: '%v'", header)
-		}
-	}
-	start, err := strconv.ParseUint(parts[0], 10, 64)
-	if err != nil {
-		return errors.Errorf("bad Range header: '%v'", header)
-	}
-	if parts[1] == "" {
-		if start == 0 {
-			h.Range = nil
-		} else {
-			h.Range = &state.Range{start, math.MaxUint64, false}
-		}
-	} else {
-		end, err := strconv.ParseUint(parts[1], 10, 64)
-		if err != nil {
-			return errors.Errorf("bad Range header: '%v'", header)
-		}
-		h.Range = &state.Range{start, end, false}
-	}
-	return nil
-}
-
 func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
-	type request struct {
-		StateURI        string              `header:"State-URI" query:"state_uri"`
-		Version         *state.Version      `header:"Version"`
-		KeypathAndRange keypathAndRangePath `path:""`
-		RangeHeader     *httpRangeHeader    `header:"Range"`
-		Raw             bool                `query:"raw"`
-	}
-
-	var req request
+	var req resourceRequest
 	err := utils.UnmarshalHTTPRequest(&req, r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -742,15 +673,22 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 		req.StateURI = t.defaultStateURI
 	}
 
-	var rng *state.Range
+	var rangeReq *RangeRequest
 	if req.RangeHeader != nil {
-		rng = req.RangeHeader.Range
+		rangeReq = req.RangeHeader
 	} else {
-		rng = req.KeypathAndRange.Range
+		rangeReq = req.KeypathAndRange.RangeRequest
 	}
 
-	var node state.Node
-	var anyMissing bool
+	// @@TODO
+	// var shouldSendBody bool
+	// if req.Method == "GET" {
+	//     shouldSendBody = true
+	// } else if req.Method == "HEAD" {
+	//     shouldSendBody = false
+	// } else {
+	//     panic("no")
+	// }
 
 	rootNode, err := t.controllerHub.StateAtVersion(req.StateURI, req.Version)
 	if err != nil {
@@ -759,81 +697,126 @@ func (t *transport) serveGetState(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rootNode.Close()
 
-	if req.Raw {
-		node = rootNode.NodeAt(req.KeypathAndRange.Keypath, rng)
+	node, exists, err := t.nelsonResolver.Seek(rootNode, req.KeypathAndRange.Keypath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+		return
+	} else if !exists {
+		http.Error(w, fmt.Sprintf("not found: %v", req.KeypathAndRange.Keypath), http.StatusNotFound)
+		return
+	}
 
-	} else {
-		var exists bool
-		node, exists, err = nelson.Seek(rootNode, req.KeypathAndRange.Keypath, t.controllerHub, t.blobStore)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
-			return
-		} else if !exists {
-			http.Error(w, fmt.Sprintf("not found: %v", req.KeypathAndRange.Keypath), http.StatusNotFound)
-			return
-		}
-		req.KeypathAndRange.Keypath = nil
-
-		indexHTMLExists, err := node.Exists(req.KeypathAndRange.Keypath.Push(state.Keypath("index.html")))
+	if !req.Raw {
+		indexHTMLExists, err := node.Exists(state.Keypath("index.html"))
 		if err != nil {
 			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 			return
 		}
 		if indexHTMLExists {
-			req.KeypathAndRange.Keypath = req.KeypathAndRange.Keypath.Push(state.Keypath("index.html"))
-
-			node, exists, err = nelson.Seek(node, state.Keypath("index.html"), t.controllerHub, t.blobStore)
+			node, exists, err = t.nelsonResolver.Seek(node, state.Keypath("index.html"))
 			if err != nil {
 				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 				return
 			} else if !exists {
-				http.Error(w, fmt.Sprintf("not found: %v", req.KeypathAndRange.Keypath), http.StatusNotFound)
+				http.Error(w, fmt.Sprintf("not found: index.html"), http.StatusNotFound)
 				return
 			}
 		}
 	}
 
-	var val interface{}
-	var exists bool
-	if !req.Raw {
-		val, exists, err = nelson.GetValueRecursive(node, nil, nil)
-	} else {
-		val, exists, err = node.Value(nil, nil)
-	}
-	if err != nil {
-		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusBadRequest)
-		return
-	} else if !exists {
-		http.Error(w, fmt.Sprintf("not found: %+v", err), http.StatusNotFound)
-		return
-	}
+	var response resourceResponse
 
-	respBuf, ok := nelson.GetReadCloser(val)
-	if !ok {
-		j, err := json.Marshal(val)
+	if req.Raw {
+		readCloser, contentLength, err := jsonReadCloser(node.NodeAt(nil, nil), rangeReq)
 		if err != nil {
-			panic(err)
+			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+			return
 		}
-		respBuf = ioutil.NopCloser(bytes.NewBuffer(j))
+		response.Body = readCloser
+		response.ContentType = "application/json"
+		response.ContentLength = contentLength
+		response.StatusCode = http.StatusOK
+
+	} else {
+		node, anyMissing, err := t.nelsonResolver.Resolve(node)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+			return
+		}
+
+		switch node := node.(type) {
+		case nelson.Node:
+			readCloser, contentLength, err := node.BytesReader(rangeReq.BytesRange())
+			if err != nil {
+				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+				return
+			}
+			response.Body = readCloser
+			response.ContentType = node.ContentType()
+			if response.ContentType == "" {
+				newReadCloser, contentType, err := utils.SniffContentType(string(node.Keypath().Part(-1)), readCloser)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+					return
+				}
+				response.Body = newReadCloser
+				response.ContentType = contentType
+			}
+			response.ContentLength = contentLength
+
+		case state.Node:
+			readCloser, contentLength, err := jsonReadCloser(node.NodeAt(nil, nil), rangeReq)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+				return
+			}
+			response.Body = readCloser
+			response.ContentType = "application/json"
+			response.ContentLength = contentLength
+
+		default:
+			panic("wat")
+		}
+
+		if anyMissing {
+			response.StatusCode = http.StatusPartialContent
+		} else {
+			response.StatusCode = http.StatusOK
+		}
 	}
-	defer respBuf.Close()
+	defer response.Body.Close()
 
-	// Add the "Parents" header
-	t.addParentsHeader(req.StateURI, w)
-
-	// Add resource headers
-	err = t.addResourceHeaders(req.StateURI, node, w)
+	resourceLength, err := node.Length()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
 		return
 	}
+	response.ResourceLength = resourceLength
 
-	// Add "Partial Content" status code if applicable
-	if anyMissing {
-		w.WriteHeader(http.StatusPartialContent)
+	// Add the "Parents" header
+	{
+		leaves, err := t.controllerHub.Leaves(req.StateURI)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error: %+v", err), http.StatusInternalServerError)
+			return
+		}
+		var leavesStrs []string
+		for _, leafID := range leaves {
+			leavesStrs = append(leavesStrs, leafID.Hex())
+		}
+		w.Header().Add("Parents", strings.Join(leavesStrs, ","))
 	}
 
-	_, err = io.Copy(w, respBuf)
+	// Add resource headers
+	{
+		w.Header().Set("State-URI", req.StateURI)
+		w.Header().Set("Content-Type", response.ContentType)
+		w.Header().Set("Content-Length", strconv.FormatInt(response.ContentLength, 10))
+		w.Header().Set("Resource-Length", strconv.FormatUint(response.ResourceLength, 10))
+		w.WriteHeader(response.StatusCode)
+	}
+
+	_, err = io.Copy(w, response.Body)
 	if err != nil {
 		http.Error(w, "could not copy response", http.StatusInternalServerError)
 	}
@@ -909,64 +892,27 @@ func (t *transport) servePostBlob(w http.ResponseWriter, r *http.Request) {
 
 func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, peerConn *peerConn) {
 	type request struct {
-		StateURI   string
-		Signature  types.Signature
-		Version    state.Version
-		Parents    []state.Version
-		Checkpoint bool
+		StateURI   string          `header:"State-URI"`
+		Version    state.Version   `header:"Version"`
+		Parents    ParentsHeader   `header:"Parents"`
+		Checkpoint bool            `header:"Checkpoint"`
+		Signature  types.Signature `header:"Signature"`
 	}
 
-	t.Infof(0, "incoming tx")
-
-	var err error
-
-	var sig types.Signature
-	sigHeaderStr := r.Header.Get("Signature")
-	if sigHeaderStr == "" {
-		http.Error(w, "missing Signature header", http.StatusBadRequest)
+	var req request
+	err := utils.UnmarshalHTTPRequest(&req, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
-	} else {
-		sig, err = types.SignatureFromHex(sigHeaderStr)
-		if err != nil {
-			http.Error(w, "bad Signature header", http.StatusBadRequest)
-			return
-		}
 	}
 
-	var txID state.Version
-	txIDStr := r.Header.Get("Version")
-	if txIDStr == "" {
-		txID = state.RandomVersion()
-	} else {
-		txID, err = state.VersionFromHex(txIDStr)
-		if err != nil {
-			http.Error(w, "bad Version header", http.StatusBadRequest)
-			return
-		}
-	}
+	t.Infof(0, "incoming tx %v", utils.PrettyJSON(req))
 
-	var parents []state.Version
-	parentsStr := r.Header.Get("Parents")
-	if parentsStr != "" {
-		parentsStrs := strings.Split(parentsStr, ",")
-		for _, pstr := range parentsStrs {
-			parentID, err := state.VersionFromHex(strings.TrimSpace(pstr))
-			if err != nil {
-				http.Error(w, "bad Parents header", http.StatusBadRequest)
-				return
-			}
-			parents = append(parents, parentID)
-		}
+	if req.StateURI == "" {
+		req.StateURI = t.defaultStateURI
 	}
-
-	var checkpoint bool
-	if checkpointStr := r.Header.Get("Checkpoint"); checkpointStr == "true" {
-		checkpoint = true
-	}
-
-	stateURI := r.Header.Get("State-URI")
-	if stateURI == "" {
-		stateURI = t.defaultStateURI
+	if req.Version == (state.Version{}) {
+		req.Version = state.RandomVersion()
 	}
 
 	var attachment []byte
@@ -1026,22 +972,41 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, peerConn
 	}
 
 	tx := tree.Tx{
-		ID:         txID,
-		Parents:    parents,
-		Sig:        sig,
+		ID:         req.Version,
+		Parents:    req.Parents.Slice(),
 		Patches:    patches,
 		Attachment: attachment,
-		StateURI:   stateURI,
-		Checkpoint: checkpoint,
+		StateURI:   req.StateURI,
+		Checkpoint: req.Checkpoint,
 	}
 
-	// @@TODO: remove .From entirely
-	pubkey, err := crypto.RecoverSigningPubkey(tx.Hash(), sig)
+	// If no signature was provided, we're going through the UCAN
+	// mechanism. Let prototree sign the tx for the requester.
+	if len(req.Signature) == 0 {
+		myAddrs, err := t.keyStore.Addresses()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if myAddrs.Contains(peerConn.addressFromRequest) {
+			tx.From = peerConn.addressFromRequest
+			t.HandleTxReceived(tx, peerConn)
+			return
+
+		} else {
+			http.Error(w, fmt.Sprintf("bad signature, no local address (%v) matches UCAN %v", myAddrs, peerConn.addressFromRequest.Hex()), http.StatusBadRequest)
+			return
+		}
+	}
+
+	// @@TODO: remove .From entirely?
+	pubkey, err := crypto.RecoverSigningPubkey(tx.Hash(), req.Signature)
 	if err != nil {
 		http.Error(w, "bad signature", http.StatusBadRequest)
 		return
 	}
 	tx.From = pubkey.Address()
+	tx.Sig = req.Signature
 	////////////////////////////////
 
 	t.Process.Go(nil, "HandleTxReceived", func(ctx context.Context) {
@@ -1068,12 +1033,13 @@ func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.Pee
 	return t.makePeerConn(nil, nil, dialAddr, types.ID{}, "", types.Address{}), nil
 }
 
+func (t *transport) AnnounceStateURIs(ctx context.Context, stateURIs types.Set[string]) {}
+
 func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_ <-chan prototree.TreePeerConn, err error) {
 	defer errors.AddStack(&err)
 
 	providers, err := t.tryFetchProvidersFromAuthoritativeHost(stateURI)
 	if err != nil {
-		t.Warnf("could not fetch providers of state URI '%v' from authoritative host: %v", stateURI, err)
 		return nil, err
 	}
 
@@ -1143,9 +1109,7 @@ func (t *transport) ProvidersOfBlob(ctx context.Context, blobID blob.ID) (<-chan
 	return nil, errors.ErrUnimplemented
 }
 
-func (t *transport) AnnounceBlob(ctx context.Context, blobID blob.ID) error {
-	return errors.ErrUnimplemented
-}
+func (t *transport) AnnounceBlobs(ctx context.Context, blobIDs types.Set[blob.ID]) {}
 
 var (
 	ErrBadCookie = errors.New("bad cookie")
@@ -1247,7 +1211,7 @@ func (t *transport) signedCookie(r *http.Request, name string) ([]byte, error) {
 }
 
 func (t *transport) makePeerConn(writer io.Writer, flusher http.Flusher, dialAddr string, sessionID types.ID, deviceUniqueID string, address types.Address) *peerConn {
-	peer := &peerConn{t: t, sessionID: sessionID}
+	peer := &peerConn{t: t, sessionID: sessionID, addressFromRequest: address}
 	peer.stream.Writer = writer
 	peer.stream.Flusher = flusher
 
@@ -1268,34 +1232,6 @@ func (t *transport) addParentsHeader(stateURI string, w http.ResponseWriter) err
 		leavesStrs = append(leavesStrs, leafID.Hex())
 	}
 	w.Header().Add("Parents", strings.Join(leavesStrs, ","))
-	return nil
-}
-
-func (t *transport) addResourceHeaders(stateURI string, node state.Node, w http.ResponseWriter) error {
-	w.Header().Set("State-URI", stateURI)
-
-	contentType, err := nelson.GetContentType(node)
-	if err != nil {
-		return errors.Wrapf(err, "error getting content type")
-	}
-	if contentType == "application/octet-stream" {
-		contentType = utils.GuessContentTypeFromFilename(string(node.Keypath().Part(-1)))
-	}
-	w.Header().Set("Content-Type", contentType)
-
-	contentLength, err := nelson.GetContentLength(node)
-	if err != nil {
-		return errors.Wrapf(err, "error getting content length")
-	}
-	if contentLength > 0 {
-		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
-	}
-
-	resourceLength, err := node.Length()
-	if err != nil {
-		return errors.Wrapf(err, "error getting resource length")
-	}
-	w.Header().Set("Resource-Length", strconv.FormatUint(resourceLength, 10))
 	return nil
 }
 

@@ -60,6 +60,7 @@ type App struct {
 	TreeProtoStore      prototree.Store
 	HTTPTransport       braidhttp.Transport
 	Libp2pTransport     libp2p.Transport
+	Libp2pStore         libp2p.Store
 	HTTPRPCServer       *http.Server
 	HTTPRPCServerConfig rpc.HTTPConfig
 	SharedStateDB       *state.DBTree
@@ -83,6 +84,14 @@ func NewApp(name string, config Config) *App {
 }
 
 func (app *App) Start() error {
+	if app.Config.PprofPort > 0 {
+		go func() {
+			http.ListenAndServe(fmt.Sprintf(":%v", app.Config.PprofPort), nil)
+		}()
+		// runtime.SetBlockProfileRate(1)
+		// runtime.SetMutexProfileFraction(1)
+	}
+
 	err := app.Process.Start()
 	if err != nil {
 		return err
@@ -174,7 +183,7 @@ func (app *App) Start() error {
 		}
 	}
 
-	// All DBs other than the keystore are encrypted at rest
+	// All DBs other than the keystore are encrypted at rest with Badger's built-in encryption
 	badgerOpts = badgerOpts.WithEncryption(app.KeyStore.LocalSymEncKey().Bytes(), 24*time.Hour)
 
 	// Initialize the config DB shared by various packages
@@ -211,6 +220,11 @@ func (app *App) Start() error {
 	app.TreeDB = treedb
 
 	app.PeerStore = swarm.NewPeerStore(app.PeerDB)
+	err = app.Process.SpawnChild(context.TODO(), app.PeerStore)
+	if err != nil {
+		app.Errorf("while starting peer store: %+v", err)
+		return err
+	}
 
 	app.BlobStore = blob.NewBadgerStore(badgerOpts.ForPath(cfg.BlobDataRoot()))
 	err = app.BlobStore.Start()
@@ -251,6 +265,7 @@ func (app *App) Start() error {
 			if err != nil {
 				return err
 			}
+			app.Libp2pStore = store
 
 			var bootstrapPeers []string
 			for _, bp := range cfg.BootstrapPeers {
@@ -289,7 +304,7 @@ func (app *App) Start() error {
 			httpTransport, err := braidhttp.NewTransport(
 				cfg.BraidHTTPTransport.ListenHost,
 				cfg.BraidHTTPTransport.ListenHostSSL,
-				types.NewStringSet(nil), // @@TODO
+				types.NewSet[string](nil), // @@TODO
 				cfg.BraidHTTPTransport.DefaultStateURI,
 				app.ControllerHub,
 				app.KeyStore,
@@ -416,7 +431,6 @@ func (app *App) Start() error {
 			// 	app.Infof(0, "CLOSE cmdutils interrupt")
 			// 	app.Process.Close()
 			case <-app.Process.Done():
-				app.Infof(0, "CLOSE cmdutils done")
 			}
 		}()
 
@@ -434,7 +448,7 @@ func (app *App) Start() error {
 				select {
 				case <-time.After(3 * time.Second):
 					// @@TODO: use stateURI subscriptions for this
-					stateURIs, err := app.ControllerHub.KnownStateURIs()
+					stateURIs, err := app.ControllerHub.StateURIsWithData()
 					if err != nil {
 						continue
 					}
@@ -536,7 +550,7 @@ func (app *App) Close() error {
 
 func (app *App) EnsureInitialState(stateURI string, checkKeypath string, value interface{}) {
 	node, err := app.ControllerHub.StateAtVersion(stateURI, nil)
-	if err != nil && errors.Cause(err) != tree.ErrNoController {
+	if err != nil && errors.Cause(err) != errors.Err404 {
 		panic(err)
 	} else if err == nil {
 		defer node.Close()

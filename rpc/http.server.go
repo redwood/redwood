@@ -19,7 +19,6 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/identity"
 	"redwood.dev/log"
-	"redwood.dev/state"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/libp2p"
 	"redwood.dev/swarm/protoauth"
@@ -243,7 +242,9 @@ func (s *HTTPServer) StaticRelays(r *http.Request, args *StaticRelaysArgs, resp 
 	if s.libp2pTransport == nil {
 		return errors.ErrUnsupported
 	}
-	resp.StaticRelays = s.libp2pTransport.StaticRelays().Slice()
+	for _, addr := range s.libp2pTransport.StaticRelays().MultiaddrStrings() {
+		resp.StaticRelays = append(resp.StaticRelays, addr)
+	}
 	return nil
 }
 
@@ -276,17 +277,17 @@ func (s *HTTPServer) RemoveStaticRelay(r *http.Request, args *RemoveStaticRelayA
 }
 
 type (
-	KnownStateURIsArgs     struct{}
-	KnownStateURIsResponse struct {
+	StateURIsWithDataArgs     struct{}
+	StateURIsWithDataResponse struct {
 		StateURIs []string
 	}
 )
 
-func (s *HTTPServer) KnownStateURIs(r *http.Request, args *KnownStateURIsArgs, resp *KnownStateURIsResponse) error {
+func (s *HTTPServer) StateURIsWithData(r *http.Request, args *StateURIsWithDataArgs, resp *StateURIsWithDataResponse) error {
 	if s.controllerHub == nil {
 		return errors.ErrUnsupported
 	}
-	stateURIs, err := s.controllerHub.KnownStateURIs()
+	stateURIs, err := s.controllerHub.StateURIsWithData()
 	if err != nil {
 		return err
 	}
@@ -329,39 +330,6 @@ func (s *HTTPServer) StoreBlob(r *http.Request, args *StoreBlobArgs, resp *Store
 }
 
 type (
-	PrivateTreeMembersArgs struct {
-		StateURI string
-	}
-	PrivateTreeMembersResponse struct {
-		Members []types.Address
-	}
-)
-
-func (s *HTTPServer) PrivateTreeMembers(r *http.Request, args *PrivateTreeMembersArgs, resp *PrivateTreeMembersResponse) error {
-	if s.controllerHub == nil {
-		return errors.ErrUnsupported
-	}
-	node, err := s.controllerHub.StateAtVersion(args.StateURI, nil)
-	if err != nil {
-		return err
-	}
-	defer node.Close()
-
-	subkeys := node.NodeAt(state.Keypath("Members"), nil).Subkeys()
-	var addrs []types.Address
-	for _, k := range subkeys {
-		addr, err := types.AddressFromHex(string(k))
-		if err != nil {
-			continue
-		}
-		addrs = append(addrs, addr)
-	}
-	resp.Members = addrs
-
-	return nil
-}
-
-type (
 	PeersArgs struct {
 		StateURI string
 	}
@@ -389,7 +357,7 @@ func (s *HTTPServer) Peers(r *http.Request, args *PeersArgs, resp *PeersResponse
 	for _, peer := range s.peerStore.Peers() {
 		for _, endpoint := range peer.Endpoints() {
 			var identities []PeerIdentity
-			for _, addr := range peer.Addresses() {
+			for addr := range peer.Addresses() {
 				sigpubkey, encpubkey := peer.PublicKeys(addr)
 				identities = append(identities, PeerIdentity{
 					Address:          addr,

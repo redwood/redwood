@@ -1,7 +1,7 @@
 package state
 
 import (
-	"github.com/dgraph-io/badger/v2"
+	"github.com/dgraph-io/badger/v3"
 )
 
 type dbIterator struct {
@@ -104,6 +104,14 @@ func (iter *dbIterator) Node() Node {
 		return nil
 	}
 	return iter.iterNode
+}
+
+func (iter *dbIterator) NodeCopy() Node {
+	if !iter.Valid() {
+		return nil
+	}
+	cp := *iter.iterNode
+	return &cp
 }
 
 func (iter *dbIterator) Valid() bool {
@@ -242,6 +250,14 @@ func (iter *dbDepthFirstIterator) Node() Node {
 		return nil
 	}
 	return iter.iterNode
+}
+
+func (iter *dbDepthFirstIterator) NodeCopy() Node {
+	if !iter.Valid() {
+		return nil
+	}
+	cp := *iter.iterNode
+	return &cp
 }
 
 func (iter *dbDepthFirstIterator) Next() {

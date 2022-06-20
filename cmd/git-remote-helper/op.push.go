@@ -298,7 +298,7 @@ func uploadBlob(
 		data := gitBlob.Contents()
 
 		var contentType string
-		contentType, err = utils.SniffContentType(commitFile.fullPath, bytes.NewBuffer(data))
+		_, contentType, err = utils.SniffContentType(commitFile.fullPath, io.NopCloser(bytes.NewBuffer(data)))
 		if err != nil {
 			return
 		}

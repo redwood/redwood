@@ -1,12 +1,16 @@
 package testutils
 
 import (
+	"bytes"
+	"io"
+	"io/ioutil"
 	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"redwood.dev/blob"
 	"redwood.dev/crypto"
 	"redwood.dev/identity"
 	"redwood.dev/types"
@@ -83,4 +87,15 @@ func RandomString(t *testing.T, n int) string {
 		s[i] = letters[rand.Intn(len(letters))]
 	}
 	return string(s)
+}
+
+func ReadCloserFromString(s string) io.ReadCloser {
+	return ioutil.NopCloser(bytes.NewReader([]byte(s)))
+}
+
+func MakeBlobManifest(length uint64, chunks ...blob.ManifestChunk) blob.Manifest {
+	return blob.Manifest{
+		TotalSize: length,
+		Chunks:    chunks,
+	}
 }

@@ -1,7 +1,7 @@
 import React, { Fragment, useState, useEffect, useCallback } from 'react'
 import styled from 'styled-components'
 import { Link, useHistory, Redirect } from 'react-router-dom'
-import { useRedwood } from '@redwood.dev/client/react'
+import { useRedwood } from '@redwood.dev/react'
 
 import Input, { InputLabel } from './../Input'
 import Button from './../Button'
@@ -91,6 +91,17 @@ function SignUp({ profileNames, setMnemonic, profileName, setProfileName, passwo
     let { signup } = useLoginStatus()
 
     let onSubmitSignUp = useCallback(async (event) => {
+        if (!profileName) {
+            setErrorMessage('Profile name is required.')
+            return
+        } else if (!password) {
+            setErrorMessage('Password is required.')
+            return
+        } else if (!confirmPassword) {
+            setErrorMessage('Password confirmation is required.')
+            return
+        }
+
 		event.preventDefault()
         setErrorMessage('')
         setLoadingText('Creating profile...')
@@ -117,13 +128,16 @@ function SignUp({ profileNames, setMnemonic, profileName, setProfileName, passwo
                 <Input
                     value={profileName}
                     onChange={(event) => setProfileName(event.currentTarget.value)}
+                    onEnter={onSubmitSignUp}
                     type={'text'}
+                    autoFocus
                 />
             </InputLabel>
             <InputLabel label={'Password'}>
                 <Input
                     value={password}
                     onChange={(event) => setPassword(event.currentTarget.value)}
+                    onEnter={onSubmitSignUp}
                     type={'password'}
                 />
             </InputLabel>
@@ -131,17 +145,20 @@ function SignUp({ profileNames, setMnemonic, profileName, setProfileName, passwo
                 <Input
                     value={confirmPassword}
                     onChange={(event) => setConfirmPassword(event.currentTarget.value)}
+                    onEnter={onSubmitSignUp}
                     type={'password'}
                 />
             </InputLabel>
             <SLink to={'/profiles'}>Existing Profiles ({profileNames.length}).</SLink>
             <SLink to={'/signin'}>Import existing profile.</SLink>
             <Button
-				type="submit"
-				primary
+                primary
                 style={{ width: '100%', marginTop: 12 }}
-                disabled={!(!!profileName && !!password && !!confirmPassword)}
-            >Sign Up</Button>
+                disabled={!(!!profileName && !!password & !!confirmPassword)}
+                onClick={onSubmitSignUp}
+            >
+                Sign Up
+            </Button>
         </SAccountCardContent>
     )
 }

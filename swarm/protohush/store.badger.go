@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
-	"sync"
 
 	"github.com/status-im/doubleratchet"
 
@@ -17,7 +16,6 @@ import (
 type store struct {
 	log.Logger
 	db *state.DBTree
-	mu sync.RWMutex
 }
 
 var _ Store = (*store)(nil)
@@ -147,11 +145,11 @@ func (s *store) SaveDHPubkeyAttestations(attestations []DHPubkeyAttestation) err
 	return node.Save()
 }
 
-func (s *store) OutgoingIndividualSessionProposalHashes() (types.HashSet, error) {
+func (s *store) OutgoingIndividualSessionProposalHashes() (types.Set[types.Hash], error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	hashes := types.NewHashSet(nil)
+	hashes := types.NewSet[types.Hash](nil)
 	for _, subkey := range node.NodeAt(outgoingIndividualSessionProposalsByHashKeypath.Copy(), nil).Subkeys() {
 		hash, err := types.HashFromHex(subkey.String())
 		if err != nil {
@@ -187,7 +185,9 @@ func (s *store) OutgoingIndividualSessionProposalByHash(proposalHash types.Hash)
 	node := s.db.State(false)
 	defer node.Close()
 
-	exists, err := node.Exists(outgoingIndividualSessionProposalKeypathForHash(proposalHash))
+	keypath := outgoingIndividualSessionProposalKeypathForHash(proposalHash)
+
+	exists, err := node.Exists(keypath)
 	if err != nil {
 		return IndividualSessionProposal{}, err
 	} else if !exists {
@@ -195,7 +195,7 @@ func (s *store) OutgoingIndividualSessionProposalByHash(proposalHash types.Hash)
 	}
 
 	var proposal IndividualSessionProposal
-	err = node.NodeAt(outgoingIndividualSessionProposalKeypathForHash(proposalHash), nil).Scan(&proposal)
+	err = node.NodeAt(keypath, nil).Scan(&proposal)
 	if err != nil {
 		return IndividualSessionProposal{}, err
 	}
@@ -216,7 +216,7 @@ func (s *store) OutgoingIndividualSessionProposalByUsersAndType(sessionType stri
 	}
 
 	var proposalHash types.Hash
-	err = node.NodeAt(outgoingIndividualSessionProposalKeypathForUsersAndType(sessionType, aliceAddr, bobAddr), nil).Scan(&proposalHash)
+	err = node.NodeAt(keypath, nil).Scan(&proposalHash)
 	if err != nil {
 		return IndividualSessionProposal{}, err
 	}
@@ -283,6 +283,7 @@ func (s *store) IncomingIndividualSessionProposal(hash types.Hash) (EncryptedInd
 	defer node.Close()
 
 	keypath := incomingIndividualSessionProposalKeypathFor(hash)
+
 	exists, err := node.Exists(keypath)
 	if err != nil {
 		return EncryptedIndividualSessionProposal{}, err
@@ -346,6 +347,7 @@ func (s *store) OutgoingIndividualSessionResponse(aliceAddr types.Address, propo
 	defer node.Close()
 
 	keypath := outgoingIndividualSessionResponseKeypathFor(aliceAddr, proposalHash)
+
 	exists, err := node.Exists(keypath)
 	if err != nil {
 		return IndividualSessionResponse{}, err
@@ -531,11 +533,11 @@ func (s *store) OutgoingIndividualMessageIntent(sessionType string, recipient ty
 	return intent, nil
 }
 
-func (s *store) OutgoingIndividualMessageIntentIDsForTypeAndRecipient(sessionType string, recipient types.Address) (types.IDSet, error) {
+func (s *store) OutgoingIndividualMessageIntentIDsForTypeAndRecipient(sessionType string, recipient types.Address) (types.Set[types.ID], error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	ids := types.NewIDSet(nil)
+	ids := types.NewSet[types.ID](nil)
 	for _, subkey := range node.NodeAt(outgoingIndividualMessagesKeypathForTypeAndRecipient(sessionType, recipient), nil).Subkeys() {
 		hash, err := types.IDFromHex(subkey.String())
 		if err != nil {
@@ -591,7 +593,6 @@ func (s *store) IncomingIndividualMessages() ([]IndividualMessage, error) {
 }
 
 func (s *store) SaveIncomingIndividualMessage(sender types.Address, msg IndividualMessage) error {
-
 	node := s.db.State(true)
 	defer node.Close()
 
@@ -613,24 +614,24 @@ func (s *store) DeleteIncomingIndividualMessage(msg IndividualMessage) error {
 	return node.Save()
 }
 
-func (s *store) OutgoingGroupMessageSessionTypes() (types.StringSet, error) {
+func (s *store) OutgoingGroupMessageSessionTypes() (types.Set[string], error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	sessionTypes := types.NewStringSet(nil)
+	sessionTypes := types.NewSet[string](nil)
 	for _, sessionType := range node.NodeAt(outgoingGroupMessageIntentsKeypath, nil).Subkeys() {
 		sessionTypes.Add(sessionType.String())
 	}
 	return sessionTypes, nil
 }
 
-func (s *store) OutgoingGroupMessageIntentIDsForSessionType(sessionType string) (types.StringSet, error) {
+func (s *store) OutgoingGroupMessageIntentIDsForSessionType(sessionType string) (types.Set[string], error) {
 	node := s.db.State(false)
 	defer node.Close()
 
 	keypath := outgoingGroupMessageIntentsKeypathForSessionType(sessionType)
 
-	ids := types.NewStringSet(nil)
+	ids := types.NewSet[string](nil)
 	for _, subkey := range node.NodeAt(keypath, nil).Subkeys() {
 		ids.Add(subkey.String())
 	}
@@ -713,7 +714,6 @@ func (s *store) SaveIncomingGroupMessage(sender types.Address, msg GroupMessage)
 }
 
 func (s *store) DeleteIncomingGroupMessage(msg GroupMessage) error {
-
 	node := s.db.State(true)
 	defer node.Close()
 

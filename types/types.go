@@ -13,6 +13,8 @@ import (
 	"redwood.dev/utils"
 )
 
+type Range = pb.Range
+
 type ID [32]byte
 
 var EmptyID = ID{}
@@ -252,6 +254,16 @@ func (sig *Signature) Unmarshal(data []byte) error {
 	return nil
 }
 
+func (sig *Signature) UnmarshalText(bs []byte) error {
+	bytes, err := hex.DecodeString(string(bs))
+	if err != nil {
+		return err
+	}
+	*sig = make(Signature, len(bytes))
+	copy(*sig, bytes)
+	return nil
+}
+
 func (sig *Signature) Size() int { return len(*sig) }
 func (sig Signature) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + sig.Hex() + `"`), nil
@@ -366,34 +378,13 @@ func (h *Hash) UnmarshalJSON(data []byte) error {
 func (h Hash) Compare(other Hash) int { return bytes.Compare(h[:], other[:]) }
 func (h Hash) Equal(other Hash) bool  { return bytes.Equal(h[:], other[:]) }
 
-type HashAlg int
+type HashAlg = pb.HashAlg
 
 const (
-	HashAlgUnknown HashAlg = iota
-	SHA1
-	SHA3
+	HashAlgUnknown = pb.HashAlgUnknown
+	SHA1           = pb.SHA1
+	SHA3           = pb.SHA3
 )
-
-func HashAlgFromProtobuf(proto pb.HashAlg) HashAlg {
-	return HashAlg(proto)
-}
-
-func (alg HashAlg) ToProtobuf() pb.HashAlg {
-	return pb.HashAlg(alg)
-}
-
-func (alg HashAlg) String() string {
-	switch alg {
-	case HashAlgUnknown:
-		return "unknown"
-	case SHA1:
-		return "sha1"
-	case SHA3:
-		return "sha3"
-	default:
-		return "ERR:(bad value for HashAlg)"
-	}
-}
 
 type gogoprotobufTest interface {
 	Float32() float32

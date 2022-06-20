@@ -1,4 +1,5 @@
-**/node_modules
+.git/
+**/node_modules/
 
 .dockerignore
 **/.dockerignore
@@ -9,3 +10,6 @@ Dockerfile
 **/*.Dockerfile
 
 demos/desktop-chat-app/main.go
+
+**/node1_data/
+**/node2_data/

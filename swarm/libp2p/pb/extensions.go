@@ -9,7 +9,7 @@ import (
 func MakeBlobProtobuf_FetchManifest(blobID blob.ID) *BlobMessage {
 	return &BlobMessage{
 		Payload: &BlobMessage_FetchManifest_{
-			FetchManifest: &BlobMessage_FetchManifest{Id: blobID.ToProtobuf()},
+			FetchManifest: &BlobMessage_FetchManifest{BlobID: blobID},
 		},
 	}
 }
@@ -17,7 +17,7 @@ func MakeBlobProtobuf_FetchManifest(blobID blob.ID) *BlobMessage {
 func MakeBlobProtobuf_SendManifest(manifest blob.Manifest, exists bool) *BlobMessage {
 	return &BlobMessage{
 		Payload: &BlobMessage_SendManifest_{
-			SendManifest: &BlobMessage_SendManifest{Manifest: manifest.ToProtobuf(), Exists: exists},
+			SendManifest: &BlobMessage_SendManifest{Manifest: manifest, Exists: exists},
 		},
 	}
 }
@@ -25,7 +25,7 @@ func MakeBlobProtobuf_SendManifest(manifest blob.Manifest, exists bool) *BlobMes
 func MakeBlobProtobuf_FetchChunk(sha3 types.Hash) *BlobMessage {
 	return &BlobMessage{
 		Payload: &BlobMessage_FetchChunk_{
-			FetchChunk: &BlobMessage_FetchChunk{Sha3: sha3.Bytes()},
+			FetchChunk: &BlobMessage_FetchChunk{SHA3: sha3.Bytes()},
 		},
 	}
 }

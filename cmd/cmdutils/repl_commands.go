@@ -145,6 +145,7 @@ var defaultREPLCommands = REPLCommands{
 				Subcommands: REPLCommands{
 					"list":      CmdListTxs,
 					"dumpstore": CmdTxStoreDebugPrint,
+					"leaves":    CmdTxStoreLeaves,
 				},
 			},
 			"subscribe": CmdSubscribe,
@@ -176,6 +177,7 @@ var defaultREPLCommands = REPLCommands{
 					"list": CmdLibp2pRelayList,
 				},
 			},
+			"dumpstore": CmdLibp2pStoreDebugPrint,
 		},
 	},
 	"ps": REPLCommand{
@@ -259,9 +261,17 @@ var (
 			if app.Libp2pTransport == nil {
 				return errors.New("libp2p is disabled")
 			}
-			for relay := range app.Libp2pTransport.StaticRelays() {
+			for _, relay := range app.Libp2pTransport.StaticRelays().Slice() {
 				fmt.Println(" -", relay)
 			}
+			return nil
+		},
+	}
+
+	CmdLibp2pStoreDebugPrint = REPLCommand{
+		HelpText: "print the contents of the libp2p store",
+		Handler: func(args []string, app *App) error {
+			app.Libp2pStore.DebugPrint()
 			return nil
 		},
 	}
@@ -286,7 +296,7 @@ var (
 	CmdStateURIs = REPLCommand{
 		HelpText: "list all known state URIs",
 		Handler: func(args []string, app *App) error {
-			stateURIs, err := app.ControllerHub.KnownStateURIs()
+			stateURIs, err := app.ControllerHub.StateURIsWithData()
 			if err != nil {
 				return err
 			}
@@ -341,7 +351,7 @@ var (
 
 			_, err := app.ControllerHub.StateAtVersion(stateURI, nil)
 			var txID state.Version
-			if errors.Cause(err) == tree.ErrNoController {
+			if errors.Cause(err) == errors.Err404 {
 				txID = tree.GenesisTxID
 			} else {
 				txID = state.RandomVersion()
@@ -367,12 +377,14 @@ var (
 			}
 			stateURI := args[0]
 
-			iter := app.TxStore.AllTxsForStateURI(stateURI, tree.GenesisTxID)
-			defer iter.Close()
+			iter, err := app.TxStore.AllTxsForStateURI(stateURI, tree.GenesisTxID)
+			if err != nil {
+				return err
+			}
 
 			var rows [][]string
-			for {
-				tx := iter.Next()
+			for iter.Rewind(); iter.Valid(); iter.Next() {
+				tx := iter.Tx()
 				if tx == nil {
 					break
 				}
@@ -381,6 +393,9 @@ var (
 					parents = append(parents, parent.Hex())
 				}
 				rows = append(rows, []string{tx.ID.Hex(), tx.Status.String(), strings.Join(parents, " ")})
+			}
+			if iter.Err() != nil {
+				app.Errorf("iterator: %v", iter.Err())
 			}
 
 			table := tablewriter.NewWriter(os.Stdout)
@@ -391,6 +406,23 @@ var (
 			table.SetHeader([]string{"ID", "Status", "Parents"})
 			table.AppendBulk(rows)
 			table.Render()
+			return nil
+		},
+	}
+
+	CmdTxStoreLeaves = REPLCommand{
+		HelpText: "print the leaves of the given state URI",
+		Handler: func(args []string, app *App) error {
+			if len(args) < 1 {
+				return errors.New("requires 1 argument: leaves <state URI>")
+			}
+			leaves, err := app.TxStore.Leaves(args[0])
+			if err != nil {
+				return err
+			}
+			for _, leaf := range leaves {
+				app.Infof(0, "- %v", leaf.Hex())
+			}
 			return nil
 		},
 	}
@@ -475,7 +507,7 @@ var (
 			var data [][]string
 			for _, peer := range app.PeerStore.Peers() {
 				for _, e := range peer.Endpoints() {
-					for _, addr := range peer.Addresses() {
+					for addr := range peer.Addresses() {
 						data = append(data, fmtPeerRow(addr.Hex(), e.DeviceUniqueID(), e.DialInfo().DialAddr, e.LastContact(), e.LastFailure(), e.Failures(), e.RemainingBackoff(), e.StateURIs().Slice()))
 					}
 					if len(e.Addresses()) == 0 {

@@ -9,18 +9,19 @@ import (
 	"github.com/aclements/go-rabin/rabin"
 	"golang.org/x/crypto/sha3"
 
+	"redwood.dev/errors"
 	"redwood.dev/types"
 )
 
 type Chunker struct {
-	reader      io.ReadCloser
-	chunker     *rabin.Chunker
-	sha1Hasher  hash.Hash
-	sha3Hasher  hash.Hash
-	tee         io.Reader
-	chunkHashes []types.Hash
-	chunkBuf    *bytes.Buffer
-	size        uint64
+	reader     io.ReadCloser
+	chunker    *rabin.Chunker
+	sha1Hasher hash.Hash
+	sha3Hasher hash.Hash
+	tee        io.Reader
+	manifest   Manifest
+	chunkBuf   *bytes.Buffer
+	done       bool
 }
 
 const (
@@ -47,12 +48,22 @@ func NewChunker(reader io.ReadCloser) *Chunker {
 	}
 }
 
-func (c *Chunker) Next() ([]byte, types.Hash, error) {
+func (c *Chunker) Done() bool {
+	return c.done
+}
+
+func (c *Chunker) Next() ([]byte, ManifestChunk, error) {
 	chunkLen, err := c.chunker.Next()
-	if err != nil {
-		return nil, types.Hash{}, err
+	if errors.Cause(err) == io.EOF {
+		c.done = true
+		return nil, ManifestChunk{}, nil
+	} else if err != nil {
+		c.done = true
+		return nil, ManifestChunk{}, err
 	}
-	c.size += uint64(chunkLen)
+
+	rangeStart := c.manifest.TotalSize
+	c.manifest.TotalSize += uint64(chunkLen)
 
 	// @@TODO: reuse buffer
 	var chunkBuf bytes.Buffer
@@ -61,24 +72,25 @@ func (c *Chunker) Next() ([]byte, types.Hash, error) {
 
 	_, err = io.CopyN(&chunkBuf, chunkTee, int64(chunkLen))
 	if err != nil {
-		return nil, types.Hash{}, err
+		return nil, ManifestChunk{}, err
 	}
 
 	var chunkHash types.Hash
 	chunkHasher.Sum(chunkHash[:0])
-	c.chunkHashes = append(c.chunkHashes, chunkHash)
 
-	return chunkBuf.Bytes(), chunkHash, nil
+	chunk := ManifestChunk{
+		SHA3:  chunkHash,
+		Range: types.Range{Start: rangeStart, End: c.manifest.TotalSize},
+	}
+	c.manifest.Chunks = append(c.manifest.Chunks, chunk)
+
+	return chunkBuf.Bytes(), chunk, nil
 }
 
-func (c *Chunker) Hashes() (sha1 types.Hash, sha3 types.Hash, chunkHashes []types.Hash) {
+func (c *Chunker) Summary() (_ Manifest, sha1, sha3 types.Hash) {
 	c.sha1Hasher.Sum(sha1[:0])
 	c.sha3Hasher.Sum(sha3[:0])
-	return sha1, sha3, c.chunkHashes
-}
-
-func (c *Chunker) Size() uint64 {
-	return c.size
+	return c.manifest, sha1, sha3
 }
 
 func (c *Chunker) Close() error {

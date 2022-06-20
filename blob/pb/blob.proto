@@ -12,19 +12,26 @@ option (gogoproto.verbose_equal_all) = true;
 option (gogoproto.goproto_stringer_all) = false;
 option (gogoproto.stringer_all) =  true;
 option (gogoproto.populate_all) = true;
-option (gogoproto.testgen_all) = true;
+option (gogoproto.testgen_all) = false;
 option (gogoproto.benchgen_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.sizer_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
 
-message BlobID {
-    Redwood.types.HashAlg hashAlg = 1;
-    bytes hash = 2;
+message ID {
+    option (gogoproto.stringer) = false;
+
+    Redwood.types.HashAlg hashAlg = 1 [(gogoproto.moretags) = "tree:\"hashAlg\""];
+    bytes hash = 2                    [(gogoproto.moretags) = "tree:\"hash\"",    (gogoproto.customtype) = "redwood.dev/types.Hash", (gogoproto.nullable) = false];
 }
 
 message Manifest {
-    uint64 size = 1;
-    repeated bytes chunkSHA3s = 2;
+    uint64 totalSize = 1               [(gogoproto.moretags) = "tree:\"totalSize\""];
+    repeated ManifestChunk chunks = 2  [(gogoproto.moretags) = "tree:\"chunks\"", (gogoproto.nullable) = false];
+}
+
+message ManifestChunk {
+    bytes sha3 = 1                [(gogoproto.moretags) = "tree:\"sha3\"", (gogoproto.customtype) = "redwood.dev/types.Hash", (gogoproto.customname) = "SHA3", (gogoproto.nullable) = false];
+    Redwood.types.Range range = 2 [(gogoproto.moretags) = "tree:\"range\"", (gogoproto.nullable) = false];
 }
