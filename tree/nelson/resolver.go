@@ -8,7 +8,6 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/types"
-	"redwood.dev/utils"
 )
 
 type Resolver struct {
@@ -233,8 +232,6 @@ func (r Resolver) Resolve(stateNode state.Node) (resolved state.Node, anyMissing
 	for len(stack) > 0 {
 		item := stack[0]
 		stack = stack[1:]
-
-		item.node.DebugPrint(utils.PrintfDebugPrinter, true, 0)
 
 		switch typedNode := item.node.(type) {
 		case Frame:

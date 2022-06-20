@@ -1,3 +1,12 @@
+FROM node:latest AS embed
+
+ADD ./embed /build/embed/
+WORKDIR /build/embed
+RUN yarn
+
+
+
+
 FROM golang:1.18.0-buster AS build
 
 RUN apt update
@@ -22,9 +31,10 @@ ADD ./tree /build/tree/
 ADD ./types /build/types/
 ADD ./utils /build/utils/
 
+COPY --from=embed /build/embed/node_modules /build/embed/node_modules
+
 WORKDIR /build/cmd/redwood
 RUN go get -d
-
 RUN go build -o /redwood .
 
 

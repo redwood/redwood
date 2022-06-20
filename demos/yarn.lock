@@ -342,10 +342,10 @@
     "@ethersproject/properties" "^5.6.0"
     "@ethersproject/strings" "^5.6.0"
 
-"@redwood.dev/client@0.3.0":
-  version "0.3.0"
-  resolved "https://registry.yarnpkg.com/@redwood.dev/client/-/client-0.3.0.tgz#b5381deee609847bb10482e020ca6dde04b70c0b"
-  integrity sha512-iF/XUdEUh5PoVIRfz3XiE3fjubMgh7FYhl+pdJy6DgDOL6qWyqjiuh7G/7QSOm/nqUKTOiswXQCk3G7hRpMmSQ==
+"@redwood.dev/client@0.3.10":
+  version "0.3.10"
+  resolved "https://registry.yarnpkg.com/@redwood.dev/client/-/client-0.3.10.tgz#61953df89959be2a6416571fbe22d96639a1dcdf"
+  integrity sha512-9TOBejQ20vGM4VKnFNSHquEllZ6OLUM1KTPjLtsKbyxnW/wbv4tOFepq3UhyAyeDbkj+iI2095xevZvlcJxQPQ==
   dependencies:
     "@types/json-stable-stringify" "^1.0.32"
     "@types/react" "^17.0.2"

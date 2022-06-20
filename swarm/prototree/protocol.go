@@ -771,29 +771,6 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 	return ch
 }
 
-func (tp *treeProtocol) peerInfosToPeerConns(ctx context.Context, peerInfos []swarm.PeerDevice) []TreePeerConn {
-	var conns []TreePeerConn
-	for _, peerInfo := range peerInfos {
-		for _, e := range peerInfo.Endpoints() {
-			dialInfo := e.DialInfo()
-			tpt, exists := tp.Transports[dialInfo.TransportName]
-			if !exists {
-				continue
-			}
-			peerConn, err := tpt.NewPeerConn(ctx, dialInfo.DialAddr)
-			if err != nil {
-				continue
-			}
-			treePeerConn, is := peerConn.(TreePeerConn)
-			if !is {
-				continue
-			}
-			conns = append(conns, treePeerConn)
-		}
-	}
-	return conns
-}
-
 func (tp *treeProtocol) handleNewState(tx tree.Tx, node state.Node, leaves []state.Version, diff *state.Diff) {
 	switch tp.acl.TypeOf(tx.StateURI) {
 	case StateURIType_Invalid:

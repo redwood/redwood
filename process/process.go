@@ -74,7 +74,7 @@ func (p *Process) Start() error {
 	defer p.mu.Unlock()
 
 	if p.state != Unstarted {
-		panic("already started")
+		panic(p.name + " already started")
 	}
 	p.state = Started
 
@@ -89,7 +89,7 @@ func (p *Process) Close() error {
 			defer p.mu.Unlock()
 
 			if p.state != Started {
-				panic("not started")
+				panic(p.name + " not started")
 			}
 			p.state = Closed
 		}()
@@ -169,7 +169,9 @@ func (p *Process) SpawnChild(ctx context.Context, child Spawnable) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.state != Started {
+	if p.state == Unstarted {
+		panic(p.name + " can't spawn children; not started")
+	} else if p.state == Closed {
 		return nil
 	}
 

@@ -40,14 +40,14 @@ func NewDBTree(badgerOpts badger.Options) (*DBTree, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.RunValueLogGC(0.5)
+	db.RunValueLogGC(0.3)
 	chStop := make(chan struct{})
 	var wgDone sync.WaitGroup
 	wgDone.Add(1)
 	go func() {
 		defer wgDone.Done()
 		for {
-			db.RunValueLogGC(0.5)
+			db.RunValueLogGC(0.3)
 			select {
 			case <-time.After(1 * time.Minute):
 			case <-chStop:

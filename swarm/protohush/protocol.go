@@ -97,8 +97,6 @@ func NewHushProtocol(
 ) *hushProtocol {
 	transportsMap := make(map[string]HushTransport)
 	for _, tpt := range transports {
-		_, is := tpt.(HushTransport)
-		log.NewLogger("protohush").Infof(0, "TPT %v: %v", tpt.Name(), is)
 		if tpt, is := tpt.(HushTransport); is {
 			transportsMap[tpt.Name()] = tpt
 		}

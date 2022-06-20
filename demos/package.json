@@ -1,7 +1,6 @@
 {
-  "name": "embed",
+  "name": "redwood-demos",
   "version": "1.0.0",
-  "main": "index.js",
   "license": "MIT",
   "dependencies": {
     "@redwood.dev/client": "0.3.12"

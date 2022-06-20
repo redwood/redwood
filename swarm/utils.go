@@ -14,7 +14,30 @@ type BaseProtocol[T Transport, P PeerConn] struct {
 	Transports map[string]T
 }
 
-func (t BaseProtocol[T, P]) TryPeerDevices(
+func (p BaseProtocol[T, P]) peerInfosToPeerConns(ctx context.Context, peerInfos []PeerDevice) []P {
+	var conns []P
+	for _, peerInfo := range peerInfos {
+		for _, e := range peerInfo.Endpoints() {
+			dialInfo := e.DialInfo()
+			tpt, exists := p.Transports[dialInfo.TransportName]
+			if !exists {
+				continue
+			}
+			peerConn, err := tpt.NewPeerConn(ctx, dialInfo.DialAddr)
+			if err != nil {
+				continue
+			}
+			typedPeerConn, is := peerConn.(P)
+			if !is {
+				continue
+			}
+			conns = append(conns, typedPeerConn)
+		}
+	}
+	return conns
+}
+
+func (p BaseProtocol[T, P]) TryPeerDevices(
 	ctx context.Context,
 	parent *process.Process,
 	peerDevices []PeerDevice,
@@ -26,9 +49,7 @@ func (t BaseProtocol[T, P]) TryPeerDevices(
 	defer child.AutocloseWithCleanup(cancel)
 
 	for _, peer := range peerDevices {
-		t.TryEndpoints(ctx, child, peer, func(ctx context.Context, peerConn P) error {
-			return fn(ctx, peerConn)
-		})
+		p.TryEndpoints(ctx, child, peer, fn)
 	}
 
 	return child.Done()
