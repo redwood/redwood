@@ -20,7 +20,6 @@ import (
 	"redwood.dev/utils"
 )
 
-//go:generate mockery --name PeerManager --output ./mocks/ --case=underscore
 type PeerManager interface {
 	process.Interface
 	NewPeerConn(ctx context.Context, dialAddr string) (swarm.PeerConn, error)

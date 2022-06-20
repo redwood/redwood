@@ -94,7 +94,7 @@ type allValidTxsForStateURIOrderedIterator struct {
 	currentTx *Tx
 	err       error
 	fromTxID  state.Version
-	sent      map[state.Version]struct{}
+	sent      types.Set[state.Version]
 }
 
 func NewAllValidTxsForStateURIOrderedIterator(
@@ -114,7 +114,7 @@ var l = log.NewLogger("ITER")
 func (iter *allValidTxsForStateURIOrderedIterator) Rewind() {
 	iter.currentTx = nil
 	iter.stack = []state.Version{iter.fromTxID}
-	iter.sent = make(map[state.Version]struct{})
+	iter.sent = types.NewSet[state.Version](nil)
 	iter.Next()
 }
 
@@ -129,10 +129,10 @@ func (iter *allValidTxsForStateURIOrderedIterator) Next() {
 		txID := iter.stack[0]
 		iter.stack = iter.stack[1:]
 
-		if _, exists := iter.sent[txID]; exists {
+		if iter.sent.Contains(txID) {
 			continue
 		}
-		iter.sent[txID] = struct{}{}
+		iter.sent.Add(txID)
 
 		tx, err := iter.txStore.FetchTx(iter.stateURI, txID)
 		if err != nil {

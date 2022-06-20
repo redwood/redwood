@@ -86,3 +86,21 @@ func (alg HashAlg) String() string {
 		return "ERR:(bad value for HashAlg)"
 	}
 }
+
+func (alg HashAlg) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + alg.String() + `"`), nil
+}
+
+func (alg *HashAlg) UnmarshalJSON(bs []byte) error {
+	switch string(bs) {
+	case `"unknown"`:
+		*alg = HashAlgUnknown
+	case `"sha1"`, `"SHA1"`:
+		*alg = SHA1
+	case `"sha3"`, `"SHA3"`:
+		*alg = SHA3
+	default:
+		return errors.Errorf("ERR:(bad value for HashAlg: '%v')", string(bs))
+	}
+	return nil
+}

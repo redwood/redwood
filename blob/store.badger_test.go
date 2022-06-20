@@ -301,8 +301,8 @@ func TestStore(t *testing.T) {
 		manifest := blob.Manifest{
 			TotalSize: uint64(len(foo) + len(bar)),
 			Chunks: []blob.ManifestChunk{
-				{fooHash, types.Range{12, 34, false}},
-				{barHash, types.Range{56, 78, false}},
+				{fooHash, types.Range{0, uint64(len(foo)), false}},
+				{barHash, types.Range{uint64(len(foo)), uint64(len(foo) + len(bar)), false}},
 			},
 		}
 		blobID := blob.ID{
@@ -353,8 +353,8 @@ func TestStore(t *testing.T) {
 		manifest2 := blob.Manifest{
 			TotalSize: uint64(len(bar) + len(baz)),
 			Chunks: []blob.ManifestChunk{
-				{barSHA3, types.Range{12, 34, false}},
-				{bazSHA3, types.Range{56, 78, false}},
+				{barSHA3, types.Range{0, uint64(len(bar)), false}},
+				{bazSHA3, types.Range{uint64(len(bar)), uint64(len(bar) + len(baz)), false}},
 			},
 		}
 		blobID2 := blob.ID{HashAlg: types.SHA3, Hash: blob2SHA3}
@@ -378,8 +378,8 @@ func TestStore(t *testing.T) {
 		manifest3 := blob.Manifest{
 			TotalSize: uint64(len(quux) + len(zork)),
 			Chunks: []blob.ManifestChunk{
-				{quuxSHA3, types.Range{12, 34, false}},
-				{zorkSHA3, types.Range{56, 78, false}},
+				{quuxSHA3, types.Range{0, uint64(len(quux)), false}},
+				{zorkSHA3, types.Range{uint64(len(quux)), uint64(len(quux) + len(zork)), false}},
 			},
 		}
 		blobID3 := blob.ID{HashAlg: types.SHA3, Hash: blob3SHA3}

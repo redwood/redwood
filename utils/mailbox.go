@@ -42,17 +42,17 @@ func (m *Mailbox[T]) Deliver(x T) {
 	}
 }
 
-func (m *Mailbox[T]) Retrieve() T {
+func (m *Mailbox[T]) Retrieve() (T, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if len(m.queue) == 0 {
 		var x T
-		return x
+		return x, false
 	}
 	x := m.queue[len(m.queue)-1]
 	m.queue = m.queue[:len(m.queue)-1]
-	return x
+	return x, true
 }
 
 func (m *Mailbox[T]) RetrieveAll() []T {

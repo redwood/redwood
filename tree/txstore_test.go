@@ -48,12 +48,12 @@ func TestAllValidTxsForStateURIOrderedIterator(t *testing.T) {
 	txStore := new(mocks.TxStore)
 
 	txs := []tree.Tx{
-		{StateURI: stateURI, ID: state.Version{0x1}},
-		{StateURI: stateURI, ID: state.Version{0x2}},
-		{StateURI: stateURI, ID: state.Version{0x3}},
-		{StateURI: stateURI, ID: state.Version{0x4}},
-		{StateURI: stateURI, ID: state.Version{0x5}},
-		{StateURI: stateURI, ID: state.Version{0x6}},
+		{StateURI: stateURI, ID: state.Version{0x1}, Status: tree.TxStatusValid},
+		{StateURI: stateURI, ID: state.Version{0x2}, Status: tree.TxStatusValid},
+		{StateURI: stateURI, ID: state.Version{0x3}, Status: tree.TxStatusValid},
+		{StateURI: stateURI, ID: state.Version{0x4}, Status: tree.TxStatusValid},
+		{StateURI: stateURI, ID: state.Version{0x5}, Status: tree.TxStatusValid},
+		{StateURI: stateURI, ID: state.Version{0x6}, Status: tree.TxStatusValid},
 	}
 	txs[0].Children = []state.Version{txs[1].ID, txs[2].ID}
 	txs[1].Children = []state.Version{txs[3].ID}
@@ -80,6 +80,7 @@ func TestAllValidTxsForStateURIOrderedIterator(t *testing.T) {
 		require.Equal(t, txs[i], *iter.Tx())
 		i++
 	}
+	require.NoError(t, iter.Err())
 
 	txStore.AssertExpectations(t)
 }

@@ -14,7 +14,7 @@ type BaseProtocol[T Transport, P PeerConn] struct {
 	Transports map[string]T
 }
 
-func (p BaseProtocol[T, P]) peerInfosToPeerConns(ctx context.Context, peerInfos []PeerDevice) []P {
+func (p BaseProtocol[T, P]) PeerInfosToPeerConns(ctx context.Context, peerInfos []PeerDevice) []P {
 	var conns []P
 	for _, peerInfo := range peerInfos {
 		for _, e := range peerInfo.Endpoints() {

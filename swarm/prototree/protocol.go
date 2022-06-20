@@ -700,7 +700,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 				peerInfos = append(peerInfos, tp.peerStore.PeersWithAddress(addr)...)
 			}
 
-			peerConns := tp.peerInfosToPeerConns(ctx, peerInfos)
+			peerConns := tp.PeerInfosToPeerConns(ctx, peerInfos)
 			for _, peerConn := range peerConns {
 				if _, exists := alreadySent.LoadOrStore(peerConn.DialInfo(), struct{}{}); exists {
 					continue
@@ -722,7 +722,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 		})
 
 		child.Go(nil, "from PeerStore", func(ctx context.Context) {
-			peerConns := tp.peerInfosToPeerConns(ctx, tp.peerStore.PeersServingStateURI(stateURI))
+			peerConns := tp.PeerInfosToPeerConns(ctx, tp.peerStore.PeersServingStateURI(stateURI))
 			for _, peerConn := range peerConns {
 				if _, exists := alreadySent.LoadOrStore(peerConn.DialInfo(), struct{}{}); exists {
 					continue

@@ -173,11 +173,11 @@ func (p *peerPool[P]) GetPeer(ctx context.Context) (_ P, err error) {
 	for {
 		select {
 		case <-p.Process.Done():
-            var p P
-            return p, process.ErrClosed
+			var p P
+			return p, process.ErrClosed
 
 		case <-ctx.Done():
-            var p P
+			var p P
 			return p, ctx.Err()
 
 		case peer := <-p.chPeers:

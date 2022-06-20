@@ -33,11 +33,11 @@ func TestMailbox(t *testing.T) {
 				return
 			case <-m.Notify():
 				for {
-					x := m.Retrieve()
-					if x == nil {
+					x, ok := m.Retrieve()
+					if !ok {
 						break
 					}
-					recvd = append(recvd, x.(int))
+					recvd = append(recvd, x)
 				}
 			}
 		}
