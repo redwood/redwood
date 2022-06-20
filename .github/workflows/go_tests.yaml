@@ -26,6 +26,9 @@ jobs:
                 mkdir -p embed/node_modules/@redwood.dev/client/browser
                 touch embed/node_modules/@redwood.dev/client/browser/index.js
 
+            - name: Remove git-remote-helper
+              run: rm -rf cmd/git-remote-helper
+
             - name: Run tests
-              run: go test -v ./...
+              run: go test -v -tags=test ./...
 
