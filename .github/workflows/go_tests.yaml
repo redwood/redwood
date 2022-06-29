@@ -32,3 +32,12 @@ jobs:
             - name: Run tests
               run: go test -v -tags=test ./...
 
+    golangci_lint:
+        name: golangci-lint
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v2
+          - name: golangci-lint
+            uses: golangci/golangci-lint-action@v2
+            with:
+                version: latest
