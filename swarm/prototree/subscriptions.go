@@ -12,8 +12,10 @@ import (
 	"redwood.dev/process"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
+	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
+	. "redwood.dev/utils/generics"
 )
 
 type SubscriptionRequest struct {
@@ -21,7 +23,7 @@ type SubscriptionRequest struct {
 	Keypath          state.Keypath
 	Type             SubscriptionType
 	FetchHistoryOpts *FetchHistoryOpts
-	Addresses        types.Set[types.Address]
+	Addresses        Set[types.Address]
 }
 
 type ReadableSubscription interface {
@@ -34,7 +36,7 @@ type WritableSubscription interface {
 	StateURI() string
 	Keypath() state.Keypath
 	Type() SubscriptionType
-	Addresses() types.Set[types.Address]
+	Addresses() Set[types.Address]
 	EnqueueWrite(msg SubscriptionMsg)
 	String() string
 }
@@ -46,7 +48,7 @@ type writableSubscription struct {
 	stateURI         string
 	keypath          state.Keypath
 	subscriptionType SubscriptionType
-	addresses        types.Set[types.Address]
+	addresses        Set[types.Address]
 	isPrivate        bool
 	treeProtocol     *treeProtocol
 	subImpl          WritableSubscriptionImpl
@@ -66,7 +68,7 @@ func newWritableSubscription(
 	keypath state.Keypath,
 	subscriptionType SubscriptionType,
 	isPrivate bool,
-	addresses types.Set[types.Address],
+	addresses Set[types.Address],
 	subImpl WritableSubscriptionImpl,
 ) *writableSubscription {
 	return &writableSubscription{
@@ -153,10 +155,10 @@ func (sub *writableSubscription) writeMessages(ctx context.Context) (err error) 
 	return nil
 }
 
-func (sub *writableSubscription) StateURI() string                    { return sub.stateURI }
-func (sub *writableSubscription) Type() SubscriptionType              { return sub.subscriptionType }
-func (sub *writableSubscription) Keypath() state.Keypath              { return sub.keypath }
-func (sub *writableSubscription) Addresses() types.Set[types.Address] { return sub.addresses }
+func (sub *writableSubscription) StateURI() string              { return sub.stateURI }
+func (sub *writableSubscription) Type() SubscriptionType        { return sub.subscriptionType }
+func (sub *writableSubscription) Keypath() state.Keypath        { return sub.keypath }
+func (sub *writableSubscription) Addresses() Set[types.Address] { return sub.addresses }
 
 func (sub *writableSubscription) EnqueueWrite(msg SubscriptionMsg) {
 	sub.messages.Deliver(msg)
@@ -229,8 +231,9 @@ func (s *multiReaderSubscription) Start() error {
 			// getPeerBackoff.Reset()
 
 			s.Process.Go(ctx, "readUntilErrorOrShutdown "+treePeer.DialInfo().String(), func(ctx context.Context) {
-				defer s.peerPool.ReturnPeer(treePeer, false)
-				s.readUntilErrorOrShutdown(ctx, treePeer)
+				var strike bool
+				defer func() { s.peerPool.ReturnPeer(treePeer, strike) }()
+				strike = s.readUntilErrorOrShutdown(ctx, treePeer)
 			})
 		}
 	})
@@ -257,39 +260,47 @@ func (s *multiReaderSubscription) getPeer(ctx context.Context) (TreePeerConn, er
 	}
 }
 
-func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, peerConn TreePeerConn) {
+func (s *multiReaderSubscription) readUntilErrorOrShutdown(ctx context.Context, peerConn TreePeerConn) (strike bool) {
 	ctxConnect, cancelConnect := context.WithTimeout(ctx, 10*time.Second)
 	defer cancelConnect()
 
 	err := peerConn.EnsureConnected(ctxConnect)
 	if errors.Cause(err) == errors.ErrConnection {
 		s.Errorf("error connecting to %v peer (stateURI: %v): %v", peerConn.Transport().Name(), s.stateURI, err)
-		return
+		return true
 	} else if err != nil {
 		s.Errorf("error connecting to %v peer (stateURI: %v): %v", peerConn.Transport().Name(), s.stateURI, err)
-		return
+		return true
 	}
 	defer peerConn.Close()
 
 	peerSub, err := peerConn.Subscribe(ctx, s.stateURI)
 	if err != nil {
 		s.Errorf("error subscribing to peer %v (stateURI: %v): %v", peerConn.DialInfo(), s.stateURI, err)
-		return
+		return true
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return false
 		case <-s.Process.Done():
-			return
+			return false
 		default:
 		}
 
 		msg, err := peerSub.Read()
 		if err != nil {
-			s.Errorf("while reading from peer subscription (%v): %v", peerConn.DialInfo(), err)
-			return
+			now := time.Now()
+			s.Errorw("while reading from peer subscription",
+				"err", err,
+				"peer", peerConn.DialInfo(),
+				"lastcontact", now.Sub(peerConn.LastContact()),
+				"lastfailure", now.Sub(peerConn.LastFailure()),
+				"failures", peerConn.Failures(),
+				"ready", peerConn.Ready(),
+			)
+			return false
 		}
 
 		s.onMessageReceived(msg, peerConn)
@@ -364,15 +375,15 @@ func (sub *inProcessSubscription) Read() (SubscriptionMsg, error) {
 }
 
 type StateURISubscription interface {
-	Read(ctx context.Context) (string, error)
+	Read(ctx context.Context) (tree.StateURI, error)
 	Close() error
 }
 
 type stateURISubscription struct {
 	process.Process
 	store       Store
-	mailbox     *utils.Mailbox[string]
-	ch          chan string
+	mailbox     *utils.Mailbox[tree.StateURI]
+	ch          chan tree.StateURI
 	unsubscribe func()
 }
 
@@ -380,8 +391,8 @@ func newStateURISubscription(store Store) *stateURISubscription {
 	return &stateURISubscription{
 		Process: *process.New("stateURI subscription"),
 		store:   store,
-		mailbox: utils.NewMailbox[string](0),
-		ch:      make(chan string),
+		mailbox: utils.NewMailbox[tree.StateURI](0),
+		ch:      make(chan tree.StateURI),
 	}
 }
 
@@ -420,11 +431,11 @@ func (sub *stateURISubscription) Close() error {
 	return sub.Process.Close()
 }
 
-func (sub *stateURISubscription) put(stateURI string) {
+func (sub *stateURISubscription) put(stateURI tree.StateURI) {
 	sub.mailbox.Deliver(stateURI)
 }
 
-func (sub *stateURISubscription) Read(ctx context.Context) (string, error) {
+func (sub *stateURISubscription) Read(ctx context.Context) (tree.StateURI, error) {
 	select {
 	case <-ctx.Done():
 		return "", ctx.Err()

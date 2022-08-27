@@ -7,11 +7,17 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/brynbellomy/go-structomancer"
 
 	"redwood.dev/errors"
 )
+
+type EncryptionConfig struct {
+	Key                 []byte        `json:"key"`
+	KeyRotationInterval time.Duration `json:"rotationInterval"`
+}
 
 const StructTag = "tree"
 
@@ -49,7 +55,7 @@ func DecodeSliceLen(k Keypath) uint64 {
 func convertKeypathToType(keypath Keypath, typ reflect.Type) (reflect.Value, error) {
 	if typ.Implements(mapKeyScannerType) {
 		val := reflect.New(typ).Elem().Interface().(MapKeyScanner)
-		err := val.ScanMapKey(keypath)
+		err := val.ScanMapKey([]byte(keypath))
 		if err != nil {
 			return reflect.Value{}, errors.Wrapf(err, "while scanning map key")
 		}
@@ -57,7 +63,7 @@ func convertKeypathToType(keypath Keypath, typ reflect.Type) (reflect.Value, err
 
 	} else if reflect.PtrTo(typ).Implements(mapKeyScannerType) {
 		val := reflect.New(typ).Interface().(MapKeyScanner)
-		err := val.ScanMapKey(keypath)
+		err := val.ScanMapKey([]byte(keypath))
 		if err != nil {
 			return reflect.Value{}, errors.Wrapf(err, "while scanning map key")
 		}
@@ -168,11 +174,11 @@ func convertKeypathToType(keypath Keypath, typ reflect.Type) (reflect.Value, err
 }
 
 type MapKeyScanner interface {
-	ScanMapKey(keypath Keypath) error
+	ScanMapKey(keypath []byte) error
 }
 
 type MapKey interface {
-	MapKey() (Keypath, error)
+	MapKey() ([]byte, error)
 }
 
 type StateBytesUnmarshaler interface {
@@ -200,7 +206,11 @@ var (
 
 func convertToKeypath(val reflect.Value) (Keypath, error) {
 	if val.Type().Implements(mapKeySetterType) {
-		return val.Interface().(MapKey).MapKey()
+		kp, err := val.Interface().(MapKey).MapKey()
+		if err != nil {
+			return nil, err
+		}
+		return Keypath(kp), nil
 	}
 
 	switch val.Kind() {

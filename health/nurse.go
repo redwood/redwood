@@ -50,7 +50,7 @@ type gatherRequest struct {
 	meta   Meta
 }
 
-type Meta map[string]interface{}
+type Meta []any
 
 const profilePerms = 0666
 
@@ -136,8 +136,8 @@ func (n *Nurse) checkMem() (bool, Meta) {
 		return false, nil
 	}
 	return true, Meta{
-		"mem_alloc": utils.FileSize(memStats.Alloc),
-		"threshold": n.cfg.MemThreshold,
+		"mem_alloc", utils.FileSize(memStats.Alloc),
+		"threshold", n.cfg.MemThreshold,
 	}
 }
 
@@ -148,23 +148,23 @@ func (n *Nurse) checkGoroutines() (bool, Meta) {
 		return false, nil
 	}
 	return true, Meta{
-		"num_goroutine": num,
-		"threshold":     n.cfg.GoroutineThreshold,
+		"num_goroutine", num,
+		"threshold", n.cfg.GoroutineThreshold,
 	}
 }
 
 func (n *Nurse) gatherVitals(reason string, meta Meta) {
-	loggerFields := (log.Fields{"reason": reason}).Merge(log.Fields(meta))
+	loggerFields := append([]any{"reason", reason}, meta...)
 
-	n.Debugw("Nurse is gathering vitals", loggerFields)
+	n.Debugw("Nurse is gathering vitals", loggerFields...)
 
 	size, err := n.totalProfileBytes()
 	if err != nil {
-		n.Errorw("could not fetch total profile bytes", loggerFields.With(log.Fields{"error": err}))
+		n.Errorw("could not fetch total profile bytes", append(loggerFields, "error", err)...)
 		return
 	} else if size >= uint64(n.cfg.MaxProfileSize) {
 		n.Warnw("cannot write pprof profile, total profile size exceeds configured PPROF_MAX_PROFILE_SIZE",
-			loggerFields.With("total", size, "max", n.cfg.MaxProfileSize),
+			append(loggerFields, "total", size, "max", n.cfg.MaxProfileSize)...,
 		)
 		return
 	}

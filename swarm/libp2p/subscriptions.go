@@ -8,8 +8,9 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/process"
+	"redwood.dev/swarm/libp2p/pb"
 	"redwood.dev/swarm/prototree"
-	"redwood.dev/tree"
+	"redwood.dev/utils"
 )
 
 type readableSubscription struct {
@@ -18,24 +19,19 @@ type readableSubscription struct {
 
 var _ prototree.ReadableSubscription = (*readableSubscription)(nil)
 
-func (sub *readableSubscription) Read() (_ prototree.SubscriptionMsg, err error) {
-	msg, err := sub.readMsg()
+func (sub *readableSubscription) Read() (prototree.SubscriptionMsg, error) {
+	var msg pb.TreeMessage
+	err := sub.readProtobuf(nil, &msg) // Nil context so that we don't time out while waiting for new txs
 	if err != nil {
 		return prototree.SubscriptionMsg{}, errors.Errorf("error reading from subscription: %v", err)
 	}
 
-	switch msg.Type {
-	case msgType_Tx:
-		tx := msg.Payload.(tree.Tx)
-		return prototree.SubscriptionMsg{Tx: &tx}, nil
-
-	case msgType_EncryptedTx:
-		encryptedTx := msg.Payload.(prototree.EncryptedTx)
-		return prototree.SubscriptionMsg{EncryptedTx: &encryptedTx}, nil
-
-	default:
-		return prototree.SubscriptionMsg{}, errors.New("protocol error, expecting msgType_Tx or msgType_EncryptedTx")
+	if tx := msg.GetTx(); tx != nil {
+		return prototree.SubscriptionMsg{Tx: tx}, nil
+	} else if etx := msg.GetEncryptedTx(); etx != nil {
+		return prototree.SubscriptionMsg{EncryptedTx: &etx.EncryptedTx}, nil
 	}
+	return prototree.SubscriptionMsg{}, errors.Errorf("protocol error, expecting Tx or EncryptedTx: %v", utils.PrettyJSON(msg))
 }
 
 type writableSubscription struct {
@@ -59,7 +55,7 @@ func (sub *writableSubscription) Start() error {
 }
 
 func (sub *writableSubscription) Close() error {
-	sub.Infof(0, "libp2p writable subscription closed (%v)", sub.stateURI)
+	sub.Infof("libp2p writable subscription closed (%v)", sub.stateURI)
 	return multierr.Append(
 		sub.peerConn.Close(),
 		sub.Process.Close(),
@@ -67,12 +63,12 @@ func (sub *writableSubscription) Close() error {
 }
 
 func (sub *writableSubscription) Put(ctx context.Context, msg prototree.SubscriptionMsg) (err error) {
-	err = sub.peerConn.EnsureConnected(ctx)
-	if err != nil {
-		return err
-	}
+	// err = sub.peerConn.EnsureConnected(ctx)
+	// if err != nil {
+	// 	return err
+	// }
 	if msg.EncryptedTx != nil {
-		return sub.peerConn.SendPrivateTx(ctx, *msg.EncryptedTx)
+		return sub.peerConn.SendEncryptedTx(ctx, *msg.EncryptedTx)
 	} else if msg.Tx != nil {
 		return sub.peerConn.SendTx(ctx, *msg.Tx)
 	} else {

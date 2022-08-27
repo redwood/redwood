@@ -26,11 +26,11 @@ var (
 
 type StateURI string
 
-func (s StateURI) MapKey() (state.Keypath, error) {
-	return state.Keypath(url.QueryEscape(string(s))), nil
+func (s StateURI) MapKey() ([]byte, error) {
+	return []byte(url.QueryEscape(string(s))), nil
 }
 
-func (s *StateURI) ScanMapKey(keypath state.Keypath) error {
+func (s *StateURI) ScanMapKey(keypath []byte) error {
 	stateURI, err := url.QueryUnescape(string(keypath))
 	if err != nil {
 		return err

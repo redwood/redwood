@@ -210,7 +210,7 @@ func (p *peerPool[P]) GetPeer(ctx context.Context) (_ P, err error) {
 }
 
 func (p *peerPool[P]) peerIsEligible(peerConn P) bool {
-	return peerConn.Ready() && len(peerConn.Addresses()) > 0 // && !p.deviceIDAlreadyActive(peerConn.DeviceUniqueID())
+	return peerConn.Ready() && len(peerConn.Addresses()) > 0 && !p.deviceIDAlreadyActive(peerConn.DeviceUniqueID())
 }
 
 func (p *peerPool[P]) deviceIDAlreadyActive(deviceID string) bool {
@@ -236,7 +236,12 @@ func (p *peerPool[P]) ReturnPeer(peer P, strike bool) {
 	defer p.sem.Release(1)
 
 	if strike {
-		p.setPeerState(peer, peerState_Strike)
+		p.setPeerState(peer, peerState_Unknown)
+		peer.UpdateConnStats(false)
+		if peer.Ready() {
+			// panic("wtf")
+		}
+		p.peersInTimeout.Deliver(peer)
 
 	} else {
 		// Return the peer to the pool

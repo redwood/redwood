@@ -6,7 +6,7 @@ import (
 
 	"redwood.dev/errors"
 	"redwood.dev/state/pb"
-	"redwood.dev/utils"
+	"redwood.dev/types"
 )
 
 var (
@@ -31,20 +31,20 @@ type Node interface {
 	Exists(keypath Keypath) (bool, error)
 	NodeAt(keypath Keypath, rng *Range) Node
 	ParentNodeFor(keypath Keypath) (Node, Keypath)
-	DebugPrint(printFn func(inFormat string, args ...interface{}), newlines bool, indentLevel int)
+	DebugPrint(printFn func(inFormat string, args ...any), newlines bool, indentLevel int)
 
-	Value(keypath Keypath, rng *Range) (interface{}, bool, error)
+	Value(keypath Keypath, rng *Range) (any, bool, error)
 	UintValue(keypath Keypath) (uint64, bool, error)
 	IntValue(keypath Keypath) (int64, bool, error)
 	FloatValue(keypath Keypath) (float64, bool, error)
 	BoolValue(keypath Keypath) (bool, bool, error)
 	StringValue(keypath Keypath) (string, bool, error)
 	BytesValue(keypath Keypath) ([]byte, bool, error)
-	MapValue(keypath Keypath) (map[string]interface{}, bool, error)
-	SliceValue(keypath Keypath) ([]interface{}, bool, error)
-	Scan(into interface{}) error
+	MapValue(keypath Keypath) (map[string]any, bool, error)
+	SliceValue(keypath Keypath) ([]any, bool, error)
+	Scan(into any) error
 
-	Set(keypath Keypath, rng *Range, val interface{}) error
+	Set(keypath Keypath, rng *Range, val any) error
 	Delete(keypath Keypath, rng *Range) error
 
 	Diff() *Diff
@@ -62,7 +62,7 @@ type NodeRange interface {
 	Length() (uint64, error)
 	Subkeys() []Keypath
 	NumSubkeys() uint64
-	Value(keypath Keypath, rng *Range) (interface{}, bool, error)
+	Value(keypath Keypath, rng *Range) (any, bool, error)
 }
 
 type NodeType uint8
@@ -230,12 +230,8 @@ func (d *Diff) Copy() *Diff {
 
 type Version [32]byte
 
-var (
-	CurrentVersion = Version{}
-)
-
 func RandomVersion() Version {
-	bs := utils.RandomBytes(len(Version{}))
+	bs := types.RandomBytes(len(Version{}))
 	var v Version
 	copy(v[:], bs)
 	return v
@@ -329,15 +325,15 @@ func (id Version) Equal(other Version) bool  { return bytes.Equal(id[:], other[:
 
 func NewPopulatedVersion(_ gogoprotobufTest) *Version {
 	var id Version
-	copy(id[:], utils.RandomBytes(32))
+	copy(id[:], types.RandomBytes(32))
 	return &id
 }
 
-func (id Version) MapKey() (Keypath, error) {
-	return Keypath(id.Hex()), nil
+func (id Version) MapKey() ([]byte, error) {
+	return []byte(id.Hex()), nil
 }
 
-func (id *Version) ScanMapKey(keypath Keypath) error {
+func (id *Version) ScanMapKey(keypath []byte) error {
 	bs, err := hex.DecodeString(string(keypath))
 	if err != nil {
 		return err

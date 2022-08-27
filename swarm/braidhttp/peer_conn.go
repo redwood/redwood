@@ -3,7 +3,6 @@ package braidhttp
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"redwood.dev/blob"
+	"redwood.dev/crypto"
 	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
@@ -20,19 +20,21 @@ import (
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
+	. "redwood.dev/utils/generics"
 )
 
 type peerConn struct {
 	swarm.PeerEndpoint
 
-	t                  *transport
-	sessionID          types.ID
-	addressFromRequest types.Address
+	t                    *transport
+	sessionID            types.ID
+	addressesFromRequest Set[types.Address]
+	myUcanWithPeer       string
 
 	// stream
 	stream struct {
 		io.ReadCloser
-		io.Writer
+		http.ResponseWriter
 		http.Flusher
 	}
 }
@@ -53,10 +55,6 @@ func (p *peerConn) EnsureConnected(ctx context.Context) error {
 
 func (p *peerConn) Subscribe(ctx context.Context, stateURI string) (_ prototree.ReadableSubscription, err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
-
-	if p.DialInfo().DialAddr == "" {
-		return nil, errors.New("peer has no DialAddr")
-	}
 
 	req, err := http.NewRequest("GET", p.DialInfo().DialAddr, nil)
 	if err != nil {
@@ -118,7 +116,7 @@ func (p *peerConn) SendTx(ctx context.Context, tx tree.Tx) (err error) {
 	return nil
 }
 
-func (p *peerConn) SendPrivateTx(ctx context.Context, encryptedTx prototree.EncryptedTx) (err error) {
+func (p *peerConn) SendEncryptedTx(ctx context.Context, encryptedTx prototree.EncryptedTx) (err error) {
 	if !p.Dialable() || !p.Ready() {
 		return nil
 	}
@@ -148,7 +146,7 @@ func (p *peerConn) SendPrivateTx(ctx context.Context, encryptedTx prototree.Encr
 	return nil
 }
 
-func (p *peerConn) Ack(stateURI string, txID state.Version) (err error) {
+func (p *peerConn) Ack(ctx context.Context, stateURI string, txID state.Version) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
 
 	if p.DialInfo().DialAddr == "" {
@@ -159,9 +157,6 @@ func (p *peerConn) Ack(stateURI string, txID state.Version) (err error) {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	ctx, cancel := context.WithTimeout(p.t.Ctx(), 10*time.Second)
-	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "ACK", p.DialInfo().DialAddr, bytes.NewReader(txIDBytes))
 	if err != nil {
@@ -182,76 +177,96 @@ func (p *peerConn) AnnounceP2PStateURI(ctx context.Context, stateURI string) (er
 	return nil
 }
 
-func (p *peerConn) ChallengeIdentity(challengeMsg protoauth.ChallengeMsg) (err error) {
+func (p *peerConn) ChallengeIdentity(ctx context.Context, challengeMsg crypto.ChallengeMsg) (err error) {
 	defer errors.AddStack(&err)
 	defer func() { p.UpdateConnStats(err == nil) }()
 
-	ctx, cancel := context.WithTimeout(p.t.Ctx(), 10*time.Second)
-	defer cancel()
+	if p.stream.ReadCloser == nil {
+		// Outgoing request
+		req, err := http.NewRequestWithContext(ctx, "AUTHORIZE", p.DialInfo().DialAddr, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Challenge", challengeMsg.Hex())
 
-	req, err := http.NewRequestWithContext(ctx, "AUTHORIZE", p.DialInfo().DialAddr, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Challenge", hex.EncodeToString(challengeMsg))
+		resp, err := p.doRequest(req)
+		if err != nil {
+			return errors.Wrapf(err, "error verifying peer address (%v)", p.DialInfo().DialAddr)
+		}
+		defer resp.Body.Close()
 
-	resp, err := p.doRequest(req)
-	if err != nil {
-		return errors.Wrapf(err, "error verifying peer address (%v)", p.DialInfo().DialAddr)
-	}
+		p.stream.ReadCloser = resp.Body
 
-	p.stream.ReadCloser = resp.Body
-	return nil
-}
+		var response []protoauth.ChallengeIdentityResponse
+		err = json.NewDecoder(resp.Body).Decode(&response)
+		if err != nil {
+			return err
+		}
+		return p.t.HandleIncomingIdentityChallengeResponse(response, p)
 
-func (p *peerConn) ReceiveChallengeIdentityResponse() (_ []protoauth.ChallengeIdentityResponse, err error) {
-	defer func() { p.UpdateConnStats(err == nil) }()
-
-	var verifyResp []protoauth.ChallengeIdentityResponse
-	err = json.NewDecoder(p.stream.ReadCloser).Decode(&verifyResp)
-	if err != nil {
-		return nil, err
-	}
-	return verifyResp, nil
-}
-
-func (p *peerConn) RespondChallengeIdentity(verifyAddressResponse []protoauth.ChallengeIdentityResponse) (err error) {
-	defer func() { p.UpdateConnStats(err == nil) }()
-
-	err = json.NewEncoder(p.stream.Writer).Encode(verifyAddressResponse)
-	if err != nil {
-		http.Error(p.stream.Writer.(http.ResponseWriter), err.Error(), http.StatusInternalServerError)
-		return err
+	} else {
+		// Incoming request
+		p.stream.ResponseWriter.Header().Set("Challenge", challengeMsg.Hex())
 	}
 	return nil
 }
 
-func (p *peerConn) FetchBlobManifest(blobID blob.ID) (blob.Manifest, error) {
+func (p *peerConn) RespondChallengeIdentity(ctx context.Context, verifyAddressResponse []protoauth.ChallengeIdentityResponse) (err error) {
+	defer func() { p.UpdateConnStats(err == nil) }()
+
+	p.stream.ResponseWriter.Header().Set("Content-Type", "application/json")
+
+	err = json.NewEncoder(p.stream.ResponseWriter).Encode(verifyAddressResponse)
+	if err != nil {
+		http.Error(p.stream.ResponseWriter, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+	return nil
+}
+
+func (p *peerConn) SendUcan(ctx context.Context, ucan string) (err error) {
+	defer func() { p.UpdateConnStats(err == nil) }()
+
+	if p.stream.ReadCloser == nil {
+		// Outgoing request
+		req, err := http.NewRequestWithContext(ctx, "AUTHORIZE", p.DialInfo().DialAddr, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Ucan", ucan)
+
+		resp, err := p.doRequest(req)
+		if err != nil {
+			return errors.Wrapf(err, "error verifying peer address (%v)", p.DialInfo().DialAddr)
+		}
+		defer resp.Body.Close()
+
+	} else {
+		// Incoming request
+		p.stream.ResponseWriter.Header().Set("Ucan", ucan)
+	}
+
+	return nil
+}
+
+func (p *peerConn) FetchBlobManifest(ctx context.Context, blobID blob.ID) (blob.Manifest, error) {
 	return blob.Manifest{}, errors.ErrUnimplemented
 }
 
-func (p *peerConn) SendBlobManifest(m blob.Manifest, exists bool) error {
+func (p *peerConn) SendBlobManifest(ctx context.Context, m blob.Manifest, exists bool) error {
 	return errors.ErrUnimplemented
 }
 
-func (p *peerConn) FetchBlobChunk(sha3 types.Hash) ([]byte, error) {
+func (p *peerConn) FetchBlobChunk(ctx context.Context, sha3 types.Hash) ([]byte, error) {
 	return nil, errors.ErrUnimplemented
 }
 
-func (p *peerConn) SendBlobChunk(chunk []byte, exists bool) error {
+func (p *peerConn) SendBlobChunk(ctx context.Context, chunk []byte, exists bool) error {
 	return errors.ErrUnimplemented
 }
 
 func (p *peerConn) AnnouncePeers(ctx context.Context, peerDialInfos []swarm.PeerDialInfo) (err error) {
 	defer func() { p.UpdateConnStats(err == nil) }()
-
-	if p.DialInfo().DialAddr == "" {
-		p.t.Warn("peer has no DialAddr")
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(p.t.Ctx(), 10*time.Second)
-	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "HEAD", p.DialInfo().DialAddr, nil)
 	if err != nil {
@@ -274,10 +289,15 @@ func (p *peerConn) Close() error {
 }
 
 func (p *peerConn) doRequest(req *http.Request) (*http.Response, error) {
+	if p.myUcanWithPeer != "" {
+		req.Header.Set("Authorization", "Bearer "+p.myUcanWithPeer)
+	}
+
 	resp, err := p.t.doRequest(req)
 	if err != nil {
 		return nil, err
 	}
+
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
 		duID := utils.DeviceIDFromX509Pubkey(resp.TLS.PeerCertificates[0].PublicKey)
 		p.SetDeviceUniqueID(duID)

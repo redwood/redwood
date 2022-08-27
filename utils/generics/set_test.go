@@ -1,4 +1,4 @@
-package types_test
+package generics_test
 
 import (
 	"testing"
@@ -6,10 +6,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"redwood.dev/types"
+	. "redwood.dev/utils/generics"
 )
 
 func TestSet(t *testing.T) {
-	set := types.NewSet[types.Address](nil)
+	set := NewSet[types.Address](nil)
 
 	addr := types.RandomAddress()
 	set.Add(addr)

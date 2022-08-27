@@ -134,7 +134,7 @@ func (f *fetcher) fetchManifest(ctx context.Context) (_ blob.Manifest, err error
 		}
 		// f.getPeerBackoff.Reset()
 
-		manifest, err := blobPeer.FetchBlobManifest(f.blobID)
+		manifest, err := blobPeer.FetchBlobManifest(ctx, f.blobID)
 		if err != nil {
 			f.peerPool.ReturnPeer(blobPeer, false)
 			f.Errorf("error getting peer from pool: %v", err)
@@ -155,7 +155,7 @@ func (f *fetcher) fetchManifest(ctx context.Context) (_ blob.Manifest, err error
 func (f *fetcher) startWorkPool(chunks []blob.ManifestChunk) (err error) {
 	defer errors.AddStack(&err)
 
-	var jobs []interface{}
+	var jobs []types.Hash
 	for _, chunk := range chunks {
 		have, err := f.blobStore.HaveChunk(chunk.SHA3)
 		if err != nil {
@@ -245,16 +245,12 @@ func (f *fetcher) readUntilErrorOrShutdown(ctx context.Context, peer BlobPeerCon
 		default:
 		}
 
-		x, i, ok := f.workPool.NextJob()
+		sha3, i, ok := f.workPool.NextJob()
 		if !ok {
 			return nil
 		}
-		sha3, ok := x.(types.Hash)
-		if !ok {
-			panic("invariant violation")
-		}
 
-		chunk, err := peer.FetchBlobChunk(sha3)
+		chunk, err := peer.FetchBlobChunk(ctx, sha3)
 		if err != nil {
 			f.workPool.ReturnFailedJob(sha3)
 			return errors.Wrapf(err, "while fetching chunk %v", sha3)
@@ -278,16 +274,16 @@ func (f *fetcher) readUntilErrorOrShutdown(ctx context.Context, peer BlobPeerCon
 
 type workPool struct {
 	process.Process
-	jobs           map[interface{}]int
-	chJobs         chan interface{}
+	jobs           map[types.Hash]int
+	chJobs         chan types.Hash
 	chJobsComplete chan struct{}
 }
 
-func newWorkPool(jobs []interface{}) *workPool {
+func newWorkPool(jobs []types.Hash) *workPool {
 	p := &workPool{
 		Process:        *process.New("work pool"),
-		jobs:           make(map[interface{}]int),
-		chJobs:         make(chan interface{}, len(jobs)),
+		jobs:           make(map[types.Hash]int),
+		chJobs:         make(chan types.Hash, len(jobs)),
 		chJobsComplete: make(chan struct{}),
 	}
 	for i, job := range jobs {
@@ -317,16 +313,16 @@ func (p *workPool) Start() error {
 	return nil
 }
 
-func (p *workPool) NextJob() (job interface{}, i int, ok bool) {
+func (p *workPool) NextJob() (job types.Hash, i int, ok bool) {
 	select {
 	case <-p.Ctx().Done():
-		return nil, 0, false
+		return types.Hash{}, 0, false
 	case job = <-p.chJobs:
 		return job, p.jobs[job], true
 	}
 }
 
-func (p *workPool) ReturnFailedJob(job interface{}) {
+func (p *workPool) ReturnFailedJob(job types.Hash) {
 	select {
 	case <-p.Ctx().Done():
 	case p.chJobs <- job:

@@ -1,68 +1,55 @@
 package protohush
 
 import (
+	"time"
+
 	"github.com/status-im/doubleratchet"
 
+	"redwood.dev/crypto"
+	"redwood.dev/identity"
 	"redwood.dev/types"
+	. "redwood.dev/utils/generics"
 )
 
 type Store interface {
-	// Diffie-Hellman keys
-	EnsureDHPair() (DHPair, error)
-	DHPubkeyAttestations() ([]DHPubkeyAttestation, error)
-	LatestDHPubkeyFor(addr types.Address) (DHPubkeyAttestation, error)
-	SaveDHPubkeyAttestations(attestations []DHPubkeyAttestation) error
+	KeyBundle(id types.Hash) (KeyBundle, error)
+	KeyBundles() ([]KeyBundle, error)
+	LatestValidKeyBundleFor(addr types.Address) (KeyBundle, error)
+	CreateKeyBundle(identity identity.Identity) (KeyBundle, PubkeyBundle, error)
 
-	// Individual session handshake protocol
-	OutgoingIndividualSessionProposalHashes() (types.Set[types.Hash], error)
-	OutgoingIndividualSessionProposalByHash(proposalHash types.Hash) (IndividualSessionProposal, error)
-	OutgoingIndividualSessionProposalsForUsers(aliceAddr, bobAddr types.Address) ([]IndividualSessionProposal, error)
-	OutgoingIndividualSessionProposalByUsersAndType(sessionType string, aliceAddr, bobAddr types.Address) (IndividualSessionProposal, error)
-	SaveOutgoingIndividualSessionProposal(proposal IndividualSessionProposal) error
-	DeleteOutgoingIndividualSessionProposal(sessionHash types.Hash) error
+	PubkeyBundle(id types.Hash) (PubkeyBundle, error)
+	PubkeyBundles() ([]PubkeyBundle, error)
+	LatestValidPubkeyBundleFor(addr types.Address) (PubkeyBundle, error)
+	SavePubkeyBundles(bundles []PubkeyBundle) error
+	PubkeyBundleAddresses() ([]types.Address, error)
 
-	IncomingIndividualSessionProposals() (map[types.Hash]EncryptedIndividualSessionProposal, error)
-	IncomingIndividualSessionProposal(hash types.Hash) (EncryptedIndividualSessionProposal, error)
-	SaveIncomingIndividualSessionProposal(proposal EncryptedIndividualSessionProposal) error
-	DeleteIncomingIndividualSessionProposal(proposal EncryptedIndividualSessionProposal) error
+	Session(id types.Hash) (Session, doubleratchet.Session, error)
+	StartOutgoingSession(myBundle KeyBundle, remoteBundle PubkeyBundle, ephemeralPubkey *X3DHPublicKey, sharedKey []byte) (Session, doubleratchet.Session, error)
+	StartIncomingSession(myBundle KeyBundle, remoteBundle PubkeyBundle, ephemeralPubkey *X3DHPublicKey, sharedKey []byte) (Session, doubleratchet.Session, error)
+	LatestValidSessionWithUsers(a, b types.Address) (Session, doubleratchet.Session, error)
 
-	OutgoingIndividualSessionResponses() (map[types.Address]map[types.Hash]IndividualSessionResponse, error)
-	OutgoingIndividualSessionResponsesForUser(aliceAddr types.Address) ([]IndividualSessionResponse, error)
-	OutgoingIndividualSessionResponse(aliceAddr types.Address, proposalHash types.Hash) (IndividualSessionResponse, error)
-	SaveOutgoingIndividualSessionResponse(sender types.Address, approval IndividualSessionResponse) error
-	DeleteOutgoingIndividualSessionResponse(aliceAddr types.Address, proposalHash types.Hash) error
+	SymEncKeyAndMessage(messageType, messageID string) (crypto.SymEncKey, crypto.SymEncMsg, error)
+	SaveSymEncKeyAndMessage(messageType, messageID string, key crypto.SymEncKey, msg crypto.SymEncMsg) error
 
-	// Established individual sessions
-	LatestIndividualSessionWithUsers(sessionType string, aliceAddr, bobAddr types.Address) (IndividualSessionProposal, error)
-	IndividualSessionByID(id IndividualSessionID) (IndividualSessionProposal, error)
-	IndividualSessionIDBySessionHash(hash types.Hash) (IndividualSessionID, error)
-	SaveApprovedIndividualSession(session IndividualSessionProposal) error
+	IncomingGroupMessages() ([]IncomingGroupMessage, error)
+	SaveIncomingGroupMessage(msg IncomingGroupMessage) error
+	DeleteIncomingGroupMessage(id string) error
 
-	// Individual messages
-	OutgoingIndividualMessageIntents() ([]IndividualMessageIntent, error)
-	OutgoingIndividualMessageIntentIDsForTypeAndRecipient(sessionType string, recipient types.Address) (types.Set[types.ID], error)
-	OutgoingIndividualMessageIntent(sessionType string, recipient types.Address, id types.ID) (IndividualMessageIntent, error)
-	SaveOutgoingIndividualMessageIntent(intent IndividualMessageIntent) error
-	DeleteOutgoingIndividualMessageIntent(intent IndividualMessageIntent) error
-
-	IncomingIndividualMessages() ([]IndividualMessage, error)
-	SaveIncomingIndividualMessage(sender types.Address, msg IndividualMessage) error
-	DeleteIncomingIndividualMessage(msg IndividualMessage) error
-
-	// Group messages
-	OutgoingGroupMessageSessionTypes() (types.Set[string], error)
-	OutgoingGroupMessageIntentIDsForSessionType(sessionType string) (types.Set[string], error)
-	OutgoingGroupMessageIntent(sessionType, id string) (GroupMessageIntent, error)
-	SaveOutgoingGroupMessageIntent(intent GroupMessageIntent) error
-	DeleteOutgoingGroupMessageIntent(sessionType, id string) error
-
-	IncomingGroupMessages() ([]GroupMessage, error)
-	SaveIncomingGroupMessage(sender types.Address, msg GroupMessage) error
-	DeleteIncomingGroupMessage(msg GroupMessage) error
+	OutgoingGroupMessage(id string) (OutgoingGroupMessage, error)
+	OutgoingGroupMessageIDs() []string
+	SaveOutgoingGroupMessage(intent OutgoingGroupMessage) error
+	DeleteOutgoingGroupMessage(id string) error
 
 	// Double ratchet message keys + sessions
 	RatchetSessionStore() RatchetSessionStore
 	RatchetKeyStore() RatchetKeyStore
+
+	// Vault
+	Vaults() Set[string]
+	AddVault(host string) error
+	RemoveVault(host string) error
+	LatestMtimeForVaultAndCollection(vaultHost, collectionID string) time.Time
+	MaybeSaveLatestMtimeForVaultAndCollection(vaultHost, collectionID string, mtime time.Time) error
 
 	DebugPrint()
 }

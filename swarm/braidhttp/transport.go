@@ -30,7 +30,6 @@ import (
 	"redwood.dev/embed"
 	"redwood.dev/errors"
 	"redwood.dev/identity"
-	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/state"
 	"redwood.dev/swarm"
@@ -41,6 +40,8 @@ import (
 	"redwood.dev/tree/nelson"
 	"redwood.dev/types"
 	"redwood.dev/utils"
+	"redwood.dev/utils/authutils"
+	. "redwood.dev/utils/generics"
 )
 
 type Transport interface {
@@ -53,14 +54,13 @@ type Transport interface {
 }
 
 type transport struct {
-	process.Process
-	log.Logger
+	swarm.BaseTransport
 	protoauth.BaseAuthTransport
 	protoblob.BaseBlobTransport
 	prototree.BaseTreeTransport
 
 	defaultStateURI string
-	ownURLs         types.Set[string]
+	ownURLs         Set[string]
 	listenAddr      string
 	listenAddrSSL   string
 	cookieSecret    [32]byte
@@ -75,7 +75,7 @@ type transport struct {
 	srvTLS     *http.Server
 	httpClient *utils.HTTPClient
 
-	pendingAuthorizations map[types.ID][]byte
+	pendingAuthorizations SyncMap[types.ID, crypto.ChallengeMsg]
 
 	treeACL        prototree.ACL
 	peerStore      swarm.PeerStore
@@ -94,7 +94,7 @@ const (
 func NewTransport(
 	listenAddr string,
 	listenAddrSSL string,
-	ownURLs types.Set[string],
+	ownURLs Set[string],
 	defaultStateURI string,
 	controllerHub tree.ControllerHub,
 	keyStore identity.KeyStore,
@@ -106,8 +106,7 @@ func NewTransport(
 	devMode bool,
 ) (*transport, error) {
 	t := &transport{
-		Process:               *process.New(TransportName),
-		Logger:                log.NewLogger(TransportName),
+		BaseTransport:         swarm.NewBaseTransport(TransportName),
 		controllerHub:         controllerHub,
 		listenAddr:            listenAddr,
 		listenAddrSSL:         listenAddrSSL,
@@ -117,7 +116,7 @@ func NewTransport(
 		tlsCerts:              tlsCerts,
 		jwtSecret:             jwtSecret,
 		devMode:               devMode,
-		pendingAuthorizations: make(map[types.ID][]byte),
+		pendingAuthorizations: NewSyncMap[types.ID, crypto.ChallengeMsg](),
 		ownURLs:               ownURLs,
 		keyStore:              keyStore,
 		blobStore:             blobStore,
@@ -133,8 +132,8 @@ func (t *transport) Start() error {
 		return err
 	}
 
-	t.Infof(0, "opening %v transport at %v", TransportName, t.listenAddr)
-	t.Infof(0, "opening %v transport (ssl) at %v", TransportName, t.listenAddrSSL)
+	t.Infof("opening %v transport at %v", TransportName, t.listenAddr)
+	t.Infof("opening %v transport (ssl) at %v", TransportName, t.listenAddrSSL)
 
 	t.cookieJar, err = cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
@@ -186,8 +185,8 @@ func (t *transport) Start() error {
 			},
 		}
 		go func() {
-			t.Infof(0, "tls cert file: %v", t.tlsCertFilename)
-			t.Infof(0, "tls key file: %v", t.tlsKeyFilename)
+			t.Infof("tls cert file: %v", t.tlsCertFilename)
+			t.Infof("tls key file: %v", t.tlsKeyFilename)
 			err := t.srvTLS.ListenAndServeTLS(t.tlsCertFilename, t.tlsKeyFilename)
 			if err != nil {
 				t.Errorf("while starting HTTPS server: %v", err)
@@ -206,11 +205,13 @@ func (t *transport) Start() error {
 		}()
 	})
 
+	t.MarkReady()
+
 	return nil
 }
 
 func (t *transport) Close() error {
-	t.Infof(0, "braidhttp transport shutting down")
+	t.Infof("braidhttp transport shutting down")
 	// Non-graceful
 	err := t.srv.Close()
 	if err != nil {
@@ -249,7 +250,7 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	address, err := t.addressFromRequest(r)
+	addresses, err := t.addressesFromRequest(r)
 	if err != nil {
 		t.Errorf("err: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -260,7 +261,7 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
 		duID = utils.DeviceIDFromX509Pubkey(r.TLS.PeerCertificates[0].PublicKey)
 	}
-	peerConn := t.makePeerConn(w, nil, "", sessionID, duID, address)
+	peerConn := t.makePeerConn(w, nil, "", sessionID, duID, addresses)
 
 	// Peer discovery
 	{
@@ -286,26 +287,13 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// w.Header().Set("Access-Control-Allow-Headers", "State-URI")
 
 	case "AUTHORIZE":
-		// Address verification requests (2 kinds)
-		if challengeMsgHex := r.Header.Get("Challenge"); challengeMsgHex != "" {
-			// 1. Remote node is reaching out to us with a challenge, and we respond
-			t.serveChallengeIdentityResponse(w, r, peerConn, challengeMsgHex)
-		} else {
-			responseHex := r.Header.Get("Response")
-			if responseHex == "" {
-				// 2a. Remote node wants a challenge, so we send it
-				t.serveChallengeIdentity(w, r, peerConn)
-			} else {
-				// 2b. Remote node wanted a challenge, this is their response
-				t.serveChallengeIdentityCheckResponse(w, r, peerConn, responseHex)
-			}
-		}
+		t.serveAuthorize(w, r, peerConn)
 
 	case "GET":
 		if r.URL.Path == "/ws" {
-			t.serveWSSubscription(w, r, sessionID, address)
+			t.serveWSSubscription(w, r, peerConn)
 		} else if r.Header.Get("Subscribe") != "" {
-			t.serveHTTPSubscription(w, r, sessionID, address)
+			t.serveHTTPSubscription(w, r, peerConn)
 		} else {
 			if r.URL.Path == "/redwood.js" {
 				// @@TODO: this is hacky
@@ -327,7 +315,7 @@ func (t *transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case "PUT":
 		if r.Header.Get("Private") == "true" {
-			t.servePostPrivateTx(w, r, peerConn)
+			t.servePostEncryptedTx(w, r, peerConn)
 		} else {
 			t.servePostTx(w, r, peerConn)
 		}
@@ -363,44 +351,30 @@ func (t *transport) storeAltSvcHeaderPeers(h http.Header) {
 	}
 }
 
-func (t *transport) addressFromRequest(r *http.Request) (types.Address, error) {
+func (t *transport) addressesFromRequest(r *http.Request) (Set[types.Address], error) {
 	type request struct {
 		JWT string `header:"Authorization" query:"ucan"`
 	}
 	var req request
 	err := utils.UnmarshalHTTPRequest(&req, r)
 	if err != nil {
-		return types.Address{}, err
+		return nil, err
 	}
 
-	claims, exists, err := utils.ParseJWT(req.JWT, t.jwtSecret)
+	var ucan authutils.Ucan
+	err = ucan.Parse(req.JWT, t.jwtSecret)
 	if err != nil {
-		return types.Address{}, err
-	} else if !exists {
-		claims, exists, err = utils.ParseJWT(req.JWT, t.jwtSecret)
-		if err != nil {
-			return types.Address{}, err
-		}
-	}
-	if exists {
-		addrHex, ok := claims["address"].(string)
-		if !ok {
-			return types.Address{}, errors.Errorf("jwt does not contain 'address' claim")
-		}
-		addr, err := types.AddressFromHex(addrHex)
-		if err != nil {
-			return types.Address{}, errors.Wrapf(err, "jwt 'address' claim contains invalid data")
-		}
-		return addr, nil
+		// no-op
 	}
 
 	addressBytes, err := t.signedCookie(r, "address")
 	if errors.Cause(err) == errors.Err404 {
-		return types.Address{}, nil
+		return ucan.Addresses, nil
 	} else if err != nil {
-		return types.Address{}, err
+		return ucan.Addresses, err
 	}
-	return types.AddressFromBytes(addressBytes), nil
+	ucan.Addresses.Add(types.AddressFromBytes(addressBytes))
+	return ucan.Addresses, nil
 }
 
 func (t *transport) serveHeadRequest(w http.ResponseWriter, r *http.Request) {
@@ -449,75 +423,53 @@ func (t *transport) serveHeadRequest(w http.ResponseWriter, r *http.Request) {
 	// @@TODO
 }
 
-// Respond to a request from another node challenging our identity.
-func (t *transport) serveChallengeIdentityResponse(w http.ResponseWriter, r *http.Request, peerConn *peerConn, challengeMsgHex string) {
-	challengeMsg, err := hex.DecodeString(challengeMsgHex)
-	if err != nil {
-		http.Error(w, "Challenge header: bad challenge message", http.StatusBadRequest)
-		return
+func (t *transport) serveAuthorize(w http.ResponseWriter, r *http.Request, peerConn *peerConn) {
+	type request struct {
+		Challenge  crypto.ChallengeMsg                   `header:"Challenge"`
+		Signatures []protoauth.ChallengeIdentityResponse `body:""`
+		Ucan       string                                `header:"Ucan"`
 	}
 
-	err = t.HandleChallengeIdentity([]byte(challengeMsg), peerConn)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
-// Respond to a request from another node that wants us to issue them an identity
-// challenge.  This is used with browser nodes which we cannot reach out to directly.
-func (t *transport) serveChallengeIdentity(w http.ResponseWriter, r *http.Request, peerConn *peerConn) {
-	challenge, err := protoauth.GenerateChallengeMsg()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	t.pendingAuthorizations[peerConn.sessionID] = challenge
-
-	challengeHex := hex.EncodeToString(challenge)
-	_, err = w.Write([]byte(challengeHex))
-	if err != nil {
-		t.Errorf("error writing challenge message: %v", err)
-		return
-	}
-}
-
-// Check the response from another node that requested an identity challenge from us.
-// This is used with browser nodes which we cannot reach out to directly.
-func (t *transport) serveChallengeIdentityCheckResponse(w http.ResponseWriter, r *http.Request, peerConn *peerConn, responseHex string) {
-	challenge, exists := t.pendingAuthorizations[peerConn.sessionID]
-	if !exists {
-		http.Error(w, "no pending authorization", http.StatusBadRequest)
-		return
-	}
-
-	sig, err := hex.DecodeString(responseHex)
+	var req request
+	err := utils.UnmarshalHTTPRequest(&req, r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	sigpubkey, err := crypto.RecoverSigningPubkey(types.HashBytes(challenge), sig)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if req.Challenge.Length() == 0 && len(req.Signatures) == 0 && req.Ucan == "" {
+		err = t.HandleIncomingIdentityChallengeRequest(peerConn)
+	} else if req.Challenge.Length() > 0 && len(req.Signatures) == 0 && req.Ucan == "" {
+		err = t.HandleIncomingIdentityChallenge(req.Challenge, peerConn)
+	} else if req.Challenge.Length() == 0 && len(req.Signatures) > 0 && req.Ucan == "" {
+		err = t.HandleIncomingIdentityChallengeResponse(req.Signatures, peerConn)
+	} else if req.Ucan != "" {
+		t.HandleIncomingUcan(req.Ucan, peerConn)
+	} else {
+		http.Error(w, "bad request, need Challenge header, Ucan header, or signatures", http.StatusBadRequest)
 		return
 	}
 
-	addr := sigpubkey.Address()
-	err = t.setSignedCookieOnResponse(w, "address", addr[:])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// @@TODO: make the request include the encrypting pubkey as well
-	t.peerStore.AddVerifiedCredentials(swarm.PeerDialInfo{TransportName, ""}, peerConn.DeviceUniqueID(), addr, sigpubkey, nil)
-
-	delete(t.pendingAuthorizations, peerConn.sessionID) // @@TODO: expiration/garbage collection for failed auths
+	// @@TODO: shitty hack
+	addrs := peerConn.Addresses()
+	if len(addrs) > 0 {
+		addr, _ := addrs.Any()
+		err = t.setSignedCookieOnResponse(w, "address", addr.Bytes())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		panic("why?")
+	}
 }
 
-func (t *transport) serveHTTPSubscription(w http.ResponseWriter, r *http.Request, sessionID types.ID, address types.Address) {
+func (t *transport) serveHTTPSubscription(w http.ResponseWriter, r *http.Request, peerConn *peerConn) {
 	type request struct {
 		StateURI string                     `header:"State-URI" query:"state_uri"         required:"true"`
 		Keypath  state.Keypath              `header:"Keypath"   query:"keypath"`
@@ -537,7 +489,7 @@ func (t *transport) serveHTTPSubscription(w http.ResponseWriter, r *http.Request
 		req.StateURI = t.defaultStateURI
 	}
 
-	t.Infof(0, "incoming http subscription (address: %v, state uri: %v)", address, req.StateURI)
+	t.Infow("incoming http subscription", "addresses", peerConn.Addresses(), "stateuri", req.StateURI)
 
 	var fetchHistoryOpts prototree.FetchHistoryOpts
 	if req.FromTxID != nil {
@@ -549,18 +501,21 @@ func (t *transport) serveHTTPSubscription(w http.ResponseWriter, r *http.Request
 		Keypath:          state.Keypath(req.Keypath),
 		Type:             req.SubType,
 		FetchHistoryOpts: &fetchHistoryOpts,
-		Addresses:        types.NewSet[types.Address]([]types.Address{address}),
+		Addresses:        peerConn.Addresses(),
 	}
 	chSubClosed, err := t.HandleWritableSubscriptionOpened(subRequest, func() (prototree.WritableSubscriptionImpl, error) {
 		return newHTTPWritableSubscription(req.StateURI, w, r), nil
 	})
 	if errors.Cause(err) == errors.Err403 {
+		t.Warnw("refusing incoming http subscription: forbidden", "addresses", peerConn.Addresses(), "stateuri", req.StateURI)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	} else if errors.Cause(err) == errors.Err404 {
+		t.Warnw("refusing incoming http subscription: not found", "addresses", peerConn.Addresses(), "stateuri", req.StateURI)
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	} else if err != nil {
+		t.Warnw("refusing incoming http subscription", "addresses", peerConn.Addresses(), "stateuri", req.StateURI, "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -572,7 +527,7 @@ func (t *transport) serveHTTPSubscription(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (t *transport) serveWSSubscription(w http.ResponseWriter, r *http.Request, sessionID types.ID, address types.Address) {
+func (t *transport) serveWSSubscription(w http.ResponseWriter, r *http.Request, peerConn *peerConn) {
 	type request struct {
 		StateURI string                     `header:"State-URI" query:"state_uri"         required:"true"`
 		Keypath  state.Keypath              `header:"Keypath"   query:"keypath"`
@@ -587,9 +542,13 @@ func (t *transport) serveWSSubscription(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	t.Warnf("WS REQ %v", utils.PrettyJSON(req))
+
 	if req.StateURI == "" {
 		req.StateURI = t.defaultStateURI
 	}
+
+	t.Infow("incoming websocket subscription", "addresses", peerConn.Addresses(), "stateuri", req.StateURI)
 
 	var fetchHistoryOpts prototree.FetchHistoryOpts
 	if req.FromTxID != nil {
@@ -601,22 +560,25 @@ func (t *transport) serveWSSubscription(w http.ResponseWriter, r *http.Request, 
 		Keypath:          req.Keypath,
 		Type:             req.SubType,
 		FetchHistoryOpts: &fetchHistoryOpts,
-		Addresses:        types.NewSet[types.Address]([]types.Address{address}),
+		Addresses:        peerConn.Addresses(),
 	}
 	chSubClosed, err := t.HandleWritableSubscriptionOpened(subRequest, func() (prototree.WritableSubscriptionImpl, error) {
 		wsConn, err := wsUpgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return nil, err
 		}
-		return newWSWritableSubscription(req.StateURI, wsConn, []types.Address{address}, t), nil
+		return newWSWritableSubscription(req.StateURI, wsConn, peerConn.Addresses().Slice(), t), nil
 	})
 	if errors.Cause(err) == errors.Err403 {
+		t.Warnw("refusing incoming http subscription: forbidden", "addresses", peerConn.Addresses(), "stateuri", req.StateURI)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	} else if errors.Cause(err) == errors.Err404 {
+		t.Warnw("refusing incoming http subscription: not found", "addresses", peerConn.Addresses(), "stateuri", req.StateURI)
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	} else if err != nil {
+		t.Warnw("refusing incoming http subscription", "addresses", peerConn.Addresses(), "stateuri", req.StateURI, "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -866,7 +828,7 @@ func (t *transport) serveGetBlobMetadata(w http.ResponseWriter, r *http.Request)
 }
 
 func (t *transport) servePostBlob(w http.ResponseWriter, r *http.Request) {
-	t.Infof(0, "incoming blob")
+	t.Infof("incoming blob")
 
 	err := r.ParseForm()
 	if err != nil {
@@ -892,11 +854,11 @@ func (t *transport) servePostBlob(w http.ResponseWriter, r *http.Request) {
 
 func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, peerConn *peerConn) {
 	type request struct {
-		StateURI   string          `header:"State-URI"`
-		Version    state.Version   `header:"Version"`
-		Parents    ParentsHeader   `header:"Parents"`
-		Checkpoint bool            `header:"Checkpoint"`
-		Signature  types.Signature `header:"Signature"`
+		StateURI   string           `header:"State-URI"`
+		Version    state.Version    `header:"Version"`
+		Parents    ParentsHeader    `header:"Parents"`
+		Checkpoint bool             `header:"Checkpoint"`
+		Signature  crypto.Signature `header:"Signature"`
 	}
 
 	var req request
@@ -906,7 +868,7 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, peerConn
 		return
 	}
 
-	t.Infof(0, "incoming tx %v", utils.PrettyJSON(req))
+	t.Infof("incoming tx %v", utils.PrettyJSON(req))
 
 	if req.StateURI == "" {
 		req.StateURI = t.defaultStateURI
@@ -988,34 +950,34 @@ func (t *transport) servePostTx(w http.ResponseWriter, r *http.Request, peerConn
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if myAddrs.Contains(peerConn.addressFromRequest) {
-			tx.From = peerConn.addressFromRequest
-			t.HandleTxReceived(tx, peerConn)
-			return
 
+		if myAddrs.Intersection(peerConn.addressesFromRequest).Length() > 0 {
+			if tx.From.IsZero() {
+				tx.From, _ = peerConn.addressesFromRequest.Any() // @@TODO: ??
+			}
 		} else {
-			http.Error(w, fmt.Sprintf("bad signature, no local address (%v) matches UCAN %v", myAddrs, peerConn.addressFromRequest.Hex()), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("bad signature, no local address matches peer %v", myAddrs, peerConn.addressesFromRequest.Slice()), http.StatusBadRequest)
 			return
 		}
-	}
 
-	// @@TODO: remove .From entirely?
-	pubkey, err := crypto.RecoverSigningPubkey(tx.Hash(), req.Signature)
-	if err != nil {
-		http.Error(w, "bad signature", http.StatusBadRequest)
-		return
+	} else {
+		tx.Sig = req.Signature
+		// @@TODO: remove .From entirely?
+		pubkey, err := crypto.RecoverSigningPubkey(tx.Hash(), tx.Sig)
+		if err != nil {
+			http.Error(w, "bad signature", http.StatusBadRequest)
+			return
+		}
+		tx.From = pubkey.Address()
 	}
-	tx.From = pubkey.Address()
-	tx.Sig = req.Signature
-	////////////////////////////////
 
 	t.Process.Go(nil, "HandleTxReceived", func(ctx context.Context) {
 		t.HandleTxReceived(tx, peerConn)
 	})
 }
 
-func (t *transport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, peerConn *peerConn) {
-	t.Infof(0, "incoming private tx")
+func (t *transport) servePostEncryptedTx(w http.ResponseWriter, r *http.Request, peerConn *peerConn) {
+	t.Infof("incoming encrypted tx")
 
 	var encryptedTx prototree.EncryptedTx
 	err := json.NewDecoder(r.Body).Decode(&encryptedTx)
@@ -1023,17 +985,17 @@ func (t *transport) servePostPrivateTx(w http.ResponseWriter, r *http.Request, p
 		http.Error(w, "bad JSON", http.StatusBadRequest)
 		return
 	}
-	t.HandlePrivateTxReceived(encryptedTx, peerConn)
+	t.HandleEncryptedTxReceived(encryptedTx, peerConn)
 }
 
 func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.PeerConn, error) {
 	if t.ownURLs.Contains(dialAddr) || strings.HasPrefix(dialAddr, "localhost") {
 		return nil, errors.WithStack(swarm.ErrPeerIsSelf)
 	}
-	return t.makePeerConn(nil, nil, dialAddr, types.ID{}, "", types.Address{}), nil
+	return t.makePeerConn(nil, nil, dialAddr, types.ID{}, "", nil), nil
 }
 
-func (t *transport) AnnounceStateURIs(ctx context.Context, stateURIs types.Set[string]) {}
+func (t *transport) AnnounceStateURIs(ctx context.Context, stateURIs Set[string]) {}
 
 func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_ <-chan prototree.TreePeerConn, err error) {
 	defer errors.AddStack(&err)
@@ -1057,7 +1019,7 @@ func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (_
 			}
 
 			select {
-			case ch <- t.makePeerConn(nil, nil, providerURL, types.ID{}, "", types.Address{}):
+			case ch <- t.makePeerConn(nil, nil, providerURL, types.ID{}, "", nil):
 			case <-ctx.Done():
 			}
 		}
@@ -1109,7 +1071,7 @@ func (t *transport) ProvidersOfBlob(ctx context.Context, blobID blob.ID) (<-chan
 	return nil, errors.ErrUnimplemented
 }
 
-func (t *transport) AnnounceBlobs(ctx context.Context, blobIDs types.Set[blob.ID]) {}
+func (t *transport) AnnounceBlobs(ctx context.Context, blobIDs Set[blob.ID]) {}
 
 var (
 	ErrBadCookie = errors.New("bad cookie")
@@ -1210,15 +1172,21 @@ func (t *transport) signedCookie(r *http.Request, name string) ([]byte, error) {
 	return value, nil
 }
 
-func (t *transport) makePeerConn(writer io.Writer, flusher http.Flusher, dialAddr string, sessionID types.ID, deviceUniqueID string, address types.Address) *peerConn {
-	peer := &peerConn{t: t, sessionID: sessionID, addressFromRequest: address}
-	peer.stream.Writer = writer
+func (t *transport) makePeerConn(writer http.ResponseWriter, flusher http.Flusher, dialAddr string, sessionID types.ID, deviceUniqueID string, addresses Set[types.Address]) *peerConn {
+	ucan, _, _ := t.keyStore.ExtraUserData("ucan:" + deviceUniqueID)
+	ucanStr, _ := ucan.(string)
+
+	peer := &peerConn{t: t, sessionID: sessionID, addressesFromRequest: addresses, myUcanWithPeer: ucanStr}
+	peer.stream.ResponseWriter = writer
 	peer.stream.Flusher = flusher
 
-	if !address.IsZero() {
-		peer.PeerEndpoint = t.peerStore.AddVerifiedCredentials(swarm.PeerDialInfo{TransportName, dialAddr}, deviceUniqueID, address, nil, nil)
+	if addresses.Length() > 0 {
+		for addr := range addresses {
+			_, peer.PeerEndpoint = t.peerStore.AddVerifiedCredentials(swarm.PeerDialInfo{TransportName, dialAddr}, deviceUniqueID, addr, nil, nil)
+		}
+	} else {
+		_, peer.PeerEndpoint = t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, dialAddr}, deviceUniqueID)
 	}
-	peer.PeerEndpoint = t.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, dialAddr}, deviceUniqueID)
 	return peer
 }
 

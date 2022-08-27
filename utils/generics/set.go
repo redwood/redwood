@@ -1,4 +1,4 @@
-package types
+package generics
 
 import (
 	"gopkg.in/yaml.v3"
@@ -23,6 +23,12 @@ func (s Set[T]) Add(val T) bool {
 	return exists
 }
 
+func (s Set[T]) AddAll(vals ...T) {
+	for _, val := range vals {
+		s.Add(val)
+	}
+}
+
 func (s Set[T]) Remove(val T) bool {
 	if s == nil {
 		return false
@@ -32,17 +38,40 @@ func (s Set[T]) Remove(val T) bool {
 	return exists
 }
 
-func (s Set[T]) Any() T {
+func (s Set[T]) Clear() {
+	if s == nil {
+		return
+	}
 	for x := range s {
-		return x
+		delete(s, x)
+	}
+}
+
+func (s Set[T]) Replace(ts []T) {
+	s.Clear()
+	s.AddAll(ts...)
+}
+
+func (s Set[T]) Any() (T, bool) {
+	if s != nil {
+		for x := range s {
+			return x, true
+		}
 	}
 	var x T
-	return x
+	return x, false
 }
 
 func (s Set[T]) Contains(val T) bool {
+	if s == nil {
+		return false
+	}
 	_, ok := s[val]
 	return ok
+}
+
+func (s Set[T]) Length() int {
+	return len(s)
 }
 
 func (s Set[T]) Intersection(other Set[T]) Set[T] {
@@ -53,6 +82,17 @@ func (s Set[T]) Intersection(other Set[T]) Set[T] {
 		}
 	}
 	return intersection
+}
+
+func (s Set[T]) Union(other Set[T]) Set[T] {
+	union := make(Set[T], len(s)+len(other))
+	for item := range s {
+		union[item] = struct{}{}
+	}
+	for item := range other {
+		union[item] = struct{}{}
+	}
+	return union
 }
 
 func (s Set[T]) Slice() []T {

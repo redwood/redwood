@@ -9,6 +9,7 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/state"
 	"redwood.dev/types"
+	. "redwood.dev/utils/generics"
 )
 
 type resourceRequest struct {
@@ -138,7 +139,7 @@ func (r *RangeRequest) UnmarshalHTTPHeader(header string) error {
 	return nil
 }
 
-type AcceptHeader types.Set[string]
+type AcceptHeader Set[string]
 
 func (h *AcceptHeader) UnmarshalHTTPHeader(header string) error {
 	var trimmedAndFiltered []string
@@ -149,12 +150,12 @@ func (h *AcceptHeader) UnmarshalHTTPHeader(header string) error {
 		}
 		trimmedAndFiltered = append(trimmedAndFiltered, trimmed)
 	}
-	*h = AcceptHeader(types.NewSet[string](trimmedAndFiltered))
+	*h = AcceptHeader(NewSet[string](trimmedAndFiltered))
 	return nil
 }
 
 func (h AcceptHeader) Contains(s string) bool {
-	return types.Set[string](h).Contains(s)
+	return Set[string](h).Contains(s)
 }
 
 type resourceResponse struct {
@@ -170,10 +171,10 @@ type StoreBlobResponse struct {
 	SHA3 types.Hash `json:"sha3"`
 }
 
-type ParentsHeader types.Set[state.Version]
+type ParentsHeader Set[state.Version]
 
 func (h *ParentsHeader) UnmarshalHTTPHeader(header string) error {
-	ids := types.NewSet[state.Version](nil)
+	ids := NewSet[state.Version](nil)
 	for _, idStr := range strings.Split(header, ",") {
 		id, err := state.VersionFromHex(strings.TrimSpace(idStr))
 		if err != nil {
@@ -186,5 +187,5 @@ func (h *ParentsHeader) UnmarshalHTTPHeader(header string) error {
 }
 
 func (h ParentsHeader) Slice() []state.Version {
-	return types.Set[state.Version](h).Slice()
+	return Set[state.Version](h).Slice()
 }

@@ -8,9 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"redwood.dev/errors"
-	"redwood.dev/state"
 	"redwood.dev/types/pb"
-	"redwood.dev/utils"
 )
 
 type Range = pb.Range
@@ -130,7 +128,7 @@ func AddressFromBytes(bs []byte) Address {
 }
 
 func RandomAddress() Address {
-	return AddressFromBytes(utils.RandomBytes(len(Address{})))
+	return AddressFromBytes(RandomBytes(len(Address{})))
 }
 
 func (a Address) IsZero() bool {
@@ -200,11 +198,11 @@ func (a *Address) UnmarshalJSON(data []byte) error {
 func (a Address) Compare(other Address) int { return bytes.Compare(a[:], other[:]) }
 func (a Address) Equal(other Address) bool  { return bytes.Equal(a[:], other[:]) }
 
-func (a Address) MapKey() (state.Keypath, error) {
-	return state.Keypath(a.Hex()), nil
+func (a Address) MapKey() ([]byte, error) {
+	return []byte(a.Hex()), nil
 }
 
-func (a *Address) ScanMapKey(keypath state.Keypath) error {
+func (a *Address) ScanMapKey(keypath []byte) error {
 	addr, err := AddressFromHex(string(keypath))
 	if err != nil {
 		return err
@@ -212,75 +210,6 @@ func (a *Address) ScanMapKey(keypath state.Keypath) error {
 	*a = addr
 	return nil
 }
-
-type Signature []byte
-
-func SignatureFromHex(hx string) (Signature, error) {
-	bs, err := hex.DecodeString(hx)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	return Signature(bs), nil
-}
-
-func (sig Signature) String() string {
-	return sig.Hex()
-}
-
-func (sig Signature) Hex() string {
-	return hex.EncodeToString(sig)
-}
-
-func (sig Signature) Copy() Signature {
-	cp := make(Signature, len(sig))
-	copy(cp, sig)
-	return cp
-}
-
-func (sig Signature) Marshal() ([]byte, error) {
-	sig2 := make(Signature, len(sig))
-	copy(sig2, sig)
-	return sig2, nil
-}
-
-func (sig *Signature) MarshalTo(data []byte) (n int, err error) {
-	copy(data, *sig)
-	return len(data), nil
-}
-
-func (sig *Signature) Unmarshal(data []byte) error {
-	*sig = make(Signature, len(data))
-	copy(*sig, data)
-	return nil
-}
-
-func (sig *Signature) UnmarshalText(bs []byte) error {
-	bytes, err := hex.DecodeString(string(bs))
-	if err != nil {
-		return err
-	}
-	*sig = make(Signature, len(bytes))
-	copy(*sig, bytes)
-	return nil
-}
-
-func (sig *Signature) Size() int { return len(*sig) }
-func (sig Signature) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + sig.Hex() + `"`), nil
-}
-func (sig *Signature) UnmarshalJSON(data []byte) error {
-	if len(data) < 2 || data[0] != '"' || data[len(data)-1] != '"' {
-		return errors.Errorf(`bad JSON for types.Signature: %v`, string(data))
-	}
-	bs, err := hex.DecodeString(string(data[1 : len(data)-1]))
-	if err != nil {
-		return err
-	}
-	*sig = bs
-	return err
-}
-func (sig Signature) Compare(other Signature) int { return bytes.Compare(sig[:], other[:]) }
-func (sig Signature) Equal(other Signature) bool  { return bytes.Equal(sig[:], other[:]) }
 
 type Hash [32]byte
 
@@ -397,24 +326,34 @@ type gogoprotobufTest interface {
 
 func NewPopulatedID(_ gogoprotobufTest) *ID {
 	var id ID
-	copy(id[:], utils.RandomBytes(32))
+	copy(id[:], RandomBytes(32))
 	return &id
 }
 
 func NewPopulatedHash(_ gogoprotobufTest) *Hash {
 	var h Hash
-	copy(h[:], utils.RandomBytes(32))
+	copy(h[:], RandomBytes(32))
 	return &h
 }
 
 func NewPopulatedAddress(_ gogoprotobufTest) *Address {
 	var a Address
-	copy(a[:], utils.RandomBytes(20))
+	copy(a[:], RandomBytes(20))
 	return &a
 }
 
-func NewPopulatedSignature(_ gogoprotobufTest) *Signature {
-	var sig Signature
-	copy(sig[:], utils.RandomBytes(32))
-	return &sig
+func RandomBytes(length int) []byte {
+	bs := make([]byte, length)
+	rand.Read(bs)
+	return bs
+}
+
+func RandomString(n int) string {
+	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+	s := make([]rune, n)
+	for i := range s {
+		s[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(s)
 }

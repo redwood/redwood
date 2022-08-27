@@ -1,16 +1,22 @@
 package protohush
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/status-im/doubleratchet"
 
+	"redwood.dev/crypto"
 	"redwood.dev/errors"
+	"redwood.dev/identity"
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
+	. "redwood.dev/utils/generics"
 )
 
 type store struct {
@@ -27,702 +33,530 @@ func NewStore(db *state.DBTree) *store {
 	}
 }
 
-func (s *store) EnsureDHPair() (DHPair, error) {
-	dhPair, err := s.getDHPair()
-	if err == nil {
-		return dhPair, nil
-	} else if errors.Cause(err) == errors.Err404 {
-		// no-op
-	} else if err != nil {
-		return DHPair{}, err
-	}
+func (s *store) KeyBundle(id types.Hash) (KeyBundle, error) {
+	node := s.db.State(false)
+	defer node.Close()
 
-	dh, err := doubleratchet.DefaultCrypto{}.GenerateDH()
+	keypath := keyBundleKeypathForID(id)
+
+	exists, err := node.Exists(keypath)
 	if err != nil {
-		return DHPair{}, errors.Wrapf(err, "while generating DH keypair")
+		return KeyBundle{}, err
+	} else if !exists {
+		return KeyBundle{}, errors.Err404
 	}
 
-	dhPair = DHPair{Public: dh.PublicKey(), Private: dh.PrivateKey()}
+	var keyBundle KeyBundle
+	err = node.NodeAt(keypath, nil).Scan(&keyBundle)
+	if err != nil {
+		return KeyBundle{}, err
+	}
+	return keyBundle, nil
+}
+
+func (s *store) KeyBundles() ([]KeyBundle, error) {
+	node := s.db.State(false)
+	defer node.Close()
+
+	keypath := keyBundleKeypath.Copy()
+
+	// exists, err := node.Exists(keypath)
+	// if err != nil {
+	// 	return nil, err
+	// } else if !exists {
+	// 	return nil, nil
+	// }
+
+	var keyBundles map[string]KeyBundle
+	err := node.NodeAt(keypath, nil).Scan(&keyBundles)
+	if err != nil {
+		return nil, err
+	}
+	return Values(keyBundles), nil
+}
+
+func (s *store) LatestValidKeyBundleFor(addr types.Address) (KeyBundle, error) {
+	bundles, err := s.KeyBundles()
+	if err != nil {
+		return KeyBundle{}, err
+	}
+
+	bundles = Filter(bundles, func(bundle KeyBundle) bool { return !bundle.Revoked && bundle.Address == addr })
+	latest, ok := MaxFunc(bundles, func(bundle KeyBundle) uint64 { return bundle.CreatedAt })
+	if !ok {
+		return KeyBundle{}, errors.Err404
+	}
+	return latest, nil
+}
+
+func (s *store) CreateKeyBundle(identity identity.Identity) (KeyBundle, PubkeyBundle, error) {
+	idKey, err := GenerateX3DHPrivateKey()
+	if err != nil {
+		return KeyBundle{}, PubkeyBundle{}, err
+	}
+	spKey, err := GenerateX3DHPrivateKey()
+	if err != nil {
+		return KeyBundle{}, PubkeyBundle{}, err
+	}
+	rKey, err := GenerateRatchetPrivateKey()
+	if err != nil {
+		return KeyBundle{}, PubkeyBundle{}, err
+	}
+
+	now := uint64(time.Now().UTC().Unix())
+
+	keyBundle := KeyBundle{
+		IdentityKey:  idKey,
+		SignedPreKey: spKey,
+		RatchetKey:   rKey,
+		Revoked:      false,
+		Address:      identity.Address(),
+		CreatedAt:    now,
+	}
+
+	pubkeyBundle, err := keyBundle.ToPubkeyBundle(identity)
+	if err != nil {
+		return KeyBundle{}, PubkeyBundle{}, err
+	}
 
 	node := s.db.State(true)
 	defer node.Close()
 
-	err = node.Set(dhPairKeypath.Copy(), nil, dhPair)
+	err = node.Set(keyBundleKeypathForID(keyBundle.ID()), nil, keyBundle)
 	if err != nil {
-		return DHPair{}, err
+		return KeyBundle{}, PubkeyBundle{}, err
+	}
+	err = node.Set(pubkeyBundleKeypathForID(pubkeyBundle.ID()), nil, pubkeyBundle)
+	if err != nil {
+		return KeyBundle{}, PubkeyBundle{}, err
 	}
 	err = node.Save()
 	if err != nil {
-		return DHPair{}, err
+		return KeyBundle{}, PubkeyBundle{}, err
 	}
-
-	dhPair, err = s.getDHPair()
-	if err != nil {
-		return DHPair{}, err
-	}
-
-	return dhPair, nil
+	return keyBundle, pubkeyBundle, nil
 }
 
-func (s *store) getDHPair() (DHPair, error) {
+func (s *store) PubkeyBundle(id types.Hash) (PubkeyBundle, error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	exists, err := node.Exists(dhPairKeypath.Copy())
+	keypath := pubkeyBundleKeypathForID(id)
+
+	exists, err := node.Exists(keypath)
 	if err != nil {
-		return DHPair{}, err
+		return PubkeyBundle{}, err
 	} else if !exists {
-		return DHPair{}, errors.Err404
+		return PubkeyBundle{}, errors.Err404
 	}
 
-	var dhPair DHPair
-	err = node.NodeAt(dhPairKeypath.Copy(), nil).Scan(&dhPair)
+	var pubkeyBundle PubkeyBundle
+	err = node.NodeAt(keypath, nil).Scan(&pubkeyBundle)
 	if err != nil {
-		return DHPair{}, err
+		return PubkeyBundle{}, err
 	}
-	return dhPair, nil
+	return pubkeyBundle, nil
 }
 
-func (s *store) DHPubkeyAttestations() ([]DHPubkeyAttestation, error) {
+func (s *store) PubkeyBundles() ([]PubkeyBundle, error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	var attestationsByAddr map[string]map[uint64]DHPubkeyAttestation
-	err := node.NodeAt(dhPubkeyAttestationsKeypath.Copy(), nil).Scan(&attestationsByAddr)
+	keypath := pubkeyBundleKeypath.Copy()
+
+	var pubkeyBundles map[string]PubkeyBundle
+	err := node.NodeAt(keypath, nil).Scan(&pubkeyBundles)
 	if err != nil {
 		return nil, err
 	}
-
-	var attestations []DHPubkeyAttestation
-	for _, as := range attestationsByAddr {
-		for _, a := range as {
-			attestations = append(attestations, a)
-		}
-	}
-	return attestations, nil
+	return Values(pubkeyBundles), nil
 }
 
-func (s *store) LatestDHPubkeyFor(addr types.Address) (DHPubkeyAttestation, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	var attestations map[uint64]DHPubkeyAttestation
-	err := node.NodeAt(dhPubkeyAttestationsKeypathFor(addr), nil).Scan(&attestations)
+func (s *store) LatestValidPubkeyBundleFor(addr types.Address) (PubkeyBundle, error) {
+	bundles, err := s.PubkeyBundles()
 	if err != nil {
-		return DHPubkeyAttestation{}, err
+		return PubkeyBundle{}, err
 	}
 
-	if len(attestations) == 0 {
-		return DHPubkeyAttestation{}, errors.Err404
+	bundles = Filter(bundles, func(bundle PubkeyBundle) bool {
+		bundleAddr, err := bundle.Address()
+		return err == nil && !bundle.Revoked && bundleAddr == addr
+	})
+	latest, ok := MaxFunc(bundles, func(bundle PubkeyBundle) uint64 { return bundle.CreatedAt })
+	if !ok {
+		return PubkeyBundle{}, errors.Err404
 	}
-
-	var maxEpoch uint64
-	for epoch := range attestations {
-		if epoch > maxEpoch {
-			maxEpoch = epoch
-		}
-	}
-	return attestations[maxEpoch], nil
+	return latest, nil
 }
 
-func (s *store) SaveDHPubkeyAttestations(attestations []DHPubkeyAttestation) error {
+func (s *store) SavePubkeyBundles(bundles []PubkeyBundle) error {
 	node := s.db.State(true)
 	defer node.Close()
 
-	for _, a := range attestations {
-		addr, err := a.Address()
+	for _, bundle := range bundles {
+		err := node.Set(pubkeyBundleKeypathForID(bundle.ID()), nil, bundle)
 		if err != nil {
-			s.Errorf("bad DH pubkey attestation: %v", a)
-			continue
+			return err
 		}
+	}
+	return node.Save()
+}
 
-		err = node.Set(dhPubkeyAttestationsKeypathFor(addr).Pushs(fmt.Sprintf("%v", a.Epoch)), nil, a)
+func (s *store) PubkeyBundleAddresses() ([]types.Address, error) {
+	bundles, err := s.PubkeyBundles()
+	if err != nil {
+		return nil, err
+	}
+	return MapWithError(bundles, func(bundle PubkeyBundle) (types.Address, error) { return bundle.Address() })
+}
+
+func (s *store) Session(id types.Hash) (Session, doubleratchet.Session, error) {
+	node := s.db.State(false)
+	defer node.Close()
+
+	keypath := sessionKeypathForID(id)
+
+	exists, err := node.Exists(keypath)
+	if err != nil {
+		return Session{}, nil, err
+	} else if !exists {
+		return Session{}, nil, errors.Err404
+	}
+
+	var session Session
+	err = node.NodeAt(keypath, nil).Scan(&session)
+	if err != nil {
+		return Session{}, nil, err
+	}
+
+	drsession, err := doubleratchet.Load(session.ID().Bytes(), s.RatchetSessionStore())
+	if err != nil {
+		return Session{}, nil, err
+	}
+
+	return session, drsession, nil
+}
+
+func (s *store) SaveSession(session Session) error {
+	node := s.db.State(true)
+	defer node.Close()
+
+	err := node.Set(sessionKeypathForID(session.ID()), nil, session)
+	if err != nil {
+		return err
+	}
+
+	err = node.Set(sessionsKeypathForUsers(session.MyAddress, session.RemoteAddress).Pushs(session.ID().Hex()), nil, true)
+	if err != nil {
+		return err
+	}
+
+	return node.Save()
+}
+
+func (s *store) StartOutgoingSession(myBundle KeyBundle, remoteBundle PubkeyBundle, ephemeralPubkey *X3DHPublicKey, sharedKey []byte) (_ Session, _ doubleratchet.Session, err error) {
+	defer errors.AddStack(&err)
+
+	remoteAddress, err := remoteBundle.Address()
+	if err != nil {
+		return Session{}, nil, err
+	}
+	session := Session{
+		MyAddress:       myBundle.Address,
+		MyBundleID:      myBundle.ID(),
+		RemoteAddress:   remoteAddress,
+		RemoteBundleID:  remoteBundle.ID(),
+		EphemeralPubkey: ephemeralPubkey,
+		SharedKey:       sharedKey,
+		Revoked:         false,
+	}
+
+	node := s.db.State(true)
+	defer node.Close()
+
+	err = node.Set(sessionKeypathForID(session.ID()), nil, session)
+	if err != nil {
+		return Session{}, nil, err
+	}
+	err = node.Set(sessionsKeypathForUsers(session.MyAddress, session.RemoteAddress).Pushs(session.ID().Hex()), nil, true)
+	if err != nil {
+		return Session{}, nil, err
+	}
+	err = node.Save()
+	if err != nil {
+		return Session{}, nil, err
+	}
+
+	drsession, err := doubleratchet.NewWithRemoteKey(
+		session.ID().Bytes(),
+		session.SharedKey,
+		doubleratchet.Key(remoteBundle.RatchetPubkey.Bytes()),
+		s.RatchetSessionStore(),
+		doubleratchet.WithKeysStorage(s.RatchetKeyStore()),
+	)
+	return session, drsession, err
+}
+
+func (s *store) StartIncomingSession(myBundle KeyBundle, remoteBundle PubkeyBundle, ephemeralPubkey *X3DHPublicKey, sharedKey []byte) (_ Session, _ doubleratchet.Session, err error) {
+	defer errors.AddStack(&err)
+
+	remoteAddress, err := remoteBundle.Address()
+	if err != nil {
+		return Session{}, nil, err
+	}
+	session := Session{
+		MyAddress:       myBundle.Address,
+		MyBundleID:      myBundle.ID(),
+		RemoteAddress:   remoteAddress,
+		RemoteBundleID:  remoteBundle.ID(),
+		EphemeralPubkey: ephemeralPubkey,
+		SharedKey:       sharedKey,
+		Revoked:         false,
+	}
+
+	node := s.db.State(true)
+	defer node.Close()
+
+	err = node.Set(sessionKeypathForID(session.ID()), nil, session)
+	if err != nil {
+		return Session{}, nil, err
+	}
+	err = node.Set(sessionsKeypathForUsers(session.MyAddress, session.RemoteAddress).Pushs(session.ID().Hex()), nil, true)
+	if err != nil {
+		return Session{}, nil, err
+	}
+	err = node.Save()
+	if err != nil {
+		return Session{}, nil, err
+	}
+
+	drsession, err := doubleratchet.New(
+		session.ID().Bytes(),
+		sharedKey,
+		myBundle.RatchetKey,
+		s.RatchetSessionStore(),
+		doubleratchet.WithKeysStorage(s.RatchetKeyStore()),
+	)
+	return session, drsession, err
+}
+
+func (s *store) LatestValidSessionWithUsers(a, b types.Address) (_ Session, _ doubleratchet.Session, err error) {
+	defer errors.AddStack(&err)
+
+	node := s.db.State(false)
+	defer node.Close()
+
+	sessionIDs := node.NodeAt(sessionsKeypathForUsers(a, b), nil).Subkeys()
+
+	sessions := Reduce(sessionIDs, func(into []Session, idKeypath state.Keypath) []Session {
+		id, err := types.HashFromHex(string(idKeypath))
 		if err != nil {
-			s.Errorf("error saving DH pubkey attestation %v: %v", a, err)
-			continue
+			s.Errorf("while decoding session keypath '%v': %v", idKeypath.String(), err)
+			return into
 		}
-	}
-	return node.Save()
-}
 
-func (s *store) OutgoingIndividualSessionProposalHashes() (types.Set[types.Hash], error) {
-	node := s.db.State(false)
-	defer node.Close()
+		keypath := sessionKeypathForID(id)
 
-	hashes := types.NewSet[types.Hash](nil)
-	for _, subkey := range node.NodeAt(outgoingIndividualSessionProposalsByHashKeypath.Copy(), nil).Subkeys() {
-		hash, err := types.HashFromHex(subkey.String())
+		exists, err := node.Exists(keypath)
 		if err != nil {
-			return nil, err
+			s.Errorf("while loading session '%v': %v", idKeypath.String(), err)
+			return into
+		} else if !exists {
+			return into
 		}
-		hashes.Add(hash)
-	}
-	return hashes, nil
-}
 
-func (s *store) OutgoingIndividualSessionProposalsForUsers(aliceAddr, bobAddr types.Address) ([]IndividualSessionProposal, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	var m map[string]types.Hash
-	err := node.NodeAt(outgoingIndividualSessionProposalKeypathForUsers(aliceAddr, bobAddr), nil).Scan(&m)
-	if err != nil {
-		return nil, err
-	}
-
-	var proposals []IndividualSessionProposal
-	for _, hash := range m {
-		proposal, err := s.OutgoingIndividualSessionProposalByHash(hash)
+		var session Session
+		err = node.NodeAt(keypath, nil).Scan(&session)
 		if err != nil {
-			return nil, err
+			s.Errorf("while loading session '%v': %v", idKeypath.String(), err)
+			return into
+		} else if session.Revoked {
+			return into
 		}
-		proposals = append(proposals, proposal)
+		return append(into, session)
+	}, nil)
+
+	session, ok := MaxFunc(sessions, func(session Session) uint64 { return session.CreatedAt })
+	if !ok {
+		return Session{}, nil, errors.Err404
 	}
-	return proposals, nil
+
+	drsession, err := doubleratchet.Load(session.ID().Bytes(), s.RatchetSessionStore())
+	if err != nil {
+		return Session{}, nil, err
+	}
+
+	return session, drsession, nil
 }
 
-func (s *store) OutgoingIndividualSessionProposalByHash(proposalHash types.Hash) (p IndividualSessionProposal, err error) {
+func (s *store) SymEncKeyAndMessage(messageType, messageID string) (crypto.SymEncKey, crypto.SymEncMsg, error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	keypath := outgoingIndividualSessionProposalKeypathForHash(proposalHash)
-
-	exists, err := node.Exists(keypath)
+	exists, err := node.Exists(nil)
 	if err != nil {
-		return IndividualSessionProposal{}, err
+		return crypto.SymEncKey{}, crypto.SymEncMsg{}, err
 	} else if !exists {
-		return IndividualSessionProposal{}, errors.Err404
+		return crypto.SymEncKey{}, crypto.SymEncMsg{}, errors.Err404
 	}
 
-	var proposal IndividualSessionProposal
-	err = node.NodeAt(keypath, nil).Scan(&proposal)
+	var msg SymEncKeyAndMessage
+	err = node.NodeAt(symEncKeyAndMessageKeypathFor(messageType, messageID), nil).Scan(&msg)
 	if err != nil {
-		return IndividualSessionProposal{}, err
+		return crypto.SymEncKey{}, crypto.SymEncMsg{}, err
 	}
-	return proposal, nil
+	return msg.Key, msg.Message, nil
 }
 
-func (s *store) OutgoingIndividualSessionProposalByUsersAndType(sessionType string, aliceAddr, bobAddr types.Address) (IndividualSessionProposal, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	keypath := outgoingIndividualSessionProposalKeypathForUsersAndType(sessionType, aliceAddr, bobAddr)
-
-	exists, err := node.Exists(keypath)
-	if err != nil {
-		return IndividualSessionProposal{}, err
-	} else if !exists {
-		return IndividualSessionProposal{}, errors.Err404
-	}
-
-	var proposalHash types.Hash
-	err = node.NodeAt(keypath, nil).Scan(&proposalHash)
-	if err != nil {
-		return IndividualSessionProposal{}, err
-	}
-	return s.OutgoingIndividualSessionProposalByHash(proposalHash)
-}
-
-func (s *store) SaveOutgoingIndividualSessionProposal(proposal IndividualSessionProposal) error {
+func (s *store) SaveSymEncKeyAndMessage(messageType, messageID string, key crypto.SymEncKey, msg crypto.SymEncMsg) error {
 	node := s.db.State(true)
 	defer node.Close()
 
-	proposalHash, err := proposal.Hash()
-	if err != nil {
-		return err
-	}
-
-	id := proposal.SessionID
-	err = node.Set(outgoingIndividualSessionProposalKeypathForUsersAndType(id.SessionType, id.AliceAddr, id.BobAddr), nil, proposalHash)
-	if err != nil {
-		return err
-	}
-	err = node.Set(outgoingIndividualSessionProposalKeypathForHash(proposalHash), nil, proposal)
+	err := node.Set(symEncKeyAndMessageKeypathFor(messageType, messageID), nil, SymEncKeyAndMessage{key, msg})
 	if err != nil {
 		return err
 	}
 	return node.Save()
 }
 
-func (s *store) DeleteOutgoingIndividualSessionProposal(proposalHash types.Hash) error {
-	proposal, err := s.OutgoingIndividualSessionProposalByHash(proposalHash)
-	if err != nil {
-		return err
-	}
-
-	node := s.db.State(true)
-	defer node.Close()
-
-	id := proposal.SessionID
-	err = node.Delete(outgoingIndividualSessionProposalKeypathForUsersAndType(id.SessionType, id.AliceAddr, id.BobAddr), nil)
-	if err != nil {
-		return err
-	}
-
-	err = node.Delete(outgoingIndividualSessionProposalKeypathForHash(proposalHash), nil)
-	if err != nil {
-		return err
-	}
-	return node.Save()
-}
-
-func (s *store) IncomingIndividualSessionProposals() (map[types.Hash]EncryptedIndividualSessionProposal, error) {
+func (s *store) IncomingGroupMessages() ([]IncomingGroupMessage, error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	var proposals map[types.Hash]EncryptedIndividualSessionProposal
-	err := node.NodeAt(incomingIndividualSessionProposalsKeypath.Copy(), nil).Scan(&proposals)
-	if err != nil {
-		return nil, err
-	}
-	return proposals, nil
-}
-
-func (s *store) IncomingIndividualSessionProposal(hash types.Hash) (EncryptedIndividualSessionProposal, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	keypath := incomingIndividualSessionProposalKeypathFor(hash)
-
-	exists, err := node.Exists(keypath)
-	if err != nil {
-		return EncryptedIndividualSessionProposal{}, err
-	} else if !exists {
-		return EncryptedIndividualSessionProposal{}, errors.Err404
-	}
-
-	var proposal EncryptedIndividualSessionProposal
-	err = node.NodeAt(keypath, nil).Scan(&proposal)
-	if err != nil {
-		return EncryptedIndividualSessionProposal{}, err
-	}
-	return proposal, nil
-}
-
-func (s *store) SaveIncomingIndividualSessionProposal(proposal EncryptedIndividualSessionProposal) error {
-	node := s.db.State(true)
-	defer node.Close()
-
-	err := node.Set(incomingIndividualSessionProposalKeypathFor(proposal.Hash()), nil, proposal)
-	if err != nil {
-		return err
-	}
-	return node.Save()
-}
-
-func (s *store) DeleteIncomingIndividualSessionProposal(proposal EncryptedIndividualSessionProposal) error {
-	node := s.db.State(true)
-	defer node.Close()
-
-	err := node.Delete(incomingIndividualSessionProposalKeypathFor(proposal.Hash()), nil)
-	if err != nil {
-		return err
-	}
-	return node.Save()
-}
-
-func (s *store) OutgoingIndividualSessionResponses() (map[types.Address]map[types.Hash]IndividualSessionResponse, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	var approvals_ map[string]map[types.Hash]IndividualSessionResponse
-	err := node.NodeAt(outgoingIndividualSessionResponsesKeypath.Copy(), nil).Scan(&approvals_)
+	var messages map[string]IncomingGroupMessage
+	err := node.NodeAt(incomingGroupMessagesKeypath.Copy(), nil).Scan(&messages)
 	if err != nil {
 		return nil, err
 	}
 
-	approvals := make(map[types.Address]map[types.Hash]IndividualSessionResponse)
-	for a, x := range approvals_ {
-		addr, err := types.AddressFromHex(a)
-		if err != nil {
-			return nil, err
-		}
-		approvals[addr] = x
-	}
-	return approvals, nil
+	return Values(messages), nil
 }
 
-func (s *store) OutgoingIndividualSessionResponse(aliceAddr types.Address, proposalHash types.Hash) (IndividualSessionResponse, error) {
+func (s *store) SaveIncomingGroupMessage(msg IncomingGroupMessage) error {
+	node := s.db.State(true)
+	defer node.Close()
+
+	err := node.Set(incomingGroupMessageKeypathForID(msg.ID), nil, msg)
+	if err != nil {
+		return err
+	}
+	return node.Save()
+}
+
+func (s *store) DeleteIncomingGroupMessage(id string) error {
+	node := s.db.State(true)
+	defer node.Close()
+
+	err := node.Delete(incomingGroupMessageKeypathForID(id), nil)
+	if err != nil {
+		return err
+	}
+	return node.Save()
+}
+
+func (s *store) OutgoingGroupMessage(id string) (OutgoingGroupMessage, error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	keypath := outgoingIndividualSessionResponseKeypathFor(aliceAddr, proposalHash)
+	keypath := outgoingGroupMessageKeypathForID(id)
 
 	exists, err := node.Exists(keypath)
 	if err != nil {
-		return IndividualSessionResponse{}, err
+		return OutgoingGroupMessage{}, err
 	} else if !exists {
-		return IndividualSessionResponse{}, errors.Err404
+		return OutgoingGroupMessage{}, errors.Err404
 	}
 
-	var approval IndividualSessionResponse
-	err = node.NodeAt(keypath, nil).Scan(&approval)
+	var msg OutgoingGroupMessage
+	err = node.NodeAt(keypath, nil).Scan(&msg)
 	if err != nil {
-		return IndividualSessionResponse{}, err
+		return OutgoingGroupMessage{}, err
 	}
-	return approval, nil
+	return msg, nil
 }
 
-func (s *store) OutgoingIndividualSessionResponsesForUser(aliceAddr types.Address) ([]IndividualSessionResponse, error) {
+func (s *store) OutgoingGroupMessageIDs() []string {
 	node := s.db.State(false)
 	defer node.Close()
-
-	var approvalsMap map[string]IndividualSessionResponse
-	err := node.NodeAt(outgoingIndividualSessionResponsesKeypathForUser(aliceAddr), nil).Scan(&approvalsMap)
-	if err != nil {
-		return nil, err
-	}
-	var approvals []IndividualSessionResponse
-	for _, a := range approvalsMap {
-		approvals = append(approvals, a)
-	}
-	return approvals, nil
+	return Map(node.NodeAt(outgoingGroupMessagesKeypath.Copy(), nil).Subkeys(), func(kp state.Keypath) string { return string(kp) })
 }
 
-func (s *store) SaveOutgoingIndividualSessionResponse(aliceAddr types.Address, approval IndividualSessionResponse) error {
+func (s *store) SaveOutgoingGroupMessage(msg OutgoingGroupMessage) error {
 	node := s.db.State(true)
 	defer node.Close()
 
-	err := node.Set(outgoingIndividualSessionResponseKeypathFor(aliceAddr, approval.ProposalHash), nil, approval)
+	err := node.Set(outgoingGroupMessageKeypathForID(msg.ID), nil, msg)
 	if err != nil {
 		return err
 	}
 	return node.Save()
 }
 
-func (s *store) DeleteOutgoingIndividualSessionResponse(aliceAddr types.Address, proposalHash types.Hash) error {
+func (s *store) DeleteOutgoingGroupMessage(id string) error {
 	node := s.db.State(true)
 	defer node.Close()
 
-	err := node.Delete(outgoingIndividualSessionResponseKeypathFor(aliceAddr, proposalHash), nil)
+	err := node.Delete(outgoingGroupMessageKeypathForID(id), nil)
 	if err != nil {
 		return err
 	}
 	return node.Save()
 }
 
-func (s *store) SaveApprovedIndividualSession(session IndividualSessionProposal) error {
-	hash, err := session.Hash()
-	if err != nil {
-		return err
-	}
+func (s *store) Vaults() Set[string] {
+	node := s.db.State(false)
+	defer node.Close()
 
+	hostsEscaped := node.NodeAt(vaultsKeypath.Copy(), nil).Subkeys()
+
+	hosts, err := MapWithError(hostsEscaped, func(kp state.Keypath) (string, error) {
+		return url.QueryUnescape(string(kp))
+	})
+	if err != nil {
+		return nil
+	}
+	return NewSet(hosts)
+}
+
+func (s *store) AddVault(host string) error {
 	node := s.db.State(true)
 	defer node.Close()
 
-	err = node.Set(individualSessionIDKeypathForHash(hash), nil, session.SessionID)
-	if err != nil {
-		return err
-	}
-	err = node.Set(individualSessionKeypathForID(session.SessionID), nil, session)
+	err := node.Set(vaultsKeypathForHost(host), nil, true)
 	if err != nil {
 		return err
 	}
 	return node.Save()
 }
 
-func (s *store) IndividualSessionIDBySessionHash(hash types.Hash) (IndividualSessionID, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	keypath := individualSessionIDKeypathForHash(hash)
-
-	exists, err := node.Exists(keypath)
-	if err != nil {
-		return IndividualSessionID{}, err
-	} else if !exists {
-		return IndividualSessionID{}, errors.Err404
-	}
-
-	var sessionID IndividualSessionID
-	err = node.NodeAt(keypath, nil).Scan(&sessionID)
-	if err != nil {
-		return IndividualSessionID{}, err
-	}
-	return sessionID, nil
-}
-
-func (s *store) LatestIndividualSessionWithUsers(sessionType string, aliceAddr, bobAddr types.Address) (IndividualSessionProposal, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	keypath := individualSessionsKeypathForUsersAndType(sessionType, aliceAddr, bobAddr)
-
-	exists, err := node.Exists(keypath)
-	if err != nil {
-		return IndividualSessionProposal{}, err
-	} else if !exists {
-		return IndividualSessionProposal{}, errors.Err404
-	}
-
-	iter := node.ChildIterator(individualSessionsKeypathForUsersAndType(sessionType, aliceAddr, bobAddr), false, 0)
-	defer iter.Close()
-
-	var maxEpoch uint64
-	for iter.Rewind(); iter.Valid(); iter.Next() {
-		epoch := state.DecodeSliceIndex(iter.Node().Keypath().Part(-1))
-		if epoch > maxEpoch {
-			maxEpoch = epoch
-		}
-	}
-
-	session, err := s.IndividualSessionByID(IndividualSessionID{sessionType, aliceAddr, bobAddr, maxEpoch})
-	if err != nil {
-		return IndividualSessionProposal{}, err
-	}
-	return session, nil
-}
-
-func (s *store) IndividualSessionByID(id IndividualSessionID) (IndividualSessionProposal, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	exists, err := node.Exists(individualSessionKeypathForID(id))
-	if err != nil {
-		return IndividualSessionProposal{}, err
-	} else if !exists {
-		return IndividualSessionProposal{}, errors.Err404
-	}
-
-	var session IndividualSessionProposal
-	err = node.NodeAt(individualSessionKeypathForID(id), nil).Scan(&session)
-	if err != nil {
-		return IndividualSessionProposal{}, err
-	}
-	return session, nil
-}
-
-func (s *store) OutgoingIndividualMessageIntents() ([]IndividualMessageIntent, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	var intentsMap map[string]map[string]map[string]IndividualMessageIntent
-	err := node.NodeAt(outgoingIndividualMessagesKeypath.Copy(), nil).Scan(&intentsMap)
-	if err != nil {
-		return nil, err
-	}
-	var intents []IndividualMessageIntent
-	for _, x := range intentsMap {
-		for _, y := range x {
-			for _, intent := range y {
-				intents = append(intents, intent)
-			}
-		}
-	}
-	return intents, nil
-}
-
-func (s *store) OutgoingIndividualMessageIntent(sessionType string, recipient types.Address, id types.ID) (IndividualMessageIntent, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	keypath := outgoingIndividualMessageKeypathFor(IndividualMessageIntent{ID: id, SessionType: sessionType, Recipient: recipient})
-
-	exists, err := node.Exists(keypath)
-	if err != nil {
-		return IndividualMessageIntent{}, err
-	} else if !exists {
-		return IndividualMessageIntent{}, errors.Err404
-	}
-
-	var intent IndividualMessageIntent
-	err = node.NodeAt(keypath, nil).Scan(&intent)
-	if err != nil {
-		return IndividualMessageIntent{}, err
-	}
-	return intent, nil
-}
-
-func (s *store) OutgoingIndividualMessageIntentIDsForTypeAndRecipient(sessionType string, recipient types.Address) (types.Set[types.ID], error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	ids := types.NewSet[types.ID](nil)
-	for _, subkey := range node.NodeAt(outgoingIndividualMessagesKeypathForTypeAndRecipient(sessionType, recipient), nil).Subkeys() {
-		hash, err := types.IDFromHex(subkey.String())
-		if err != nil {
-			return nil, err
-		}
-		ids.Add(hash)
-	}
-	return ids, nil
-}
-
-func (s *store) SaveOutgoingIndividualMessageIntent(intent IndividualMessageIntent) error {
-	if (intent.ID == types.ID{}) {
-		return errors.New("message has no id")
-	}
-
+func (s *store) RemoveVault(host string) error {
 	node := s.db.State(true)
 	defer node.Close()
 
-	err := node.Set(outgoingIndividualMessageKeypathFor(intent), nil, intent)
+	err := node.Delete(vaultsKeypathForHost(host), nil)
 	if err != nil {
 		return err
 	}
 	return node.Save()
 }
 
-func (s *store) DeleteOutgoingIndividualMessageIntent(intent IndividualMessageIntent) error {
-	node := s.db.State(true)
-	defer node.Close()
-
-	err := node.Delete(outgoingIndividualMessageKeypathFor(intent), nil)
-	if err != nil {
-		return err
-	}
-	return node.Save()
-}
-
-func (s *store) IncomingIndividualMessages() ([]IndividualMessage, error) {
+func (s *store) LatestMtimeForVaultAndCollection(vaultHost, collectionID string) time.Time {
 	node := s.db.State(false)
 	defer node.Close()
 
-	var mss map[string]map[uint64]IndividualMessage
-	err := node.NodeAt(incomingIndividualMessagesKeypath.Copy(), nil).Scan(&mss)
+	var mtime uint64
+	err := node.NodeAt(keypathForLatestMtimeForVaultAndCollection(vaultHost, collectionID), nil).Scan(&mtime)
 	if err != nil {
-		return nil, err
+		return time.Time{}
 	}
-	var messages []IndividualMessage
-	for _, ms := range mss {
-		for _, m := range ms {
-			messages = append(messages, m)
-		}
-	}
-	return messages, nil
+	return time.Unix(int64(mtime), 0)
 }
 
-func (s *store) SaveIncomingIndividualMessage(sender types.Address, msg IndividualMessage) error {
+func (s *store) MaybeSaveLatestMtimeForVaultAndCollection(vaultHost, collectionID string, mtime time.Time) error {
 	node := s.db.State(true)
 	defer node.Close()
 
-	err := node.Set(incomingIndividualMessageKeypathFor(msg), nil, msg)
-	if err != nil {
-		return err
-	}
-	return node.Save()
-}
-
-func (s *store) DeleteIncomingIndividualMessage(msg IndividualMessage) error {
-	node := s.db.State(true)
-	defer node.Close()
-
-	err := node.Delete(incomingIndividualMessageKeypathFor(msg), nil)
-	if err != nil {
-		return err
-	}
-	return node.Save()
-}
-
-func (s *store) OutgoingGroupMessageSessionTypes() (types.Set[string], error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	sessionTypes := types.NewSet[string](nil)
-	for _, sessionType := range node.NodeAt(outgoingGroupMessageIntentsKeypath, nil).Subkeys() {
-		sessionTypes.Add(sessionType.String())
-	}
-	return sessionTypes, nil
-}
-
-func (s *store) OutgoingGroupMessageIntentIDsForSessionType(sessionType string) (types.Set[string], error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	keypath := outgoingGroupMessageIntentsKeypathForSessionType(sessionType)
-
-	ids := types.NewSet[string](nil)
-	for _, subkey := range node.NodeAt(keypath, nil).Subkeys() {
-		ids.Add(subkey.String())
-	}
-	return ids, nil
-}
-
-func (s *store) OutgoingGroupMessageIntent(sessionType, id string) (GroupMessageIntent, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	keypath := outgoingGroupMessageIntentKeypathFor(sessionType, id)
-
-	exists, err := node.Exists(keypath)
-	if err != nil {
-		return GroupMessageIntent{}, err
-	} else if !exists {
-		return GroupMessageIntent{}, errors.Err404
-	}
-
-	var intent GroupMessageIntent
-	err = node.NodeAt(keypath, nil).Scan(&intent)
-	if err != nil {
-		return GroupMessageIntent{}, err
-	}
-	return intent, nil
-}
-
-func (s *store) SaveOutgoingGroupMessageIntent(intent GroupMessageIntent) error {
-	node := s.db.State(true)
-	defer node.Close()
-
-	err := node.Set(outgoingGroupMessageIntentKeypathFor(intent.SessionType, intent.ID), nil, intent)
-	if err != nil {
-		return err
-	}
-
-	return node.Save()
-}
-
-func (s *store) DeleteOutgoingGroupMessageIntent(sessionType, id string) error {
-	node := s.db.State(true)
-	defer node.Close()
-
-	err := node.Delete(outgoingGroupMessageIntentKeypathFor(sessionType, id), nil)
-	if err != nil {
-		return err
-	}
-	return node.Save()
-}
-
-func (s *store) IncomingGroupMessages() ([]GroupMessage, error) {
-	node := s.db.State(false)
-	defer node.Close()
-
-	var messagesMap map[string]GroupMessage
-	err := node.NodeAt(incomingGroupMessagesKeypath.Copy(), nil).Scan(&messagesMap)
-	if err != nil {
-		return nil, err
-	}
-	var messages []GroupMessage
-	for _, msg := range messagesMap {
-		messages = append(messages, msg)
-	}
-	return messages, nil
-}
-
-func (s *store) SaveIncomingGroupMessage(sender types.Address, msg GroupMessage) error {
-	node := s.db.State(true)
-	defer node.Close()
-
-	msgHash, err := msg.Hash()
-	if err != nil {
-		return err
-	}
-	err = node.Set(incomingGroupMessageKeypathFor(msgHash), nil, msg)
-	if err != nil {
-		return err
-	}
-	return node.Save()
-}
-
-func (s *store) DeleteIncomingGroupMessage(msg GroupMessage) error {
-	node := s.db.State(true)
-	defer node.Close()
-
-	msgHash, err := msg.Hash()
-	if err != nil {
-		return err
-	}
-
-	err = node.Delete(incomingGroupMessageKeypathFor(msgHash), nil)
+	err := node.Set(keypathForLatestMtimeForVaultAndCollection(vaultHost, collectionID), nil, uint64(mtime.UTC().Unix()))
 	if err != nil {
 		return err
 	}
@@ -735,12 +569,12 @@ func (s *store) DebugPrint() {
 	node.NodeAt(rootKeypath, nil).DebugPrint(func(msg string, args ...interface{}) { fmt.Printf(msg, args...) }, true, 0)
 }
 
-func (ks *store) RatchetSessionStore() RatchetSessionStore {
-	return (*ratchetSessionStore)(ks)
+func (s *store) RatchetSessionStore() RatchetSessionStore {
+	return (*ratchetSessionStore)(s)
 }
 
-func (ks *store) RatchetKeyStore() RatchetKeyStore {
-	return (*ratchetKeyStore)(ks)
+func (s *store) RatchetKeyStore() RatchetKeyStore {
+	return (*ratchetKeyStore)(s)
 }
 
 type ratchetSessionStore store
@@ -748,49 +582,60 @@ type ratchetSessionStore store
 var _ RatchetSessionStore = (*ratchetSessionStore)(nil)
 
 type ratchetSessionCodec struct {
-	DHr                      doubleratchet.Key `tree:"DHr"`
-	DHs                      DHPair            `tree:"DHs"`
-	RootChainKey             doubleratchet.Key `tree:"RootChainKey"`
-	SendChainKey             doubleratchet.Key `tree:"SendChainKey"`
-	SendChainN               uint64            `tree:"SendChainN"`
-	RecvChainKey             doubleratchet.Key `tree:"RecvChainKey"`
-	RecvChainN               uint64            `tree:"RecvChainN"`
-	PN                       uint64            `tree:"PN"`
-	MaxSkip                  uint64            `tree:"MaxSkip"`
-	HKr                      doubleratchet.Key `tree:"HKr"`
-	NHKr                     doubleratchet.Key `tree:"NHKr"`
-	HKs                      doubleratchet.Key `tree:"HKs"`
-	NHKs                     doubleratchet.Key `tree:"NHKs"`
-	MaxKeep                  uint64            `tree:"MaxKeep"`
-	MaxMessageKeysPerSession int64             `tree:"MaxMessageKeysPerSession"`
-	Step                     uint64            `tree:"Step"`
-	KeysCount                uint64            `tree:"KeysCount"`
+	DHr                      doubleratchet.Key  `tree:"DHr"`
+	DHs                      *RatchetPrivateKey `tree:"DHs"`
+	RootChainKey             doubleratchet.Key  `tree:"RootChainKey"`
+	SendChainKey             doubleratchet.Key  `tree:"SendChainKey"`
+	SendChainN               uint64             `tree:"SendChainN"`
+	RecvChainKey             doubleratchet.Key  `tree:"RecvChainKey"`
+	RecvChainN               uint64             `tree:"RecvChainN"`
+	PN                       uint64             `tree:"PN"`
+	MaxSkip                  uint64             `tree:"MaxSkip"`
+	HKr                      doubleratchet.Key  `tree:"HKr"`
+	NHKr                     doubleratchet.Key  `tree:"NHKr"`
+	HKs                      doubleratchet.Key  `tree:"HKs"`
+	NHKs                     doubleratchet.Key  `tree:"NHKs"`
+	MaxKeep                  uint64             `tree:"MaxKeep"`
+	MaxMessageKeysPerSession int64              `tree:"MaxMessageKeysPerSession"`
+	Step                     uint64             `tree:"Step"`
+	KeysCount                uint64             `tree:"KeysCount"`
 }
 
-func (s *ratchetSessionStore) loadSharedKey(sessionIDBytes []byte) ([]byte, error) {
-	var sessionID IndividualSessionID
-	err := sessionID.UnmarshalText(sessionIDBytes)
-	if err != nil {
-		return nil, err
-	}
-	session, err := (*store)(s).IndividualSessionByID(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return session.SharedKey[:], nil
-}
-
-func (s *ratchetSessionStore) Load(sessionID []byte) (*doubleratchet.State, error) {
+func (s *ratchetSessionStore) Load(sessionIDBytes []byte) (*doubleratchet.State, error) {
 	node := s.db.State(false)
 	defer node.Close()
 
-	sharedKey, err := s.loadSharedKey(sessionID)
+	id, err := types.HashFromBytes(sessionIDBytes)
 	if err != nil {
 		return nil, err
 	}
 
+	keypath := sessionKeypathForID(id).Pushs("sharedKey")
+
+	exists, err := node.Exists(keypath)
+	if err != nil {
+		return nil, err
+	} else if !exists {
+		return nil, errors.Err404
+	}
+
+	var sharedKey []byte
+	err = node.NodeAt(keypath, nil).Scan(&sharedKey)
+	if err != nil {
+		return nil, err
+	}
+
+	keypath = ratchetSessionKeypathFor(sessionIDBytes)
+
+	exists, err = node.Exists(keypath)
+	if err != nil {
+		return nil, err
+	} else if !exists {
+		return nil, errors.Err404
+	}
+
 	var codec ratchetSessionCodec
-	err = node.NodeAt(ratchetSessionKeypathFor(sessionID), nil).Scan(&codec)
+	err = node.NodeAt(keypath, nil).Scan(&codec)
 	if err != nil {
 		return nil, err
 	}
@@ -824,7 +669,7 @@ func (s *ratchetSessionStore) Save(sessionID []byte, state *doubleratchet.State)
 
 	codec := ratchetSessionCodec{
 		DHr:                      state.DHr,
-		DHs:                      DHPair{Private: state.DHs.PrivateKey(), Public: state.DHs.PublicKey()},
+		DHs:                      RatchetPrivateKeyFromBytes([]byte(state.DHs.PrivateKey())),
 		RootChainKey:             state.RootCh.CK,
 		SendChainKey:             state.SendCh.CK,
 		SendChainN:               uint64(state.SendCh.N),
@@ -962,116 +807,53 @@ func (s *ratchetKeyStore) All() (map[string]map[uint]doubleratchet.Key, error) {
 }
 
 var (
-	rootKeypath = state.Keypath("protohush")
-
-	dhPubkeyAttestationsKeypath = rootKeypath.Copy().Pushs("dh-pubkey-attestations")
-	dhPairKeypath               = rootKeypath.Copy().Pushs("dh-pairs")
-
-	outgoingIndividualSessionProposalsKeypath        = rootKeypath.Copy().Pushs("proposals-out")
-	outgoingIndividualSessionProposalsByHashKeypath  = outgoingIndividualSessionProposalsKeypath.Copy().Pushs("by-hash")
-	outgoingIndividualSessionProposalsByUsersKeypath = outgoingIndividualSessionProposalsKeypath.Copy().Pushs("by-users")
-
-	outgoingIndividualSessionResponsesKeypath = rootKeypath.Copy().Pushs("approvals-out")
-	incomingIndividualSessionProposalsKeypath = rootKeypath.Copy().Pushs("proposals-in")
-
-	individualSessionsKeypath       = rootKeypath.Copy().Pushs("individual-sessions")
-	individualSessionsByIDKeypath   = individualSessionsKeypath.Copy().Pushs("by-id")
-	individualSessionsByHashKeypath = individualSessionsKeypath.Copy().Pushs("by-hash")
-
-	outgoingIndividualMessagesKeypath = rootKeypath.Copy().Pushs("outgoing-individual-messages")
-	incomingIndividualMessagesKeypath = rootKeypath.Copy().Pushs("incoming-individual-messages")
-
-	outgoingGroupMessagesKeypath       = rootKeypath.Copy().Pushs("outgoing-group-messages")
-	outgoingGroupMessageIntentsKeypath = outgoingGroupMessagesKeypath.Copy().Pushs("intents")
-	outgoingGroupMessageSendsKeypath   = outgoingGroupMessagesKeypath.Copy().Pushs("sends")
-
-	incomingGroupMessagesKeypath = rootKeypath.Copy().Pushs("incoming-group-messages")
-
-	sharedKeysKeypath  = rootKeypath.Copy().Pushs("sks")
-	sessionsKeypath    = rootKeypath.Copy().Pushs("sessions")
-	messageKeysKeypath = rootKeypath.Copy().Pushs("mks")
+	rootKeypath                  = state.Keypath("protohush")
+	keyBundleKeypath             = rootKeypath.Copy().Pushs("key-bundles")
+	pubkeyBundleKeypath          = rootKeypath.Copy().Pushs("pubkey-bundles")
+	sessionsKeypath              = rootKeypath.Copy().Pushs("sessions")
+	symEncKeyAndMessageKeypath   = rootKeypath.Copy().Pushs("sym-enc-messages-and-keys")
+	incomingGroupMessagesKeypath = rootKeypath.Copy().Pushs("messages-in")
+	outgoingGroupMessagesKeypath = rootKeypath.Copy().Pushs("messages-out")
+	sharedKeysKeypath            = rootKeypath.Copy().Pushs("sks")
+	drsessionsKeypath            = rootKeypath.Copy().Pushs("dr-sessions")
+	messageKeysKeypath           = rootKeypath.Copy().Pushs("mks")
+	vaultsKeypath                = rootKeypath.Copy().Pushs("vaults")
+	vaultMtimeKeypath            = rootKeypath.Copy().Pushs("latestMtimeForVaultAndCollection")
 )
 
-func dhPubkeyAttestationsKeypathFor(addr types.Address) state.Keypath {
-	return dhPubkeyAttestationsKeypath.Copy().Pushs(addr.Hex())
+func keyBundleKeypathForID(id types.Hash) state.Keypath {
+	return keyBundleKeypath.Copy().Pushs(id.Hex())
 }
 
-func outgoingIndividualSessionProposalKeypathForHash(proposalHash types.Hash) state.Keypath {
-	return outgoingIndividualSessionProposalsByHashKeypath.Copy().Pushs(proposalHash.Hex())
+func pubkeyBundleKeypathForID(id types.Hash) state.Keypath {
+	return pubkeyBundleKeypath.Copy().Pushs(id.Hex())
 }
 
-func outgoingIndividualSessionProposalKeypathForUsers(aliceAddr, bobAddr types.Address) state.Keypath {
-	alice, bob := addrsSorted(aliceAddr, bobAddr)
-	return outgoingIndividualSessionProposalsByUsersKeypath.Copy().Pushs(alice.Hex()).Pushs(bob.Hex())
+func sessionKeypathForID(id types.Hash) state.Keypath {
+	return sessionsKeypath.Copy().Pushs("by-id").Pushs(id.Hex())
 }
 
-func outgoingIndividualSessionProposalKeypathForUsersAndType(sessionType string, aliceAddr, bobAddr types.Address) state.Keypath {
-	return outgoingIndividualSessionProposalKeypathForUsers(aliceAddr, bobAddr).Pushs(sessionType)
+func sessionsKeypathForUsers(a, b types.Address) state.Keypath {
+	if bytes.Compare(a.Bytes(), b.Bytes()) > 0 {
+		a, b = b, a
+	}
+	return sessionsKeypath.Copy().Pushs("by-users").Pushs(a.Hex()).Pushs(b.Hex())
 }
 
-func incomingIndividualSessionProposalKeypathFor(proposalHash types.Hash) state.Keypath {
-	return incomingIndividualSessionProposalsKeypath.Copy().Pushs(proposalHash.Hex())
+func symEncKeyAndMessageKeypathFor(messageType, messageID string) state.Keypath {
+	return symEncKeyAndMessageKeypath.Copy().Pushs(messageType).Pushs(messageID)
 }
 
-func outgoingIndividualSessionResponsesKeypathForUser(aliceAddr types.Address) state.Keypath {
-	return outgoingIndividualSessionResponsesKeypath.Copy().Pushs(aliceAddr.Hex())
+func incomingGroupMessageKeypathForID(id string) state.Keypath {
+	return incomingGroupMessagesKeypath.Copy().Pushs(id)
 }
 
-func outgoingIndividualSessionResponseKeypathFor(aliceAddr types.Address, proposalHash types.Hash) state.Keypath {
-	return outgoingIndividualSessionResponsesKeypathForUser(aliceAddr).Pushs(proposalHash.Hex())
-}
-
-func individualSessionsKeypathForUsers(aliceAddr, bobAddr types.Address) state.Keypath {
-	a, b := addrsSorted(aliceAddr, bobAddr)
-	return individualSessionsByIDKeypath.Copy().Pushs(a.Hex()).Pushs(b.Hex())
-}
-
-func individualSessionsKeypathForUsersAndType(sessionType string, aliceAddr, bobAddr types.Address) state.Keypath {
-	return individualSessionsKeypathForUsers(aliceAddr, bobAddr).Pushs(sessionType)
-}
-
-func individualSessionKeypathForID(sessionID IndividualSessionID) state.Keypath {
-	return individualSessionsKeypathForUsersAndType(sessionID.SessionType, sessionID.AliceAddr, sessionID.BobAddr).PushIndex(sessionID.Epoch)
-}
-
-func individualSessionIDKeypathForHash(hash types.Hash) state.Keypath {
-	return individualSessionsByHashKeypath.Copy().Pushs(hash.Hex())
-}
-
-func outgoingIndividualMessagesKeypathForTypeAndRecipient(sessionType string, recipient types.Address) state.Keypath {
-	return outgoingIndividualMessagesKeypath.Copy().Pushs(sessionType).Pushs(recipient.Hex())
-}
-
-func outgoingIndividualMessageKeypathFor(intent IndividualMessageIntent) state.Keypath {
-	return outgoingIndividualMessagesKeypathForTypeAndRecipient(intent.SessionType, intent.Recipient).Pushs(intent.ID.Hex())
-}
-
-func incomingIndividualMessageKeypathFor(msg IndividualMessage) state.Keypath {
-	return incomingIndividualMessagesKeypath.Copy().Pushs(msg.SessionHash.Hex()).PushIndex(uint64(msg.Header.N))
-}
-
-func outgoingGroupMessageIntentsKeypathForSessionType(sessionType string) state.Keypath {
-	return outgoingGroupMessageIntentsKeypath.Copy().Pushs(sessionType)
-}
-
-func outgoingGroupMessageIntentKeypathFor(sessionType, id string) state.Keypath {
-	return outgoingGroupMessageIntentsKeypathForSessionType(sessionType).Pushs(id)
-}
-
-func outgoingGroupMessageKeypathFor(recipient types.Address, id types.ID) state.Keypath {
-	return outgoingGroupMessagesKeypathForRecipient(recipient).Pushs(id.Hex())
-}
-
-func outgoingGroupMessagesKeypathForRecipient(recipient types.Address) state.Keypath {
-	return outgoingGroupMessageSendsKeypath.Copy().Pushs(recipient.Hex())
-}
-
-func incomingGroupMessageKeypathFor(msgHash types.Hash) state.Keypath {
-	return incomingGroupMessagesKeypath.Copy().Pushs(msgHash.Hex())
+func outgoingGroupMessageKeypathForID(id string) state.Keypath {
+	return outgoingGroupMessagesKeypath.Copy().Pushs(id)
 }
 
 func ratchetSessionKeypathFor(sessionID []byte) state.Keypath {
-	return sessionsKeypath.Push(sessionID)
+	return drsessionsKeypath.Copy().Pushs(hex.EncodeToString(sessionID))
 }
 
 func ratchetPubkeyKeypathFor(pubKey doubleratchet.Key) state.Keypath {
@@ -1082,4 +864,12 @@ func ratchetPubkeyKeypathFor(pubKey doubleratchet.Key) state.Keypath {
 func ratchetMsgkeyKeypath(pubKey doubleratchet.Key, msgNum uint) state.Keypath {
 	strMsgNum := strconv.FormatUint(uint64(msgNum), 10)
 	return ratchetPubkeyKeypathFor(pubKey).Pushs(strMsgNum)
+}
+
+func vaultsKeypathForHost(host string) state.Keypath {
+	return vaultsKeypath.Copy().Pushs(url.QueryEscape(host))
+}
+
+func keypathForLatestMtimeForVaultAndCollection(vaultHost, collectionID string) state.Keypath {
+	return vaultMtimeKeypath.Copy().Pushs(url.QueryEscape(vaultHost)).Pushs(collectionID)
 }

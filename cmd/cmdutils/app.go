@@ -35,9 +35,9 @@ import (
 	"redwood.dev/swarm/protohush"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
-	"redwood.dev/types"
 	"redwood.dev/utils"
 	"redwood.dev/utils/badgerutils"
+	. "redwood.dev/utils/generics"
 )
 
 type App struct {
@@ -304,7 +304,7 @@ func (app *App) Start() error {
 			httpTransport, err := braidhttp.NewTransport(
 				cfg.BraidHTTPTransport.ListenHost,
 				cfg.BraidHTTPTransport.ListenHostSSL,
-				types.NewSet[string](nil), // @@TODO
+				NewSet[string](nil), // @@TODO
 				cfg.BraidHTTPTransport.DefaultStateURI,
 				app.ControllerHub,
 				app.KeyStore,
@@ -330,19 +330,19 @@ func (app *App) Start() error {
 	var protocols []process.Interface
 
 	if cfg.AuthProtocol.Enabled {
-		app.AuthProto = protoauth.NewAuthProtocol(transports, app.KeyStore, app.PeerStore)
+		app.AuthProto = protoauth.NewAuthProtocol(transports, app.KeyStore, app.PeerStore, []byte(cfg.JWTSecret))
 		protocols = append(protocols, app.AuthProto)
-	}
-
-	if cfg.BlobProtocol.Enabled {
-		app.BlobProto = protoblob.NewBlobProtocol(transports, app.BlobStore)
-		protocols = append(protocols, app.BlobProto)
 	}
 
 	if cfg.HushProtocol.Enabled {
 		app.HushProtoStore = protohush.NewStore(app.HushDB)
 		app.HushProto = protohush.NewHushProtocol(transports, app.HushProtoStore, app.KeyStore, app.PeerStore)
 		protocols = append(protocols, app.HushProto)
+	}
+
+	if cfg.BlobProtocol.Enabled {
+		app.BlobProto = protoblob.NewBlobProtocol(transports, app.BlobStore, app.HushProto)
+		protocols = append(protocols, app.BlobProto)
 	}
 
 	if cfg.TreeProtocol.Enabled {
@@ -370,8 +370,16 @@ func (app *App) Start() error {
 		protocols = append(protocols, app.TreeProto)
 	}
 
+	for _, protocol := range protocols {
+		app.Infof("starting %v", protocol.Name())
+		err = app.Process.SpawnChild(nil, protocol)
+		if err != nil {
+			return err
+		}
+	}
+
 	for _, transport := range transports {
-		app.Infof(0, "starting %v", transport.Name())
+		app.Infof("starting %v", transport.Name())
 		err = app.Process.SpawnChild(nil, transport)
 		if err != nil {
 			app.Errorf("while starting %v transport: %+v", transport.Name(), err)
@@ -379,33 +387,25 @@ func (app *App) Start() error {
 		}
 	}
 
-	for _, protocol := range protocols {
-		app.Infof(0, "starting %v", protocol.Name())
-		err = app.Process.SpawnChild(nil, protocol)
-		if err != nil {
-			return err
-		}
-	}
-
 	if cfg.HTTPRPC.Enabled {
-		rwRPC := rpc.NewHTTPServer([]byte(cfg.JWTSecret), app.AuthProto, app.BlobProto, app.TreeProto, app.PeerStore, app.KeyStore, app.BlobStore, app.ControllerHub, app.Libp2pTransport)
+		rwRPC := rpc.NewHTTPServer([]byte(cfg.JWTSecret), app.AuthProto, app.BlobProto, app.HushProto, app.TreeProto, app.PeerStore, app.KeyStore, app.BlobStore, app.ControllerHub, app.Libp2pTransport)
 		var server interface{}
 		if cfg.HTTPRPC.Server != nil {
 			server = cfg.HTTPRPC.Server(rwRPC)
 		} else {
 			server = rwRPC
 		}
-		app.HTTPRPCServer, err = rpc.StartHTTPRPC(server, cfg.HTTPRPC, []byte(cfg.JWTSecret))
+		app.HTTPRPCServer, err = rpc.StartHTTPRPC(server, cfg.HTTPRPC, []byte(cfg.JWTSecret), cfg.JWTExpiry)
 		if err != nil {
 			return err
 		}
-		app.Infof(0, "http rpc server listening on %v", cfg.HTTPRPC.ListenHost)
+		app.Infof("http rpc server listening on %v", cfg.HTTPRPC.ListenHost)
 	}
 
 	for _, bootstrapPeer := range cfg.BootstrapPeers {
 		bootstrapPeer := bootstrapPeer
 		_ = app.Process.Go(nil, "", func(ctx context.Context) {
-			app.Infof(0, "adding bootstrap peer %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
+			app.Infof("adding bootstrap peer %v %v", bootstrapPeer.Transport, bootstrapPeer.DialAddresses)
 			for _, dialAddr := range bootstrapPeer.DialAddresses {
 				app.PeerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: bootstrapPeer.Transport, DialAddr: dialAddr}, "")
 			}
@@ -428,7 +428,7 @@ func (app *App) Start() error {
 			go app.startREPL(prompt, cfg.REPLConfig.Commands)
 			select {
 			// case <-AwaitInterrupt():
-			// 	app.Infof(0, "CLOSE cmdutils interrupt")
+			// 	app.Infof("CLOSE cmdutils interrupt")
 			// 	app.Process.Close()
 			case <-app.Process.Done():
 			}
@@ -494,9 +494,9 @@ func closeIfError(err *error, x interface{}) {
 }
 
 func (app *App) Close() error {
-	app.Infof(0, "shutting down")
+	app.Infof("shutting down")
 
-	app.Infof(0, "killing rpc")
+	app.Infof("killing rpc")
 	if app.HTTPRPCServer != nil {
 		err := app.HTTPRPCServer.Close()
 		if err != nil {
@@ -504,47 +504,47 @@ func (app *App) Close() error {
 		}
 	}
 
-	app.Infof(0, "killing keystore")
+	app.Infof("killing keystore")
 	if app.KeyStore != nil {
 		app.KeyStore.Close()
 		app.KeyStore = nil
 	}
 
-	app.Infof(0, "killing blobstore")
+	app.Infof("killing blobstore")
 	if app.BlobStore != nil {
 		app.BlobStore.Close()
 		app.BlobStore = nil
 	}
 
-	app.Infof(0, "killing txstore")
+	app.Infof("killing txstore")
 	if app.TxStore != nil {
 		app.TxStore.Close()
 		app.TxStore = nil
 	}
 
-	app.Infof(0, "killing shared state db")
+	app.Infof("killing shared state db")
 	if app.SharedStateDB != nil {
 		app.SharedStateDB.Close()
 		app.SharedStateDB = nil
 	}
 
-	app.Infof(0, "killing tree db")
+	app.Infof("killing tree db")
 	if app.TreeDB != nil {
 		app.TreeDB.Close()
 		app.TreeDB = nil
 	}
-	app.Infof(0, "killing hush db")
+	app.Infof("killing hush db")
 	if app.HushDB != nil {
 		app.HushDB.Close()
 		app.HushDB = nil
 	}
-	app.Infof(0, "killing peer db")
+	app.Infof("killing peer db")
 	if app.PeerDB != nil {
 		app.PeerDB.Close()
 		app.PeerDB = nil
 	}
 
-	app.Infof(0, "killing process")
+	app.Infof("killing process")
 	return app.Process.Close()
 }
 

@@ -15,19 +15,20 @@ import (
 	"redwood.dev/state"
 	"redwood.dev/types"
 	"redwood.dev/utils"
+	. "redwood.dev/utils/generics"
 )
 
 //go:generate mockery --name PeerStore --output ./mocks/ --case=underscore
 type PeerStore interface {
 	process.Interface
 
-	AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) PeerEndpoint
-	AddVerifiedCredentials(dialInfo PeerDialInfo, deviceUniqueID string, address types.Address, sigpubkey *crypto.SigningPublicKey, encpubkey *crypto.AsymEncPubkey) PeerEndpoint
+	AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) (PeerDevice, PeerEndpoint)
+	AddVerifiedCredentials(dialInfo PeerDialInfo, deviceUniqueID string, address types.Address, sigpubkey *crypto.SigningPublicKey, encpubkey *crypto.AsymEncPubkey) (PeerDevice, PeerEndpoint)
 	RemovePeers(deviceUniqueIDs []string) error
-	UnverifiedPeers() []PeerDialInfo
+	UnverifiedPeers() []PeerDevice
 	VerifiedPeers() []PeerDevice
 	Peers() []PeerDevice
-	AllDialInfos() map[PeerDialInfo]struct{}
+	AllDialInfos() Set[PeerDialInfo]
 	PeerWithDeviceUniqueID(deviceUniqueID string) (PeerDevice, bool)
 	PeerEndpoint(dialInfo PeerDialInfo) PeerEndpoint
 	PeersWithAddress(address types.Address) []PeerDevice
@@ -47,9 +48,9 @@ type peerStore struct {
 	state                   *state.DBTree
 	muPeers                 sync.RWMutex
 	peerEndpoints           map[PeerDialInfo]*peerEndpoint
-	deviceIDsWithAddress    map[types.Address]types.Set[string]
+	deviceIDsWithAddress    map[types.Address]Set[string]
 	peersWithDeviceUniqueID map[string]*peerDevice
-	unverifiedPeers         map[PeerDialInfo]struct{}
+	unverifiedDevices       Set[*peerDevice]
 
 	newUnverifiedPeerListeners   []func(dialInfo PeerDialInfo)
 	newUnverifiedPeerListenersMu sync.RWMutex
@@ -63,11 +64,11 @@ func NewPeerStore(db *state.DBTree) *peerStore {
 		Logger:                  log.NewLogger("peerstore"),
 		state:                   db,
 		peerEndpoints:           make(map[PeerDialInfo]*peerEndpoint),
-		deviceIDsWithAddress:    make(map[types.Address]types.Set[string]),
+		deviceIDsWithAddress:    make(map[types.Address]Set[string]),
 		peersWithDeviceUniqueID: make(map[string]*peerDevice),
-		unverifiedPeers:         make(map[PeerDialInfo]struct{}),
+		unverifiedDevices:       NewSet[*peerDevice](nil),
 	}
-	s.Infof(0, "opening peer store")
+	s.Infof("opening peer store")
 
 	node := s.state.State(false)
 	defer node.Close()
@@ -79,32 +80,32 @@ func NewPeerStore(db *state.DBTree) *peerStore {
 	if err != nil {
 		s.Warnf("could not fetch stored peer details from DB: %v", err)
 	} else {
-		for _, pd := range peerDevices {
-			if pd == nil {
+		for _, device := range peerDevices {
+			if device == nil {
 				continue
 			}
-			pd.peerStore = s
-			for _, e := range pd.Endpts {
+			device.peerStore = s
+			for _, e := range device.Endpts {
 				if e == nil {
 					continue
 				}
-				e.peerDevice = pd
+				e.peerDevice = device
 				s.peerEndpoints[e.Dialinfo] = e
 
-				if len(pd.DeviceUniqID) > 0 {
-					s.peersWithDeviceUniqueID[pd.DeviceUniqID] = pd
+				if len(device.DeviceUniqID) > 0 {
+					s.peersWithDeviceUniqueID[device.DeviceUniqID] = device
 				}
 
-				if len(pd.Addrs) > 0 {
-					for addr := range pd.Addrs {
+				if len(device.Addrs) > 0 {
+					for addr := range device.Addrs {
 						if _, exists := s.deviceIDsWithAddress[addr]; !exists {
-							s.deviceIDsWithAddress[addr] = types.NewSet[string](nil)
+							s.deviceIDsWithAddress[addr] = NewSet[string](nil)
 						}
-						s.deviceIDsWithAddress[addr].Add(pd.DeviceUniqID)
+						s.deviceIDsWithAddress[addr].Add(device.DeviceUniqID)
 					}
 
 				} else {
-					s.unverifiedPeers[e.Dialinfo] = struct{}{}
+					s.unverifiedDevices.Add(device)
 				}
 			}
 		}
@@ -151,12 +152,7 @@ func (s *peerStore) Start() error {
 func (s *peerStore) Peers() []PeerDevice {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
-
-	var peers []PeerDevice
-	for _, p := range s.peersWithDeviceUniqueID {
-		peers = append(peers, p)
-	}
-	return peers
+	return Map[[]*peerDevice, []PeerDevice, *peerDevice, PeerDevice](Values(s.peersWithDeviceUniqueID), func(p *peerDevice) PeerDevice { return p })
 }
 
 func (s *peerStore) OnNewUnverifiedPeer(fn func(dialInfo PeerDialInfo)) {
@@ -187,88 +183,71 @@ func (s *peerStore) notifyNewVerifiedPeerListeners(peer PeerDevice) {
 	}
 }
 
-func (s *peerStore) AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) PeerEndpoint {
-	if deviceUniqueID == "" || dialInfo.DialAddr == "" {
-		pd := newPeerDevice(s, "")
-		e := &peerEndpoint{
-			peerDevice: pd,
-			Dialinfo:   dialInfo,
-		}
-		pd.Endpts[dialInfo] = e
-		return e
+func (s *peerStore) AddDialInfo(dialInfo PeerDialInfo, deviceUniqueID string) (PeerDevice, PeerEndpoint) {
+	if dialInfo.DialAddr == "" {
+		device := newPeerDevice(s, deviceUniqueID)
+		endpoint := device.ensureEndpoint(dialInfo)
+		return device, endpoint
 	}
 
-	var peerEndpoint PeerEndpoint
-	var exists bool
+	var device *peerDevice
+	var endpoint *peerEndpoint
+	var knownDevice bool
 	func() {
 		s.muPeers.Lock()
 		defer s.muPeers.Unlock()
 
-		var pd *peerDevice
-		var needsSave bool
-		pd, exists, needsSave = s.ensurePeerDevice(dialInfo, deviceUniqueID)
-
-		if len(pd.Addrs) == 0 {
-			s.unverifiedPeers[dialInfo] = struct{}{}
+		device, endpoint, knownDevice = s.ensurePeerDevice(dialInfo, deviceUniqueID)
+		if len(device.Addrs) == 0 {
+			s.unverifiedDevices.Add(device)
 		}
-
-		if needsSave && deviceUniqueID != "" {
-			// err := s.savePeerDevice(pd)
-			// if err != nil {
-			// 	s.Warnf("could not save modifications to peerstore DB: %v", err)
-			// }
-		}
-		peerEndpoint = pd.Endpts[dialInfo]
 	}()
-	if !exists && deviceUniqueID != "" {
+	if !knownDevice {
 		s.notifyNewUnverifiedPeerListeners(dialInfo)
 	}
-	return peerEndpoint
+	return device, endpoint
 }
 
 func (s *peerStore) findPeerDevice(dialInfo PeerDialInfo, deviceUniqueID string) *peerDevice {
 	if deviceUniqueID != "" {
-		pd, exists := s.peersWithDeviceUniqueID[deviceUniqueID]
+		device, exists := s.peersWithDeviceUniqueID[deviceUniqueID]
 		if exists {
-			return pd
+			return device
 		}
 	}
-	e, exists := s.peerEndpoints[dialInfo]
+	endpoint, exists := s.peerEndpoints[dialInfo]
 	if !exists {
 		return nil
 	}
-	return e.peerDevice
+	return endpoint.peerDevice
 }
 
-func (s *peerStore) ensurePeerDevice(dialInfo PeerDialInfo, deviceUniqueID string) (pd *peerDevice, knownPeer bool, needsSave bool) {
-	pd = s.findPeerDevice(dialInfo, deviceUniqueID)
-	knownPeer = pd != nil
+func (s *peerStore) ensurePeerDevice(dialInfo PeerDialInfo, deviceUniqueID string) (device *peerDevice, endpoint *peerEndpoint, knownDevice bool) {
+	device = s.findPeerDevice(dialInfo, deviceUniqueID)
+	knownDevice = device != nil
 
-	if pd == nil {
-		pd = newPeerDevice(s, deviceUniqueID)
-		needsSave = true
+	if !knownDevice {
+		device = newPeerDevice(s, deviceUniqueID)
+		s.unverifiedDevices.Add(device)
 	}
+
 	if deviceUniqueID != "" {
-		s.peersWithDeviceUniqueID[deviceUniqueID] = pd
+		s.peersWithDeviceUniqueID[deviceUniqueID] = device
 
 		// Handle the case where a peer's deviceUniqueID has changed (cleared browser cache, wiped keystore, etc.)
-		if pd.DeviceUniqID != deviceUniqueID && pd.DeviceUniqID != "" {
-			for addr := range pd.Addrs {
+		if device.DeviceUniqID != deviceUniqueID && device.DeviceUniqID != "" {
+			for addr := range device.Addrs {
 				if _, exists := s.deviceIDsWithAddress[addr]; !exists {
-					s.deviceIDsWithAddress[addr] = types.NewSet[string](nil)
+					s.deviceIDsWithAddress[addr] = NewSet[string](nil)
 				}
 				s.deviceIDsWithAddress[addr].Add(deviceUniqueID)
 			}
-			delete(s.peersWithDeviceUniqueID, pd.DeviceUniqID)
-			needsSave = true
+			delete(s.peersWithDeviceUniqueID, device.DeviceUniqID)
 		}
-		pd.DeviceUniqID = deviceUniqueID
+		device.DeviceUniqID = deviceUniqueID
 	}
-	e, known := pd.ensureEndpoint(dialInfo)
-	if !known {
-		needsSave = true
-		s.peerEndpoints[dialInfo] = e
-	}
+	endpoint = device.ensureEndpoint(dialInfo)
+	s.peerEndpoints[dialInfo] = endpoint
 	return
 }
 
@@ -278,74 +257,58 @@ func (s *peerStore) AddVerifiedCredentials(
 	address types.Address,
 	sigpubkey *crypto.SigningPublicKey,
 	encpubkey *crypto.AsymEncPubkey,
-) PeerEndpoint {
-	if deviceUniqueID == "" || dialInfo.DialAddr == "" {
-		pd := newPeerDevice(s, "")
-		pd.Addrs = types.NewSet[types.Address]([]types.Address{address})
-		pd.Sigpubkeys = map[types.Address]*crypto.SigningPublicKey{address: sigpubkey}
-		pd.Encpubkeys = map[types.Address]*crypto.AsymEncPubkey{address: encpubkey}
-		e := &peerEndpoint{
-			peerDevice: pd,
-			Dialinfo:   dialInfo,
-		}
-		pd.Endpts[dialInfo] = e
-		return e
+) (PeerDevice, PeerEndpoint) {
+	if dialInfo.DialAddr == "" {
+		device := newPeerDevice(s, "")
+		endpoint := device.ensureEndpoint(dialInfo)
+
+		device.Addrs.Add(address)
+		device.Sigpubkeys[address] = sigpubkey
+		device.Encpubkeys[address] = encpubkey
+
+		return device, endpoint
 	}
 
 	if address.IsZero() {
 		panic("cannot add verified peer without credentials")
-		// } else if deviceUniqueID == "" || deviceUniqueID == "0000000000000000000000000000000000000000000000000000000000000000" {
-		// 	panic("cannot add verified peer without device unique ID")
 	}
 
 	var (
-		pd               *peerDevice
-		peerEndpoint     PeerEndpoint
-		peerAlreadyKnown bool
+		device                *peerDevice
+		endpoint              *peerEndpoint
+		deviceAlreadyVerified bool
 	)
 	func() {
 		s.muPeers.Lock()
 		defer s.muPeers.Unlock()
 
-		_, peerAlreadyKnown = s.deviceIDsWithAddress[address]
-		if peerAlreadyKnown {
-			peerAlreadyKnown = s.deviceIDsWithAddress[address].Contains(deviceUniqueID)
+		_, exists := s.deviceIDsWithAddress[address]
+		if exists {
+			deviceAlreadyVerified = s.deviceIDsWithAddress[address].Contains(deviceUniqueID)
 		}
 
-		pd, _, _ = s.ensurePeerDevice(dialInfo, deviceUniqueID)
+		device, endpoint, _ = s.ensurePeerDevice(dialInfo, deviceUniqueID)
 
-		pd.peerStore = s
-
-		pd.Addrs.Add(address)
-		if sigpubkey != nil {
-			pd.Sigpubkeys[address] = sigpubkey
-		}
-		if encpubkey != nil {
-			pd.Encpubkeys[address] = encpubkey
-		}
+		device.Addrs.Add(address)
+		device.Sigpubkeys[address] = sigpubkey
+		device.Encpubkeys[address] = encpubkey
 
 		if _, exists := s.deviceIDsWithAddress[address]; !exists {
-			s.deviceIDsWithAddress[address] = make(map[string]struct{})
+			s.deviceIDsWithAddress[address] = NewSet[string](nil)
 		}
 		s.deviceIDsWithAddress[address].Add(deviceUniqueID)
 
 		if dialInfo.DialAddr != "" {
-			s.peerEndpoints[dialInfo] = pd.Endpts[dialInfo]
+			s.peerEndpoints[dialInfo] = device.Endpts[dialInfo]
 		}
 
-		delete(s.unverifiedPeers, dialInfo)
-
-		// err := s.savePeerDevice(pd)
-		// if err != nil {
-		// 	s.Warnf("could not save modifications to peerstore DB: %v", err)
-		// }
-		peerEndpoint = pd.Endpts[dialInfo]
+		s.unverifiedDevices.Remove(device)
 	}()
 
-	if !peerAlreadyKnown {
-		s.notifyNewVerifiedPeerListeners(pd)
+	if !deviceAlreadyVerified {
+		s.notifyNewVerifiedPeerListeners(device)
 	}
-	return peerEndpoint
+	return device, endpoint
 }
 
 func (s *peerStore) RemovePeers(deviceUniqueIDs []string) error {
@@ -353,18 +316,18 @@ func (s *peerStore) RemovePeers(deviceUniqueIDs []string) error {
 	defer s.muPeers.Unlock()
 
 	for _, deviceUniqueID := range deviceUniqueIDs {
-		pd, exists := s.peersWithDeviceUniqueID[deviceUniqueID]
+		device, exists := s.peersWithDeviceUniqueID[deviceUniqueID]
 		if !exists {
 			continue
 		}
-		for dialInfo := range pd.Endpts {
+		for dialInfo := range device.Endpts {
 			delete(s.peerEndpoints, dialInfo)
-			delete(s.unverifiedPeers, dialInfo)
+			s.unverifiedDevices.Remove(device)
 		}
-		for addr := range pd.Addrs {
-			delete(s.deviceIDsWithAddress, addr)
+		for addr := range device.Addrs {
+			device.Addrs.Remove(addr)
 		}
-		delete(s.peersWithDeviceUniqueID, pd.DeviceUniqID)
+		delete(s.peersWithDeviceUniqueID, device.DeviceUniqID)
 	}
 	return s.deletePeers(deviceUniqueIDs)
 }
@@ -382,17 +345,10 @@ func (s *peerStore) PeerEndpoint(dialInfo PeerDialInfo) PeerEndpoint {
 	return e
 }
 
-func (s *peerStore) UnverifiedPeers() []PeerDialInfo {
+func (s *peerStore) UnverifiedPeers() []PeerDevice {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
-
-	unverifiedPeers := make([]PeerDialInfo, len(s.unverifiedPeers))
-	i := 0
-	for dialInfo := range s.unverifiedPeers {
-		unverifiedPeers[i] = dialInfo
-		i++
-	}
-	return unverifiedPeers
+	return Map[[]*peerDevice, []PeerDevice, *peerDevice, PeerDevice](s.unverifiedDevices.Slice(), func(d *peerDevice) PeerDevice { return d })
 }
 
 func (s *peerStore) VerifiedPeers() []PeerDevice {
@@ -412,18 +368,14 @@ func (s *peerStore) VerifiedPeers() []PeerDevice {
 	return pds
 }
 
-func (s *peerStore) AllDialInfos() map[PeerDialInfo]struct{} {
+func (s *peerStore) AllDialInfos() Set[PeerDialInfo] {
 	s.muPeers.RLock()
 	defer s.muPeers.RUnlock()
 
-	dialInfos := make(map[PeerDialInfo]struct{})
-	for dialInfo := range s.peerEndpoints {
-		dialInfos[dialInfo] = struct{}{}
-	}
-	for dialInfo := range s.unverifiedPeers {
-		dialInfos[dialInfo] = struct{}{}
-	}
-	return dialInfos
+	set := NewSet[PeerDialInfo](nil)
+	set.AddAll(Keys(s.peerEndpoints)...)
+	set.AddAll(FlatMap(s.unverifiedDevices.Slice(), func(d *peerDevice) []PeerDialInfo { return []PeerDialInfo(Keys(d.Endpts)) })...)
+	return set
 }
 
 func (s *peerStore) PeerWithDeviceUniqueID(deviceUniqueID string) (PeerDevice, bool) {
@@ -510,9 +462,9 @@ func (s *peerStore) DebugPrint() {
 type PeerDevice interface {
 	DeviceUniqueID() string
 	SetDeviceUniqueID(id string)
-	Addresses() types.Set[types.Address]
+	Addresses() Set[types.Address]
 	PublicKeys(addr types.Address) (*crypto.SigningPublicKey, *crypto.AsymEncPubkey)
-	StateURIs() types.Set[string]
+	StateURIs() Set[string]
 	AddStateURI(stateURI string)
 	RemoveStateURI(stateURI string)
 	LastContact() time.Time
@@ -528,10 +480,10 @@ type PeerDevice interface {
 type peerDevice struct {
 	peerStore    *peerStore                                 `tree:"-"`
 	DeviceUniqID string                                     `tree:"deviceUniqueID"`
-	Addrs        types.Set[types.Address]                   `tree:"addresses"`
+	Addrs        Set[types.Address]                         `tree:"addresses"`
 	Sigpubkeys   map[types.Address]*crypto.SigningPublicKey `tree:"sigpubkeys"`
 	Encpubkeys   map[types.Address]*crypto.AsymEncPubkey    `tree:"encpubkeys"`
-	Stateuris    types.Set[string]                          `tree:"stateURIs"`
+	Stateuris    Set[string]                                `tree:"stateURIs"`
 	Endpts       map[PeerDialInfo]*peerEndpoint             `tree:"peerEndpoints"`
 }
 
@@ -539,18 +491,18 @@ func newPeerDevice(peerStore *peerStore, deviceUniqueID string) *peerDevice {
 	return &peerDevice{
 		peerStore:    peerStore,
 		DeviceUniqID: deviceUniqueID,
-		Addrs:        types.NewSet[types.Address](nil),
+		Addrs:        NewSet[types.Address](nil),
 		Sigpubkeys:   make(map[types.Address]*crypto.SigningPublicKey),
 		Encpubkeys:   make(map[types.Address]*crypto.AsymEncPubkey),
-		Stateuris:    types.NewSet[string](nil),
+		Stateuris:    NewSet[string](nil),
 		Endpts:       make(map[PeerDialInfo]*peerEndpoint),
 	}
 }
 
-func (pd *peerDevice) ensureEndpoint(dialInfo PeerDialInfo) (*peerEndpoint, bool) {
+func (pd *peerDevice) ensureEndpoint(dialInfo PeerDialInfo) *peerEndpoint {
 	e, exists := pd.Endpts[dialInfo]
 	if exists {
-		return e, true
+		return e
 	}
 	e = &peerEndpoint{
 		peerDevice: pd,
@@ -558,10 +510,10 @@ func (pd *peerDevice) ensureEndpoint(dialInfo PeerDialInfo) (*peerEndpoint, bool
 		backoff:    utils.ExponentialBackoff{Min: 3 * time.Second, Max: 30 * time.Second},
 	}
 	pd.Endpts[dialInfo] = e
-	return e, false
+	return e
 }
 
-func (pd *peerDevice) Addresses() types.Set[types.Address] {
+func (pd *peerDevice) Addresses() Set[types.Address] {
 	pd.rlock()
 	defer pd.runlock()
 	return pd.Addrs
@@ -588,7 +540,7 @@ func (pd *peerDevice) SetDeviceUniqueID(id string) {
 	pd.DeviceUniqID = id
 }
 
-func (pd *peerDevice) StateURIs() types.Set[string] {
+func (pd *peerDevice) StateURIs() Set[string] {
 	pd.rlock()
 	defer pd.runlock()
 	return pd.Stateuris.Copy()

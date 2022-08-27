@@ -21,6 +21,7 @@ import (
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
+	. "redwood.dev/utils/generics"
 )
 
 type httpReadableSubscription struct {
@@ -107,7 +108,7 @@ func (sub *httpWritableSubscription) Start() error {
 }
 
 func (sub *httpWritableSubscription) Close() (err error) {
-	sub.Infof(0, "%v writable subscription closed (%v)", TransportName, sub.stateURI)
+	sub.Infof("%v writable subscription closed (%v)", TransportName, sub.stateURI)
 	return sub.Process.Close()
 }
 
@@ -157,7 +158,7 @@ type wsWritableSubscription struct {
 	addresses                  []types.Address
 	writableSubscriptionOpener writableSubscriptionOpener
 
-	stateURIs types.Set[string]
+	stateURIs Set[string]
 	messages  *utils.Mailbox[wsMessage]
 	writeMu   sync.Mutex
 	startOnce sync.Once
@@ -188,7 +189,7 @@ func newWSWritableSubscription(
 	return &wsWritableSubscription{
 		Process:                    *process.New("sub impl (ws) " + stateURI),
 		Logger:                     log.NewLogger(TransportName),
-		stateURIs:                  types.NewSet[string]([]string{stateURI}),
+		stateURIs:                  NewSet[string]([]string{stateURI}),
 		wsConn:                     wsConn,
 		addresses:                  addresses,
 		writableSubscriptionOpener: writableSubscriptionOpener,
@@ -277,7 +278,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 					sub.Errorf("got bad multiplexed subscription request: %v", err)
 					continue
 				}
-				sub.Infof(0, "incoming websocket subscription (state uri: %v)", addSubMsg.Params.StateURI)
+				sub.Infof("incoming websocket subscription (state uri: %v)", addSubMsg.Params.StateURI)
 
 				if sub.stateURIs.Contains(addSubMsg.Params.StateURI) {
 					continue
@@ -300,7 +301,7 @@ func (sub *wsWritableSubscription) Start() (err error) {
 						Keypath:          addSubMsg.Params.Keypath,
 						Type:             addSubMsg.Params.SubscriptionType,
 						FetchHistoryOpts: &fetchHistoryOpts,
-						Addresses:        types.NewSet[types.Address](sub.addresses),
+						Addresses:        NewSet[types.Address](sub.addresses),
 					},
 					func() (prototree.WritableSubscriptionImpl, error) { return sub, nil },
 				)
@@ -397,7 +398,7 @@ func (sub *wsWritableSubscription) Close() error {
 		sub.closed = true
 		sub.writeMu.Unlock()
 
-		sub.Infof(0, "ws writable subscription closed")
+		sub.Infof("ws writable subscription closed")
 
 		_ = sub.write(websocket.CloseMessage, []byte{})
 

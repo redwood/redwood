@@ -92,7 +92,7 @@ func (bn *bootstrapNode) Start() error {
 		return err
 	}
 
-	bn.Infof(0, "opening libp2p on port %v", bn.port)
+	bn.Infof("opening libp2p on port %v", bn.port)
 
 	peerID, err := peer.IDFromPublicKey(bn.p2pKey.GetPublic())
 	if err != nil {
@@ -255,7 +255,7 @@ func (bn *bootstrapNode) Start() error {
 	}
 	bn.mdns.RegisterNotifee(bn)
 
-	bn.Infof(0, "libp2p peer ID is %v", bn.Libp2pPeerID())
+	bn.Infof("libp2p peer ID is %v", bn.Libp2pPeerID())
 
 	return nil
 }

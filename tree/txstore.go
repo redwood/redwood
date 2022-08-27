@@ -3,7 +3,7 @@ package tree
 import (
 	"redwood.dev/log"
 	"redwood.dev/state"
-	"redwood.dev/types"
+	. "redwood.dev/utils/generics"
 )
 
 //go:generate mockery --name TxStore --output ./mocks/ --case=underscore
@@ -18,7 +18,7 @@ type TxStore interface {
 	AllTxsForStateURI(stateURI string, fromTxID state.Version) (TxIterator, error)
 	AllValidTxsForStateURIOrdered(stateURI string, fromTxID state.Version) TxIterator
 	IsStateURIWithData(stateURI string) (bool, error)
-	StateURIsWithData() (types.Set[string], error)
+	StateURIsWithData() (Set[string], error)
 	OnNewStateURIWithData(fn NewStateURIWithDataCallback)
 	MarkLeaf(stateURI string, txID state.Version) error
 	UnmarkLeaf(stateURI string, txID state.Version) error
@@ -94,7 +94,7 @@ type allValidTxsForStateURIOrderedIterator struct {
 	currentTx *Tx
 	err       error
 	fromTxID  state.Version
-	sent      types.Set[state.Version]
+	sent      Set[state.Version]
 }
 
 func NewAllValidTxsForStateURIOrderedIterator(
@@ -114,7 +114,7 @@ var l = log.NewLogger("ITER")
 func (iter *allValidTxsForStateURIOrderedIterator) Rewind() {
 	iter.currentTx = nil
 	iter.stack = []state.Version{iter.fromTxID}
-	iter.sent = types.NewSet[state.Version](nil)
+	iter.sent = NewSet[state.Version](nil)
 	iter.Next()
 }
 

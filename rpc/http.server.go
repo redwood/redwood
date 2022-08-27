@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	"io/ioutil"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -23,19 +21,22 @@ import (
 	"redwood.dev/swarm/libp2p"
 	"redwood.dev/swarm/protoauth"
 	"redwood.dev/swarm/protoblob"
+	"redwood.dev/swarm/protohush"
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
+	"redwood.dev/utils/authutils"
+	. "redwood.dev/utils/generics"
 )
 
 type HTTPConfig struct {
-	Enabled     bool                                      `json:"enabled"    yaml:"Enabled"`
-	ListenHost  string                                    `json:"listenHost" yaml:"ListenHost"`
+	Enabled     bool                                      `json:"enabled"     yaml:"Enabled"`
+	ListenHost  string                                    `json:"listenHost"  yaml:"ListenHost"`
 	TLSCertFile string                                    `json:"tlsCertFile" yaml:"TLSCertFile"`
-	TLSKeyFile  string                                    `json:"tlsKeyFile" yaml:"TLSKeyFile"`
-	Whitelist   HTTPWhitelistConfig                       `json:"whitelist"  yaml:"Whitelist"`
-	Server      func(innerServer *HTTPServer) interface{} `json:"-"          yaml:"-"`
+	TLSKeyFile  string                                    `json:"tlsKeyFile"  yaml:"TLSKeyFile"`
+	Whitelist   HTTPWhitelistConfig                       `json:"whitelist"   yaml:"Whitelist"`
+	Server      func(innerServer *HTTPServer) interface{} `json:"-"           yaml:"-"`
 }
 
 type HTTPWhitelistConfig struct {
@@ -43,7 +44,7 @@ type HTTPWhitelistConfig struct {
 	PermittedAddrs []types.Address `json:"permittedAddrs" yaml:"PermittedAddrs"`
 }
 
-func StartHTTPRPC(svc interface{}, config *HTTPConfig, jwtSecret []byte) (*http.Server, error) {
+func StartHTTPRPC(svc interface{}, config *HTTPConfig, jwtSecret []byte, jwtExpiry time.Duration) (*http.Server, error) {
 	if config == nil || !config.Enabled {
 		return nil, nil
 	}
@@ -59,7 +60,7 @@ func StartHTTPRPC(svc interface{}, config *HTTPConfig, jwtSecret []byte) (*http.
 
 		httpServer.Handler = server
 		if config.Whitelist.Enabled {
-			httpServer.Handler = NewWhitelistMiddleware(config.Whitelist.PermittedAddrs, jwtSecret, server)
+			httpServer.Handler = NewWhitelistMiddleware(config.Whitelist.PermittedAddrs, jwtSecret, jwtExpiry, server)
 		}
 		httpServer.Handler = utils.UnrestrictedCors(httpServer.Handler)
 		httpServer.ListenAndServe()
@@ -73,6 +74,7 @@ type HTTPServer struct {
 	jwtSecret       []byte
 	authProto       protoauth.AuthProtocol
 	blobProto       protoblob.BlobProtocol
+	hushProto       protohush.HushProtocol
 	treeProto       prototree.TreeProtocol
 	peerStore       swarm.PeerStore
 	keyStore        identity.KeyStore
@@ -85,6 +87,7 @@ func NewHTTPServer(
 	jwtSecret []byte,
 	authProto protoauth.AuthProtocol,
 	blobProto protoblob.BlobProtocol,
+	hushProto protohush.HushProtocol,
 	treeProto prototree.TreeProtocol,
 	peerStore swarm.PeerStore,
 	keyStore identity.KeyStore,
@@ -97,6 +100,7 @@ func NewHTTPServer(
 		jwtSecret:       jwtSecret,
 		authProto:       authProto,
 		blobProto:       blobProto,
+		hushProto:       hushProto,
 		treeProto:       treeProto,
 		peerStore:       peerStore,
 		keyStore:        keyStore,
@@ -120,8 +124,8 @@ func (s *HTTPServer) Ucan(r *http.Request, args *UcanArgs, resp *UcanResponse) e
 	}
 
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"address": identity.Address().Hex(),
-		"nbf":     time.Date(2015, 10, 10, 12, 0, 0, 0, time.UTC).Unix(),
+		"addresses": []string{identity.Address().Hex()},
+		"nbf":       time.Date(2015, 10, 10, 12, 0, 0, 0, time.UTC).Unix(),
 	})
 
 	// Sign and get the complete encoded token as a string using the secret
@@ -277,6 +281,52 @@ func (s *HTTPServer) RemoveStaticRelay(r *http.Request, args *RemoveStaticRelayA
 }
 
 type (
+	VaultsArgs     struct{}
+	VaultsResponse struct {
+		Vaults []string
+	}
+)
+
+func (s *HTTPServer) Vaults(r *http.Request, args *VaultsArgs, resp *VaultsResponse) error {
+	if s.hushProto == nil {
+		return errors.ErrUnsupported
+	}
+
+	resp.Vaults = s.hushProto.Vaults().Union(s.treeProto.Vaults()).Slice()
+	return nil
+}
+
+type (
+	AddVaultArgs struct {
+		DialAddr string
+	}
+	AddVaultResponse struct{}
+)
+
+func (s *HTTPServer) AddVault(r *http.Request, args *AddVaultArgs, resp *AddVaultResponse) error {
+	err := s.treeProto.AddVault(args.DialAddr)
+	if err != nil {
+		return err
+	}
+	return s.hushProto.AddVault(args.DialAddr)
+}
+
+type (
+	RemoveVaultArgs struct {
+		DialAddr string
+	}
+	RemoveVaultResponse struct{}
+)
+
+func (s *HTTPServer) RemoveVault(r *http.Request, args *RemoveVaultArgs, resp *RemoveVaultResponse) error {
+	err := s.treeProto.RemoveVault(args.DialAddr)
+	if err != nil {
+		return err
+	}
+	return s.hushProto.RemoveVault(args.DialAddr)
+}
+
+type (
 	StateURIsWithDataArgs     struct{}
 	StateURIsWithDataResponse struct {
 		StateURIs []string
@@ -354,6 +404,9 @@ func (s *HTTPServer) Peers(r *http.Request, args *PeersArgs, resp *PeersResponse
 	if s.peerStore == nil {
 		return errors.ErrUnsupported
 	}
+
+	peerstoreAddrs := NewSet[types.Address](nil)
+
 	for _, peer := range s.peerStore.Peers() {
 		for _, endpoint := range peer.Endpoints() {
 			var identities []PeerIdentity
@@ -376,20 +429,37 @@ func (s *HTTPServer) Peers(r *http.Request, args *PeersArgs, resp *PeersResponse
 				StateURIs:   peer.StateURIs().Slice(),
 				LastContact: lastContact,
 			})
+			peerstoreAddrs = peerstoreAddrs.Union(peer.Addresses())
+		}
+	}
+
+	pubkeyAddrs, err := s.hushProto.PubkeyBundleAddresses()
+	if err != nil {
+		return err
+	}
+	for _, addr := range pubkeyAddrs {
+		if !peerstoreAddrs.Contains(addr) {
+			resp.Peers = append(resp.Peers, Peer{
+				Identities: []PeerIdentity{{Address: addr}},
+			})
 		}
 	}
 	return nil
 }
 
 type whitelistMiddleware struct {
-	permittedAddrs          map[types.Address]struct{}
-	nextHandler             http.Handler
-	jwtSecret               []byte
-	pendingAuthorizations   map[string]struct{}
-	pendingAuthorizationsMu sync.Mutex
+	nextHandler   http.Handler
+	accessControl *authutils.UcanAccessControl[capability]
 }
 
-func NewWhitelistMiddleware(permittedAddrs []types.Address, jwtSecret []byte, nextHandler http.Handler) *whitelistMiddleware {
+type capability uint8
+
+const (
+	forbidden capability = iota
+	allowed
+)
+
+func NewWhitelistMiddleware(permittedAddrs []types.Address, jwtSecret []byte, jwtExpiry time.Duration, nextHandler http.Handler) *whitelistMiddleware {
 	if len(jwtSecret) == 0 {
 		jwtSecret = make([]byte, 64)
 		_, err := rand.Read(jwtSecret)
@@ -397,118 +467,72 @@ func NewWhitelistMiddleware(permittedAddrs []types.Address, jwtSecret []byte, ne
 			panic(err)
 		}
 	}
-	paddrs := make(map[types.Address]struct{}, len(permittedAddrs))
+
+	accessControl := authutils.NewUcanAccessControl[capability](jwtSecret, jwtExpiry, nil)
 	for _, addr := range permittedAddrs {
-		paddrs[addr] = struct{}{}
+		accessControl.SetCapabilities(addr, []capability{allowed})
 	}
 	return &whitelistMiddleware{
-		permittedAddrs:        paddrs,
-		nextHandler:           nextHandler,
-		jwtSecret:             jwtSecret,
-		pendingAuthorizations: make(map[string]struct{}),
+		nextHandler:   nextHandler,
+		accessControl: accessControl,
+	}
+}
+
+func (mw *whitelistMiddleware) SetAllowed(addr types.Address, isAllowed bool) {
+	if isAllowed {
+		mw.accessControl.SetCapabilities(addr, []capability{allowed})
+	} else {
+		mw.accessControl.SetCapabilities(addr, nil)
 	}
 }
 
 func (mw *whitelistMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		Challenge crypto.ChallengeMsg `header:"Challenge"`
+		Signature crypto.Signature    `header:"Signature"`
+	}
+	var req request
+	err := utils.UnmarshalHTTPRequest(&req, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	if r.Method == "AUTHORIZE" {
-		responseHex := r.Header.Get("Response")
-		if responseHex == "" {
+		if req.Signature.Length() == 0 {
 			// Wants challenge
-			challenge, err := protoauth.GenerateChallengeMsg()
+			challenge, err := mw.accessControl.GenerateChallenge()
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-
-			mw.pendingAuthorizationsMu.Lock()
-			defer mw.pendingAuthorizationsMu.Unlock()
-
-			mw.pendingAuthorizations[string(challenge)] = struct{}{}
-
-			challengeHex := hex.EncodeToString(challenge)
 
 			utils.RespondJSON(w, struct {
 				Challenge string `json:"challenge"`
-			}{challengeHex})
+			}{challenge.Hex()})
 
 		} else {
 			// Has challenge response
-			challengeHex := r.Header.Get("Challenge")
-			if challengeHex == "" {
-				http.Error(w, "must provide Challenge header", http.StatusBadRequest)
-				return
-			}
-
-			challenge, err := hex.DecodeString(challengeHex)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			mw.pendingAuthorizationsMu.Lock()
-			defer mw.pendingAuthorizationsMu.Unlock()
-			_, exists := mw.pendingAuthorizations[string(challenge)]
-			if !exists {
-				http.Error(w, "no pending authorization", http.StatusBadRequest)
-				return
-			}
-
-			sig, err := hex.DecodeString(responseHex)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			sigpubkey, err := crypto.RecoverSigningPubkey(types.HashBytes(challenge), sig)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			delete(mw.pendingAuthorizations, string(challenge)) // @@TODO: expiration/garbage collection for failed auths
-
-			jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-				"address": sigpubkey.Address().Hex(),
-				"nbf":     time.Date(2015, 10, 10, 12, 0, 0, 0, time.UTC).Unix(),
-			})
-
-			// Sign and get the complete encoded token as a string using the secret
-			jwtTokenString, err := jwtToken.SignedString(mw.jwtSecret)
+			_, ucan, err := mw.accessControl.RespondChallenge([]authutils.ChallengeSignature{{Challenge: req.Challenge, Signature: req.Signature}})
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-
 			utils.RespondJSON(w, struct {
-				JWT string `json:"jwt"`
-			}{jwtTokenString})
+				Ucan string `json:"ucan"`
+			}{ucan})
 		}
 
 	} else {
-		claims, exists, err := utils.ParseJWT(r.Header.Get("Authorization"), mw.jwtSecret)
+		isAllowed, err := mw.accessControl.UserHasCapabilityByJWT(r.Header.Get("Authorization"), allowed)
 		if err != nil {
 			http.Error(w, "bad Authorization header", http.StatusBadRequest)
 			return
-		} else if !exists {
-			http.Error(w, "no JWT present", http.StatusForbidden)
-			return
 		}
-		addrHex, ok := claims["address"].(string)
-		if !ok {
-			http.Error(w, "jwt does not contain 'address' claim", http.StatusBadRequest)
-			return
-		}
-		addr, err := types.AddressFromHex(addrHex)
-		if err != nil {
-			http.Error(w, "jwt 'address' claim contains invalid data", http.StatusBadRequest)
-			return
-		}
-		_, exists = mw.permittedAddrs[addr]
-		if !exists {
+		if !isAllowed {
 			http.Error(w, "nope", http.StatusForbidden)
 			return
 		}
-
 		mw.nextHandler.ServeHTTP(w, r)
 	}
 }

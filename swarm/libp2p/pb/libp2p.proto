@@ -5,11 +5,12 @@ option go_package = "redwood.dev/swarm/libp2p/pb";
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "blob/pb/blob.proto";
+import "tree/pb/tx.proto";
 import "swarm/protohush/pb/hush.proto";
 
 option (gogoproto.gostring_all) = true;
-option (gogoproto.equal_all) = true;
-option (gogoproto.verbose_equal_all) = true;
+option (gogoproto.equal_all) = false;
+option (gogoproto.verbose_equal_all) = false;
 option (gogoproto.goproto_stringer_all) = false;
 option (gogoproto.stringer_all) =  true;
 option (gogoproto.populate_all) = true;
@@ -18,6 +19,31 @@ option (gogoproto.benchgen_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.sizer_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+
+message AuthMessage {
+    oneof payload {
+        ChallengeRequest challengeRequest = 1;
+        Challenge challenge = 2;
+        Signatures signatures = 3;
+        Ucan ucan = 4;
+    }
+
+    message ChallengeRequest {}
+
+    message Challenge {
+        bytes challenge = 1 [(gogoproto.customtype) = "redwood.dev/crypto.ChallengeMsg", (gogoproto.nullable) = false];
+    }
+
+    message Signatures {
+        repeated bytes challenges = 1     [(gogoproto.customtype) = "redwood.dev/crypto.ChallengeMsg",  (gogoproto.nullable) = false];
+        repeated bytes signatures = 2     [(gogoproto.customtype) = "redwood.dev/crypto.Signature",     (gogoproto.nullable) = false];
+        repeated bytes asymEncPubkeys = 3 [(gogoproto.customtype) = "redwood.dev/crypto.AsymEncPubkey"];
+    }
+
+    message Ucan {
+        string ucan = 1;
+    }
+}
 
 message BlobMessage {
     oneof payload {
@@ -48,32 +74,54 @@ message BlobMessage {
 
 message HushMessage {
     oneof payload {
-        DHPubkeyAttestations dhPubkeyAttestations = 1;
-        ProposeIndividualSession proposeIndividualSession = 2;
-        RespondToIndividualSessionProposal respondToIndividualSessionProposal = 3;
-        SendIndividualMessage sendIndividualMessage = 4;
-        SendGroupMessage sendGroupMessage = 5;
+        PubkeyBundles pubkeyBundles = 1;
     }
 
-    message DHPubkeyAttestations {
-        repeated Redwood.swarm.protohush.DHPubkeyAttestation attestations = 1 [(gogoproto.nullable) = false];
-    }
-
-    message ProposeIndividualSession {
-        bytes encryptedProposal = 1;
-    }
-
-    message RespondToIndividualSessionProposal {
-        Redwood.swarm.protohush.IndividualSessionResponse response = 1;
-    }
-
-    message SendIndividualMessage {
-        Redwood.swarm.protohush.IndividualMessage message = 1;
-    }
-
-    message SendGroupMessage {
-        Redwood.swarm.protohush.GroupMessage message = 1;
+    message PubkeyBundles {
+        repeated Redwood.swarm.protohush.PubkeyBundle bundles = 1 [(gogoproto.nullable) = false];
     }
 }
 
+message TreeMessage {
+    oneof payload {
+        Redwood.tree.Tx tx = 1;
+        EncryptedTx encryptedTx = 2;
+        Subscribe subscribe = 3;
+        Ack ack = 4;
+        AnnounceP2PStateURI announceP2PStateURI = 5;
+    }
 
+    message EncryptedTx {
+        Redwood.swarm.protohush.GroupMessage encryptedTx = 1 [(gogoproto.nullable) = false];
+    }
+
+    message Subscribe {
+        string stateURI = 1;
+    }
+
+    message SubscriptionMsg {
+        oneof payload {
+            Redwood.tree.Tx tx = 1;
+            Redwood.swarm.protohush.GroupMessage encryptedTx = 2;
+        }
+    }
+
+    message Ack {
+        string stateURI = 1;
+        bytes txID = 2 [(gogoproto.customtype) = "redwood.dev/state.Version", (gogoproto.nullable) = false];
+    }
+
+    message AnnounceP2PStateURI {
+        string stateURI = 1;
+    }
+}
+
+message PeerMessage {
+    oneof payload {
+        AnnouncePeers announcePeers = 1;
+    }
+
+    message AnnouncePeers {
+        repeated bytes dialInfos = 1 [(gogoproto.customtype) = "redwood.dev/swarm.PeerDialInfo"];
+    }
+}

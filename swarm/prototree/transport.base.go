@@ -9,20 +9,20 @@ import (
 
 type BaseTreeTransport struct {
 	muTxReceivedCallbacks                sync.RWMutex
-	muPrivateTxReceivedCallbacks         sync.RWMutex
+	muEncryptedTxReceivedCallbacks       sync.RWMutex
 	muAckReceivedCallbacks               sync.RWMutex
 	muWritableSubscriptionOpenedCallback sync.RWMutex
 	muP2PStateURIReceivedCallbacks       sync.RWMutex
 
 	txReceivedCallbacks                []TxReceivedCallback
-	privateTxReceivedCallbacks         []PrivateTxReceivedCallback
+	encryptedTxReceivedCallbacks       []EncryptedTxReceivedCallback
 	ackReceivedCallbacks               []AckReceivedCallback
 	writableSubscriptionOpenedCallback WritableSubscriptionOpenedCallback
 	p2pStateURIReceivedCallbacks       []P2PStateURIReceivedCallback
 }
 
 type TxReceivedCallback func(tx tree.Tx, peerConn TreePeerConn)
-type PrivateTxReceivedCallback func(encryptedTx EncryptedTx, peerConn TreePeerConn)
+type EncryptedTxReceivedCallback func(encryptedTx EncryptedTx, peerConn TreePeerConn)
 type AckReceivedCallback func(stateURI string, txID state.Version, peerConn TreePeerConn)
 type WritableSubscriptionOpenedCallback func(req SubscriptionRequest, writeSubImplFactory WritableSubscriptionImplFactory) (<-chan struct{}, error)
 type P2PStateURIReceivedCallback func(stateURI string, peerConn TreePeerConn)
@@ -35,10 +35,10 @@ func (t *BaseTreeTransport) OnTxReceived(handler TxReceivedCallback) {
 	t.txReceivedCallbacks = append(t.txReceivedCallbacks, handler)
 }
 
-func (t *BaseTreeTransport) OnPrivateTxReceived(handler PrivateTxReceivedCallback) {
-	t.muPrivateTxReceivedCallbacks.Lock()
-	defer t.muPrivateTxReceivedCallbacks.Unlock()
-	t.privateTxReceivedCallbacks = append(t.privateTxReceivedCallbacks, handler)
+func (t *BaseTreeTransport) OnEncryptedTxReceived(handler EncryptedTxReceivedCallback) {
+	t.muEncryptedTxReceivedCallbacks.Lock()
+	defer t.muEncryptedTxReceivedCallbacks.Unlock()
+	t.encryptedTxReceivedCallbacks = append(t.encryptedTxReceivedCallbacks, handler)
 }
 
 func (t *BaseTreeTransport) OnAckReceived(handler AckReceivedCallback) {
@@ -77,12 +77,12 @@ func (t *BaseTreeTransport) HandleTxReceived(tx tree.Tx, peerConn TreePeerConn) 
 	wg.Wait()
 }
 
-func (t *BaseTreeTransport) HandlePrivateTxReceived(encryptedTx EncryptedTx, peerConn TreePeerConn) {
-	t.muPrivateTxReceivedCallbacks.RLock()
-	defer t.muPrivateTxReceivedCallbacks.RUnlock()
+func (t *BaseTreeTransport) HandleEncryptedTxReceived(encryptedTx EncryptedTx, peerConn TreePeerConn) {
+	t.muEncryptedTxReceivedCallbacks.RLock()
+	defer t.muEncryptedTxReceivedCallbacks.RUnlock()
 	var wg sync.WaitGroup
-	wg.Add(len(t.privateTxReceivedCallbacks))
-	for _, handler := range t.privateTxReceivedCallbacks {
+	wg.Add(len(t.encryptedTxReceivedCallbacks))
+	for _, handler := range t.encryptedTxReceivedCallbacks {
 		handler := handler
 		go func() {
 			defer wg.Done()
