@@ -26,14 +26,14 @@ func TestBaseAuthTransport_ChallengeIdentity(t *testing.T) {
 	callback1 := testutils.NewAwaiter()
 	callback2 := testutils.NewAwaiter()
 
-	transport.OnChallengeIdentity(func(challengeMsg protoauth.ChallengeMsg, peerConn protoauth.AuthPeerConn) error {
+	transport.OnIncomingIdentityChallenge(func(challengeMsg protoauth.ChallengeMsg, peerConn protoauth.AuthPeerConn) error {
 		require.Equal(t, expectedChallengeMsg, challengeMsg)
 		require.Equal(t, expectedPeerConn, peerConn)
 		callback1.ItHappened()
 		return nil
 	})
 
-	transport.OnChallengeIdentity(func(challengeMsg protoauth.ChallengeMsg, peerConn protoauth.AuthPeerConn) error {
+	transport.OnIncomingIdentityChallenge(func(challengeMsg protoauth.ChallengeMsg, peerConn protoauth.AuthPeerConn) error {
 		require.Equal(t, expectedChallengeMsg, challengeMsg)
 		require.Equal(t, expectedPeerConn, peerConn)
 		callback2.ItHappened()

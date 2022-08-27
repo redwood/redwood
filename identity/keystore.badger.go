@@ -12,7 +12,7 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
-	"redwood.dev/utils"
+	. "redwood.dev/utils/generics"
 )
 
 type BadgerKeyStore struct {
@@ -31,7 +31,7 @@ type badgerUser struct {
 	Identities         []Identity
 	PublicIdentities   map[uint32]struct{}
 	AddressesToIndices map[types.Address]uint32
-	Extra              map[string]interface{}
+	Extra              map[string]any
 }
 
 type ScryptParams struct{ N, P int }
@@ -109,7 +109,7 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 			Identities:         []Identity{{Public: true, SigKeypair: sigkeys, AsymEncKeypair: enckeys}},
 			PublicIdentities:   map[uint32]struct{}{0: struct{}{}},
 			AddressesToIndices: map[types.Address]uint32{sigkeys.Address(): 0},
-			Extra:              map[string]interface{}{},
+			Extra:              map[string]any{},
 		}
 		return ks.saveUser(ks.unlockedUser, password)
 
@@ -118,17 +118,17 @@ func (ks *BadgerKeyStore) Unlock(password string, userMnemonic string) (err erro
 	}
 
 	if user.Extra == nil {
-		user.Extra = make(map[string]interface{})
+		user.Extra = make(map[string]any)
 	}
 
-	ks.Infof(0, "keystore unlocked")
+	ks.Infof("keystore unlocked")
 
 	ks.unlockedUser = user
 	return ks.saveUser(ks.unlockedUser, password)
 }
 
 func (ks *BadgerKeyStore) Close() error {
-	ks.Infof(0, "keystore shutting down")
+	ks.Infof("keystore shutting down")
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
@@ -162,14 +162,14 @@ func (ks *BadgerKeyStore) Identities() (_ []Identity, err error) {
 	return identities, nil
 }
 
-func (ks *BadgerKeyStore) Addresses() (types.Set[types.Address], error) {
+func (ks *BadgerKeyStore) Addresses() (Set[types.Address], error) {
 	ks.mu.RLock()
 	defer ks.mu.RUnlock()
 
 	if ks.unlockedUser == nil {
 		return nil, errors.WithStack(ErrLocked)
 	}
-	addrs := types.NewSet(utils.Map(ks.unlockedUser.Identities, func(identity Identity) types.Address {
+	addrs := NewSet(Map(ks.unlockedUser.Identities, func(identity Identity) types.Address {
 		return identity.Address()
 	}))
 	return addrs, nil
@@ -182,7 +182,7 @@ func (ks *BadgerKeyStore) PublicIdentities() (_ []Identity, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return utils.Filter(identities, func(identity Identity) bool { return identity.Public }), nil
+	return Filter(identities, func(identity Identity) bool { return identity.Public }), nil
 }
 
 func (ks *BadgerKeyStore) DefaultPublicIdentity() (_ Identity, err error) {
@@ -261,7 +261,7 @@ func (ks *BadgerKeyStore) NewIdentity(public bool) (_ Identity, err error) {
 	return identity, nil
 }
 
-func (ks *BadgerKeyStore) SignHash(usingIdentity types.Address, data types.Hash) (_ []byte, err error) {
+func (ks *BadgerKeyStore) SignHash(usingIdentity types.Address, data types.Hash) (_ crypto.Signature, err error) {
 	defer errors.AddStack(&err)
 
 	identity, err := ks.IdentityWithAddress(usingIdentity)
@@ -271,7 +271,7 @@ func (ks *BadgerKeyStore) SignHash(usingIdentity types.Address, data types.Hash)
 	return identity.SigKeypair.SignHash(data)
 }
 
-func (ks *BadgerKeyStore) VerifySignature(usingIdentity types.Address, hash types.Hash, signature []byte) (_ bool, err error) {
+func (ks *BadgerKeyStore) VerifySignature(usingIdentity types.Address, hash types.Hash, signature crypto.Signature) (_ bool, err error) {
 	defer errors.AddStack(&err)
 
 	identity, err := ks.IdentityWithAddress(usingIdentity)
@@ -319,7 +319,7 @@ func (ks *BadgerKeyStore) SymmetricallyDecrypt(ciphertext crypto.SymEncMsg) ([]b
 	return ks.unlockedUser.LocalSymEncKey.Decrypt(ciphertext)
 }
 
-func (ks *BadgerKeyStore) ExtraUserData(key string) (interface{}, bool, error) {
+func (ks *BadgerKeyStore) ExtraUserData(key string) (any, bool, error) {
 	ks.mu.RLock()
 	defer ks.mu.RUnlock()
 
@@ -330,7 +330,7 @@ func (ks *BadgerKeyStore) ExtraUserData(key string) (interface{}, bool, error) {
 	return val, exists, nil
 }
 
-func (ks *BadgerKeyStore) SaveExtraUserData(key string, value interface{}) error {
+func (ks *BadgerKeyStore) SaveExtraUserData(key string, value any) error {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
@@ -348,7 +348,7 @@ type encryptedBadgerUser struct {
 	PublicIdentities map[uint32]struct{}
 	AsymEncKeypair   map[uint32]dbAsymEncKeypair
 	LocalSymEncKey   []byte
-	Extra            map[string]interface{}
+	Extra            map[string]any
 }
 
 type dbAsymEncKeypair struct {
@@ -456,12 +456,19 @@ func (ks *BadgerKeyStore) loadUser(password string) (_ *badgerUser, err error) {
 			public = true
 			publicIdentities[i] = struct{}{}
 		}
+
+		asymEncPubkey, err := crypto.AsymEncPubkeyFromBytes(encryptedUser.AsymEncKeypair[i].Public)
+		if err != nil {
+			return nil, err
+		}
+		asymEncPrivkey := crypto.AsymEncPrivkeyFromBytes(encryptedUser.AsymEncKeypair[i].Private)
+
 		identities[i] = Identity{
 			Public:     public,
 			SigKeypair: sigkeys,
 			AsymEncKeypair: &crypto.AsymEncKeypair{
-				AsymEncPubkey:  crypto.AsymEncPubkeyFromBytes(encryptedUser.AsymEncKeypair[i].Public),
-				AsymEncPrivkey: crypto.AsymEncPrivkeyFromBytes(encryptedUser.AsymEncKeypair[i].Private),
+				AsymEncPubkey:  asymEncPubkey,
+				AsymEncPrivkey: asymEncPrivkey,
 			},
 		}
 		addressesToIndices[sigkeys.Address()] = i

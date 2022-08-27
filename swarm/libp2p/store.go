@@ -8,7 +8,7 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/state"
-	"redwood.dev/types"
+	. "redwood.dev/utils/generics"
 )
 
 //go:generate mockery --name Store --output ./mocks/ --case=underscore
@@ -32,7 +32,7 @@ type storeData struct {
 }
 
 type storeDataCodec struct {
-	StaticRelays types.Set[string] `tree:"staticRelays"`
+	StaticRelays Set[string] `tree:"staticRelays"`
 }
 
 func NewStore(db *state.DBTree) (*store, error) {
@@ -40,7 +40,7 @@ func NewStore(db *state.DBTree) (*store, error) {
 		Logger: log.NewLogger("libp2p store"),
 		db:     db,
 	}
-	s.Infof(0, "opening libp2p store")
+	s.Infof("opening libp2p store")
 	err := s.loadData()
 	return s, err
 }

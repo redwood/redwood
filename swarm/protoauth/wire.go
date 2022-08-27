@@ -1,34 +1,22 @@
 package protoauth
 
 import (
-	"crypto/rand"
-	"encoding/hex"
+	"bytes"
 
-	"redwood.dev/errors"
+	"redwood.dev/crypto"
+	"redwood.dev/types"
 )
 
-type ChallengeMsg []byte
-
-func GenerateChallengeMsg() ([]byte, error) {
-	challengeMsg := make([]byte, 128)
-	_, err := rand.Read(challengeMsg)
-	return challengeMsg, err
-}
-
-func (c ChallengeMsg) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + hex.EncodeToString(c) + `"`), nil
-}
-
-func (c *ChallengeMsg) UnmarshalJSON(bs []byte) error {
-	bs, err := hex.DecodeString(string(bs[1 : len(bs)-1]))
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	*c = bs
-	return nil
-}
-
 type ChallengeIdentityResponse struct {
-	Signature     []byte `json:"signature"`
-	AsymEncPubkey []byte `json:"encryptingPublicKey"`
+	Challenge     crypto.ChallengeMsg  `json:"challenge"`
+	Signature     crypto.Signature     `json:"signature"`
+	AsymEncPubkey crypto.AsymEncPubkey `json:"encryptingPublicKey"`
+}
+
+func (r ChallengeIdentityResponse) Hash() types.Hash {
+	bs := bytes.Join([][]byte{
+		r.Challenge.Bytes(),
+		r.AsymEncPubkey.Bytes(),
+	}, nil)
+	return types.HashBytes(bs)
 }

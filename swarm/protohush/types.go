@@ -3,56 +3,74 @@ package protohush
 import (
 	"bytes"
 
+	"redwood.dev/crypto"
 	"redwood.dev/errors"
 	"redwood.dev/swarm/protohush/pb"
 	"redwood.dev/types"
 )
 
-type SharedKey = pb.SharedKey
-type IndividualSessionID = pb.IndividualSessionID
-type IndividualSessionProposal = pb.IndividualSessionProposal
-type IndividualSessionResponse = pb.IndividualSessionResponse
-type DHPair = pb.DHPair
-type DHPubkeyAttestation = pb.DHPubkeyAttestation
-type IndividualMessage = pb.IndividualMessage
-type IndividualMessageHeader = pb.IndividualMessage_Header
+type (
+	KeyBundle         = pb.KeyBundle
+	PubkeyBundle      = pb.PubkeyBundle
+	IndividualMessage = pb.IndividualMessage
+	GroupMessage      = pb.GroupMessage
+	X3DHPrivateKey    = pb.X3DHPrivateKey
+	X3DHPublicKey     = pb.X3DHPublicKey
+	RatchetPrivateKey = pb.RatchetPrivateKey
+	RatchetPublicKey  = pb.RatchetPublicKey
+)
 
-// type GroupSessionID = pb.GroupSessionID
-// type GroupSessionProposal = pb.GroupSessionProposal
-type GroupMessage = pb.GroupMessage
-type GroupMessage_EncryptionKey = pb.GroupMessage_EncryptionKey
+var (
+	RatchetPrivateKeyFromBytes = pb.RatchetPrivateKeyFromBytes
+	RatchetPublicKeyFromBytes  = pb.RatchetPublicKeyFromBytes
+	GenerateX3DHPrivateKey     = pb.GenerateX3DHPrivateKey
+	GenerateRatchetPrivateKey  = pb.GenerateRatchetPrivateKey
+)
 
-var GenerateSharedKey = pb.GenerateSharedKey
-var IndividualMessageFromDoubleRatchetMessage = pb.IndividualMessageFromDoubleRatchetMessage
-
-type EncryptedIndividualSessionProposal struct {
-	AliceAddr         types.Address `tree:"aliceAddr"`
-	EncryptedProposal []byte        `tree:"encryptedProposal"`
+type Session struct {
+	MyAddress       types.Address  `tree:"myAddress"`
+	MyBundleID      types.Hash     `tree:"myBundleID"`
+	RemoteAddress   types.Address  `tree:"remoteAddress"`
+	RemoteBundleID  types.Hash     `tree:"remoteBundleID"`
+	EphemeralPubkey *X3DHPublicKey `tree:"ephemeralPubkey"`
+	SharedKey       []byte         `tree:"sharedKey"`
+	Revoked         bool           `tree:"revoked"`
+	CreatedAt       uint64         `tree:"createdAt"`
 }
 
-func (p EncryptedIndividualSessionProposal) Hash() types.Hash {
-	return types.HashBytes(append(p.AliceAddr.Bytes(), p.EncryptedProposal...))
+func SessionID(aliceBundleID, bobBundleID types.Hash, ephemeralPubkey *X3DHPublicKey) types.Hash {
+	if bytes.Compare(aliceBundleID.Bytes(), bobBundleID.Bytes()) > 0 {
+		aliceBundleID, bobBundleID = bobBundleID, aliceBundleID
+	}
+	bs := bytes.Join([][]byte{
+		aliceBundleID.Bytes(),
+		bobBundleID.Bytes(),
+		ephemeralPubkey.Bytes(),
+	}, nil)
+	return types.HashBytes(bs)
 }
 
-type IndividualMessageIntent struct {
-	ID          types.ID      `tree:"id"`
-	SessionType string        `tree:"sessionType"`
-	Recipient   types.Address `tree:"recipient"`
-	Plaintext   []byte        `tree:"plaintext"`
+func (s Session) ID() types.Hash {
+	return SessionID(s.MyBundleID, s.RemoteBundleID, s.EphemeralPubkey)
 }
 
-type GroupMessageIntent struct {
-	SessionType string          `tree:"sessionType"`
+type SymEncKeyAndMessage struct {
+	Key     crypto.SymEncKey `tree:"key"`
+	Message crypto.SymEncMsg `tree:"message"`
+}
+
+type OutgoingGroupMessage struct {
 	ID          string          `tree:"id"`
+	MessageType string          `tree:"messageType"`
+	Sender      types.Address   `tree:"sender"`
 	Recipients  []types.Address `tree:"recipients"`
 	Plaintext   []byte          `tree:"plaintext"`
 }
 
-func addrsSorted(alice, bob types.Address) (types.Address, types.Address) {
-	if bytes.Compare(alice.Bytes(), bob.Bytes()) < 0 {
-		return alice, bob
-	}
-	return bob, alice
+type IncomingGroupMessage struct {
+	ID          string       `tree:"id"`
+	MessageType string       `tree:"messageType"`
+	Message     GroupMessage `tree:"message"`
 }
 
 var (

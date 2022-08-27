@@ -31,6 +31,7 @@ var resolverRegistry = map[string]ResolverConstructor{
 	"resolver/dumb": NewDumbResolver,
 	"resolver/lua":  NewLuaResolver,
 	"resolver/js":   NewJSResolver,
+	"resolver/wasm": NewWASMResolver,
 	// "resolver/git":  NewGitResolver,
 	//"resolver/stack": NewStackResolver,
 }

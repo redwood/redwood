@@ -12,6 +12,7 @@ import (
 	math_rand "math/rand"
 	_ "redwood.dev/blob/pb"
 	_ "redwood.dev/swarm/protohush/pb"
+	_ "redwood.dev/tree/pb"
 	testing "testing"
 )
 
@@ -19,6 +20,206 @@ import (
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+func BenchmarkAuthMessageProtoMarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*AuthMessage, 10000)
+	for i := 0; i < 10000; i++ {
+		pops[i] = NewPopulatedAuthMessage(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(pops[i%10000])
+		if err != nil {
+			panic(err)
+		}
+		total += len(dAtA)
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessageProtoUnmarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	datas := make([][]byte, 10000)
+	for i := 0; i < 10000; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedAuthMessage(popr, false))
+		if err != nil {
+			panic(err)
+		}
+		datas[i] = dAtA
+	}
+	msg := &AuthMessage{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += len(datas[i%10000])
+		if err := github_com_gogo_protobuf_proto.Unmarshal(datas[i%10000], msg); err != nil {
+			panic(err)
+		}
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_ChallengeRequestProtoMarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*AuthMessage_ChallengeRequest, 10000)
+	for i := 0; i < 10000; i++ {
+		pops[i] = NewPopulatedAuthMessage_ChallengeRequest(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(pops[i%10000])
+		if err != nil {
+			panic(err)
+		}
+		total += len(dAtA)
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_ChallengeRequestProtoUnmarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	datas := make([][]byte, 10000)
+	for i := 0; i < 10000; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedAuthMessage_ChallengeRequest(popr, false))
+		if err != nil {
+			panic(err)
+		}
+		datas[i] = dAtA
+	}
+	msg := &AuthMessage_ChallengeRequest{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += len(datas[i%10000])
+		if err := github_com_gogo_protobuf_proto.Unmarshal(datas[i%10000], msg); err != nil {
+			panic(err)
+		}
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_ChallengeProtoMarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*AuthMessage_Challenge, 10000)
+	for i := 0; i < 10000; i++ {
+		pops[i] = NewPopulatedAuthMessage_Challenge(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(pops[i%10000])
+		if err != nil {
+			panic(err)
+		}
+		total += len(dAtA)
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_ChallengeProtoUnmarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	datas := make([][]byte, 10000)
+	for i := 0; i < 10000; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedAuthMessage_Challenge(popr, false))
+		if err != nil {
+			panic(err)
+		}
+		datas[i] = dAtA
+	}
+	msg := &AuthMessage_Challenge{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += len(datas[i%10000])
+		if err := github_com_gogo_protobuf_proto.Unmarshal(datas[i%10000], msg); err != nil {
+			panic(err)
+		}
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_SignaturesProtoMarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*AuthMessage_Signatures, 10000)
+	for i := 0; i < 10000; i++ {
+		pops[i] = NewPopulatedAuthMessage_Signatures(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(pops[i%10000])
+		if err != nil {
+			panic(err)
+		}
+		total += len(dAtA)
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_SignaturesProtoUnmarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	datas := make([][]byte, 10000)
+	for i := 0; i < 10000; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedAuthMessage_Signatures(popr, false))
+		if err != nil {
+			panic(err)
+		}
+		datas[i] = dAtA
+	}
+	msg := &AuthMessage_Signatures{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += len(datas[i%10000])
+		if err := github_com_gogo_protobuf_proto.Unmarshal(datas[i%10000], msg); err != nil {
+			panic(err)
+		}
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_UcanProtoMarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*AuthMessage_Ucan, 10000)
+	for i := 0; i < 10000; i++ {
+		pops[i] = NewPopulatedAuthMessage_Ucan(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(pops[i%10000])
+		if err != nil {
+			panic(err)
+		}
+		total += len(dAtA)
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_UcanProtoUnmarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	datas := make([][]byte, 10000)
+	for i := 0; i < 10000; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedAuthMessage_Ucan(popr, false))
+		if err != nil {
+			panic(err)
+		}
+		datas[i] = dAtA
+	}
+	msg := &AuthMessage_Ucan{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += len(datas[i%10000])
+		if err := github_com_gogo_protobuf_proto.Unmarshal(datas[i%10000], msg); err != nil {
+			panic(err)
+		}
+	}
+	b.SetBytes(int64(total / b.N))
+}
 
 func BenchmarkBlobMessageProtoMarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
@@ -260,12 +461,12 @@ func BenchmarkHushMessageProtoUnmarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_DHPubkeyAttestationsProtoMarshal(b *testing.B) {
+func BenchmarkHushMessage_PubkeyBundlesProtoMarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_DHPubkeyAttestations, 10000)
+	pops := make([]*HushMessage_PubkeyBundles, 10000)
 	for i := 0; i < 10000; i++ {
-		pops[i] = NewPopulatedHushMessage_DHPubkeyAttestations(popr, false)
+		pops[i] = NewPopulatedHushMessage_PubkeyBundles(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -278,18 +479,18 @@ func BenchmarkHushMessage_DHPubkeyAttestationsProtoMarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_DHPubkeyAttestationsProtoUnmarshal(b *testing.B) {
+func BenchmarkHushMessage_PubkeyBundlesProtoUnmarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
 	datas := make([][]byte, 10000)
 	for i := 0; i < 10000; i++ {
-		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedHushMessage_DHPubkeyAttestations(popr, false))
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedHushMessage_PubkeyBundles(popr, false))
 		if err != nil {
 			panic(err)
 		}
 		datas[i] = dAtA
 	}
-	msg := &HushMessage_DHPubkeyAttestations{}
+	msg := &HushMessage_PubkeyBundles{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		total += len(datas[i%10000])
@@ -300,12 +501,12 @@ func BenchmarkHushMessage_DHPubkeyAttestationsProtoUnmarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_ProposeIndividualSessionProtoMarshal(b *testing.B) {
+func BenchmarkTreeMessageProtoMarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_ProposeIndividualSession, 10000)
+	pops := make([]*TreeMessage, 10000)
 	for i := 0; i < 10000; i++ {
-		pops[i] = NewPopulatedHushMessage_ProposeIndividualSession(popr, false)
+		pops[i] = NewPopulatedTreeMessage(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -318,18 +519,18 @@ func BenchmarkHushMessage_ProposeIndividualSessionProtoMarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_ProposeIndividualSessionProtoUnmarshal(b *testing.B) {
+func BenchmarkTreeMessageProtoUnmarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
 	datas := make([][]byte, 10000)
 	for i := 0; i < 10000; i++ {
-		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedHushMessage_ProposeIndividualSession(popr, false))
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedTreeMessage(popr, false))
 		if err != nil {
 			panic(err)
 		}
 		datas[i] = dAtA
 	}
-	msg := &HushMessage_ProposeIndividualSession{}
+	msg := &TreeMessage{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		total += len(datas[i%10000])
@@ -340,12 +541,12 @@ func BenchmarkHushMessage_ProposeIndividualSessionProtoUnmarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_RespondToIndividualSessionProposalProtoMarshal(b *testing.B) {
+func BenchmarkTreeMessage_EncryptedTxProtoMarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_RespondToIndividualSessionProposal, 10000)
+	pops := make([]*TreeMessage_EncryptedTx, 10000)
 	for i := 0; i < 10000; i++ {
-		pops[i] = NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, false)
+		pops[i] = NewPopulatedTreeMessage_EncryptedTx(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -358,18 +559,18 @@ func BenchmarkHushMessage_RespondToIndividualSessionProposalProtoMarshal(b *test
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_RespondToIndividualSessionProposalProtoUnmarshal(b *testing.B) {
+func BenchmarkTreeMessage_EncryptedTxProtoUnmarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
 	datas := make([][]byte, 10000)
 	for i := 0; i < 10000; i++ {
-		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, false))
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedTreeMessage_EncryptedTx(popr, false))
 		if err != nil {
 			panic(err)
 		}
 		datas[i] = dAtA
 	}
-	msg := &HushMessage_RespondToIndividualSessionProposal{}
+	msg := &TreeMessage_EncryptedTx{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		total += len(datas[i%10000])
@@ -380,12 +581,12 @@ func BenchmarkHushMessage_RespondToIndividualSessionProposalProtoUnmarshal(b *te
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_SendIndividualMessageProtoMarshal(b *testing.B) {
+func BenchmarkTreeMessage_SubscribeProtoMarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_SendIndividualMessage, 10000)
+	pops := make([]*TreeMessage_Subscribe, 10000)
 	for i := 0; i < 10000; i++ {
-		pops[i] = NewPopulatedHushMessage_SendIndividualMessage(popr, false)
+		pops[i] = NewPopulatedTreeMessage_Subscribe(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -398,18 +599,18 @@ func BenchmarkHushMessage_SendIndividualMessageProtoMarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_SendIndividualMessageProtoUnmarshal(b *testing.B) {
+func BenchmarkTreeMessage_SubscribeProtoUnmarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
 	datas := make([][]byte, 10000)
 	for i := 0; i < 10000; i++ {
-		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedHushMessage_SendIndividualMessage(popr, false))
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedTreeMessage_Subscribe(popr, false))
 		if err != nil {
 			panic(err)
 		}
 		datas[i] = dAtA
 	}
-	msg := &HushMessage_SendIndividualMessage{}
+	msg := &TreeMessage_Subscribe{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		total += len(datas[i%10000])
@@ -420,12 +621,12 @@ func BenchmarkHushMessage_SendIndividualMessageProtoUnmarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_SendGroupMessageProtoMarshal(b *testing.B) {
+func BenchmarkTreeMessage_SubscriptionMsgProtoMarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_SendGroupMessage, 10000)
+	pops := make([]*TreeMessage_SubscriptionMsg, 10000)
 	for i := 0; i < 10000; i++ {
-		pops[i] = NewPopulatedHushMessage_SendGroupMessage(popr, false)
+		pops[i] = NewPopulatedTreeMessage_SubscriptionMsg(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -438,24 +639,254 @@ func BenchmarkHushMessage_SendGroupMessageProtoMarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_SendGroupMessageProtoUnmarshal(b *testing.B) {
+func BenchmarkTreeMessage_SubscriptionMsgProtoUnmarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
 	datas := make([][]byte, 10000)
 	for i := 0; i < 10000; i++ {
-		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedHushMessage_SendGroupMessage(popr, false))
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedTreeMessage_SubscriptionMsg(popr, false))
 		if err != nil {
 			panic(err)
 		}
 		datas[i] = dAtA
 	}
-	msg := &HushMessage_SendGroupMessage{}
+	msg := &TreeMessage_SubscriptionMsg{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		total += len(datas[i%10000])
 		if err := github_com_gogo_protobuf_proto.Unmarshal(datas[i%10000], msg); err != nil {
 			panic(err)
 		}
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkTreeMessage_AckProtoMarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*TreeMessage_Ack, 10000)
+	for i := 0; i < 10000; i++ {
+		pops[i] = NewPopulatedTreeMessage_Ack(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(pops[i%10000])
+		if err != nil {
+			panic(err)
+		}
+		total += len(dAtA)
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkTreeMessage_AckProtoUnmarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	datas := make([][]byte, 10000)
+	for i := 0; i < 10000; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedTreeMessage_Ack(popr, false))
+		if err != nil {
+			panic(err)
+		}
+		datas[i] = dAtA
+	}
+	msg := &TreeMessage_Ack{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += len(datas[i%10000])
+		if err := github_com_gogo_protobuf_proto.Unmarshal(datas[i%10000], msg); err != nil {
+			panic(err)
+		}
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkTreeMessage_AnnounceP2PStateURIProtoMarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*TreeMessage_AnnounceP2PStateURI, 10000)
+	for i := 0; i < 10000; i++ {
+		pops[i] = NewPopulatedTreeMessage_AnnounceP2PStateURI(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(pops[i%10000])
+		if err != nil {
+			panic(err)
+		}
+		total += len(dAtA)
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkTreeMessage_AnnounceP2PStateURIProtoUnmarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	datas := make([][]byte, 10000)
+	for i := 0; i < 10000; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedTreeMessage_AnnounceP2PStateURI(popr, false))
+		if err != nil {
+			panic(err)
+		}
+		datas[i] = dAtA
+	}
+	msg := &TreeMessage_AnnounceP2PStateURI{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += len(datas[i%10000])
+		if err := github_com_gogo_protobuf_proto.Unmarshal(datas[i%10000], msg); err != nil {
+			panic(err)
+		}
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkPeerMessageProtoMarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*PeerMessage, 10000)
+	for i := 0; i < 10000; i++ {
+		pops[i] = NewPopulatedPeerMessage(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(pops[i%10000])
+		if err != nil {
+			panic(err)
+		}
+		total += len(dAtA)
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkPeerMessageProtoUnmarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	datas := make([][]byte, 10000)
+	for i := 0; i < 10000; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedPeerMessage(popr, false))
+		if err != nil {
+			panic(err)
+		}
+		datas[i] = dAtA
+	}
+	msg := &PeerMessage{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += len(datas[i%10000])
+		if err := github_com_gogo_protobuf_proto.Unmarshal(datas[i%10000], msg); err != nil {
+			panic(err)
+		}
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkPeerMessage_AnnouncePeersProtoMarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*PeerMessage_AnnouncePeers, 10000)
+	for i := 0; i < 10000; i++ {
+		pops[i] = NewPopulatedPeerMessage_AnnouncePeers(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(pops[i%10000])
+		if err != nil {
+			panic(err)
+		}
+		total += len(dAtA)
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkPeerMessage_AnnouncePeersProtoUnmarshal(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	datas := make([][]byte, 10000)
+	for i := 0; i < 10000; i++ {
+		dAtA, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedPeerMessage_AnnouncePeers(popr, false))
+		if err != nil {
+			panic(err)
+		}
+		datas[i] = dAtA
+	}
+	msg := &PeerMessage_AnnouncePeers{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += len(datas[i%10000])
+		if err := github_com_gogo_protobuf_proto.Unmarshal(datas[i%10000], msg); err != nil {
+			panic(err)
+		}
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessageSize(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*AuthMessage, 1000)
+	for i := 0; i < 1000; i++ {
+		pops[i] = NewPopulatedAuthMessage(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += pops[i%1000].Size()
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_ChallengeRequestSize(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*AuthMessage_ChallengeRequest, 1000)
+	for i := 0; i < 1000; i++ {
+		pops[i] = NewPopulatedAuthMessage_ChallengeRequest(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += pops[i%1000].Size()
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_ChallengeSize(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*AuthMessage_Challenge, 1000)
+	for i := 0; i < 1000; i++ {
+		pops[i] = NewPopulatedAuthMessage_Challenge(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += pops[i%1000].Size()
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_SignaturesSize(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*AuthMessage_Signatures, 1000)
+	for i := 0; i < 1000; i++ {
+		pops[i] = NewPopulatedAuthMessage_Signatures(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += pops[i%1000].Size()
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkAuthMessage_UcanSize(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*AuthMessage_Ucan, 1000)
+	for i := 0; i < 1000; i++ {
+		pops[i] = NewPopulatedAuthMessage_Ucan(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += pops[i%1000].Size()
 	}
 	b.SetBytes(int64(total / b.N))
 }
@@ -544,12 +975,12 @@ func BenchmarkHushMessageSize(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_DHPubkeyAttestationsSize(b *testing.B) {
+func BenchmarkHushMessage_PubkeyBundlesSize(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_DHPubkeyAttestations, 1000)
+	pops := make([]*HushMessage_PubkeyBundles, 1000)
 	for i := 0; i < 1000; i++ {
-		pops[i] = NewPopulatedHushMessage_DHPubkeyAttestations(popr, false)
+		pops[i] = NewPopulatedHushMessage_PubkeyBundles(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -558,12 +989,12 @@ func BenchmarkHushMessage_DHPubkeyAttestationsSize(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_ProposeIndividualSessionSize(b *testing.B) {
+func BenchmarkTreeMessageSize(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_ProposeIndividualSession, 1000)
+	pops := make([]*TreeMessage, 1000)
 	for i := 0; i < 1000; i++ {
-		pops[i] = NewPopulatedHushMessage_ProposeIndividualSession(popr, false)
+		pops[i] = NewPopulatedTreeMessage(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -572,12 +1003,12 @@ func BenchmarkHushMessage_ProposeIndividualSessionSize(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_RespondToIndividualSessionProposalSize(b *testing.B) {
+func BenchmarkTreeMessage_EncryptedTxSize(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_RespondToIndividualSessionProposal, 1000)
+	pops := make([]*TreeMessage_EncryptedTx, 1000)
 	for i := 0; i < 1000; i++ {
-		pops[i] = NewPopulatedHushMessage_RespondToIndividualSessionProposal(popr, false)
+		pops[i] = NewPopulatedTreeMessage_EncryptedTx(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -586,12 +1017,12 @@ func BenchmarkHushMessage_RespondToIndividualSessionProposalSize(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_SendIndividualMessageSize(b *testing.B) {
+func BenchmarkTreeMessage_SubscribeSize(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_SendIndividualMessage, 1000)
+	pops := make([]*TreeMessage_Subscribe, 1000)
 	for i := 0; i < 1000; i++ {
-		pops[i] = NewPopulatedHushMessage_SendIndividualMessage(popr, false)
+		pops[i] = NewPopulatedTreeMessage_Subscribe(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -600,12 +1031,68 @@ func BenchmarkHushMessage_SendIndividualMessageSize(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkHushMessage_SendGroupMessageSize(b *testing.B) {
+func BenchmarkTreeMessage_SubscriptionMsgSize(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
-	pops := make([]*HushMessage_SendGroupMessage, 1000)
+	pops := make([]*TreeMessage_SubscriptionMsg, 1000)
 	for i := 0; i < 1000; i++ {
-		pops[i] = NewPopulatedHushMessage_SendGroupMessage(popr, false)
+		pops[i] = NewPopulatedTreeMessage_SubscriptionMsg(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += pops[i%1000].Size()
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkTreeMessage_AckSize(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*TreeMessage_Ack, 1000)
+	for i := 0; i < 1000; i++ {
+		pops[i] = NewPopulatedTreeMessage_Ack(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += pops[i%1000].Size()
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkTreeMessage_AnnounceP2PStateURISize(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*TreeMessage_AnnounceP2PStateURI, 1000)
+	for i := 0; i < 1000; i++ {
+		pops[i] = NewPopulatedTreeMessage_AnnounceP2PStateURI(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += pops[i%1000].Size()
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkPeerMessageSize(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*PeerMessage, 1000)
+	for i := 0; i < 1000; i++ {
+		pops[i] = NewPopulatedPeerMessage(popr, false)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		total += pops[i%1000].Size()
+	}
+	b.SetBytes(int64(total / b.N))
+}
+
+func BenchmarkPeerMessage_AnnouncePeersSize(b *testing.B) {
+	popr := math_rand.New(math_rand.NewSource(616))
+	total := 0
+	pops := make([]*PeerMessage_AnnouncePeers, 1000)
+	for i := 0; i < 1000; i++ {
+		pops[i] = NewPopulatedPeerMessage_AnnouncePeers(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

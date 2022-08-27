@@ -1,13 +1,16 @@
 package crypto
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 
 	"golang.org/x/crypto/nacl/box"
 
 	"redwood.dev/errors"
+	"redwood.dev/types"
 )
 
 type (
@@ -40,10 +43,13 @@ func GenerateAsymEncKeypair() (*AsymEncKeypair, error) {
 	}, nil
 }
 
-func AsymEncPubkeyFromBytes(bs []byte) *AsymEncPubkey {
+func AsymEncPubkeyFromBytes(bs []byte) (*AsymEncPubkey, error) {
+	if len(bs) != NACL_BOX_KEY_LENGTH {
+		return nil, errors.Errorf("bad length for AsymEncPubkey (%v)", len(bs))
+	}
 	var pk AsymEncPubkey
 	copy(pk[:], bs)
-	return &pk
+	return &pk, nil
 }
 
 func AsymEncPubkeyFromHex(s string) (*AsymEncPubkey, error) {
@@ -51,16 +57,12 @@ func AsymEncPubkeyFromHex(s string) (*AsymEncPubkey, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-
-	var pk AsymEncPubkey
-	copy(pk[:], bs)
-	return &pk, nil
+	return AsymEncPubkeyFromBytes(bs)
 }
 
 func (pubkey *AsymEncPubkey) Bytes() []byte {
-	bs := make([]byte, NACL_BOX_KEY_LENGTH)
-	copy(bs, (*pubkey)[:])
-	return bs
+	k := *pubkey
+	return k[:]
 }
 
 func (pubkey *AsymEncPubkey) Hex() string {
@@ -71,8 +73,11 @@ func (pubkey *AsymEncPubkey) String() string {
 	return pubkey.Hex()
 }
 
-func (pubkey *AsymEncPubkey) UnmarshalBinary(bs []byte) error {
-	k := AsymEncPubkeyFromBytes(bs)
+func (pubkey *AsymEncPubkey) UnmarshalBinary(bs []byte) (err error) {
+	k, err := AsymEncPubkeyFromBytes(bs)
+	if err != nil {
+		return err
+	}
 	*pubkey = *k
 	return nil
 }
@@ -85,12 +90,65 @@ func (pubkey *AsymEncPubkey) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + pubkey.Hex() + `"`), nil
 }
 
+func (pk *AsymEncPubkey) UnmarshalJSON(bs []byte) error {
+	var s string
+	err := json.Unmarshal(bs, &s)
+	if err != nil {
+		return err
+	}
+	k, err := AsymEncPubkeyFromHex(s)
+	if err != nil {
+		return err
+	}
+	*pk = *k
+	return nil
+}
+
 func (pubkey *AsymEncPubkey) UnmarshalStateBytes(bs []byte) error {
 	return pubkey.UnmarshalBinary(bs)
 }
 
 func (pubkey AsymEncPubkey) MarshalStateBytes() ([]byte, error) {
 	return pubkey.MarshalBinary()
+}
+
+func (pk AsymEncPubkey) Copy() AsymEncPubkey {
+	return pk
+}
+
+func (pk AsymEncPubkey) Marshal() ([]byte, error) {
+	return pk.Bytes(), nil
+}
+
+func (pk AsymEncPubkey) MarshalTo(data []byte) (n int, err error) {
+	copy(data, pk.Bytes())
+	return len(pk), nil
+}
+
+func (pk *AsymEncPubkey) Unmarshal(data []byte) error {
+	if len(data) != NACL_BOX_KEY_LENGTH {
+		return errors.Errorf("bad length for crypto.AsymEncPubkey (%v)", len(data))
+	}
+	copy((*pk)[:], data)
+	return nil
+}
+
+func (pk *AsymEncPubkey) UnmarshalText(bs []byte) error {
+	bytes, err := hex.DecodeString(string(bs))
+	if err != nil {
+		return err
+	}
+	return pk.Unmarshal(bytes)
+}
+
+func (pk *AsymEncPubkey) Size() int { return NACL_BOX_KEY_LENGTH }
+
+func (pk AsymEncPubkey) Compare(other AsymEncPubkey) int {
+	return bytes.Compare(pk[:], other[:])
+}
+
+func (pk AsymEncPubkey) Equal(other AsymEncPubkey) bool {
+	return bytes.Equal(pk[:], other[:])
 }
 
 func AsymEncPrivkeyFromBytes(bs []byte) *AsymEncPrivkey {
@@ -153,4 +211,12 @@ func (privkey *AsymEncPrivkey) OpenMessageFrom(senderPublicKey *AsymEncPubkey, m
 		return nil, ErrCannotDecrypt
 	}
 	return decrypted, nil
+}
+
+func NewPopulatedAsymEncPubkey(_ gogoprotobufTest) *AsymEncPubkey {
+	k, err := AsymEncPubkeyFromBytes(types.RandomBytes(32))
+	if err != nil {
+		panic(err)
+	}
+	return k
 }

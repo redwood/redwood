@@ -9,9 +9,9 @@ import (
 	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/state"
-	"redwood.dev/types"
 	"redwood.dev/utils"
 	"redwood.dev/utils/badgerutils"
+	. "redwood.dev/utils/generics"
 )
 
 type badgerTxStore struct {
@@ -30,7 +30,7 @@ func NewBadgerTxStore(badgerOpts badger.Options) TxStore {
 }
 
 func (p *badgerTxStore) Start() error {
-	p.Infof(0, "opening txstore at %v", p.badgerOpts.Dir)
+	p.Infof("opening txstore at %v", p.badgerOpts.Dir)
 
 	db, err := badger.Open(p.badgerOpts)
 	if err != nil {
@@ -144,7 +144,7 @@ func (p *badgerTxStore) AddTx(tx Tx) (err error) {
 		}
 	}
 
-	p.Infof(0, "wrote tx %v %v (status: %v)", tx.StateURI, tx.ID.Pretty(), tx.Status)
+	p.Infof("wrote tx %v %v (status: %v)", tx.StateURI, tx.ID.Pretty(), tx.Status)
 	return nil
 }
 
@@ -238,8 +238,8 @@ func (p *badgerTxStore) AllValidTxsForStateURIOrdered(stateURI string, fromTxID 
 	return NewAllValidTxsForStateURIOrderedIterator(p, stateURI, fromTxID)
 }
 
-func (s *badgerTxStore) StateURIsWithData() (types.Set[string], error) {
-	stateURIs := types.NewSet[string](nil)
+func (s *badgerTxStore) StateURIsWithData() (Set[string], error) {
+	stateURIs := NewSet[string](nil)
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false

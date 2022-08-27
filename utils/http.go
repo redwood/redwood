@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -14,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
 	"github.com/rs/cors"
 
 	"redwood.dev/errors"
@@ -108,6 +108,13 @@ func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
 			case "path":
 				value = r.URL.Path
 				unmarshal = unmarshalURLPath
+			case "body":
+				bs, err := ioutil.ReadAll(r.Body)
+				if err != nil {
+					return err
+				}
+				value = string(bs)
+				unmarshal = unmarshalBody
 			default:
 				panic("invariant violation")
 			}
@@ -129,6 +136,10 @@ func UnmarshalHTTPRequest(into interface{}, r *http.Request) error {
 		}
 	}
 	return nil
+}
+
+func unmarshalBody(fieldName, value string, fieldVal reflect.Value) error {
+	return json.Unmarshal([]byte(value), fieldVal.Interface())
 }
 
 var unmarshalResponseRegexp = regexp.MustCompile(`(header):"([^"]*)"`)
@@ -198,7 +209,15 @@ func unmarshalURLPath(fieldName, path string, fieldVal reflect.Value) error {
 	return unmarshalHTTPField(fieldName, path, fieldVal)
 }
 
+type URLQueryUnmarshaler interface {
+	UnmarshalURLQuery(query string) error
+}
+
 func unmarshalURLQuery(fieldName, query string, fieldVal reflect.Value) error {
+	val := fieldVal.Interface()
+	if as, is := val.(URLQueryUnmarshaler); is {
+		return as.UnmarshalURLQuery(query)
+	}
 	return unmarshalHTTPField(fieldName, query, fieldVal)
 }
 
@@ -300,32 +319,6 @@ func unmarshalHTTPField(fieldName, value string, fieldVal reflect.Value) error {
 		}
 	}
 	return nil
-}
-
-func ParseJWT(authHeader string, jwtSecret []byte) (jwt.MapClaims, bool, error) {
-	if authHeader == "" {
-		return nil, false, nil
-	}
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return nil, false, errors.Errorf("bad Authorization header")
-	}
-
-	jwtToken := strings.TrimSpace(authHeader[len("Bearer "):])
-
-	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.Errorf("Unexpected signing method: %v", token.Header["alg"])
-		}
-		return jwtSecret, nil
-	})
-	if err != nil {
-		return nil, false, err
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
-		return nil, false, errors.Errorf("invalid jwt token")
-	}
-	return claims, true, nil
 }
 
 func RespondJSON(resp http.ResponseWriter, data interface{}) {

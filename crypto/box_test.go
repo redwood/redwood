@@ -11,7 +11,8 @@ import (
 func TestEncryptingKeyConstructors(t *testing.T) {
 	bytes := []byte("12345678901234567890123456789012")
 
-	pubkey := crypto.AsymEncPubkeyFromBytes(bytes)
+	pubkey, err := crypto.AsymEncPubkeyFromBytes(bytes)
+	require.NoError(t, err)
 	require.Equal(t, bytes, pubkey.Bytes())
 
 	privkey := crypto.AsymEncPrivkeyFromBytes(bytes)
@@ -19,7 +20,7 @@ func TestEncryptingKeyConstructors(t *testing.T) {
 
 	hex := hex.EncodeToString(bytes)
 
-	pubkey, err := crypto.AsymEncPubkeyFromHex(hex)
+	pubkey, err = crypto.AsymEncPubkeyFromHex(hex)
 	require.NoError(t, err)
 	require.Equal(t, bytes, pubkey.Bytes())
 

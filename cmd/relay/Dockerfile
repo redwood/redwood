@@ -7,7 +7,7 @@ RUN yarn
 
 
 
-FROM golang:1.18.0-buster AS build
+FROM golang:1.18.3-buster AS build
 
 RUN apt update
 RUN apt -y install build-essential
@@ -30,18 +30,19 @@ ADD ./swarm /build/swarm/
 ADD ./tree /build/tree/
 ADD ./types /build/types/
 ADD ./utils /build/utils/
+ADD ./vault /build/vault/
 
 COPY --from=embed /build/embed/node_modules /build/embed/node_modules
 
-WORKDIR /build/cmd/bootstrapnode
+WORKDIR /build/cmd/relay
 RUN go get -d
-RUN go build -o /bootstrapnode .
+RUN go build -o /relay .
 
 
 
 
-FROM golang:1.18.0-buster
+FROM golang:1.18.3-buster
 
-COPY --from=build /bootstrapnode /bootstrapnode
+COPY --from=build /relay /relay
 WORKDIR /
-CMD ["/bootstrapnode"]
+CMD ["/relay"]

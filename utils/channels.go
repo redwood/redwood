@@ -7,6 +7,23 @@ import (
 	"time"
 )
 
+func CollectChan[T any](ctx context.Context, n int, ch <-chan T) []T {
+	items := make([]T, n)
+	i := 0
+	for i := 0; i < n; i++ {
+		select {
+		case item, open := <-ch:
+			if !open {
+				break
+			}
+			items[i] = item
+		case <-ctx.Done():
+			break
+		}
+	}
+	return items[:i]
+}
+
 // ContextFromChan creates a context that finishes when the provided channel
 // receives or is closed.
 func ContextFromChan(chStop <-chan struct{}) (context.Context, context.CancelFunc) {

@@ -16,13 +16,13 @@ import (
 	"redwood.dev/process"
 	"redwood.dev/swarm/protoblob"
 	"redwood.dev/swarm/prototree"
-	"redwood.dev/types"
+	. "redwood.dev/utils/generics"
 )
 
 type DHTClient interface {
 	process.Interface
-	AnnounceStateURIs(ctx context.Context, stateURIs types.Set[string])
-	AnnounceBlobs(ctx context.Context, blobIDs types.Set[blob.ID])
+	AnnounceStateURIs(ctx context.Context, stateURIs Set[string])
+	AnnounceBlobs(ctx context.Context, blobIDs Set[blob.ID])
 	ProvidersOfStateURI(ctx context.Context, stateURI string) (<-chan prototree.TreePeerConn, error)
 	ProvidersOfBlob(ctx context.Context, blobID blob.ID) (<-chan protoblob.BlobPeerConn, error)
 }
@@ -54,11 +54,11 @@ func NewDHTClient(libp2pHost host.Host, dht DHT, peerManager PeerManager) *dhtCl
 }
 
 func (client *dhtClient) Close() error {
-	client.Infof(0, "libp2p dht client shutting down")
+	client.Infof("libp2p dht client shutting down")
 	return client.Process.Close()
 }
 
-func (client *dhtClient) AnnounceStateURIs(ctx context.Context, stateURIs types.Set[string]) {
+func (client *dhtClient) AnnounceStateURIs(ctx context.Context, stateURIs Set[string]) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -78,7 +78,7 @@ func (client *dhtClient) AnnounceStateURIs(ctx context.Context, stateURIs types.
 	}
 }
 
-func (client *dhtClient) AnnounceBlobs(ctx context.Context, blobIDs types.Set[blob.ID]) {
+func (client *dhtClient) AnnounceBlobs(ctx context.Context, blobIDs Set[blob.ID]) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 

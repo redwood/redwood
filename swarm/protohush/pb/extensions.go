@@ -2,204 +2,71 @@ package pb
 
 import (
 	"bytes"
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
+	"crypto/ecdsa"
 	"strconv"
-	"strings"
 
+	gethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/status-im/doubleratchet"
+	"golang.org/x/crypto/curve25519"
 
 	"redwood.dev/crypto"
-	"redwood.dev/errors"
+	"redwood.dev/identity"
 	"redwood.dev/types"
 )
 
-func (id IndividualSessionID) String() string {
-	return strings.Join([]string{
-		id.SessionType,
-		id.AliceAddr.Hex(),
-		id.BobAddr.Hex(),
-		fmt.Sprintf("%v", id.Epoch),
-	}, "-")
+func (b KeyBundle) ID() types.Hash {
+	return b.Hash()
 }
 
-func (id IndividualSessionID) Bytes() []byte {
-	return []byte(id.String())
-}
-
-func (id IndividualSessionID) Hash() types.Hash {
-	return types.HashBytes(id.Bytes())
-}
-
-func (id IndividualSessionID) MarshalText() ([]byte, error) {
-	return id.Bytes(), nil
-}
-
-func (id *IndividualSessionID) UnmarshalText(bs []byte) error {
-	parts := bytes.Split(bs, []byte("-"))
-	if len(parts) != 4 {
-		return errors.Errorf(`bad session ID: "%v"`, string(bs))
+func (b KeyBundle) Hash() types.Hash {
+	parts := [][]byte{
+		b.IdentityKey.PublicKeyBytes(),
+		b.SignedPreKey.PublicKeyBytes(),
+		[]byte(b.RatchetKey.PublicKey()),
+		[]byte(strconv.FormatUint(b.CreatedAt, 10)),
 	}
-	aliceAddr, err := types.AddressFromHex(string(parts[1]))
+	return types.HashBytes(bytes.Join(parts, nil))
+}
+
+func (b KeyBundle) ToPubkeyBundle(identity identity.Identity) (PubkeyBundle, error) {
+	pubkeyBundle := PubkeyBundle{
+		IdentityPubkey:     b.IdentityKey.Public(),
+		SignedPreKeyPubkey: b.SignedPreKey.Public(),
+		RatchetPubkey:      b.RatchetKey.Public(),
+		Revoked:            false,
+		CreatedAt:          b.CreatedAt,
+	}
+	sig, err := identity.SignHash(pubkeyBundle.Hash())
 	if err != nil {
-		return err
+		return PubkeyBundle{}, err
 	}
-	bobAddr, err := types.AddressFromHex(string(parts[2]))
-	if err != nil {
-		return err
+	pubkeyBundle.Sig = sig
+	return pubkeyBundle, nil
+}
+
+func (b PubkeyBundle) ID() types.Hash {
+	return b.Hash()
+}
+
+func (b PubkeyBundle) Hash() types.Hash {
+	parts := [][]byte{
+		b.IdentityPubkey.Bytes(),
+		b.SignedPreKeyPubkey.Bytes(),
+		b.RatchetPubkey.Bytes(),
+		[]byte(strconv.FormatUint(b.CreatedAt, 10)),
 	}
-	epoch, err := strconv.ParseUint(string(parts[3]), 10, 64)
-	if err != nil {
-		return err
-	}
-	*id = IndividualSessionID{
-		SessionType: string(parts[0]),
-		AliceAddr:   aliceAddr,
-		BobAddr:     bobAddr,
-		Epoch:       epoch,
-	}
-	return nil
+	return types.HashBytes(bytes.Join(parts, nil))
 }
 
-func (p DHPair) PrivateKey() doubleratchet.Key {
-	return p.Private
-}
-
-func (p DHPair) PublicKey() doubleratchet.Key {
-	return p.Public
-}
-
-func (p DHPair) AttestationHash() types.Hash {
-	a := DHPubkeyAttestation{Pubkey: p.Public, Epoch: p.Epoch}
-	bs, err := a.Marshal()
-	if err != nil {
-		panic("impossible")
-	}
-	// bs := bytes.Join([][]byte{p.Public, []byte(fmt.Sprintf("%v", p.Epoch))}, []byte("-"))
-	return types.HashBytes(bs)
-}
-
-type SharedKey [32]byte
-
-func SharedKeyFromBytes(bs []byte) (sk SharedKey) {
-	copy(sk[:], bs)
-	return sk
-}
-
-func GenerateSharedKey() (SharedKey, error) {
-	var sk SharedKey
-	n, err := rand.Read(sk[:])
-	if err != nil {
-		return SharedKey{}, err
-	} else if n < len(SharedKey{}) {
-		return SharedKey{}, errors.New("did not read enough entropy")
-	}
-	return sk, nil
-}
-
-func (t SharedKey) Bytes() []byte {
-	return t[:]
-}
-
-func (t SharedKey) Marshal() ([]byte, error) { return t[:], nil }
-
-func (t *SharedKey) MarshalTo(data []byte) (n int, err error) {
-	copy(data, (*t)[:])
-	return len(data), nil
-}
-
-func (t *SharedKey) Unmarshal(data []byte) error {
-	*t = SharedKey{}
-	copy((*t)[:], data)
-	return nil
-}
-
-func (t *SharedKey) Size() int { return len(*t) }
-func (t SharedKey) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + hex.EncodeToString(t[:]) + `"`), nil
-}
-func (t *SharedKey) UnmarshalJSON(data []byte) error {
-	if len(data) < 3 {
-		*t = SharedKey{}
-		return nil
-	}
-	bs, err := hex.DecodeString(string(data[1 : len(data)-1]))
-	if err != nil {
-		return err
-	}
-	*t = SharedKeyFromBytes(bs)
-	return nil
-}
-func (t SharedKey) Compare(other SharedKey) int { return bytes.Compare(t[:], other[:]) }
-func (t SharedKey) Equal(other SharedKey) bool  { return bytes.Equal(t[:], other[:]) }
-
-func NewPopulatedSharedKey(r randyHush) *SharedKey {
-	sk, _ := GenerateSharedKey()
-	return &sk
-}
-
-func (p IndividualSessionProposal) Hash() (types.Hash, error) {
-	p2 := p
-	p2.AliceSig = nil
-	p2.RemoteDHPubkey = nil
-
-	bs, err := p2.Marshal()
-	if err != nil {
-		return types.Hash{}, err
-	}
-	return types.HashBytes(bs), nil
-}
-
-func (a DHPubkeyAttestation) PubkeyHex() string {
-	return hex.EncodeToString(a.Pubkey)
-}
-
-func (a DHPubkeyAttestation) Hash() (types.Hash, error) {
-	withoutSig := DHPubkeyAttestation{Pubkey: a.Pubkey, Epoch: a.Epoch}
-	bs, err := withoutSig.Marshal()
-	if err != nil {
-		return types.Hash{}, err
-	}
-	return types.HashBytes(bs), nil
-}
-
-func (a DHPubkeyAttestation) Address() (types.Address, error) {
-	hash, err := a.Hash()
-	if err != nil {
-		return types.Address{}, err
-	}
-	pubkey, err := crypto.RecoverSigningPubkey(hash, a.Sig)
+func (b PubkeyBundle) Address() (types.Address, error) {
+	pubkey, err := crypto.RecoverSigningPubkey(b.Hash(), b.Sig)
 	if err != nil {
 		return types.Address{}, err
 	}
 	return pubkey.Address(), nil
 }
 
-func IndividualMessageFromDoubleRatchetMessage(msg doubleratchet.Message, sessionHash types.Hash) IndividualMessage {
-	return IndividualMessage{
-		SessionHash: sessionHash,
-		Header: IndividualMessage_Header{
-			DhPubkey: msg.Header.DH,
-			N:        msg.Header.N,
-			Pn:       msg.Header.PN,
-		},
-		Ciphertext: msg.Ciphertext,
-	}
-}
-
-func (m IndividualMessage) ToDoubleRatchetMessage() doubleratchet.Message {
-	return doubleratchet.Message{
-		Header: doubleratchet.MessageHeader{
-			DH: m.Header.DhPubkey,
-			N:  m.Header.N,
-			PN: m.Header.Pn,
-		},
-		Ciphertext: m.Ciphertext,
-	}
-}
-
-func (m IndividualMessage) Hash() (types.Hash, error) {
+func (m GroupMessage) Hash() (types.Hash, error) {
 	bs, err := m.Marshal()
 	if err != nil {
 		return types.Hash{}, err
@@ -207,33 +74,281 @@ func (m IndividualMessage) Hash() (types.Hash, error) {
 	return types.HashBytes(bs), nil
 }
 
-func (m GroupMessage) Hash() (types.Hash, error) {
-	m2 := m
-	m2.Sig = nil
-
-	bs, err := m2.Marshal()
-	if err != nil {
-		return types.Hash{}, err
-	}
-	return types.HashBytes(bs), nil
+func (m GroupMessage) Copy() GroupMessage {
+	// @@TODO
+	return m
 }
 
-// func (p SharedKeyProposal) MarshalBinary() ([]byte, error) {
-//     return (&pb.SharedKeyProposal{
-//         SessionID: p.SessionID,
-//         SharedKey: p.SharedKey[:],
-//     }).Marshal()
-// }
+type X3DHPrivateKey ecdsa.PrivateKey
 
-// func (p *SharedKeyProposal) UnmarshalBinary(bs []byte) error {
-//     var proto pb.SharedKeyProposal
-//     err := proto.Unmarshal(bs)
-//     if err != nil {
-//         return err
-//     }
-//     *p = SharedKeyProposal{
-//         SessionID: proto.SessionID,
-//         SharedKey: SharedKeyFromBytes(proto.SharedKey),
-//     }
-//     return nil
-// }
+func GenerateX3DHPrivateKey() (*X3DHPrivateKey, error) {
+	key, err := gethcrypto.GenerateKey()
+	if err != nil {
+		return nil, err
+	}
+	return (*X3DHPrivateKey)(key), nil
+}
+
+func (k *X3DHPrivateKey) PublicKeyBytes() []byte {
+	return gethcrypto.CompressPubkey(k.Public().ECDSA())
+}
+
+func (k *X3DHPrivateKey) PrivateKeyBytes() []byte {
+	return gethcrypto.FromECDSA((*ecdsa.PrivateKey)(k))
+}
+
+func (k *X3DHPrivateKey) ECDSA() *ecdsa.PrivateKey {
+	return (*ecdsa.PrivateKey)(k)
+}
+
+func (k *X3DHPrivateKey) Public() *X3DHPublicKey {
+	return (*X3DHPublicKey)((*ecdsa.PrivateKey)(k).Public().(*ecdsa.PublicKey))
+}
+
+func (k *X3DHPrivateKey) Unmarshal(bs []byte) error {
+	key, err := gethcrypto.ToECDSA(bs)
+	if err != nil {
+		return err
+	}
+	*k = X3DHPrivateKey(*key)
+	return nil
+}
+
+func (k *X3DHPrivateKey) UnmarshalStateBytes(bs []byte) error {
+	return k.Unmarshal(bs)
+}
+
+func (k *X3DHPrivateKey) MarshalStateBytes() ([]byte, error) {
+	return k.PrivateKeyBytes(), nil
+}
+
+func (k *X3DHPrivateKey) MarshalTo(data []byte) (n int, err error) {
+	return copy(data, k.PrivateKeyBytes()), nil
+}
+
+func (k *X3DHPrivateKey) Size() int { return len(k.PrivateKeyBytes()) }
+
+type X3DHPublicKey ecdsa.PublicKey
+
+func (k *X3DHPublicKey) ECDSA() *ecdsa.PublicKey {
+	return (*ecdsa.PublicKey)(k)
+}
+
+func (k *X3DHPublicKey) Bytes() []byte {
+	return gethcrypto.CompressPubkey((*ecdsa.PublicKey)(k))
+}
+
+func (k *X3DHPublicKey) Unmarshal(bs []byte) error {
+	key, err := gethcrypto.DecompressPubkey(bs)
+	if err != nil {
+		return err
+	}
+	*k = X3DHPublicKey(*key)
+	return nil
+}
+
+func (k *X3DHPublicKey) MarshalTo(data []byte) (n int, err error) {
+	return copy(data, k.Bytes()), nil
+}
+
+func (k *X3DHPublicKey) Size() int { return len(k.Bytes()) }
+
+func (k *X3DHPublicKey) UnmarshalStateBytes(bs []byte) error {
+	return k.Unmarshal(bs)
+}
+
+func (k *X3DHPublicKey) MarshalStateBytes() ([]byte, error) {
+	return k.Bytes(), nil
+}
+
+type RatchetPrivateKey struct {
+	K []byte
+}
+
+var _ doubleratchet.DHPair = (*RatchetPrivateKey)(nil)
+
+func RatchetPrivateKeyFromBytes(bs []byte) *RatchetPrivateKey {
+	if len(bs) != 32 {
+		panic("bad length for ratchet private key")
+	}
+	return &RatchetPrivateKey{bs}
+}
+
+func GenerateRatchetPrivateKey() (*RatchetPrivateKey, error) {
+	dhpair, err := doubleratchet.DefaultCrypto{}.GenerateDH()
+	if err != nil {
+		return nil, err
+	}
+	return &RatchetPrivateKey{K: []byte(dhpair.PrivateKey())}, nil
+}
+
+func (k *RatchetPrivateKey) Public() *RatchetPublicKey {
+	if len(k.K) < 32 {
+		panic("bad length for ratchet private key")
+	}
+	var pubkey [32]byte
+	var privkey [32]byte
+	copy(privkey[:], k.K)
+	curve25519.ScalarBaseMult(&pubkey, &privkey)
+	pub := &RatchetPublicKey{K: make([]byte, 32)}
+	copy(pub.K, pubkey[:])
+	return pub
+}
+
+func (k *RatchetPrivateKey) PrivateKey() doubleratchet.Key {
+	if k == nil {
+		return nil
+	}
+	if len(k.K) < 32 {
+		panic("bad length for ratchet private key")
+	}
+	k2 := make(doubleratchet.Key, 32)
+	copy(k2, k.K)
+	return k2
+}
+
+func (k *RatchetPrivateKey) PublicKey() doubleratchet.Key {
+	if k == nil {
+		return nil
+	}
+	if len(k.K) < 32 {
+		panic("bad length for ratchet private key")
+	}
+	var pubkey [32]byte
+	var privkey [32]byte
+	copy(privkey[:], k.K)
+	curve25519.ScalarBaseMult(&pubkey, &privkey)
+	return doubleratchet.Key(pubkey[:])
+}
+
+func (k *RatchetPrivateKey) Unmarshal(bs []byte) error {
+	if len(bs) != 32 {
+		panic("bad length for ratchet private key")
+	}
+	if k == nil {
+		*k = RatchetPrivateKey{}
+	}
+	k.K = make([]byte, 32)
+	copy(k.K, bs)
+	return nil
+}
+
+func (k *RatchetPrivateKey) MarshalTo(data []byte) (n int, err error) {
+	if len(data) < 32 {
+		panic("bad length for ratchet private key")
+	}
+	return copy(data, k.K), nil
+}
+
+func (k *RatchetPrivateKey) Size() int { return 32 }
+
+func (k *RatchetPrivateKey) UnmarshalStateBytes(bs []byte) error {
+	return k.Unmarshal(bs)
+}
+
+func (k *RatchetPrivateKey) MarshalStateBytes() ([]byte, error) {
+	return []byte(k.PrivateKey()), nil
+}
+
+type RatchetPublicKey struct {
+	K []byte
+}
+
+func RatchetPublicKeyFromBytes(bs []byte) *RatchetPublicKey {
+	if len(bs) != 32 {
+		panic("bad length for ratchet public key")
+	}
+	return &RatchetPublicKey{bs}
+}
+
+func (k *RatchetPublicKey) Unmarshal(bs []byte) error {
+	if len(bs) != 32 {
+		panic("bad length for ratchet public key")
+	}
+	if k == nil {
+		*k = RatchetPublicKey{}
+	}
+	k.K = make([]byte, 32)
+	copy(k.K, bs)
+	return nil
+}
+
+func (k *RatchetPublicKey) Marshal() ([]byte, error) {
+	if len(k.K) < 32 {
+		panic("bad length for ratchet public key")
+	}
+	bs := make([]byte, 32)
+	copy(bs, k.K)
+	return bs, nil
+}
+
+func (k *RatchetPublicKey) Bytes() []byte {
+	if len(k.K) < 32 {
+		panic("bad length for ratchet public key")
+	}
+	bs := make([]byte, len(k.K))
+	copy(bs, k.K)
+	return bs
+}
+
+func (k *RatchetPublicKey) MarshalTo(data []byte) (n int, err error) {
+	if len(data) < 32 {
+		panic("bad length for ratchet public key")
+	}
+	if len(k.K) < 32 {
+		panic("bad length for ratchet public key")
+	}
+	return copy(data, k.K), nil
+}
+
+func (k *RatchetPublicKey) Size() int { return 32 }
+
+func (k *RatchetPublicKey) UnmarshalStateBytes(bs []byte) error {
+	if len(bs) < 32 {
+		panic("bad length for ratchet public key")
+	}
+	return k.Unmarshal(bs)
+}
+
+func (k *RatchetPublicKey) MarshalStateBytes() ([]byte, error) {
+	if len(k.K) < 32 {
+		panic("bad length for ratchet public key")
+	}
+	return k.Bytes(), nil
+}
+
+//
+// Protobuf testing stuff
+//
+
+func NewPopulatedX3DHPrivateKey(r randyHush) *X3DHPrivateKey {
+	k, err := GenerateX3DHPrivateKey()
+	if err != nil {
+		panic(err)
+	}
+	return k
+}
+
+func NewPopulatedX3DHPublicKey(r randyHush) *X3DHPublicKey {
+	k, err := GenerateX3DHPrivateKey()
+	if err != nil {
+		panic(err)
+	}
+	return (*X3DHPublicKey)(k.Public())
+}
+
+func NewPopulatedRatchetPrivateKey(r randyHush) *RatchetPrivateKey {
+	k, err := GenerateRatchetPrivateKey()
+	if err != nil {
+		panic(err)
+	}
+	return k
+}
+
+func NewPopulatedRatchetPublicKey(r randyHush) *RatchetPublicKey {
+	k, err := GenerateRatchetPrivateKey()
+	if err != nil {
+		panic(err)
+	}
+	return &RatchetPublicKey{K: []byte(k.PublicKey())}
+}

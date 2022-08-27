@@ -5,7 +5,7 @@ import (
 
 	"redwood.dev/errors"
 	"redwood.dev/state"
-	"redwood.dev/swarm/protohush"
+	"redwood.dev/swarm/protohush/pb"
 	"redwood.dev/tree"
 )
 
@@ -18,7 +18,7 @@ type SubscriptionMsg struct {
 	Error       error           `json:"error,omitempty"`
 }
 
-type EncryptedTx = protohush.GroupMessage
+type EncryptedTx = pb.GroupMessage
 
 type SubscriptionType uint8
 

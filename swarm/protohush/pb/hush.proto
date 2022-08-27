@@ -6,8 +6,8 @@ option go_package = "redwood.dev/swarm/protohush/pb";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option (gogoproto.gostring_all) = true;
-option (gogoproto.equal_all) = true;
-option (gogoproto.verbose_equal_all) = true;
+option (gogoproto.equal_all) = false;
+option (gogoproto.verbose_equal_all) = false;
 option (gogoproto.goproto_stringer_all) = false;
 option (gogoproto.stringer_all) =  true;
 option (gogoproto.populate_all) = true;
@@ -17,67 +17,36 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.sizer_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-message DHPair {
-    bytes private = 1 [(gogoproto.moretags) = "tree:\"privateKey\""];
-    bytes public = 2  [(gogoproto.moretags) = "tree:\"publicKey\""];
-    uint64 epoch = 3  [(gogoproto.moretags) = "tree:\"epoch\""];
+message KeyBundle {
+    bytes  identityKey  = 1 [(gogoproto.moretags) = "tree:\"identityKey\"",  (gogoproto.customtype) = "X3DHPrivateKey"];
+    bytes  signedPreKey = 2 [(gogoproto.moretags) = "tree:\"signedPreKey\"", (gogoproto.customtype) = "X3DHPrivateKey"];
+    bytes  ratchetKey   = 3 [(gogoproto.moretags) = "tree:\"ratchetKey\"",   (gogoproto.customtype) = "RatchetPrivateKey"];
+    bool   revoked      = 4 [(gogoproto.moretags) = "tree:\"revoked\""];
+    bytes  address      = 5 [(gogoproto.moretags) = "tree:\"address\"",      (gogoproto.customtype) = "redwood.dev/types.Address", (gogoproto.nullable) = false];
+    uint64 createdAt    = 6 [(gogoproto.moretags) = "tree:\"createdAt\""];
 }
 
-message DHPubkeyAttestation {
-    bytes pubkey = 1 [(gogoproto.moretags) = "tree:\"pubkey\""];
-    uint64 epoch = 2 [(gogoproto.moretags) = "tree:\"epoch\""];
-    bytes sig = 3    [(gogoproto.moretags) = "tree:\"sig\""];
-}
-
-message IndividualSessionID {
-    option (gogoproto.stringer) = false;
-
-    string sessionType = 1 [(gogoproto.moretags) = "tree:\"sessionType\""];
-    bytes aliceAddr = 2    [(gogoproto.moretags) = "tree:\"aliceAddr\"",   (gogoproto.customtype) = "redwood.dev/types.Address", (gogoproto.nullable) = false];
-    bytes bobAddr = 3      [(gogoproto.moretags) = "tree:\"bobAddr\"",     (gogoproto.customtype) = "redwood.dev/types.Address", (gogoproto.nullable) = false];
-    uint64 epoch = 4       [(gogoproto.moretags) = "tree:\"epoch\""];
-
-    // @@TODO: use this to prevent the parties from starting sessions that overwrite one another
-    // bytes randomness = 4;
-}
-
-message IndividualSessionProposal {
-    option (gogoproto.testgen) = false;
-
-    IndividualSessionID sessionID = 1 [(gogoproto.moretags) = "tree:\"sessionID\"", (gogoproto.nullable) = false];
-    bytes sharedKey = 2               [(gogoproto.moretags) = "tree:\"sharedKey\"", (gogoproto.nullable) = false, (gogoproto.customtype) = "SharedKey"];
-    bytes aliceSig = 3                [(gogoproto.moretags) = "tree:\"aliceSig\""];
-    bytes replacesSessionWithHash = 4 [(gogoproto.moretags) = "tree:\"replacesSessionWithHash\"", (gogoproto.nullable) = false, (gogoproto.customtype) = "redwood.dev/types.Hash"];
-    bytes remoteDHPubkey = 5          [(gogoproto.moretags) = "tree:\"remoteDHPubkey\""];
-}
-
-message IndividualSessionResponse {
-    bytes proposalHash = 1 [(gogoproto.moretags) = "tree:\"proposalHash\"", (gogoproto.customtype) = "redwood.dev/types.Hash", (gogoproto.nullable) = false];
-    bytes bobSig = 2       [(gogoproto.moretags) = "tree:\"bobSig\""];
-    bool approved = 3      [(gogoproto.moretags) = "tree:\"approved\""];
+message PubkeyBundle {
+    bytes identityPubkey     = 1 [(gogoproto.moretags) = "tree:\"identityPubkey\"",     (gogoproto.customtype) = "X3DHPublicKey"];
+    bytes signedPreKeyPubkey = 2 [(gogoproto.moretags) = "tree:\"signedPreKeyPubkey\"", (gogoproto.customtype) = "X3DHPublicKey"];
+    bytes ratchetPubkey      = 3 [(gogoproto.moretags) = "tree:\"ratchetPubkey\"",      (gogoproto.customtype) = "RatchetPublicKey"];
+    bool  revoked            = 4 [(gogoproto.moretags) = "tree:\"revoked\""];
+    bytes sig                = 5 [(gogoproto.moretags) = "tree:\"sig\""];
+    uint64 createdAt         = 6 [(gogoproto.moretags) = "tree:\"createdAt\""];
 }
 
 message IndividualMessage {
-    bytes sessionHash = 1   [(gogoproto.moretags) = "tree:\"sessionHash\"", (gogoproto.customtype) = "redwood.dev/types.Hash", (gogoproto.nullable) = false];
-    Header header = 2       [(gogoproto.moretags) = "tree:\"header\"",      (gogoproto.nullable) = false];
-    bytes ciphertext = 3    [(gogoproto.moretags) = "tree:\"ciphertext\""];
-
-    message Header {
-        bytes dhPubkey = 1  [(gogoproto.moretags) = "tree:\"dhPubkey\""];
-        uint32 n = 2        [(gogoproto.moretags) = "tree:\"n\""];
-        uint32 pn = 3       [(gogoproto.moretags) = "tree:\"pn\""];
-    }
+    bytes  senderBundleID    = 2 [(gogoproto.moretags) = "tree:\"senderBundleID\"",    (gogoproto.customtype) = "redwood.dev/types.Hash", (gogoproto.nullable) = false];
+    bytes  recipientBundleID = 3 [(gogoproto.moretags) = "tree:\"recipientBundleID\"", (gogoproto.customtype) = "redwood.dev/types.Hash", (gogoproto.nullable) = false];
+    bytes  ephemeralPubkey   = 4 [(gogoproto.moretags) = "tree:\"ephemeralPubkey\"",   (gogoproto.customtype) = "X3DHPublicKey"];
+    bytes  ratchetPubkey     = 5 [(gogoproto.moretags) = "tree:\"ratchetPubkey\"",     (gogoproto.customtype) = "RatchetPublicKey"];
+    uint32 n                 = 6 [(gogoproto.moretags) = "tree:\"n\""];
+    uint32 pn                = 7 [(gogoproto.moretags) = "tree:\"pn\""];
+    bytes  ciphertext        = 8 [(gogoproto.moretags) = "tree:\"ciphertext\""];
 }
 
 message GroupMessage {
-    string sessionType = 1                    [(gogoproto.moretags) = "tree:\"sessionType\""];
-    string id = 2                             [(gogoproto.moretags) = "tree:\"id\"", (gogoproto.customname) = "ID"];
-    repeated EncryptionKey encryptionKeys = 3 [(gogoproto.moretags) = "tree:\"encryptionKeys\"", (gogoproto.nullable) = false];
-    bytes ciphertext = 4                      [(gogoproto.moretags) = "tree:\"ciphertext\""];
-    bytes sig = 5                             [(gogoproto.moretags) = "tree:\"sig\""];
-
-    message EncryptionKey {
-        bytes recipient = 1       [(gogoproto.moretags) = "tree:\"recipient\"", (gogoproto.customtype) = "redwood.dev/types.Address", (gogoproto.nullable) = false];
-        IndividualMessage key = 2 [(gogoproto.moretags) = "tree:\"key\"", (gogoproto.nullable) = false];
-    }
+    repeated IndividualMessage encryptionKeys = 2 [(gogoproto.moretags) = "tree:\"encryptionKeys\"", (gogoproto.nullable) = false];
+    bytes                      ciphertext     = 3 [(gogoproto.moretags) = "tree:\"ciphertext\""];
+    // bytes                      sig            = 4 [(gogoproto.moretags) = "tree:\"sig\""];
 }

@@ -11,6 +11,7 @@ import (
 
 	"redwood.dev/errors"
 	"redwood.dev/rpc"
+	"redwood.dev/types"
 	"redwood.dev/utils"
 )
 
@@ -21,6 +22,7 @@ type Config struct {
 	DataRoot        string          `yaml:"DataRoot"`
 	DNSOverHTTPSURL string          `yaml:"DNSOverHTTPSURL"`
 	JWTSecret       string          `yaml:"JWTSecret"`
+	JWTExpiry       time.Duration   `yaml:"JWTExpiry"`
 	DevMode         bool            `yaml:"-"`
 	Nurse           NurseConfig     `yaml:"Nurse"`
 	KeyStore        KeyStoreConfig  `yaml:"-"`
@@ -129,7 +131,8 @@ func DefaultConfig(appName string) Config {
 		},
 		BootstrapPeers: []BootstrapPeer{},
 		DataRoot:       dataRoot,
-		JWTSecret:      utils.RandomString(32),
+		JWTSecret:      types.RandomString(32),
+		JWTExpiry:      24 * time.Hour,
 		DevMode:        false,
 		Nurse: NurseConfig{
 			Enabled:              true,

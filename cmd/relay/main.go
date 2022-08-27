@@ -163,7 +163,7 @@ var replCommands = []replCommand{
 		"peerid",
 		"show the node's libp2p peer ID",
 		func(args []string, bn libp2p.BootstrapNode) error {
-			bn.Infof(0, "%v", bn.Libp2pPeerID())
+			bn.Infof("%v", bn.Libp2pPeerID())
 			return nil
 		},
 	},

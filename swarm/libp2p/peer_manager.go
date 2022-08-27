@@ -11,13 +11,12 @@ import (
 	mdns "github.com/libp2p/go-libp2p/p2p/discovery/mdns_legacy"
 	ma "github.com/multiformats/go-multiaddr"
 
-	// "github.com/libp2p/go-libp2p/p2p/discovery"
-
 	"redwood.dev/errors"
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/swarm"
 	"redwood.dev/utils"
+	. "redwood.dev/utils/generics"
 )
 
 type PeerManager interface {
@@ -121,7 +120,7 @@ func (pm *peerManager) Start() error {
 }
 
 func (pm *peerManager) Close() error {
-	pm.Infof(0, "libp2p peer discovery shutting down")
+	pm.Infof("libp2p peer discovery shutting down")
 
 	err := pm.mdns.Close()
 	if err != nil {
@@ -150,7 +149,7 @@ func (pm *peerManager) MakeConnectedPeerConn(stream network.Stream) *peerConn {
 	duID := deviceUniqueID(pinfo.ID)
 	multiaddrs := multiaddrsFromPeerInfo(pinfo)
 
-	peer.PeerEndpoint = pm.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, multiaddrs[0].String()}, duID)
+	_, peer.PeerEndpoint = pm.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, multiaddrs[0].String()}, duID)
 	for _, addr := range multiaddrs[1:] {
 		pm.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName, addr.String()}, duID)
 	}
@@ -174,7 +173,7 @@ func (pm *peerManager) MakeDisconnectedPeerConn(pinfo peer.AddrInfo) (*peerConn,
 
 	duID := deviceUniqueID(pinfo.ID)
 
-	peer.PeerEndpoint = pm.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: multiaddrs[0].String()}, duID)
+	_, peer.PeerEndpoint = pm.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: multiaddrs[0].String()}, duID)
 	for _, addr := range multiaddrs[1:] {
 		pm.peerStore.AddDialInfo(swarm.PeerDialInfo{TransportName: TransportName, DialAddr: addr.String()}, duID)
 	}
@@ -224,7 +223,7 @@ func (pm *peerManager) OnPeerFound(via string, pinfo peer.AddrInfo) {
 
 		dialInfo := swarm.PeerDialInfo{TransportName: TransportName, DialAddr: multiaddr.String()}
 		if !pm.peerStore.IsKnownPeer(dialInfo) {
-			pm.Infof(0, "%v: peer (%v) %+v found", via, pinfo.ID, multiaddr)
+			pm.Infof("%v: peer (%v) %+v found", via, pinfo.ID, multiaddr)
 		}
 		pm.peerStore.AddDialInfo(dialInfo, deviceUniqueID(pinfo.ID))
 
@@ -350,7 +349,7 @@ func (t *announcePeersTask) announcePeers(ctx context.Context) {
 	child := t.Process.NewChild(ctx, "announce peers")
 	defer child.AutocloseWithCleanup(cancel)
 
-	var allDialInfos []swarm.PeerDialInfo
+	allDialInfos := NewSet[swarm.PeerDialInfo](nil)
 	for dialInfo := range t.pm.peerStore.AllDialInfos() {
 		if dialInfo.TransportName == TransportName {
 			addrInfo, err := addrInfoFromString(dialInfo.DialAddr)
@@ -363,7 +362,7 @@ func (t *announcePeersTask) announcePeers(ctx context.Context) {
 				continue
 			}
 		} else {
-			allDialInfos = append(allDialInfos, dialInfo)
+			allDialInfos.Add(dialInfo)
 		}
 	}
 
@@ -396,7 +395,7 @@ func (t *announcePeersTask) announcePeers(ctx context.Context) {
 				return
 			}
 
-			err = libp2pPeerConn.AnnouncePeers(ctx, allDialInfos)
+			err = libp2pPeerConn.AnnouncePeers(ctx, allDialInfos.Slice())
 			if err != nil {
 				// t.Errorf("error writing to peerConn: %+v", err)
 			}

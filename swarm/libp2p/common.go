@@ -15,7 +15,7 @@ import (
 	"redwood.dev/blob"
 	"redwood.dev/errors"
 	"redwood.dev/swarm"
-	"redwood.dev/types"
+	. "redwood.dev/utils/generics"
 )
 
 var (
@@ -88,7 +88,7 @@ func (set *PeerSet) RemoveString(s string) error {
 		return err
 	}
 	if existing, exists := set.set[addrInfo.ID]; exists {
-		toDelete := types.NewSet[string](nil)
+		toDelete := NewSet[string](nil)
 		for _, addr := range addrInfo.Addrs {
 			toDelete.Add(addr.String())
 		}
@@ -321,7 +321,7 @@ func multiaddrHasTerminatingPeerID(multiaddr ma.Multiaddr) (is bool) {
 
 func dedupeMultiaddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
 	var uniqueAddrs []ma.Multiaddr
-	strs := types.NewSet[string](nil)
+	strs := NewSet[string](nil)
 	for _, addr := range addrs {
 		if strs.Contains(addr.String()) {
 			continue

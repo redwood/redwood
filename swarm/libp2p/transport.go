@@ -30,7 +30,6 @@ import (
 	"redwood.dev/blob"
 	"redwood.dev/errors"
 	"redwood.dev/identity"
-	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/libp2p/pb"
@@ -40,6 +39,7 @@ import (
 	"redwood.dev/swarm/prototree"
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	. "redwood.dev/utils/generics"
 )
 
 type Transport interface {
@@ -58,8 +58,7 @@ type Transport interface {
 }
 
 type transport struct {
-	process.Process
-	log.Logger
+	swarm.BaseTransport
 	protoauth.BaseAuthTransport
 	protoblob.BaseBlobTransport
 	protohush.BaseHushTransport
@@ -92,12 +91,13 @@ type transport struct {
 }
 
 var _ Transport = (*transport)(nil)
-var _ protohush.HushTransport = (*transport)(nil)
 
 const (
-	PROTO_MAIN    protocol.ID = "/redwood/main/1.0.0"
+	PROTO_AUTH    protocol.ID = "/redwood/auth/1.0.0"
 	PROTO_BLOB    protocol.ID = "/redwood/blob/1.0.0"
 	PROTO_HUSH    protocol.ID = "/redwood/hush/1.0.0"
+	PROTO_PEER    protocol.ID = "/redwood/peer/1.0.0"
+	PROTO_TREE    protocol.ID = "/redwood/tree/1.0.0"
 	TransportName string      = "libp2p"
 )
 
@@ -119,8 +119,7 @@ func NewTransport(
 	}
 
 	t := &transport{
-		Process:           *process.New(TransportName),
-		Logger:            log.NewLogger(TransportName),
+		BaseTransport:     swarm.NewBaseTransport(TransportName),
 		port:              port,
 		reachableAt:       reachableAt,
 		bootstrapPeers:    bootstrapPeerSet,
@@ -142,7 +141,7 @@ func (t *transport) Start() error {
 		return err
 	}
 
-	t.Infof(0, "opening libp2p on port %v", t.port)
+	t.Infof("opening libp2p on port %v", t.port)
 
 	err = t.findOrCreateP2PKey()
 	if err != nil {
@@ -221,7 +220,7 @@ func (t *transport) Start() error {
 	}
 
 	// Update our node's info in the peer store
-	myDialAddrs := types.NewSet[string](nil)
+	myDialAddrs := NewSet[string](nil)
 	for _, addr := range t.ListenAddrs() {
 		myDialAddrs.Add(addr)
 	}
@@ -246,9 +245,11 @@ func (t *transport) Start() error {
 
 	// t.libp2pHost = rhost.Wrap(libp2pHost, t.dht)
 
-	t.libp2pHost.SetStreamHandler(PROTO_MAIN, t.handleIncomingStream)
+	t.libp2pHost.SetStreamHandler(PROTO_AUTH, t.handleAuthStream)
 	t.libp2pHost.SetStreamHandler(PROTO_BLOB, t.handleBlobStream)
 	t.libp2pHost.SetStreamHandler(PROTO_HUSH, t.handleHushStream)
+	t.libp2pHost.SetStreamHandler(PROTO_PEER, t.handlePeerStream)
+	t.libp2pHost.SetStreamHandler(PROTO_TREE, t.handleTreeStream)
 	t.libp2pHost.Network().Notify(t) // Register for libp2p connect/disconnect notifications
 
 	err = t.dht.Bootstrap(t.Process.Ctx())
@@ -268,13 +269,14 @@ func (t *transport) Start() error {
 		return errors.Wrap(err, "could not start dht client")
 	}
 
-	t.Infof(0, "libp2p peer ID is %v", t.Libp2pPeerID())
+	t.Infof("libp2p peer ID is %v", t.Libp2pPeerID())
 
+	t.MarkReady()
 	return nil
 }
 
 func (t *transport) Close() error {
-	t.Infof(0, "libp2p transport shutting down")
+	t.Infof("libp2p transport shutting down")
 
 	err := t.dht.Close()
 	if err != nil {
@@ -326,30 +328,56 @@ func (t *transport) Name() string {
 }
 
 func (t *transport) NewPeerConn(ctx context.Context, dialAddr string) (swarm.PeerConn, error) {
+	ok := <-t.AwaitReady(ctx)
+	if !ok {
+		return nil, errors.New("libp2p not started")
+	}
 	return t.peerManager.NewPeerConn(ctx, dialAddr)
 }
 
 func (t *transport) ProvidersOfStateURI(ctx context.Context, stateURI string) (<-chan prototree.TreePeerConn, error) {
+	ok := <-t.AwaitReady(ctx)
+	if !ok {
+		return nil, errors.New("libp2p not started")
+	}
 	return t.dhtClient.ProvidersOfStateURI(ctx, stateURI)
 }
 
 func (t *transport) ProvidersOfBlob(ctx context.Context, blobID blob.ID) (<-chan protoblob.BlobPeerConn, error) {
+	ok := <-t.AwaitReady(ctx)
+	if !ok {
+		return nil, errors.New("libp2p not started")
+	}
 	return t.dhtClient.ProvidersOfBlob(ctx, blobID)
 }
 
-func (t *transport) AnnounceStateURIs(ctx context.Context, stateURIs types.Set[string]) {
+func (t *transport) AnnounceStateURIs(ctx context.Context, stateURIs Set[string]) {
+	ok := <-t.AwaitReady(ctx)
+	if !ok {
+		return
+	}
 	t.dhtClient.AnnounceStateURIs(ctx, stateURIs)
 }
 
-func (t *transport) AnnounceBlobs(ctx context.Context, blobIDs types.Set[blob.ID]) {
+func (t *transport) AnnounceBlobs(ctx context.Context, blobIDs Set[blob.ID]) {
+	ok := <-t.AwaitReady(ctx)
+	if !ok {
+		return
+	}
 	t.dhtClient.AnnounceBlobs(ctx, blobIDs)
 }
 
 func (t *transport) Libp2pPeerID() string {
+	if !t.Ready() {
+		return "<ERR: libp2p not started>"
+	}
 	return t.libp2pHost.ID().Pretty()
 }
 
 func (t *transport) ListenAddrs() []string {
+	if !t.Ready() {
+		return nil
+	}
 	addrs := []string{}
 	for _, addr := range t.libp2pHost.Addrs() {
 		addrs = append(addrs, addr.String()+"/p2p/"+t.libp2pHost.ID().Pretty())
@@ -358,6 +386,9 @@ func (t *transport) ListenAddrs() []string {
 }
 
 func (t *transport) Peers() []peer.AddrInfo {
+	if !t.Ready() {
+		return nil
+	}
 	return peerstore.PeerInfos(t.libp2pHost.Peerstore(), t.libp2pHost.Peerstore().Peers())
 }
 
@@ -407,12 +438,70 @@ func (t *transport) ClosedStream(network network.Network, stream network.Stream)
 	}
 }
 
+func (t *transport) handleAuthStream(stream network.Stream) {
+	peerConn := t.peerManager.MakeConnectedPeerConn(stream)
+	defer peerConn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var proto pb.AuthMessage
+	err := peerConn.readProtobuf(ctx, &proto)
+	if err != nil {
+		t.Errorf("while reading incoming auth stream: %v", err)
+		return
+	}
+
+	if msg := proto.GetChallengeRequest(); msg != nil {
+		err := t.HandleIncomingIdentityChallengeRequest(peerConn)
+		if err != nil {
+			t.Errorf("while handling incoming identity challenge request: %v", err)
+		}
+		return
+
+	} else if msg := proto.GetChallenge(); msg != nil {
+		err := t.HandleIncomingIdentityChallenge(msg.Challenge, peerConn)
+		if err != nil {
+			t.Errorf("while handling incoming identity challenge: %v", err)
+			return
+		}
+
+		err = peerConn.readProtobuf(ctx, &proto)
+		if err != nil {
+			t.Errorf("while reading incoming auth stream: %v", err)
+			return
+		}
+
+		msg := proto.GetUcan()
+		if msg == nil {
+			t.Errorf("while reading incoming auth stream: protocol error")
+			return
+		}
+		t.HandleIncomingUcan(msg.Ucan, peerConn)
+
+	} else {
+		t.Errorf("while reading incoming auth stream: got unknown message")
+	}
+}
+
+// if msg := proto.GetSignatures(); msg != nil {
+//         responses := ZipFunc3(payload.Challenges, payload.Signatures, payload.AsymEncPubkeys,
+//             func(c crypto.ChallengeMsg, s crypto.Signature, k crypto.AsymEncPubkey, _ int) protoauth.ChallengeIdentityResponse {
+//                 return protoauth.ChallengeIdentityResponse{c, s, k}
+//             },
+//         )
+//         t.HandleIncomingIdentityChallengeResponse(responses, peerConn)
+// }
+
 func (t *transport) handleBlobStream(stream network.Stream) {
 	peerConn := t.peerManager.MakeConnectedPeerConn(stream)
 	defer peerConn.Close()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	var proto pb.BlobMessage
-	err := peerConn.readProtobuf(&proto)
+	err := peerConn.readProtobuf(ctx, &proto)
 	if err != nil {
 		t.Errorf("while reading incoming blob stream: %v", err)
 		return
@@ -438,70 +527,88 @@ func (t *transport) handleHushStream(stream network.Stream) {
 	peerConn := t.peerManager.MakeConnectedPeerConn(stream)
 	defer peerConn.Close()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	var proto pb.HushMessage
-	err := peerConn.readProtobuf(&proto)
+	err := peerConn.readProtobuf(ctx, &proto)
 	if err != nil {
 		t.Errorf("while reading incoming hush stream: %v", err)
 		return
 	}
 
-	ctx := context.TODO()
-
-	if msg := proto.GetDhPubkeyAttestations(); msg != nil {
-		t.HandleIncomingDHPubkeyAttestations(ctx, msg.Attestations, peerConn)
-
-	} else if msg := proto.GetProposeIndividualSession(); msg != nil {
-		t.HandleIncomingIndividualSessionProposal(ctx, msg.EncryptedProposal, peerConn)
-
-	} else if msg := proto.GetRespondToIndividualSessionProposal(); msg != nil {
-		t.HandleIncomingIndividualSessionResponse(ctx, *msg.Response, peerConn)
-
-	} else if msg := proto.GetSendIndividualMessage(); msg != nil {
-		t.HandleIncomingIndividualMessage(ctx, *msg.Message, peerConn)
-
-	} else if msg := proto.GetSendGroupMessage(); msg != nil {
-		t.HandleIncomingGroupMessage(ctx, *msg.Message, peerConn)
+	if msg := proto.GetPubkeyBundles(); msg != nil {
+		t.HandleIncomingPubkeyBundles(msg.Bundles)
 
 	} else {
 		t.Errorf("while reading incoming hush stream: got unknown message")
 	}
 }
 
-func (t *transport) handleIncomingStream(stream network.Stream) {
-	peer := t.peerManager.MakeConnectedPeerConn(stream)
+func (t *transport) handlePeerStream(stream network.Stream) {
+	peerConn := t.peerManager.MakeConnectedPeerConn(stream)
+	defer peerConn.Close()
 
-	msg, err := peer.readMsg()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var proto pb.PeerMessage
+	err := peerConn.readProtobuf(ctx, &proto)
 	if err != nil {
-		t.Errorf("incoming stream error: %v", err)
-		stream.Close()
+		t.Errorf("while reading incoming peer stream: %v", err)
 		return
 	}
 
-	switch msg.Type {
-	case msgType_Subscribe:
-		stateURI, ok := msg.Payload.(string)
-		if !ok {
-			t.Errorf("subscribe message: bad payload: (%T) %v", msg.Payload, msg.Payload)
-			return
+	if msg := proto.GetAnnouncePeers(); msg != nil {
+		for _, dialInfo := range msg.DialInfos {
+			if dialInfo.TransportName == TransportName {
+				addrInfo, err := addrInfoFromString(dialInfo.DialAddr)
+				if err != nil {
+					continue
+				}
+				t.peerManager.OnPeerFound("announce", addrInfo)
+			}
+			t.peerStore.AddDialInfo(dialInfo, "")
 		}
-		t.Infof(0, "incoming libp2p subscription: %v %v", peer.DialInfo(), stateURI)
+
+	} else {
+		t.Errorf("while reading incoming peer stream: got unknown message")
+	}
+}
+
+func (t *transport) handleTreeStream(stream network.Stream) {
+	peerConn := t.peerManager.MakeConnectedPeerConn(stream)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var proto pb.TreeMessage
+	err := peerConn.readProtobuf(ctx, &proto)
+	if err != nil {
+		t.Errorf("while reading incoming tree stream: %v", err)
+		peerConn.Close()
+		return
+	}
+
+	if msg := proto.GetSubscribe(); msg != nil {
+		t.Infof("incoming libp2p subscription: %v %v", peerConn.DialInfo(), msg.StateURI)
 
 		fetchHistoryOpts := &prototree.FetchHistoryOpts{FromTxID: tree.GenesisTxID} // Fetch all history (@@TODO)
 
 		var writeSub *writableSubscription
 		req := prototree.SubscriptionRequest{
-			StateURI:         stateURI,
+			StateURI:         msg.StateURI,
 			Keypath:          nil,
 			Type:             prototree.SubscriptionType_Txs,
 			FetchHistoryOpts: fetchHistoryOpts,
-			Addresses:        peer.Addresses(),
+			Addresses:        peerConn.Addresses(),
 		}
 		_, err := t.HandleWritableSubscriptionOpened(req, func() (prototree.WritableSubscriptionImpl, error) {
-			writeSub = newWritableSubscription(peer, stateURI)
+			writeSub = newWritableSubscription(peerConn, msg.StateURI)
 			return writeSub, nil
 		})
 		if err != nil && errors.Cause(err) != errors.Err404 {
-			peer.Close()
+			peerConn.Close()
 			t.Errorf("while starting incoming subscription: %v", err)
 			return
 		}
@@ -509,78 +616,29 @@ func (t *transport) handleIncomingStream(stream network.Stream) {
 		func() {
 			t.writeSubsByPeerIDMu.Lock()
 			defer t.writeSubsByPeerIDMu.Unlock()
-			if _, exists := t.writeSubsByPeerID[peer.pinfo.ID]; !exists {
-				t.writeSubsByPeerID[peer.pinfo.ID] = make(map[network.Stream]*writableSubscription)
+			if _, exists := t.writeSubsByPeerID[peerConn.pinfo.ID]; !exists {
+				t.writeSubsByPeerID[peerConn.pinfo.ID] = make(map[network.Stream]*writableSubscription)
 			}
-			t.writeSubsByPeerID[peer.pinfo.ID][stream] = writeSub
+			t.writeSubsByPeerID[peerConn.pinfo.ID][stream] = writeSub
 		}()
 
-	case msgType_Tx:
-		defer peer.Close()
+	} else if msg := proto.GetTx(); msg != nil {
+		defer peerConn.Close()
+		t.HandleTxReceived(*msg, peerConn)
 
-		tx, ok := msg.Payload.(tree.Tx)
-		if !ok {
-			t.Errorf("Put message: bad payload: (%T) %v", msg.Payload, msg.Payload)
-			return
-		}
-		t.HandleTxReceived(tx, peer)
+	} else if msg := proto.GetEncryptedTx(); msg != nil {
+		defer peerConn.Close()
+		t.HandleEncryptedTxReceived(msg.EncryptedTx, peerConn)
 
-	case msgType_Ack:
-		defer peer.Close()
+	} else if msg := proto.GetAck(); msg != nil {
+		defer peerConn.Close()
+		t.HandleAckReceived(msg.StateURI, msg.TxID, peerConn)
 
-		ackMsg, ok := msg.Payload.(ackMsg)
-		if !ok {
-			t.Errorf("Ack message: bad payload: (%T) %v", msg.Payload, msg.Payload)
-			return
-		}
-		t.HandleAckReceived(ackMsg.StateURI, ackMsg.TxID, peer)
+	} else if msg := proto.GetAnnounceP2PStateURI(); msg != nil {
+		defer peerConn.Close()
+		t.HandleP2PStateURIReceived(msg.StateURI, peerConn)
 
-	case msgType_AnnounceP2PStateURI:
-		defer peer.Close()
-
-		stateURI, ok := msg.Payload.(string)
-		if !ok {
-			t.Errorf("P2PStateURI message: bad payload: (%T) %v", msg.Payload, msg.Payload)
-			return
-		}
-		t.HandleP2PStateURIReceived(stateURI, peer)
-
-	case msgType_ChallengeIdentityRequest:
-		defer peer.Close()
-
-		challengeMsg, ok := msg.Payload.(protoauth.ChallengeMsg)
-		if !ok {
-			t.Errorf("msgType_ChallengeIdentityRequest message: bad payload: (%T) %v", msg.Payload, msg.Payload)
-			return
-		}
-
-		err := t.HandleChallengeIdentity(challengeMsg, peer)
-		if err != nil {
-			t.Errorf("msgType_ChallengeIdentityRequest: error from verifyAddressHandler: %v", err)
-			return
-		}
-
-	case msgType_AnnouncePeers:
-		defer peer.Close()
-
-		dialInfos, ok := msg.Payload.([]swarm.PeerDialInfo)
-		if !ok {
-			t.Errorf("Announce peers: bad payload: (%T) %v", msg.Payload, msg.Payload)
-			return
-		}
-		for _, dialInfo := range dialInfos {
-			if dialInfo.TransportName == TransportName {
-				addrInfo, err := addrInfoFromString(dialInfo.DialAddr)
-				if err != nil {
-					continue
-				}
-				t.peerManager.OnPeerFound("announce", addrInfo)
-			} else {
-				t.peerStore.AddDialInfo(dialInfo, "")
-			}
-		}
-
-	default:
-		panic("protocol error")
+	} else {
+		t.Errorf("while reading incoming tree stream: got unknown message")
 	}
 }

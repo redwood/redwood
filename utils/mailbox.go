@@ -2,6 +2,10 @@ package utils
 
 import (
 	"sync"
+
+	"golang.org/x/net/context"
+
+	. "redwood.dev/utils/generics"
 )
 
 type Mailbox[T any] struct {
@@ -39,6 +43,36 @@ func (m *Mailbox[T]) Deliver(x T) {
 	select {
 	case m.chNotify <- struct{}{}:
 	default:
+	}
+}
+
+func (m *Mailbox[T]) DeliverAll(x []T) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.queue = append(Reverse(x), m.queue...)
+	if uint64(len(m.queue)) > m.capacity && m.capacity > 0 {
+		m.queue = m.queue[:len(m.queue)-1]
+	}
+
+	select {
+	case m.chNotify <- struct{}{}:
+	default:
+	}
+}
+
+func (m *Mailbox[T]) IngestFromChannel(ctx context.Context, ch <-chan T) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case x, ok := <-ch:
+			if !ok {
+				return
+			}
+			m.Deliver(x)
+		}
 	}
 }
 

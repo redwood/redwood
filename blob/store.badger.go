@@ -13,6 +13,7 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 )
 
 type badgerStore struct {
@@ -49,7 +50,7 @@ func NewBadgerStore(badgerOpts badger.Options) *badgerStore {
 }
 
 func (s *badgerStore) Start() error {
-	s.Infof(0, "opening blob store at %v", s.badgerOpts.Dir)
+	s.Infof("opening blob store at %v", s.badgerOpts.Dir)
 
 	db, err := state.NewDBTree(s.badgerOpts)
 	if err != nil {
@@ -692,29 +693,5 @@ func (s *badgerStore) SetMaxFetchConns(maxFetchConns uint64) error {
 }
 
 func (s *badgerStore) DebugPrint() {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	keypaths, values, err := s.db.DebugPrint(nil, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	for i := range keypaths {
-		kp := keypaths[i]
-		val := values[i]
-
-		if kp.ContainsPart(chunkKey) {
-			s.Debugf("%v: (chunk of length %v)\n", kp, len(val.([]byte)))
-		} else if kp.ContainsPart(state.Keypath("manifest")) {
-			switch val := val.(type) {
-			case []interface{}:
-				s.Debugf("%v: (manifest with %v entries)\n", kp, len(val))
-			default:
-				s.Debugf("%v: %0x\n", kp, val)
-			}
-		} else {
-			s.Debugf("%v: %v\n", kp, val)
-		}
-	}
+	s.db.DebugPrint(utils.PrintfDebugPrinter, true, 0)
 }

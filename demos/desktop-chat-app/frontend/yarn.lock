@@ -2098,28 +2098,30 @@
     redux-thunk "^2.3.0"
     reselect "^4.0.0"
 
-"@redwood.dev/client@0.3.10":
-  version "0.3.10"
-  resolved "https://registry.yarnpkg.com/@redwood.dev/client/-/client-0.3.10.tgz#61953df89959be2a6416571fbe22d96639a1dcdf"
-  integrity sha512-9TOBejQ20vGM4VKnFNSHquEllZ6OLUM1KTPjLtsKbyxnW/wbv4tOFepq3UhyAyeDbkj+iI2095xevZvlcJxQPQ==
+"@redwood.dev/client@0.3.13":
+  version "0.3.13"
+  resolved "https://registry.yarnpkg.com/@redwood.dev/client/-/client-0.3.13.tgz#e0abbab7b621b95d9cf7570e023af38065929dd4"
+  integrity sha512-21TQyH33FUHHPLx3BRfZyRDbNiWEXDSnXXhiAuD0gBp1afCMpmJYKls1J9oj4mknxRXpogWCZC9xLA1F6eyebw==
   dependencies:
+    "@babel/polyfill" "^7.12.1"
     "@types/json-stable-stringify" "^1.0.32"
     "@types/react" "^17.0.2"
     "@types/ws" "^8.5.2"
     buffer "^6.0.3"
     ethers "^5.0.31"
+    form-data "^4.0.0"
     isomorphic-ws "^4.0.1"
     json-stable-stringify "^1.0.1"
     lodash "^4.17.21"
     node-fetch "^2.6.1"
     ws "^8.2.3"
 
-"@redwood.dev/react@0.3.10":
-  version "0.3.10"
-  resolved "https://registry.yarnpkg.com/@redwood.dev/react/-/react-0.3.10.tgz#45306d7b151c959fba627c7694b35a835a01793e"
-  integrity sha512-OwkrHUu0hNdwGzStUuKydi65dj+Ai6mjnmnMtqJWonwC+0JKvOgg6mHyNURNZYBCxRsylM/mxkMquD0cLH5EnQ==
+"@redwood.dev/react@0.3.13":
+  version "0.3.13"
+  resolved "https://registry.yarnpkg.com/@redwood.dev/react/-/react-0.3.13.tgz#60c1226126243ea2381c72a6deb2f18eb46b7f6f"
+  integrity sha512-wQeddQj5mRsQ1sqKW1BUPnxeD2XrSA0YO9fZxiqM4ph50gjBMwJoy3gBMl3eVhmzdrL3InfsWjwAeovbjbEBNw==
   dependencies:
-    "@redwood.dev/client" "0.3.10"
+    "@redwood.dev/client" "0.3.13"
     "@types/lodash" "^4.14.179"
 
 "@rollup/plugin-node-resolve@^7.1.1":

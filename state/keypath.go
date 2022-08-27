@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"redwood.dev/errors"
-	"redwood.dev/utils"
+	"redwood.dev/types"
 )
 
 type Keypath []byte
@@ -379,7 +379,7 @@ type gogoprotobufTest interface {
 func NewPopulatedKeypath(_ gogoprotobufTest) *Keypath {
 	parts := make([]string, rand.Intn(5))
 	for i := range parts {
-		parts[i] = utils.RandomString(rand.Intn(10))
+		parts[i] = types.RandomString(rand.Intn(10))
 	}
 	k := Keypath([]byte(strings.Join(parts, string(KeypathSeparator))))
 	return &k

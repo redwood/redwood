@@ -15,9 +15,11 @@ import (
 	"redwood.dev/swarm"
 	"redwood.dev/swarm/protohush"
 	"redwood.dev/tree"
-	"redwood.dev/types"
 	"redwood.dev/utils"
+	. "redwood.dev/utils/generics"
 )
+
+//go:generate mockery --name TreeProtocol --output ./mocks/ --case=underscore
 
 //go:generate mockery --name TreeProtocol --output ./mocks/ --case=underscore
 type TreeProtocol interface {
@@ -28,15 +30,20 @@ type TreeProtocol interface {
 	Unsubscribe(stateURI string) error
 	SubscribeStateURIs() (StateURISubscription, error)
 	SendTx(ctx context.Context, tx tree.Tx) error
+
+	Vaults() Set[string]
+	AddVault(host string) error
+	RemoveVault(host string) error
+	SyncWithAllVaults() error
 }
 
 //go:generate mockery --name TreeTransport --output ./mocks/ --case=underscore
 type TreeTransport interface {
 	swarm.Transport
 	ProvidersOfStateURI(ctx context.Context, stateURI string) (<-chan TreePeerConn, error)
-	AnnounceStateURIs(ctx context.Context, stateURIs types.Set[string])
+	AnnounceStateURIs(ctx context.Context, stateURIs Set[string])
 	OnTxReceived(handler TxReceivedCallback)
-	OnPrivateTxReceived(handler PrivateTxReceivedCallback)
+	OnEncryptedTxReceived(handler EncryptedTxReceivedCallback)
 	OnAckReceived(handler AckReceivedCallback)
 	OnWritableSubscriptionOpened(handler WritableSubscriptionOpenedCallback)
 	OnP2PStateURIReceived(handler P2PStateURIReceivedCallback)
@@ -47,8 +54,8 @@ type TreePeerConn interface {
 	swarm.PeerConn
 	Subscribe(ctx context.Context, stateURI string) (ReadableSubscription, error)
 	SendTx(ctx context.Context, tx tree.Tx) error
-	SendPrivateTx(ctx context.Context, encryptedTx EncryptedTx) (err error)
-	Ack(stateURI string, txID state.Version) error
+	SendEncryptedTx(ctx context.Context, encryptedTx EncryptedTx) (err error)
+	Ack(ctx context.Context, stateURI string, txID state.Version) error
 	AnnounceP2PStateURI(ctx context.Context, stateURI string) error
 }
 
@@ -61,6 +68,7 @@ type treeProtocol struct {
 	txStore       tree.TxStore
 	keyStore      identity.KeyStore
 	peerStore     swarm.PeerStore
+	vaultManager  *VaultManager
 
 	hushProto protohush.HushProtocol
 
@@ -77,8 +85,7 @@ type treeProtocol struct {
 }
 
 var (
-	_ TreeProtocol      = (*treeProtocol)(nil)
-	_ process.Interface = (*treeProtocol)(nil)
+	_ TreeProtocol = (*treeProtocol)(nil)
 )
 
 func NewTreeProtocol(
@@ -96,6 +103,9 @@ func NewTreeProtocol(
 			transportsMap[tpt.Name()] = tpt
 		}
 	}
+
+	acl := DefaultACL{ControllerHub: controllerHub}
+
 	tp := &treeProtocol{
 		BaseProtocol: swarm.BaseProtocol[TreeTransport, TreePeerConn]{
 			Process:    *process.New(ProtocolName),
@@ -108,8 +118,9 @@ func NewTreeProtocol(
 		txStore:       txStore,
 		keyStore:      keyStore,
 		peerStore:     peerStore,
+		vaultManager:  NewVaultManager(store, keyStore, controllerHub, acl, 1*time.Minute),
 
-		acl: DefaultACL{ControllerHub: controllerHub},
+		acl: acl,
 
 		readableSubscriptions: make(map[string]*multiReaderSubscription),
 		writableSubscriptions: make(map[string]map[WritableSubscription]struct{}),
@@ -122,15 +133,18 @@ func NewTreeProtocol(
 	tp.poolWorker = process.NewPoolWorker("pool worker", 8, process.NewStaticScheduler(5*time.Second, 10*time.Second))
 
 	tp.controllerHub.OnNewState(tp.handleNewState)
-	tp.hushProto.OnGroupMessageEncrypted(ProtocolName, tp.handlePrivateTxEncrypted)
-	tp.hushProto.OnGroupMessageDecrypted(ProtocolName, tp.handlePrivateTxDecrypted)
+
+	tp.hushProto.OnGroupMessageEncrypted(ProtocolName+":tx", tp.handlePrivateTxEncrypted)
+	tp.hushProto.OnGroupMessageDecrypted(ProtocolName+":tx", tp.handlePrivateTxDecrypted)
+	tp.hushProto.OnGroupMessageEncrypted(ProtocolName+":stateuri", tp.handlePrivateStateURIEncrypted)
+	tp.hushProto.OnGroupMessageDecrypted(ProtocolName+":stateuri", tp.handlePrivateStateURIDecrypted)
 
 	for _, tpt := range tp.Transports {
-		tp.Infof(0, "registering %v", tpt.Name())
+		tp.Infof("registering %v", tpt.Name())
 		tpt.OnTxReceived(tp.handleTxReceived)
 		tpt.OnAckReceived(tp.handleAckReceived)
 		tpt.OnWritableSubscriptionOpened(tp.handleWritableSubscriptionOpened)
-		tpt.OnP2PStateURIReceived(tp.handleP2PStateURIReceived)
+		tpt.OnP2PStateURIReceived(tp.handleP2PStateURIReceivedFromPeer)
 	}
 
 	return tp
@@ -150,7 +164,7 @@ func (tp *treeProtocol) Start() error {
 
 	tp.Process.Go(nil, "initial subscribe", func(ctx context.Context) {
 		for stateURI := range tp.store.SubscribedStateURIs() {
-			err := tp.Subscribe(ctx, stateURI)
+			err := tp.Subscribe(ctx, string(stateURI))
 			if err != nil {
 				tp.Errorf("error subscribing to %v: %v", stateURI, err)
 				continue
@@ -175,27 +189,60 @@ func (tp *treeProtocol) Start() error {
 		return err
 	}
 
+	err = tp.Process.SpawnChild(nil, tp.vaultManager)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		time.Sleep(5 * time.Second)
+		for messageID, encryptedTx := range tp.store.OpaqueEncryptedTxs() {
+			err = tp.hushProto.DecryptGroupMessage(ProtocolName+":tx", messageID, encryptedTx)
+			if err != nil {
+				tp.Errorf("%v", err)
+				continue
+			}
+		}
+	}()
+
+	tp.Process.Go(nil, "listen for encrypted messages from vault", func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			case <-tp.vaultManager.EncryptedStateURIs().Notify():
+				items := tp.vaultManager.EncryptedStateURIs().RetrieveAll()
+				for _, item := range items {
+					tp.handleEncryptedStateURIReceivedFromVault(item)
+				}
+
+			case <-tp.vaultManager.EncryptedTxs().Notify():
+				items := tp.vaultManager.EncryptedTxs().RetrieveAll()
+				for _, item := range items {
+					tp.handleEncryptedTxReceivedFromVault(item)
+				}
+			}
+		}
+	})
+
 	return nil
 }
 
 func (tp *treeProtocol) Close() error {
-	tp.Infof(0, "tree protocol shutting down")
+	tp.Infof("tree protocol shutting down")
 	return tp.Process.Close()
 }
 
 func (tp *treeProtocol) SendTx(ctx context.Context, tx tree.Tx) (err error) {
-	tp.Infof(0, "adding tx (%v) %v %v", tx.StateURI, tx.ID.Pretty(), utils.PrettyJSON(tx))
+	tp.Infof("adding tx (%v) %v %v", tx.StateURI, tx.ID.Pretty(), utils.PrettyJSON(tx))
 
 	defer func() {
 		if err != nil {
 			return
 		}
 		// If we send a tx to a state URI that we're not subscribed to yet, auto-subscribe.
-		if !tp.store.SubscribedStateURIs().Contains(tx.StateURI) {
-			// err := tp.store.AddSubscribedStateURI(tx.StateURI)
-			// if err != nil {
-			// 	tp.Errorf("error adding %v to config store SubscribedStateURIs: %v", tx.StateURI, err)
-			// }
+		if !tp.store.SubscribedStateURIs().Contains(tree.StateURI(tx.StateURI)) {
 			err := tp.Subscribe(context.TODO(), tx.StateURI)
 			if err != nil {
 				tp.Errorf("while subscribing to p2p state URI %v: %v", tx.StateURI, err)
@@ -253,36 +300,15 @@ func (tp *treeProtocol) SendTx(ctx context.Context, tx tree.Tx) (err error) {
 	return nil
 }
 
-func (tp *treeProtocol) hushMessageIDForTx(tx tree.Tx) string {
-	return url.QueryEscape(tx.StateURI) + ":" + tx.ID.Hex()
-}
-
-func (tp *treeProtocol) parseHushMessageID(id string) (string, state.Version, error) {
-	parts := strings.Split(id, ":")
-	if len(parts) != 2 {
-		return "", state.Version{}, errors.Errorf("bad hush message ID for tx: %v", id)
-	}
-	txID, err := state.VersionFromHex(parts[1])
-	if err != nil {
-		return "", state.Version{}, err
-	}
-	stateURI, err := url.QueryUnescape(parts[0])
-	if err != nil {
-		return "", state.Version{}, err
-	}
-	return stateURI, txID, nil
-}
-
 func (tp *treeProtocol) handleTxReceived(tx tree.Tx, peerConn TreePeerConn) {
-	tp.Infof(0, "tx received: tx=%v peer=%v", tx.ID.Pretty(), peerConn.DialInfo())
+	tp.Infof("tx received: tx=%v peer=%v", tx.ID.Pretty(), peerConn.DialInfo())
 
-	tp.store.MarkTxSeenByPeer(peerConn.DeviceUniqueID(), tx.StateURI, tx.ID)
+	tp.store.MarkTxSeenByPeer(peerConn.DeviceUniqueID(), tree.StateURI(tx.StateURI), tx.ID)
 
 	exists, err := tp.txStore.TxExists(tx.StateURI, tx.ID)
 	if err != nil {
 		tp.Errorf("error fetching tx %v from store: %v", tx.ID.Pretty(), err)
 		// @@TODO: does it make sense to return here?
-		// return
 		exists = false // Just to be clear
 	}
 
@@ -314,16 +340,146 @@ func (tp *treeProtocol) handleTxReceived(tx tree.Tx, peerConn TreePeerConn) {
 		tp.Errorf("error ACKing peer: %v", err)
 	}
 	defer peerConn2.Close()
-	err = peerConn2.(TreePeerConn).Ack(tx.StateURI, tx.ID)
+	err = peerConn2.(TreePeerConn).Ack(context.TODO(), tx.StateURI, tx.ID)
 	if err != nil {
 		tp.Errorf("error ACKing peer: %v", err)
 	}
 }
 
-func (tp *treeProtocol) handlePrivateTxReceived(encryptedTx EncryptedTx, peerConn TreePeerConn) {
-	tp.Infof(0, "private tx received: tx=%v peer=%v", encryptedTx.ID, peerConn.DialInfo())
+func (tp *treeProtocol) handleP2PStateURIReceivedFromPeer(stateURI string, peerConn TreePeerConn) {
+	if peerConn != nil {
+		peerConn.AddStateURI(stateURI) // @@TODO: dos vector
+	}
 
-	err := tp.hushProto.DecryptGroupMessage(encryptedTx)
+	err := tp.Subscribe(context.TODO(), stateURI)
+	if err != nil {
+		tp.Errorf("while subscribing to p2p state URI %v: %v", stateURI, err)
+	}
+}
+
+func (tp *treeProtocol) handleEncryptedStateURIReceivedFromVault(item vaultItem[protohush.GroupMessage]) {
+	tp.Infow("private state uri received from vault", "host", item.Host, "collection", item.CollectionID, "item", item.ItemID, "mtime", item.Mtime)
+
+	hash, err := item.Item.Hash()
+	if err != nil {
+		tp.Errorw("failed to hash incoming encrypted state uri", "host", item.Host, "collection", item.CollectionID, "item", item.ItemID, "err", err)
+		return
+	}
+
+	err = tp.hushProto.DecryptGroupMessage(ProtocolName+":stateuri", hash.Hex(), item.Item)
+	if err != nil {
+		tp.Errorw("failed to submit private state uri for decryption", "host", item.Host, "collection", item.CollectionID, "item", item.ItemID, "err", err)
+		return
+	}
+
+	err = tp.store.MaybeSaveLatestMtimeForVaultAndCollection(item.Host, item.CollectionID, item.Mtime)
+	if err != nil {
+		tp.Errorw("failed to update latest mtime for vault/collection", "host", item.Host, "collection", item.CollectionID, "item", item.ItemID, "err", err)
+		return
+	}
+}
+
+func (tp *treeProtocol) handlePrivateStateURIDecrypted(messageID string, plaintext []byte, encryptedTx protohush.GroupMessage) {
+	tp.Debugf("private state uri decrypted: %v", string(plaintext))
+	tp.handleP2PStateURIReceivedFromPeer(string(plaintext), nil)
+}
+
+func (tp *treeProtocol) handlePrivateStateURIEncrypted(messageID string, encryptedStateURI protohush.GroupMessage) {
+	stateURI, err := parseHushMessageID_EncryptedStateURI(messageID)
+	if err != nil {
+		tp.Errorf("while parsing hush message id '%v': %v", messageID, err)
+		return
+	}
+
+	err = tp.store.SaveEncryptedStateURI(stateURI, encryptedStateURI)
+	if err != nil {
+		tp.Errorw("failed to save encrypted state uri to store", "stateuri", stateURI, "err", err)
+		return
+	}
+
+	members, err := tp.acl.MembersOf(string(stateURI))
+	if err != nil {
+		tp.Errorf("while fetching members of state uri %v", stateURI)
+		return
+	}
+
+	// Send to vaults
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = tp.vaultManager.AddEncryptedStateURIForUsers(ctx, stateURI, members, encryptedStateURI)
+	if err != nil {
+		tp.Errorf("while adding encrypted state uri to vaults: %v", err)
+		return
+	}
+}
+
+func (tp *treeProtocol) handleEncryptedTxReceivedFromVault(item vaultItem[protohush.GroupMessage]) {
+	tp.Infow("private tx received from vault", "host", item.Host, "collection", item.CollectionID, "item", item.ItemID, "mtime", item.Mtime)
+
+	hash, err := item.Item.Hash()
+	if err != nil {
+		tp.Errorw("failed to hash incoming encrypted tx", "host", item.Host, "collection", item.CollectionID, "item", item.ItemID, "err", err)
+		return
+	}
+
+	_, err = tp.store.OpaqueEncryptedTx(hash.Hex())
+	if errors.Cause(err) == errors.Err404 {
+		// no-op
+	} else if err != nil {
+		tp.Errorw("failed to fetch opaque encrypted tx from store", "host", item.Host, "collection", item.CollectionID, "item", item.ItemID, "err", err)
+	} else {
+		tp.Infow("ignoring incoming encrypted tx, already known", "host", item.Host, "collection", item.CollectionID, "item", item.ItemID, "err", err)
+		return
+	}
+
+	err = tp.store.SaveOpaqueEncryptedTx(hash.Hex(), item.Item)
+	if err != nil {
+		tp.Errorw("failed to save incoming encrypted tx", "host", item.Host, "collection", item.CollectionID, "item", item.ItemID, "err", err)
+		return
+	}
+
+	err = tp.store.MaybeSaveLatestMtimeForVaultAndCollection(item.Host, item.CollectionID, item.Mtime)
+	if err != nil {
+		tp.Errorw("failed to save latest mtime for vault/collection", "host", item.Host, "collection", item.CollectionID, "item", item.ItemID, "err", err)
+		return
+	}
+
+	err = tp.hushProto.DecryptGroupMessage(ProtocolName+":tx", hash.Hex(), item.Item)
+	if err != nil {
+		tp.Errorw("failed to submit encrypted tx for decryption", "host", item.Host, "collection", item.CollectionID, "item", item.ItemID, "err", err)
+		return
+	}
+
+	// @@TODO: ack?
+}
+
+func (tp *treeProtocol) handleEncryptedTxReceivedFromPeer(encryptedTx protohush.GroupMessage, peerConn TreePeerConn) {
+	tp.Infow("private tx received", "peer", peerConn.DialInfo())
+
+	hash, err := encryptedTx.Hash()
+	if err != nil {
+		tp.Errorf("while hashing incoming encrypted tx: %v", err)
+		return
+	}
+
+	_, err = tp.store.OpaqueEncryptedTx(hash.Hex())
+	if errors.Cause(err) == errors.Err404 {
+		// no-op
+	} else if err != nil {
+		tp.Errorf("while fetching opaque encrypted tx from store: %v", err)
+	} else {
+		tp.Infof("ignoring incoming encrypted tx %v: already known", hash.Hex())
+		return
+	}
+
+	err = tp.store.SaveOpaqueEncryptedTx(hash.Hex(), encryptedTx)
+	if err != nil {
+		tp.Errorf("while saving incoming encrypted tx: %v", err)
+		return
+	}
+
+	err = tp.hushProto.DecryptGroupMessage(ProtocolName+":tx", hash.Hex(), encryptedTx)
 	if err != nil {
 		tp.Errorf("while submitting private tx for decryption: %v", err)
 		return
@@ -332,25 +488,7 @@ func (tp *treeProtocol) handlePrivateTxReceived(encryptedTx EncryptedTx, peerCon
 	// @@TODO: ack?
 }
 
-func (tp *treeProtocol) handlePrivateTxEncrypted(encryptedTx protohush.GroupMessage) {
-	stateURI, txID, err := tp.parseHushMessageID(encryptedTx.ID)
-	if err != nil {
-		tp.Errorf("while parsing hush message ID: %v", err)
-		return
-	}
-	tp.Infof(0, "private tx encrypted (stateURI=%v id=%v)", stateURI, txID.Pretty())
-
-	err = tp.store.SaveEncryptedTx(stateURI, txID, encryptedTx)
-	if err != nil {
-		tp.Errorf("while saving encrypted tx to database: %v", err)
-		return
-	}
-
-	// @@TODO: send to Vault
-	tp.poolWorker.Add(broadcastPrivateTx{stateURI, txID, tp})
-}
-
-func (tp *treeProtocol) handlePrivateTxDecrypted(sender types.Address, plaintext []byte, encryptedTx protohush.GroupMessage) {
+func (tp *treeProtocol) handlePrivateTxDecrypted(messageID string, plaintext []byte, encryptedTx protohush.GroupMessage) {
 	var tx tree.Tx
 	err := tx.Unmarshal(plaintext)
 	if err != nil {
@@ -358,11 +496,17 @@ func (tp *treeProtocol) handlePrivateTxDecrypted(sender types.Address, plaintext
 		return
 	}
 
-	tp.Infof(0, "private tx decrypted (stateURI=%v id=%v sender=%v)", tx.StateURI, tx.ID, sender)
+	tp.Infof("private tx decrypted (stateURI=%v id=%v sender=%v)", tx.StateURI, tx.ID, tx.From)
 
-	err = tp.store.SaveEncryptedTx(tx.StateURI, tx.ID, encryptedTx)
+	err = tp.store.SaveEncryptedTx(tree.StateURI(tx.StateURI), tx.ID, encryptedTx)
 	if err != nil {
 		tp.Errorf("while saving encrypted tx to database: %v", err)
+		return
+	}
+
+	err = tp.store.DeleteOpaqueEncryptedTx(messageID)
+	if err != nil {
+		tp.Errorf("while deleting opaque encrypted tx to database: %v", err)
 		return
 	}
 
@@ -375,18 +519,38 @@ func (tp *treeProtocol) handlePrivateTxDecrypted(sender types.Address, plaintext
 	// @@TODO: send to Vault
 }
 
-func (tp *treeProtocol) handleAckReceived(stateURI string, txID state.Version, peerConn TreePeerConn) {
-	tp.Infof(0, "ack received: tx=%v peer=%v", txID.Hex(), peerConn.DialInfo())
-	tp.store.MarkTxSeenByPeer(peerConn.DeviceUniqueID(), stateURI, txID)
+func (tp *treeProtocol) handlePrivateTxEncrypted(messageID string, encryptedTx protohush.GroupMessage) {
+	stateURI, txID, err := parseHushMessageID_EncryptedTx(messageID)
+	if err != nil {
+		tp.Errorf("while parsing hush message id '%v': %v", messageID, err)
+		return
+	}
+
+	tp.Infof("private tx encrypted (stateURI=%v id=%v)", stateURI, txID.Pretty())
+
+	err = tp.store.SaveEncryptedTx(tree.StateURI(stateURI), txID, encryptedTx)
+	if err != nil {
+		tp.Errorf("while saving encrypted tx to database: %v", err)
+		return
+	}
+
+	// Send to vaults
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = tp.vaultManager.AddEncryptedTx(ctx, stateURI, txID, encryptedTx)
+	if err != nil {
+		tp.Errorf("while adding encrypted tx to vaults: %v", err)
+		return
+	}
+
+	// Broadcast
+	tp.poolWorker.Add(broadcastPrivateTx{string(stateURI), txID, tp})
 }
 
-func (tp *treeProtocol) handleP2PStateURIReceived(stateURI string, peerConn TreePeerConn) {
-	peerConn.AddStateURI(stateURI)
-
-	err := tp.Subscribe(context.TODO(), stateURI)
-	if err != nil {
-		tp.Errorf("while subscribing to p2p state URI %v: %v", stateURI, err)
-	}
+func (tp *treeProtocol) handleAckReceived(stateURI string, txID state.Version, peerConn TreePeerConn) {
+	tp.Infof("ack received: tx=%v peer=%v", txID.Hex(), peerConn.DialInfo())
+	tp.store.MarkTxSeenByPeer(peerConn.DeviceUniqueID(), tree.StateURI(stateURI), txID)
 }
 
 type FetchHistoryOpts struct {
@@ -417,7 +581,7 @@ func (tp *treeProtocol) handleFetchHistoryRequest(stateURI string, opts FetchHis
 
 		var encryptedTx *EncryptedTx
 		if isPrivate {
-			encryptedTx2, err := tp.store.EncryptedTx(stateURI, tx.ID)
+			encryptedTx2, err := tp.store.EncryptedTx(tree.StateURI(stateURI), tx.ID)
 			if err != nil {
 				return err
 			}
@@ -563,7 +727,7 @@ func (tp *treeProtocol) openReadableSubscription(stateURI string) {
 			tp.store.MaxPeersPerSubscription(),
 			func(msg SubscriptionMsg, peerConn TreePeerConn) {
 				if msg.EncryptedTx != nil {
-					tp.handlePrivateTxReceived(*msg.EncryptedTx, peerConn)
+					tp.handleEncryptedTxReceivedFromPeer(*msg.EncryptedTx, peerConn)
 				} else if msg.Tx != nil {
 					tp.handleTxReceived(*msg.Tx, peerConn)
 				} else {
@@ -587,7 +751,7 @@ func (tp *treeProtocol) Subscribe(ctx context.Context, stateURI string) error {
 		return errors.Errorf("invalid state URI: %v", stateURI)
 	}
 
-	err := tp.store.AddSubscribedStateURI(stateURI)
+	err := tp.store.AddSubscribedStateURI(tree.StateURI(stateURI))
 	if err != nil {
 		return errors.Wrap(err, "while updating config store")
 	}
@@ -654,7 +818,7 @@ func (tp *treeProtocol) Unsubscribe(stateURI string) error {
 		}
 	}()
 
-	err := tp.store.RemoveSubscribedStateURI(stateURI)
+	err := tp.store.RemoveSubscribedStateURI(tree.StateURI(stateURI))
 	if err != nil {
 		return errors.Wrap(err, "while updating config")
 	}
@@ -675,7 +839,7 @@ func (tp *treeProtocol) SubscribeStateURIs() (StateURISubscription, error) {
 func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string) <-chan TreePeerConn {
 	var (
 		ch          = make(chan TreePeerConn)
-		alreadySent sync.Map
+		alreadySent = NewSyncSet[swarm.PeerDialInfo](nil)
 	)
 
 	switch tp.acl.TypeOf(stateURI) {
@@ -702,7 +866,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 
 			peerConns := tp.PeerInfosToPeerConns(ctx, peerInfos)
 			for _, peerConn := range peerConns {
-				if _, exists := alreadySent.LoadOrStore(peerConn.DialInfo(), struct{}{}); exists {
+				if exists := alreadySent.Add(peerConn.DialInfo()); exists {
 					continue
 				}
 				peerConn.AddStateURI(stateURI)
@@ -724,7 +888,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 		child.Go(nil, "from PeerStore", func(ctx context.Context) {
 			peerConns := tp.PeerInfosToPeerConns(ctx, tp.peerStore.PeersServingStateURI(stateURI))
 			for _, peerConn := range peerConns {
-				if _, exists := alreadySent.LoadOrStore(peerConn.DialInfo(), struct{}{}); exists {
+				if exists := alreadySent.Add(peerConn.DialInfo()); exists {
 					continue
 				}
 				select {
@@ -736,13 +900,20 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 		})
 
 		for _, tpt := range tp.Transports {
-			innerCh, err := tpt.ProvidersOfStateURI(ctx, stateURI)
-			if err != nil {
-				// tp.Warnf("error fetching providers of State-URI %v on transport %v: %v", stateURI, tpt.Name(), err)
-				continue
-			}
+			tpt := tpt
 
 			child.Go(nil, tpt.Name(), func(ctx context.Context) {
+				ok := <-tpt.AwaitReady(ctx)
+				if !ok {
+					return
+				}
+
+				innerCh, err := tpt.ProvidersOfStateURI(ctx, stateURI)
+				if err != nil {
+					// tp.Warnf("error fetching providers of State-URI %v on transport %v: %v", stateURI, tpt.Name(), err)
+					return
+				}
+
 				for {
 					select {
 					case <-ctx.Done():
@@ -753,7 +924,7 @@ func (tp *treeProtocol) ProvidersOfStateURI(ctx context.Context, stateURI string
 						}
 						peer.AddStateURI(stateURI)
 
-						if _, exists := alreadySent.LoadOrStore(peer.DialInfo(), struct{}{}); exists {
+						if exists := alreadySent.Add(peer.DialInfo()); exists {
 							continue
 						}
 
@@ -777,6 +948,13 @@ func (tp *treeProtocol) handleNewState(tx tree.Tx, node state.Node, leaves []sta
 		panic("invariant violation")
 
 	case StateURIType_Private:
+		if tp.acl.MembersAdded(diff).Length() > 0 || tp.acl.MembersRemoved(diff).Length() > 0 {
+			err := tp.handlePrivateStateURIMembersChanged(tx)
+			if err != nil {
+				tp.Errorf("while handling member change for state URI %v: %v", tx.StateURI, err)
+			}
+		}
+
 		tp.announceP2PStateURIsTask.Enqueue()
 
 		// If this is the genesis tx of a private state URI, ensure that we subscribe to that state URI
@@ -815,7 +993,7 @@ func (tp *treeProtocol) handleNewState(tx tree.Tx, node state.Node, leaves []sta
 			}
 			tp.Process.Go(nil, "ack "+tx.StateURI+" "+tx.ID.Hex(), func(ctx context.Context) {
 				tp.TryPeerDevices(ctx, &tp.Process, peerDevices, func(ctx context.Context, treePeerConn TreePeerConn) error {
-					return treePeerConn.Ack(tx.StateURI, tx.ID)
+					return treePeerConn.Ack(ctx, tx.StateURI, tx.ID)
 				})
 			})
 
@@ -830,6 +1008,48 @@ func (tp *treeProtocol) handleNewState(tx tree.Tx, node state.Node, leaves []sta
 		}
 		tp.broadcastToWritableSubscribers(context.TODO(), tx.StateURI, &tx, nil, node, leaves)
 	}
+}
+
+func (tp *treeProtocol) handlePrivateStateURIMembersChanged(inTx tree.Tx) error {
+	sender, err := tp.keyStore.DefaultPublicIdentity()
+	if err != nil {
+		return err
+	}
+	members, err := tp.acl.MembersOf(inTx.StateURI)
+	if err != nil {
+		return err
+	}
+
+	tp.Debugw("state uri members changed", "stateuri", inTx.StateURI, "members", members.Slice())
+
+	// Send encrypted state URI to members
+	err = tp.hushProto.EncryptGroupMessage(ProtocolName+":stateuri", makeHushMessageID_EncryptedStateURI(tree.StateURI(inTx.StateURI)), sender.Address(), members.Slice(), []byte(inTx.StateURI))
+	if err != nil {
+		return err
+	}
+
+	// Send encrypted txs to members
+	iter, err := tp.txStore.AllTxsForStateURI(inTx.StateURI, tree.GenesisTxID)
+	if err != nil {
+		return err
+	}
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		tx := iter.Tx()
+		if tx.ID == inTx.ID {
+			continue
+		}
+
+		plaintext, err := tx.Marshal()
+		if err != nil {
+			return err
+		}
+
+		err = tp.hushProto.EncryptGroupMessage(ProtocolName+":tx", makeHushMessageID_EncryptedTx(tree.StateURI(tx.StateURI), tx.ID), sender.Address(), members.Slice(), plaintext)
+		if err != nil {
+			return err
+		}
+	}
+	return iter.Err()
 }
 
 func (tp *treeProtocol) broadcastToWritableSubscribers(
@@ -857,7 +1077,7 @@ func (tp *treeProtocol) broadcastToWritableSubscribers(
 
 		if peer, isPeer := writeSub.(TreePeerConn); isPeer {
 			// If the subscriber wants us to send states, we never skip sending
-			if tp.store.TxSeenByPeer(peer.DeviceUniqueID(), stateURI, tx.ID) && !writeSub.Type().Includes(SubscriptionType_States) {
+			if tp.store.TxSeenByPeer(peer.DeviceUniqueID(), tree.StateURI(stateURI), tx.ID) && !writeSub.Type().Includes(SubscriptionType_States) {
 				continue
 			}
 		}
@@ -880,6 +1100,22 @@ func (tp *treeProtocol) broadcastToWritableSubscribers(
 			Leaves:      leaves,
 		})
 	}
+}
+
+func (tp *treeProtocol) Vaults() Set[string] {
+	return tp.vaultManager.Vaults()
+}
+
+func (tp *treeProtocol) AddVault(host string) error {
+	return tp.vaultManager.AddVault(host)
+}
+
+func (tp *treeProtocol) RemoveVault(host string) error {
+	return tp.vaultManager.RemoveVault(host)
+}
+
+func (tp *treeProtocol) SyncWithAllVaults() error {
+	return tp.vaultManager.SyncWithAllVaults(context.TODO())
 }
 
 type announceStateURIsTask struct {
@@ -914,7 +1150,7 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 		return
 	}
 
-	publicStateURIs := types.NewSet[string](nil)
+	publicStateURIs := NewSet[string](nil)
 	for stateURI := range stateURIs {
 		if t.treeProto.acl.TypeOf(stateURI) != StateURIType_Public {
 			continue
@@ -923,6 +1159,11 @@ func (t *announceStateURIsTask) announceStateURIs(ctx context.Context) {
 	}
 
 	for _, tpt := range t.treeProto.Transports {
+		ok := <-tpt.AwaitReady(ctx)
+		if !ok {
+			continue
+		}
+
 		tpt.AnnounceStateURIs(ctx, publicStateURIs)
 	}
 }
@@ -1001,10 +1242,11 @@ func (t encryptOwnPrivateTx) Work(ctx context.Context) (retry bool) {
 		}
 	}()
 
-	_, err := t.treeProto.store.EncryptedTx(t.stateURI, t.txID)
-	if err == nil {
-		return false
-	}
+	// _, err := t.treeProto.store.EncryptedTx(t.stateURI, t.txID)
+	// if err == nil {
+	// 	// Done
+	// 	return false
+	// }
 
 	tx, err := t.treeProto.txStore.FetchTx(t.stateURI, t.txID)
 	if errors.Cause(err) == errors.Err404 {
@@ -1029,7 +1271,14 @@ func (t encryptOwnPrivateTx) Work(ctx context.Context) (retry bool) {
 		t.treeProto.Errorf("while marshaling tx %v %v: %v", t.stateURI, t.txID, err)
 		return true
 	}
-	err = t.treeProto.hushProto.EncryptGroupMessage(ProtocolName, t.treeProto.hushMessageIDForTx(tx), members.Slice(), txBytes)
+
+	sender, err := t.treeProto.keyStore.DefaultPublicIdentity()
+	if err != nil {
+		t.treeProto.Errorf("while fetching default identity from key store: %v", err)
+		return
+	}
+
+	err = t.treeProto.hushProto.EncryptGroupMessage(ProtocolName+":tx", makeHushMessageID_EncryptedTx(tree.StateURI(tx.StateURI), tx.ID), sender.Address(), members.Slice(), txBytes)
 	if err != nil {
 		t.treeProto.Errorf("while enqueuing hush tx %v %v: %v", t.stateURI, t.txID, err)
 		return true
@@ -1065,9 +1314,9 @@ func (t broadcastPrivateTx) Work(ctx context.Context) (retry bool) {
 		return false
 	}
 
-	encryptedTx, err := t.treeProto.store.EncryptedTx(t.stateURI, t.txID)
+	encryptedTx, err := t.treeProto.store.EncryptedTx(tree.StateURI(t.stateURI), t.txID)
 	if errors.Cause(err) == errors.Err404 {
-		t.treeProto.Warnf("broadcast private tx %v %v: retrying later (encryptedTx not found)", t.stateURI, t.txID.Pretty())
+		t.treeProto.Warnf("broadcast private tx %v %v: retrying later (encrypted tx not found)", t.stateURI, t.txID.Pretty())
 		return true
 	} else if err != nil {
 		t.treeProto.Errorf("while fetching private tx %v %v: %v", t.stateURI, t.txID.Pretty(), err)
@@ -1095,4 +1344,36 @@ func (t broadcastPrivateTx) Work(ctx context.Context) (retry bool) {
 
 	t.treeProto.broadcastToWritableSubscribers(ctx, t.stateURI, &tx, &encryptedTx, node, leaves)
 	return false
+}
+
+func makeHushMessageID_EncryptedStateURI(stateURI tree.StateURI) string {
+	return url.QueryEscape(string(stateURI))
+}
+
+func parseHushMessageID_EncryptedStateURI(messageID string) (tree.StateURI, error) {
+	stateURI, err := url.QueryUnescape(messageID)
+	if err != nil {
+		return "", err
+	}
+	return tree.StateURI(stateURI), nil
+}
+
+func makeHushMessageID_EncryptedTx(stateURI tree.StateURI, txID state.Version) string {
+	return url.QueryEscape(string(stateURI)) + ":" + txID.Hex()
+}
+
+func parseHushMessageID_EncryptedTx(messageID string) (tree.StateURI, state.Version, error) {
+	parts := strings.Split(messageID, ":")
+	if len(parts) != 2 {
+		return "", state.Version{}, errors.Errorf("expected 2 parts in message id, got %v", len(parts))
+	}
+	stateURI, err := url.QueryUnescape(parts[0])
+	if err != nil {
+		return "", state.Version{}, err
+	}
+	version, err := state.VersionFromHex(parts[1])
+	if err != nil {
+		return "", state.Version{}, err
+	}
+	return tree.StateURI(stateURI), version, nil
 }
