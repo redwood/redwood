@@ -5,10 +5,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"time"
 
 	datastore "github.com/ipfs/go-datastore"
+	writer "github.com/ipfs/go-log/writer"
 	dohp2p "github.com/libp2p/go-doh-resolver"
 	libp2p "github.com/libp2p/go-libp2p"
 	cryptop2p "github.com/libp2p/go-libp2p-core/crypto"
@@ -17,7 +19,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/network"
 	peer "github.com/libp2p/go-libp2p-core/peer"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	mplex "github.com/libp2p/go-libp2p-mplex"
 	noisep2p "github.com/libp2p/go-libp2p-noise"
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	"github.com/libp2p/go-libp2p-peerstore/pstoremem"
@@ -52,9 +53,9 @@ type Transport interface {
 	Libp2pPeerID() string
 	ListenAddrs() []string
 	Peers() []peer.AddrInfo
-	AddStaticRelay(relayAddr string) error
-	RemoveStaticRelay(relayAddr string) error
-	StaticRelays() PeerSet
+	AddRelay(relayAddr string) error
+	RemoveRelay(relayAddr string) error
+	Relays() []RelayAndReservation
 }
 
 type transport struct {
@@ -79,6 +80,7 @@ type transport struct {
 
 	dhtClient   DHTClient
 	peerManager PeerManager
+	relayClient RelayClient
 
 	store         Store
 	controllerHub tree.ControllerHub
@@ -117,6 +119,8 @@ func NewTransport(
 	if err != nil {
 		return nil, err
 	}
+
+	writer.WriterGroup.AddWriter(os.Stdout)
 
 	t := &transport{
 		BaseTransport:     swarm.NewBaseTransport(TransportName),
@@ -172,7 +176,9 @@ func (t *transport) Start() error {
 		return err
 	}
 
-	autorelay.AdvertiseBootDelay = 10 * time.Second
+	// autorelay.AdvertiseBootDelay = 10 * time.Second
+
+	t.relayClient = NewRelayClient(t.store)
 
 	// Initialize the libp2p host
 	t.libp2pHost, err = libp2p.New(
@@ -186,26 +192,31 @@ func (t *transport) Start() error {
 		libp2p.EnableNATService(),
 		// libp2p.ForceReachabilityPrivate(),
 		// libp2p.StaticRelays(t.store.StaticRelays().Slice()),
-		libp2p.EnableRelay(),
+		// libp2p.EnableRelay(),
 		libp2p.EnableAutoRelay(
-		// autorelay.WithStaticRelays(t.StaticRelays().Slice()),
+			// autorelay.WithStaticRelays(t.StaticRelays().Slice()),
+			autorelay.WithPeerSource(t.relayClient.RelayChan()),
+			autorelay.WithMinCandidates(1),
+			autorelay.WithMaxCandidates(10),
+			autorelay.WithNumRelays(99999),
+			autorelay.WithBootDelay(0),
+			autorelay.WithMaxAttempts(99999),
 		),
-		libp2p.EnableRelayService(
+		// libp2p.EnableRelayService(
 		// relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 		//     WithResources(rc Resources)
 		//     WithLimit(limit *RelayLimit)
 		//     WithACL(acl ACLFilter)
-		),
+		// ),
 		libp2p.EnableHolePunching(
 		//    WithTracer(tr EventTracer)
 		),
 		libp2p.Peerstore(peerStore),
 		libp2p.Security(noisep2p.ID, noisep2p.New),
 		libp2p.MultiaddrResolver(dnsResolver),
-		libp2p.Muxer("/mplex/6.7.0", mplex.DefaultTransport),
 		libp2p.Routing(func(host corehost.Host) (routing.PeerRouting, error) {
 			t.dht, err = dht.New(t.Process.Ctx(), host,
-				dht.BootstrapPeers(append(t.store.StaticRelays().Slice(), t.bootstrapPeers.Slice()...)...),
+				dht.BootstrapPeers(append(t.store.Relays().Slice(), t.bootstrapPeers.Slice()...)...),
 				dht.Mode(dht.ModeServer),
 				dht.Datastore(datastore.NewMapDatastore()),
 				dht.Resiliency(1),
@@ -217,6 +228,12 @@ func (t *transport) Start() error {
 	)
 	if err != nil {
 		return errors.Wrap(err, "could not initialize libp2p host")
+	}
+
+	t.relayClient.SetHost(t.libp2pHost)
+	err = t.relayClient.Start()
+	if err != nil {
+		return err
 	}
 
 	// Update our node's info in the peer store
@@ -392,12 +409,12 @@ func (t *transport) Peers() []peer.AddrInfo {
 	return peerstore.PeerInfos(t.libp2pHost.Peerstore(), t.libp2pHost.Peerstore().Peers())
 }
 
-func (t *transport) StaticRelays() PeerSet {
-	return t.store.StaticRelays()
+func (t *transport) Relays() []RelayAndReservation {
+	return t.relayClient.Relays()
 }
 
-func (t *transport) AddStaticRelay(relayAddr string) error {
-	err := t.store.AddStaticRelay(relayAddr)
+func (t *transport) AddRelay(relayAddr string) error {
+	err := t.relayClient.AddRelay(relayAddr)
 	if err != nil {
 		return err
 	}
@@ -405,8 +422,8 @@ func (t *transport) AddStaticRelay(relayAddr string) error {
 	return nil
 }
 
-func (t *transport) RemoveStaticRelay(relayAddr string) error {
-	return t.store.RemoveStaticRelay(relayAddr)
+func (t *transport) RemoveRelay(relayAddr string) error {
+	return t.relayClient.RemoveRelay(relayAddr)
 }
 
 func (t *transport) Listen(network network.Network, multiaddr ma.Multiaddr)      {}

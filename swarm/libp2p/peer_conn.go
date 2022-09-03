@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,7 +55,20 @@ func (peer *peerConn) EnsureConnected(ctx context.Context) (err error) {
 	defer func() { peer.UpdateConnStats(err == nil) }()
 
 	err = peer.t.libp2pHost.Connect(ctx, peer.pinfo)
-	if err != nil {
+	if err != nil && strings.Contains(err.Error(), "NO_RESERVATION") {
+		for _, multiaddr := range multiaddrsFromPeerInfo(peer.pinfo) {
+			relay, _ := splitRelayAndPeer(multiaddr)
+			if relay == nil {
+				continue
+			}
+			addrInfo, ok := addrInfoFromMultiaddr(relay)
+			if !ok {
+				continue
+			}
+			peer.t.relayClient.RenewReservation(addrInfo)
+		}
+	} else if err != nil {
+		peer.t.Debugf("EnsureConnected %v: %+v", peer.pinfo, err)
 		return errors.Wrapf(errors.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 	}
 	return nil
@@ -73,8 +87,22 @@ func (peer *peerConn) ensureStreamWithProtocol(ctx context.Context, p protocol.I
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	ctx = netp2p.WithUseTransient(ctx, "because circuitv2 seems to require it?")
+
 	peer.stream, err = peer.t.libp2pHost.NewStream(ctx, peer.pinfo.ID, p)
-	if err != nil {
+	if err != nil && strings.Contains(err.Error(), "NO_RESERVATION") {
+		for _, multiaddr := range multiaddrsFromPeerInfo(peer.pinfo) {
+			relay, _ := splitRelayAndPeer(multiaddr)
+			if relay == nil {
+				continue
+			}
+			addrInfo, ok := addrInfoFromMultiaddr(relay)
+			if !ok {
+				continue
+			}
+			peer.t.relayClient.RenewReservation(addrInfo)
+		}
+	} else if err != nil {
 		return errors.Wrapf(errors.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 	}
 	return nil

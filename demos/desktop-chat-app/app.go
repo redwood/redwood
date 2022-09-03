@@ -118,7 +118,7 @@ func (app *App) addDefaultRelays() {
 	}
 
 	for _, relay := range relays {
-		app.app.Libp2pStore.AddStaticRelay(relay)
+		app.app.Libp2pStore.AddRelay(relay)
 	}
 }
 

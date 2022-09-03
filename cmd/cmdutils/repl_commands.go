@@ -254,7 +254,7 @@ var (
 			} else if len(args) < 1 {
 				return errors.New("requires 1 argument: libp2p relay add <multiaddress>")
 			}
-			return app.Libp2pTransport.AddStaticRelay(args[0])
+			return app.Libp2pTransport.AddRelay(args[0])
 		},
 	}
 
@@ -266,7 +266,7 @@ var (
 			} else if len(args) < 1 {
 				return errors.New("requires 1 argument: libp2p relay rm <multiaddress>")
 			}
-			return app.Libp2pTransport.RemoveStaticRelay(args[0])
+			return app.Libp2pTransport.RemoveRelay(args[0])
 		},
 	}
 
@@ -276,9 +276,39 @@ var (
 			if app.Libp2pTransport == nil {
 				return errors.New("libp2p is disabled")
 			}
-			for _, relay := range app.Libp2pTransport.StaticRelays().Slice() {
-				fmt.Println(" -", relay)
+
+			var rows [][]string
+
+			for _, relayAndRes := range app.Libp2pTransport.Relays() {
+				for _, multiaddr := range relayAndRes.AddrInfo.Addrs {
+					if relayAndRes.Reservation != nil {
+						rows = append(rows, []string{
+							relayAndRes.AddrInfo.ID.Pretty(),
+							multiaddr.String(),
+							"in " + relayAndRes.Reservation.Expiration.Sub(time.Now()).Round(time.Second).String(),
+							relayAndRes.Reservation.LimitDuration.String(),
+							fmt.Sprintf("%v", relayAndRes.Reservation.LimitData),
+						})
+					} else {
+						rows = append(rows, []string{
+							relayAndRes.AddrInfo.ID.Pretty(),
+							multiaddr.String(),
+							"",
+							"",
+							"",
+						})
+					}
+				}
 			}
+
+			table := tablewriter.NewWriter(os.Stdout)
+			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
+			table.SetCenterSeparator("|")
+			table.SetRowLine(true)
+			table.SetAutoMergeCellsByColumnIndex([]int{0, 1, 2, 3, 4})
+			table.SetHeader([]string{"PeerID", "Addr", "Expiration", "Duration limit", "Data limit"})
+			table.AppendBulk(rows)
+			table.Render()
 			return nil
 		},
 	}

@@ -112,7 +112,7 @@ func main() {
 					return err
 				}
 
-				bn := libp2p.NewBootstrapNode(
+				bn := libp2p.NewRelay(
 					config.Port,
 					config.BootstrapPeers,
 					p2pkey,
@@ -155,14 +155,14 @@ func main() {
 type replCommand struct {
 	Command  string
 	HelpText string
-	Handler  func(args []string, bn libp2p.BootstrapNode) error
+	Handler  func(args []string, bn libp2p.Relay) error
 }
 
 var replCommands = []replCommand{
 	{
 		"peerid",
 		"show the node's libp2p peer ID",
-		func(args []string, bn libp2p.BootstrapNode) error {
+		func(args []string, bn libp2p.Relay) error {
 			bn.Infof("%v", bn.Libp2pPeerID())
 			return nil
 		},
@@ -170,7 +170,7 @@ var replCommands = []replCommand{
 	{
 		"peers",
 		"show the peers known to the node",
-		func(args []string, bn libp2p.BootstrapNode) error {
+		func(args []string, bn libp2p.Relay) error {
 			var data [][]string
 
 			for _, addrinfo := range bn.Peers() {
@@ -205,7 +205,7 @@ var replCommands = []replCommand{
 	},
 }
 
-func startREPL(bn libp2p.BootstrapNode) {
+func startREPL(bn libp2p.Relay) {
 	fmt.Println("Type \"help\" for a list of commands.")
 	fmt.Println()
 

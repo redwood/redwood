@@ -17,4 +17,6 @@ pony/
 integration/
 demos/wasm/
 deployments/
+.blockade/
+
 

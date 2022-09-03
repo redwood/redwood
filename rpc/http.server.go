@@ -11,6 +11,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
+	ma "github.com/multiformats/go-multiaddr"
 
 	"redwood.dev/blob"
 	"redwood.dev/crypto"
@@ -246,9 +247,9 @@ func (s *HTTPServer) StaticRelays(r *http.Request, args *StaticRelaysArgs, resp 
 	if s.libp2pTransport == nil {
 		return errors.ErrUnsupported
 	}
-	for _, addr := range s.libp2pTransport.StaticRelays().MultiaddrStrings() {
-		resp.StaticRelays = append(resp.StaticRelays, addr)
-	}
+	resp.StaticRelays = Reduce(s.libp2pTransport.Relays(), func(into []string, rr libp2p.RelayAndReservation) []string {
+		return append(into, Map(rr.AddrInfo.Addrs, func(ma ma.Multiaddr) string { return ma.String() })...)
+	}, []string{})
 	return nil
 }
 
@@ -263,7 +264,7 @@ func (s *HTTPServer) AddStaticRelay(r *http.Request, args *AddStaticRelayArgs, r
 	if s.libp2pTransport == nil {
 		return errors.ErrUnsupported
 	}
-	return s.libp2pTransport.AddStaticRelay(args.DialAddr)
+	return s.libp2pTransport.AddRelay(args.DialAddr)
 }
 
 type (
@@ -277,7 +278,7 @@ func (s *HTTPServer) RemoveStaticRelay(r *http.Request, args *RemoveStaticRelayA
 	if s.libp2pTransport == nil {
 		return errors.ErrUnsupported
 	}
-	return s.libp2pTransport.RemoveStaticRelay(args.DialAddr)
+	return s.libp2pTransport.RemoveRelay(args.DialAddr)
 }
 
 type (
