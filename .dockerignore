@@ -13,3 +13,7 @@ demos/desktop-chat-app/main.go
 
 **/node1_data/
 **/node2_data/
+
+deployments/
+
+.blockade/

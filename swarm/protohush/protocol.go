@@ -23,8 +23,6 @@ import (
 )
 
 //go:generate mockery --name HushProtocol --output ./mocks/ --case=underscore
-
-//go:generate mockery --name HushProtocol --output ./mocks/ --case=underscore
 type HushProtocol interface {
 	process.Interface
 

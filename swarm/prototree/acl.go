@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"redwood.dev/errors"
-	"redwood.dev/log"
 	"redwood.dev/state"
 	"redwood.dev/tree"
 	"redwood.dev/types"
@@ -99,19 +98,10 @@ func (acl DefaultACL) MembersOf(stateURI string) (Set[types.Address], error) {
 }
 
 func (acl DefaultACL) MembersAdded(diff *state.Diff) Set[types.Address] {
-	L := log.NewLogger("acl")
-	L.Warnf("ADDED %v", diff.AddedList)
 	keypaths := Filter(diff.AddedList, func(kp state.Keypath) bool {
-		if kp.NumParts() > 0 {
-			L.Warnf("kp (%v) [%v] %v", kp.NumParts(), kp.Part(0), kp)
-		} else {
-			L.Warnf("kp (%v) %v", kp.NumParts(), kp)
-		}
 		return kp.NumParts() == 2 && kp.Part(0).Equals(DefaultACLMembersKeypath)
 	})
-	L.Warnf("FILTERED %v", keypaths)
-	addrs, err := MapWithError(keypaths, func(kp state.Keypath) (types.Address, error) { return types.AddressFromHex(kp.Part(1).String()) })
-	L.Warnf("MAPPED %v %v", addrs, err)
+	addrs, _ := MapWithError(keypaths, func(kp state.Keypath) (types.Address, error) { return types.AddressFromHex(kp.Part(1).String()) })
 	return NewSet(addrs)
 }
 

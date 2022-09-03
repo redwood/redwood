@@ -17,7 +17,7 @@ vault:
 hush:
 	cd embed && npm install && cd .. && \
 	cd ./demos/desktop-chat-app && \
-	cd frontend && NODE_OPTIONS=--openssl-legacy-provider yarn install && NODE_OPTIONS=--openssl-legacy-provider yarn build && cd .. && \
+	cd frontend &&  yarn install &&  yarn build && cd .. && \
 	rm -rf ./output && \
 	astilectron-bundler && \
 	cd ./output/linux-amd64 && zip -r ../hush-linux.zip ./Hush && \

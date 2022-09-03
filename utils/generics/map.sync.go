@@ -41,6 +41,31 @@ func (m SyncMap[K, V]) Delete(key K) (v V, exists bool) {
 	return v, exists
 }
 
+func (m SyncMap[K, V]) Keys() []K {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	keys := make([]K, len(m.m))
+	i := 0
+	for k := range m.m {
+		keys[i] = k
+	}
+	return keys
+}
+
+func (m SyncMap[K, V]) Zip() []Tuple2[K, V] {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	zipped := make([]Tuple2[K, V], len(m.m))
+	i := 0
+	for k, v := range m.m {
+		zipped[i] = Tuple2[K, V]{k, v}
+		i++
+	}
+	return zipped
+}
+
 func (m SyncMap[K, V]) Range(fn func(key K, value V) (keepGoing bool)) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

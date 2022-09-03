@@ -1,13 +1,11 @@
 package libp2p
 
 import (
-	"sort"
 	"sync"
 
 	cid "github.com/ipfs/go-cid"
 	cryptop2p "github.com/libp2p/go-libp2p-core/crypto"
 	corepeer "github.com/libp2p/go-libp2p-core/peer"
-	peerstoreaddr "github.com/libp2p/go-libp2p-peerstore/addr"
 	ma "github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
 	"go.uber.org/multierr"
@@ -211,7 +209,7 @@ func multiaddrsFromPeerInfo(pinfo corepeer.AddrInfo) []ma.Multiaddr {
 		multiaddrs = append(multiaddrs, addr)
 	}
 	multiaddrs = filterUselessMultiaddrs(multiaddrs)
-	sort.Sort(peerstoreaddr.AddrList(multiaddrs))
+	// sort.Sort(peerstoreaddr.AddrList(multiaddrs))
 	return multiaddrs
 }
 
@@ -282,6 +280,14 @@ func peerIDFromMultiaddr(multiaddr ma.Multiaddr) (peerID corepeer.ID, ok bool) {
 		return true
 	})
 	return
+}
+
+func addrInfoFromMultiaddr(multiaddr ma.Multiaddr) (corepeer.AddrInfo, bool) {
+	peerID, ok := peerIDFromMultiaddr(multiaddr)
+	if !ok {
+		return corepeer.AddrInfo{}, false
+	}
+	return corepeer.AddrInfo{ID: peerID, Addrs: []ma.Multiaddr{multiaddr}}, true
 }
 
 func splitRelayAndPeer(multiaddr ma.Multiaddr) (relay, peer ma.Multiaddr) {
