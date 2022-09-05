@@ -13,9 +13,17 @@
         "arch": "arm64",
         "env": {
             "CGO_ENABLED": "1",
-            "CC": "$(brew --prefix llvm@14)/bin/clang",
-            "CXX": "$(brew --prefix llvm@14)/bin/clang++",
-            "SDKROOT": "$(xcrun --sdk macosx11.1 --show-sdk-path)"
+            "CC": "/home/linuxbrew/.linuxbrew/opt/llvm/bin/clang",
+            "CXX": "/home/linuxbrew/.linuxbrew/opt/llvm/bin/clang++"
+        }
+    },
+    {
+        "os": "darwin",
+        "arch": "amd64",
+        "env": {
+            "CGO_ENABLED": "1",
+            "CC": "/home/linuxbrew/.linuxbrew/opt/llvm/bin/clang",
+            "CXX": "/home/linuxbrew/.linuxbrew/opt/llvm/bin/clang++"
         }
     },
     {"arch": "amd64", "os": "windows", "env": {

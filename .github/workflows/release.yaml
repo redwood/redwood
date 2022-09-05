@@ -135,12 +135,6 @@ jobs:
 
         runs-on: ubuntu-latest
         steps:
-            - name: brew --prefix llvm@14
-              run:  brew --prefix llvm@14
-
-            - name: xcrun --sdk macosx11.1 --show-sdk-path
-              run:  xcrun --sdk macosx11.1 --show-sdk-path
-
             - name: Checkout the repo
               uses: actions/checkout@v2
 
@@ -212,8 +206,12 @@ jobs:
               run:  zip -qq -r hush-linux.zip ./output/linux-amd64/Hush
               working-directory: demos/desktop-chat-app
 
-            - name: Zip (macOS)
-              run:  zip -qq -r hush-macos.zip ./output/darwin-amd64/Hush.app
+            - name: Zip (macOS amd64)
+              run:  zip -qq -r hush-macos-amd64.zip ./output/darwin-amd64/Hush.app
+              working-directory: demos/desktop-chat-app
+
+            - name: Zip (macOS arm64)
+              run:  zip -qq -r hush-macos-arm64.zip ./output/darwin-arm64/Hush.app
               working-directory: demos/desktop-chat-app
 
             - name: Zip (Windows)
@@ -226,11 +224,17 @@ jobs:
                   name: hush-linux.zip
                   path: demos/desktop-chat-app/hush-linux.zip
 
-            - name: Upload artifacts (macOS)
+            - name: Upload artifacts (macOS amd64)
               uses: actions/upload-artifact@v2
               with:
-                  name: hush-macos.zip
-                  path: demos/desktop-chat-app/hush-macos.zip
+                  name: hush-macos-amd64.zip
+                  path: demos/desktop-chat-app/hush-macos-amd64.zip
+
+            - name: Upload artifacts (macOS arm64)
+              uses: actions/upload-artifact@v2
+              with:
+                  name: hush-macos-arm64.zip
+                  path: demos/desktop-chat-app/hush-macos-arm64.zip
 
             - name: Upload artifacts (Windows)
               uses: actions/upload-artifact@v2
@@ -248,14 +252,24 @@ jobs:
                   asset_path: demos/desktop-chat-app/hush-linux.zip
                   asset_content_type: application/zip
 
-            - name: Upload release assets (macOS)
+            - name: Upload release assets (macOS amd64)
               uses: actions/upload-release-asset@v1
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
                   upload_url: ${{ needs.create_release.outputs.upload_url }}
-                  asset_name: hush-macos.zip
-                  asset_path: demos/desktop-chat-app/hush-macos.zip
+                  asset_name: hush-macos-amd64.zip
+                  asset_path: demos/desktop-chat-app/hush-macos-amd64.zip
+                  asset_content_type: application/zip
+
+            - name: Upload release assets (macOS arm64)
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ needs.create_release.outputs.upload_url }}
+                  asset_name: hush-macos-arm64.zip
+                  asset_path: demos/desktop-chat-app/hush-macos-arm64.zip
                   asset_content_type: application/zip
 
             - name: Upload release assets (Windows)
