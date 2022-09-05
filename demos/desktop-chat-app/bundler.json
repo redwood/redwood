@@ -13,7 +13,7 @@
         "arch": "arm64",
         "env": {
             "CGO_ENABLED": "1",
-            "CC": "gcc-11"
+            "CC": "gcc"
         }
     },
     {
@@ -21,8 +21,7 @@
         "arch": "amd64",
         "env": {
             "CGO_ENABLED": "1",
-            "CC": "clang",
-            "CXX": "clang++"
+            "CC": "gcc"
         }
     },
     {"arch": "amd64", "os": "windows", "env": {
