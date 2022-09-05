@@ -291,16 +291,18 @@ func (t *transport) Start() error {
 	t.MarkReady()
 	t.Infof("libp2p peer ID is %v", t.Libp2pPeerID())
 
-	go func() {
+	t.Process.Go(nil, "clear libp2p dial backoffs", func(ctx context.Context) {
 		for {
-			time.Sleep(1 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Second):
+			}
 			for _, peerID := range t.libp2pHost.Peerstore().Peers() {
-				t.libp2pHost.Network().(interface {
-					Backoff() *swarmp2p.DialBackoff
-				}).Backoff().Clear(peerID)
+				t.libp2pHost.Network().(*swarmp2p.Swarm).Backoff().Clear(peerID)
 			}
 		}
-	}()
+	})
 
 	return nil
 }
