@@ -135,6 +135,12 @@ jobs:
 
         runs-on: ubuntu-latest
         steps:
+            - name: brew --prefix llvm@14
+              run:  brew --prefix llvm@14
+
+            - name: xcrun --sdk macosx11.1 --show-sdk-path
+              run:  xcrun --sdk macosx11.1 --show-sdk-path
+
             - name: Checkout the repo
               uses: actions/checkout@v2
 
