@@ -13,8 +13,7 @@
         "arch": "arm64",
         "env": {
             "CGO_ENABLED": "1",
-            "CC": "clang",
-            "CXX": "clang++"
+            "CC": "gcc-11"
         }
     },
     {
