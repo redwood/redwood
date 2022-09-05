@@ -110,10 +110,10 @@ func (c *RelayClient) Start() error {
 
 					reservation, err := client.Reserve(ctx, c.host, addrInfo)
 					if err != nil {
-						c.Errorw("could not acquire relay reservation", "err", err, "relay", addrInfo.ID)
+						// c.Errorw("could not acquire relay reservation", "err", err, "relay", addrInfo.ID)
 						return
 					}
-					c.Successw("acquired relay reservation", "peer id", addrInfo.ID)
+					// c.Successw("acquired relay reservation", "peer id", addrInfo.ID)
 					c.activeReservations.Set(addrInfo.ID, reservation)
 				})
 			}

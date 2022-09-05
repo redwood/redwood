@@ -299,7 +299,7 @@ func (t verifyPeer) Work(ctx context.Context) (retry bool) {
 
 	err = authPeerConn.ChallengeIdentity(ctx, challengeMsg)
 	if err != nil {
-		t.authProto.Errorw("failed to challenge peer identity", "peer", authPeerConn.DialInfo(), "err", err)
+		// t.authProto.Errorw("failed to challenge peer identity", "peer", authPeerConn.DialInfo(), "err", err)
 		return true
 	}
 	return false
