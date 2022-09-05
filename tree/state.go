@@ -5,7 +5,7 @@ import (
 )
 
 type VersionedDBTree struct {
-	*state.DBTree
+	tree     *state.DBTree
 	stateURI StateURI
 }
 
@@ -18,7 +18,7 @@ func (t *VersionedDBTree) StateAtVersion(version *state.Version, mutable bool) *
 	p2 := append(version.Bytes(), ':')
 	copy(prefix, p1)
 	copy(prefix[len(p1):], p2)
-	return t.DBTree.StateWithPrefix(prefix, mutable)
+	return t.tree.StateWithPrefix(prefix, mutable)
 }
 
 var (

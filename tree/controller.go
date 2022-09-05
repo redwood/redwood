@@ -56,7 +56,7 @@ var (
 
 func NewController(
 	stateURI string,
-	tree *state.DBTree,
+	tree *VersionedDBTree,
 	controllerHub ControllerHub,
 	txStore TxStore,
 	blobStore blob.Store,
@@ -69,7 +69,7 @@ func NewController(
 		txStore:        txStore,
 		blobStore:      blobStore,
 		nelsonResolver: nelson.NewResolver(controllerHub, blobStore, nil),
-		states:         &VersionedDBTree{tree, StateURI(stateURI)},
+		states:         tree,
 		behaviorTree:   newBehaviorTree(),
 	}, nil
 }
@@ -86,8 +86,31 @@ func (c *controller) Start() (err error) {
 		return err
 	}
 
-	// Add default root resolver
+	// Add default root resolver (overridable if one is explicitly set)
 	c.behaviorTree.addResolver(state.Keypath(nil), &dumbResolver{})
+
+	// Attach added resolvers and validators
+	node := c.states.StateAtVersion(nil, false)
+	iter := node.Iterator(nil, false, 0)
+	defer iter.Close()
+
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		keypath := iter.Node().Keypath()
+		_, key := keypath.Pop()
+		switch {
+		case key.Equals(MergeTypeKeypath):
+			err := c.initializeResolver(c.behaviorTree, node, keypath)
+			if err != nil {
+				return err
+			}
+
+		case key.Equals(ValidatorKeypath):
+			err := c.initializeValidator(c.behaviorTree, node, keypath)
+			if err != nil {
+				return err
+			}
+		}
+	}
 
 	// Start mempool
 	c.mempool = NewMempool(c.processMempoolTx)
@@ -127,16 +150,6 @@ func (c *controller) Start() (err error) {
 	c.blobStore.OnBlobsSaved(c.mempool.ForceReprocess)
 
 	return nil
-}
-
-func (c *controller) Close() error {
-	if c.states != nil {
-		err := c.states.Close()
-		if err != nil {
-			c.Errorf("error closing state db: %v", err)
-		}
-	}
-	return c.Process.Close()
 }
 
 func (c *controller) StateAtVersion(version *state.Version) state.Node {
@@ -569,7 +582,7 @@ func (c *controller) initializeResolver(behaviorTree *behaviorTree, root state.N
 	if err != nil {
 		return err
 	} else if contentType == "" {
-		return errors.New("cannot initialize validator without a 'Content-Type' key")
+		return errors.New("cannot initialize resolver without a 'Content-Type' key")
 	}
 
 	ctor, exists := resolverRegistry[contentType]

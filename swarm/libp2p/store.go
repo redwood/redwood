@@ -37,7 +37,7 @@ type storeDataCodec struct {
 
 func NewStore(db *state.DBTree) (*store, error) {
 	s := &store{
-		Logger: log.NewLogger("libp2p store"),
+		Logger: log.NewLogger("libp2p"),
 		db:     db,
 	}
 	s.Infof("opening libp2p store")

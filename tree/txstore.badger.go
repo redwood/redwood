@@ -110,7 +110,9 @@ func (p *badgerTxStore) AddTx(tx Tx) (err error) {
 					return err
 				}
 
-				parentTx.Children = state.NewVersionSet(parentTx.Children).Add(tx.ID).Slice()
+				newChildren := NewSet(parentTx.Children)
+				newChildren.Add(tx.ID)
+				parentTx.Children = newChildren.Slice()
 
 				parentBytes, err := parentTx.Marshal()
 				if err != nil {

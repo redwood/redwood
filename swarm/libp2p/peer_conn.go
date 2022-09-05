@@ -68,7 +68,6 @@ func (peer *peerConn) EnsureConnected(ctx context.Context) (err error) {
 			peer.t.relayClient.RenewReservation(addrInfo)
 		}
 	} else if err != nil {
-		peer.t.Debugf("EnsureConnected %v: %+v", peer.pinfo, err)
 		return errors.Wrapf(errors.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 	}
 	return nil
@@ -102,6 +101,7 @@ func (peer *peerConn) ensureStreamWithProtocol(ctx context.Context, p protocol.I
 			}
 			peer.t.relayClient.RenewReservation(addrInfo)
 		}
+		return errors.Wrapf(errors.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 	} else if err != nil {
 		return errors.Wrapf(errors.ErrConnection, "(peer %v): %v", peer.pinfo.ID, err)
 	}

@@ -279,7 +279,7 @@ var (
 
 			var rows [][]string
 
-			for _, relayAndRes := range app.Libp2pTransport.Relays() {
+			for _, relayAndRes := range app.Libp2pTransport.RelayReservations() {
 				for _, multiaddr := range relayAndRes.AddrInfo.Addrs {
 					if relayAndRes.Reservation != nil {
 						rows = append(rows, []string{

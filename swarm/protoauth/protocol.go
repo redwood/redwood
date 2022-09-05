@@ -85,6 +85,19 @@ func NewAuthProtocol(transports []swarm.Transport, keyStore identity.KeyStore, p
 		tpt.OnIncomingUcan(ap.handleIncomingUcan)
 	}
 
+	go func() {
+		for {
+			for _, pd := range ap.peerStore.UnverifiedPeers() {
+				for dialInfo := range pd.Endpoints() {
+					ap.poolWorker.Add(verifyPeer{dialInfo, ap})
+					ap.poolWorker.ForceRetry(verifyPeer{dialInfo, ap})
+				}
+			}
+
+			time.Sleep(10 * time.Second)
+		}
+	}()
+
 	return ap
 }
 

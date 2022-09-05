@@ -25,15 +25,15 @@ type RelayClient struct {
 	chRelays           chan peer.AddrInfo
 }
 
-func NewRelayClient(store Store) RelayClient {
-	return RelayClient{
+func NewRelayClient(host host.Host, store Store, chRelays chan peer.AddrInfo) *RelayClient {
+	return &RelayClient{
 		Process:            *process.New("relay client"),
 		Logger:             log.NewLogger("libp2p"),
 		store:              store,
-		host:               nil,
+		host:               host,
 		activeReservations: NewSyncMap[peer.ID, *client.Reservation](),
 		mbNeedReservation:  utils.NewMailbox[peer.AddrInfo](24),
-		chRelays:           make(chan peer.AddrInfo),
+		chRelays:           chRelays,
 	}
 }
 
@@ -49,7 +49,19 @@ func (c *RelayClient) Start() error {
 	// Keep the relay channel used by libp2p's autorelay package full of relays
 	c.Process.Go(nil, "fill relay channel", func(ctx context.Context) {
 		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			for _, peerID := range c.activeReservations.Keys() {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
 				reservation, ok := c.activeReservations.Get(peerID)
 				if !ok || reservation == nil || reservation.Expiration.Before(time.Now()) {
 					c.activeReservations.Delete(peerID)
@@ -111,19 +123,25 @@ func (c *RelayClient) Start() error {
 	return nil
 }
 
+func (c *RelayClient) Relays() PeerSet {
+	return c.store.Relays()
+}
+
 type RelayAndReservation struct {
 	AddrInfo    peer.AddrInfo
 	Reservation *client.Reservation
 }
 
-func (c *RelayClient) Relays() []RelayAndReservation {
-	return Map(c.store.Relays().Slice(), func(addrInfo peer.AddrInfo) RelayAndReservation {
+func (c *RelayClient) RelayReservations() map[peer.ID]RelayAndReservation {
+	m := make(map[peer.ID]RelayAndReservation)
+	for _, addrInfo := range c.store.Relays().Slice() {
 		reservation, _ := c.activeReservations.Get(addrInfo.ID)
-		return RelayAndReservation{
+		m[addrInfo.ID] = RelayAndReservation{
 			AddrInfo:    addrInfo,
 			Reservation: reservation,
 		}
-	})
+	}
+	return m
 }
 
 func (c *RelayClient) AddRelay(addrStr string) error {
@@ -142,27 +160,10 @@ func (c *RelayClient) AddRelay(addrStr string) error {
 }
 
 func (c *RelayClient) RemoveRelay(addrStr string) error {
-	addrInfo, err := addrInfoFromString(addrStr)
-	if err != nil {
-		return err
-	}
-
-	for _, conn := range c.host.Network().ConnsToPeer(addrInfo.ID) {
-		conn.Close()
-	}
-
 	return c.store.RemoveRelay(addrStr)
 }
 
 func (c *RelayClient) RenewReservation(addrInfo peer.AddrInfo) {
 	c.activeReservations.Delete(addrInfo.ID)
 	c.mbNeedReservation.Deliver(addrInfo)
-}
-
-func (c *RelayClient) SetHost(host host.Host) {
-	c.host = host
-}
-
-func (c RelayClient) RelayChan() <-chan peer.AddrInfo {
-	return c.chRelays
 }

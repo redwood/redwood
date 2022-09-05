@@ -542,13 +542,11 @@ func (t *transport) serveWSSubscription(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	t.Warnf("WS REQ %v", utils.PrettyJSON(req))
-
 	if req.StateURI == "" {
 		req.StateURI = t.defaultStateURI
 	}
 
-	t.Infow("incoming websocket subscription", "addresses", peerConn.Addresses(), "stateuri", req.StateURI)
+	t.Infow("incoming websocket subscription", "addresses", peerConn.Addresses().Slice(), "stateuri", req.StateURI)
 
 	var fetchHistoryOpts prototree.FetchHistoryOpts
 	if req.FromTxID != nil {

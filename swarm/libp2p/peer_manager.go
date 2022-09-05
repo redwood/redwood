@@ -237,7 +237,7 @@ func (pm *peerManager) OnPeerFound(via string, pinfo peer.AddrInfo) {
 		return
 	}
 
-	// Add to peer store (unless it's a static relay or local/private IP)
+	// Add to peer store (unless it's a relay or local/private IP)
 	// Once libp2p peers are added to the peer store, we automatically attempt
 	// to connect to them (see `connectToPeersTask`)
 	for _, multiaddr := range multiaddrsFromPeerInfo(pinfo) {

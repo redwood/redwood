@@ -11,7 +11,6 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
-	ma "github.com/multiformats/go-multiaddr"
 
 	"redwood.dev/blob"
 	"redwood.dev/crypto"
@@ -247,9 +246,11 @@ func (s *HTTPServer) StaticRelays(r *http.Request, args *StaticRelaysArgs, resp 
 	if s.libp2pTransport == nil {
 		return errors.ErrUnsupported
 	}
-	resp.StaticRelays = Reduce(s.libp2pTransport.Relays(), func(into []string, rr libp2p.RelayAndReservation) []string {
-		return append(into, Map(rr.AddrInfo.Addrs, func(ma ma.Multiaddr) string { return ma.String() })...)
-	}, []string{})
+	resp.StaticRelays = s.libp2pTransport.Relays().MultiaddrStrings()
+	//    Reduce(s.libp2pTransport.Relays(), func(into []string, rr libp2p.RelayAndReservation) []string {
+	//        peer.AddrInfoToP2pAddrs
+	// 	return append(into, Map(rr.AddrInfo.Addrs, func(ma ma.Multiaddr) string { return ma.String() })...)
+	// }, []string{})
 	return nil
 }
 

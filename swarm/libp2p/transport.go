@@ -25,6 +25,7 @@ import (
 	protocol "github.com/libp2p/go-libp2p-protocol"
 	routing "github.com/libp2p/go-libp2p-routing"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
+	swarmp2p "github.com/libp2p/go-libp2p/p2p/net/swarm"
 	ma "github.com/multiformats/go-multiaddr"
 	madns "github.com/multiformats/go-multiaddr-dns"
 
@@ -53,9 +54,10 @@ type Transport interface {
 	Libp2pPeerID() string
 	ListenAddrs() []string
 	Peers() []peer.AddrInfo
+	Relays() PeerSet
+	RelayReservations() map[peer.ID]RelayAndReservation
 	AddRelay(relayAddr string) error
 	RemoveRelay(relayAddr string) error
-	Relays() []RelayAndReservation
 }
 
 type transport struct {
@@ -80,7 +82,7 @@ type transport struct {
 
 	dhtClient   DHTClient
 	peerManager PeerManager
-	relayClient RelayClient
+	relayClient *RelayClient
 
 	store         Store
 	controllerHub tree.ControllerHub
@@ -178,7 +180,7 @@ func (t *transport) Start() error {
 
 	// autorelay.AdvertiseBootDelay = 10 * time.Second
 
-	t.relayClient = NewRelayClient(t.store)
+	chRelays := make(chan peer.AddrInfo)
 
 	// Initialize the libp2p host
 	t.libp2pHost, err = libp2p.New(
@@ -195,7 +197,7 @@ func (t *transport) Start() error {
 		// libp2p.EnableRelay(),
 		libp2p.EnableAutoRelay(
 			// autorelay.WithStaticRelays(t.StaticRelays().Slice()),
-			autorelay.WithPeerSource(t.relayClient.RelayChan()),
+			autorelay.WithPeerSource(chRelays),
 			autorelay.WithMinCandidates(1),
 			autorelay.WithMaxCandidates(10),
 			autorelay.WithNumRelays(99999),
@@ -228,12 +230,6 @@ func (t *transport) Start() error {
 	)
 	if err != nil {
 		return errors.Wrap(err, "could not initialize libp2p host")
-	}
-
-	t.relayClient.SetHost(t.libp2pHost)
-	err = t.relayClient.Start()
-	if err != nil {
-		return err
 	}
 
 	// Update our node's info in the peer store
@@ -286,9 +282,26 @@ func (t *transport) Start() error {
 		return errors.Wrap(err, "could not start dht client")
 	}
 
-	t.Infof("libp2p peer ID is %v", t.Libp2pPeerID())
+	t.relayClient = NewRelayClient(t.libp2pHost, t.store, chRelays)
+	err = t.Process.SpawnChild(nil, t.relayClient)
+	if err != nil {
+		return err
+	}
 
 	t.MarkReady()
+	t.Infof("libp2p peer ID is %v", t.Libp2pPeerID())
+
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			for _, peerID := range t.libp2pHost.Peerstore().Peers() {
+				t.libp2pHost.Network().(interface {
+					Backoff() *swarmp2p.DialBackoff
+				}).Backoff().Clear(peerID)
+			}
+		}
+	}()
+
 	return nil
 }
 
@@ -409,8 +422,12 @@ func (t *transport) Peers() []peer.AddrInfo {
 	return peerstore.PeerInfos(t.libp2pHost.Peerstore(), t.libp2pHost.Peerstore().Peers())
 }
 
-func (t *transport) Relays() []RelayAndReservation {
+func (t *transport) Relays() PeerSet {
 	return t.relayClient.Relays()
+}
+
+func (t *transport) RelayReservations() map[peer.ID]RelayAndReservation {
+	return t.relayClient.RelayReservations()
 }
 
 func (t *transport) AddRelay(relayAddr string) error {
@@ -423,7 +440,18 @@ func (t *transport) AddRelay(relayAddr string) error {
 }
 
 func (t *transport) RemoveRelay(relayAddr string) error {
-	return t.relayClient.RemoveRelay(relayAddr)
+	err := t.relayClient.RemoveRelay(relayAddr)
+	if err != nil {
+		return err
+	}
+	addrInfo, err := addrInfoFromString(relayAddr)
+	if err != nil {
+		return err
+	}
+	for _, conn := range t.libp2pHost.Network().ConnsToPeer(addrInfo.ID) {
+		conn.Close()
+	}
+	return nil
 }
 
 func (t *transport) Listen(network network.Network, multiaddr ma.Multiaddr)      {}

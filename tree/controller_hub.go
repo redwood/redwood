@@ -99,6 +99,14 @@ func (m *controllerHub) Start() (err error) {
 	return nil
 }
 
+func (m *controllerHub) Close() error {
+	err := m.dbTree.Close()
+	if err != nil {
+		return err
+	}
+	return m.Process.Close()
+}
+
 func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
 	m.controllersMu.Lock()
 	defer m.controllersMu.Unlock()
@@ -109,7 +117,7 @@ func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
 		// stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(stateURI)
 
 		var err error
-		ctrl, err = NewController(stateURI, m.dbTree, m, m.txStore, m.blobStore)
+		ctrl, err = NewController(stateURI, &VersionedDBTree{m.dbTree, StateURI(stateURI)}, m, m.txStore, m.blobStore)
 		if err != nil {
 			return nil, err
 		}

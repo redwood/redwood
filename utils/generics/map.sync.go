@@ -49,6 +49,7 @@ func (m SyncMap[K, V]) Keys() []K {
 	i := 0
 	for k := range m.m {
 		keys[i] = k
+		i++
 	}
 	return keys
 }

@@ -101,7 +101,6 @@ func (app *App) Start() error {
 	app.addDefaultRelays()
 	app.initializeLocalState()
 	app.monitorForDMs()
-
 	return nil
 }
 
@@ -118,7 +117,10 @@ func (app *App) addDefaultRelays() {
 	}
 
 	for _, relay := range relays {
-		app.app.Libp2pStore.AddRelay(relay)
+		err := app.app.Libp2pTransport.AddRelay(relay)
+		if err != nil {
+			app.Errorw("could not add libp2p relay", "err", err, "relay", relay)
+		}
 	}
 }
 
