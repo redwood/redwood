@@ -8,11 +8,15 @@
   },
   "ldflags":{"linkmode":["internal"]},
   "environments": [
-    {"arch": "amd64", "os": "linux"},
-    {"arch": "amd64", "os": "darwin", "env": {
-        "CGO_ENABLED": "1",
-        "SDKROOT": "$(xcrun --sdk macosx --show-sdk-path)"
-      }
+    {
+        "os": "darwin",
+        "arch": "arm64",
+        "env": {
+            "CGO_ENABLED": "1",
+            "CC": "$(brew --prefix llvm@14)/bin/clang",
+            "CXX": "$(brew --prefix llvm@14)/bin/clang++",
+            "SDKROOT": "$(xcrun --sdk macosx11.1 --show-sdk-path)"
+        }
     },
     {"arch": "amd64", "os": "windows", "env": {
         "CC": "x86_64-w64-mingw32-gcc",
