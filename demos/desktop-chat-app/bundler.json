@@ -10,20 +10,12 @@
   "environments": [
     {
         "os": "darwin",
-        "arch": "arm64",
-        "env": {
-            "CGO_ENABLED": "1",
-            "CC": "/usr/local/opt/llvm/bin/clang",
-            "CXX": "/usr/local/opt/llvm/bin/clang++"
-        }
-    },
-    {
-        "os": "darwin",
         "arch": "amd64",
         "env": {
             "CGO_ENABLED": "1",
             "CC": "/usr/local/opt/llvm/bin/clang",
-            "CXX": "/usr/local/opt/llvm/bin/clang++"
+            "CXX": "/usr/local/opt/llvm/bin/clang++",
+            "SDKROOT": "/Applications/Xcode_13.2.1.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
         }
     }
   ]
