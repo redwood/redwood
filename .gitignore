@@ -9,3 +9,14 @@ lib/
 cmd/bootstrapnode/data/
 .vscode
 blah.go
+*.sublime-project
+*.sublime-workspace
+
+pony/
+*goreleaser*
+integration/
+demos/wasm/
+deployments/
+.blockade/
+
+

@@ -1,12 +1,25 @@
 BootstrapPeers: []
 DataRoot: ./node2_data
 DNSOverHTTPSURL: ""
+JWTSecret: NbtV9HZgwaJXnGxPQRjzZ1jl1XzcOhi4
 Nurse:
     Enabled: false
+    ProfileRoot: /tmp/redwood-pprof
+    PollInterval: 10s
+    GatherDuration: 10s
+    MaxProfileSize: 100.00mb
+    CPUProfileRate: 1
+    MemProfileRate: 1
+    BlockProfileRate: 1
+    MutexProfileFraction: 1
+    MemThreshold: 5.00gb
+    GoroutineThreshold: 10000
+PprofPort: 6061
 Libp2pTransport:
     Enabled: true
     ListenAddr: 0.0.0.0
     ListenPort: 21241
+    Key: ""
     Reachability: ""
     ReachableAt: ""
     StaticRelays: []

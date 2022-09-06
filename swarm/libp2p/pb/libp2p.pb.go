@@ -4,7 +4,6 @@
 package pb
 
 import (
-	bytes "bytes"
 	fmt "fmt"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
@@ -12,7 +11,11 @@ import (
 	math "math"
 	math_bits "math/bits"
 	pb "redwood.dev/blob/pb"
+	redwood_dev_crypto "redwood.dev/crypto"
+	redwood_dev_state "redwood.dev/state"
+	redwood_dev_swarm "redwood.dev/swarm"
 	pb1 "redwood.dev/swarm/protohush/pb"
+	pb2 "redwood.dev/tree/pb"
 	reflect "reflect"
 	strings "strings"
 )
@@ -28,6 +31,268 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+type AuthMessage struct {
+	// Types that are valid to be assigned to Payload:
+	//	*AuthMessage_ChallengeRequest_
+	//	*AuthMessage_Challenge_
+	//	*AuthMessage_Signatures_
+	//	*AuthMessage_Ucan_
+	Payload isAuthMessage_Payload `protobuf_oneof:"payload"`
+}
+
+func (m *AuthMessage) Reset()      { *m = AuthMessage{} }
+func (*AuthMessage) ProtoMessage() {}
+func (*AuthMessage) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{0}
+}
+func (m *AuthMessage) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AuthMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AuthMessage.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AuthMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AuthMessage.Merge(m, src)
+}
+func (m *AuthMessage) XXX_Size() int {
+	return m.Size()
+}
+func (m *AuthMessage) XXX_DiscardUnknown() {
+	xxx_messageInfo_AuthMessage.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AuthMessage proto.InternalMessageInfo
+
+type isAuthMessage_Payload interface {
+	isAuthMessage_Payload()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type AuthMessage_ChallengeRequest_ struct {
+	ChallengeRequest *AuthMessage_ChallengeRequest `protobuf:"bytes,1,opt,name=challengeRequest,proto3,oneof" json:"challengeRequest,omitempty"`
+}
+type AuthMessage_Challenge_ struct {
+	Challenge *AuthMessage_Challenge `protobuf:"bytes,2,opt,name=challenge,proto3,oneof" json:"challenge,omitempty"`
+}
+type AuthMessage_Signatures_ struct {
+	Signatures *AuthMessage_Signatures `protobuf:"bytes,3,opt,name=signatures,proto3,oneof" json:"signatures,omitempty"`
+}
+type AuthMessage_Ucan_ struct {
+	Ucan *AuthMessage_Ucan `protobuf:"bytes,4,opt,name=ucan,proto3,oneof" json:"ucan,omitempty"`
+}
+
+func (*AuthMessage_ChallengeRequest_) isAuthMessage_Payload() {}
+func (*AuthMessage_Challenge_) isAuthMessage_Payload()        {}
+func (*AuthMessage_Signatures_) isAuthMessage_Payload()       {}
+func (*AuthMessage_Ucan_) isAuthMessage_Payload()             {}
+
+func (m *AuthMessage) GetPayload() isAuthMessage_Payload {
+	if m != nil {
+		return m.Payload
+	}
+	return nil
+}
+
+func (m *AuthMessage) GetChallengeRequest() *AuthMessage_ChallengeRequest {
+	if x, ok := m.GetPayload().(*AuthMessage_ChallengeRequest_); ok {
+		return x.ChallengeRequest
+	}
+	return nil
+}
+
+func (m *AuthMessage) GetChallenge() *AuthMessage_Challenge {
+	if x, ok := m.GetPayload().(*AuthMessage_Challenge_); ok {
+		return x.Challenge
+	}
+	return nil
+}
+
+func (m *AuthMessage) GetSignatures() *AuthMessage_Signatures {
+	if x, ok := m.GetPayload().(*AuthMessage_Signatures_); ok {
+		return x.Signatures
+	}
+	return nil
+}
+
+func (m *AuthMessage) GetUcan() *AuthMessage_Ucan {
+	if x, ok := m.GetPayload().(*AuthMessage_Ucan_); ok {
+		return x.Ucan
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*AuthMessage) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*AuthMessage_ChallengeRequest_)(nil),
+		(*AuthMessage_Challenge_)(nil),
+		(*AuthMessage_Signatures_)(nil),
+		(*AuthMessage_Ucan_)(nil),
+	}
+}
+
+type AuthMessage_ChallengeRequest struct {
+}
+
+func (m *AuthMessage_ChallengeRequest) Reset()      { *m = AuthMessage_ChallengeRequest{} }
+func (*AuthMessage_ChallengeRequest) ProtoMessage() {}
+func (*AuthMessage_ChallengeRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{0, 0}
+}
+func (m *AuthMessage_ChallengeRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AuthMessage_ChallengeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AuthMessage_ChallengeRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AuthMessage_ChallengeRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AuthMessage_ChallengeRequest.Merge(m, src)
+}
+func (m *AuthMessage_ChallengeRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *AuthMessage_ChallengeRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_AuthMessage_ChallengeRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AuthMessage_ChallengeRequest proto.InternalMessageInfo
+
+type AuthMessage_Challenge struct {
+	Challenge redwood_dev_crypto.ChallengeMsg `protobuf:"bytes,1,opt,name=challenge,proto3,customtype=redwood.dev/crypto.ChallengeMsg" json:"challenge"`
+}
+
+func (m *AuthMessage_Challenge) Reset()      { *m = AuthMessage_Challenge{} }
+func (*AuthMessage_Challenge) ProtoMessage() {}
+func (*AuthMessage_Challenge) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{0, 1}
+}
+func (m *AuthMessage_Challenge) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AuthMessage_Challenge) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AuthMessage_Challenge.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AuthMessage_Challenge) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AuthMessage_Challenge.Merge(m, src)
+}
+func (m *AuthMessage_Challenge) XXX_Size() int {
+	return m.Size()
+}
+func (m *AuthMessage_Challenge) XXX_DiscardUnknown() {
+	xxx_messageInfo_AuthMessage_Challenge.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AuthMessage_Challenge proto.InternalMessageInfo
+
+type AuthMessage_Signatures struct {
+	Challenges     []redwood_dev_crypto.ChallengeMsg  `protobuf:"bytes,1,rep,name=challenges,proto3,customtype=redwood.dev/crypto.ChallengeMsg" json:"challenges"`
+	Signatures     []redwood_dev_crypto.Signature     `protobuf:"bytes,2,rep,name=signatures,proto3,customtype=redwood.dev/crypto.Signature" json:"signatures"`
+	AsymEncPubkeys []redwood_dev_crypto.AsymEncPubkey `protobuf:"bytes,3,rep,name=asymEncPubkeys,proto3,customtype=redwood.dev/crypto.AsymEncPubkey" json:"asymEncPubkeys,omitempty"`
+}
+
+func (m *AuthMessage_Signatures) Reset()      { *m = AuthMessage_Signatures{} }
+func (*AuthMessage_Signatures) ProtoMessage() {}
+func (*AuthMessage_Signatures) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{0, 2}
+}
+func (m *AuthMessage_Signatures) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AuthMessage_Signatures) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AuthMessage_Signatures.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AuthMessage_Signatures) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AuthMessage_Signatures.Merge(m, src)
+}
+func (m *AuthMessage_Signatures) XXX_Size() int {
+	return m.Size()
+}
+func (m *AuthMessage_Signatures) XXX_DiscardUnknown() {
+	xxx_messageInfo_AuthMessage_Signatures.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AuthMessage_Signatures proto.InternalMessageInfo
+
+type AuthMessage_Ucan struct {
+	Ucan string `protobuf:"bytes,1,opt,name=ucan,proto3" json:"ucan,omitempty"`
+}
+
+func (m *AuthMessage_Ucan) Reset()      { *m = AuthMessage_Ucan{} }
+func (*AuthMessage_Ucan) ProtoMessage() {}
+func (*AuthMessage_Ucan) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{0, 3}
+}
+func (m *AuthMessage_Ucan) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AuthMessage_Ucan) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AuthMessage_Ucan.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AuthMessage_Ucan) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AuthMessage_Ucan.Merge(m, src)
+}
+func (m *AuthMessage_Ucan) XXX_Size() int {
+	return m.Size()
+}
+func (m *AuthMessage_Ucan) XXX_DiscardUnknown() {
+	xxx_messageInfo_AuthMessage_Ucan.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AuthMessage_Ucan proto.InternalMessageInfo
+
+func (m *AuthMessage_Ucan) GetUcan() string {
+	if m != nil {
+		return m.Ucan
+	}
+	return ""
+}
+
 type BlobMessage struct {
 	// Types that are valid to be assigned to Payload:
 	//	*BlobMessage_FetchManifest_
@@ -40,7 +305,7 @@ type BlobMessage struct {
 func (m *BlobMessage) Reset()      { *m = BlobMessage{} }
 func (*BlobMessage) ProtoMessage() {}
 func (*BlobMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cad2813fa2bf04bd, []int{0}
+	return fileDescriptor_cad2813fa2bf04bd, []int{1}
 }
 func (m *BlobMessage) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -71,8 +336,6 @@ var xxx_messageInfo_BlobMessage proto.InternalMessageInfo
 
 type isBlobMessage_Payload interface {
 	isBlobMessage_Payload()
-	Equal(interface{}) bool
-	VerboseEqual(interface{}) error
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
@@ -147,7 +410,7 @@ type BlobMessage_FetchManifest struct {
 func (m *BlobMessage_FetchManifest) Reset()      { *m = BlobMessage_FetchManifest{} }
 func (*BlobMessage_FetchManifest) ProtoMessage() {}
 func (*BlobMessage_FetchManifest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cad2813fa2bf04bd, []int{0, 0}
+	return fileDescriptor_cad2813fa2bf04bd, []int{1, 0}
 }
 func (m *BlobMessage_FetchManifest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -191,7 +454,7 @@ type BlobMessage_SendManifest struct {
 func (m *BlobMessage_SendManifest) Reset()      { *m = BlobMessage_SendManifest{} }
 func (*BlobMessage_SendManifest) ProtoMessage() {}
 func (*BlobMessage_SendManifest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cad2813fa2bf04bd, []int{0, 1}
+	return fileDescriptor_cad2813fa2bf04bd, []int{1, 1}
 }
 func (m *BlobMessage_SendManifest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -241,7 +504,7 @@ type BlobMessage_FetchChunk struct {
 func (m *BlobMessage_FetchChunk) Reset()      { *m = BlobMessage_FetchChunk{} }
 func (*BlobMessage_FetchChunk) ProtoMessage() {}
 func (*BlobMessage_FetchChunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cad2813fa2bf04bd, []int{0, 2}
+	return fileDescriptor_cad2813fa2bf04bd, []int{1, 2}
 }
 func (m *BlobMessage_FetchChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -285,7 +548,7 @@ type BlobMessage_SendChunk struct {
 func (m *BlobMessage_SendChunk) Reset()      { *m = BlobMessage_SendChunk{} }
 func (*BlobMessage_SendChunk) ProtoMessage() {}
 func (*BlobMessage_SendChunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cad2813fa2bf04bd, []int{0, 3}
+	return fileDescriptor_cad2813fa2bf04bd, []int{1, 3}
 }
 func (m *BlobMessage_SendChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -330,18 +593,14 @@ func (m *BlobMessage_SendChunk) GetExists() bool {
 
 type HushMessage struct {
 	// Types that are valid to be assigned to Payload:
-	//	*HushMessage_DhPubkeyAttestations
-	//	*HushMessage_ProposeIndividualSession_
-	//	*HushMessage_RespondToIndividualSessionProposal_
-	//	*HushMessage_SendIndividualMessage_
-	//	*HushMessage_SendGroupMessage_
+	//	*HushMessage_PubkeyBundles_
 	Payload isHushMessage_Payload `protobuf_oneof:"payload"`
 }
 
 func (m *HushMessage) Reset()      { *m = HushMessage{} }
 func (*HushMessage) ProtoMessage() {}
 func (*HushMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cad2813fa2bf04bd, []int{1}
+	return fileDescriptor_cad2813fa2bf04bd, []int{2}
 }
 func (m *HushMessage) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -372,33 +631,15 @@ var xxx_messageInfo_HushMessage proto.InternalMessageInfo
 
 type isHushMessage_Payload interface {
 	isHushMessage_Payload()
-	Equal(interface{}) bool
-	VerboseEqual(interface{}) error
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
 
-type HushMessage_DhPubkeyAttestations struct {
-	DhPubkeyAttestations *HushMessage_DHPubkeyAttestations `protobuf:"bytes,1,opt,name=dhPubkeyAttestations,proto3,oneof" json:"dhPubkeyAttestations,omitempty"`
-}
-type HushMessage_ProposeIndividualSession_ struct {
-	ProposeIndividualSession *HushMessage_ProposeIndividualSession `protobuf:"bytes,2,opt,name=proposeIndividualSession,proto3,oneof" json:"proposeIndividualSession,omitempty"`
-}
-type HushMessage_RespondToIndividualSessionProposal_ struct {
-	RespondToIndividualSessionProposal *HushMessage_RespondToIndividualSessionProposal `protobuf:"bytes,3,opt,name=respondToIndividualSessionProposal,proto3,oneof" json:"respondToIndividualSessionProposal,omitempty"`
-}
-type HushMessage_SendIndividualMessage_ struct {
-	SendIndividualMessage *HushMessage_SendIndividualMessage `protobuf:"bytes,4,opt,name=sendIndividualMessage,proto3,oneof" json:"sendIndividualMessage,omitempty"`
-}
-type HushMessage_SendGroupMessage_ struct {
-	SendGroupMessage *HushMessage_SendGroupMessage `protobuf:"bytes,5,opt,name=sendGroupMessage,proto3,oneof" json:"sendGroupMessage,omitempty"`
+type HushMessage_PubkeyBundles_ struct {
+	PubkeyBundles *HushMessage_PubkeyBundles `protobuf:"bytes,1,opt,name=pubkeyBundles,proto3,oneof" json:"pubkeyBundles,omitempty"`
 }
 
-func (*HushMessage_DhPubkeyAttestations) isHushMessage_Payload()                {}
-func (*HushMessage_ProposeIndividualSession_) isHushMessage_Payload()           {}
-func (*HushMessage_RespondToIndividualSessionProposal_) isHushMessage_Payload() {}
-func (*HushMessage_SendIndividualMessage_) isHushMessage_Payload()              {}
-func (*HushMessage_SendGroupMessage_) isHushMessage_Payload()                   {}
+func (*HushMessage_PubkeyBundles_) isHushMessage_Payload() {}
 
 func (m *HushMessage) GetPayload() isHushMessage_Payload {
 	if m != nil {
@@ -407,37 +648,9 @@ func (m *HushMessage) GetPayload() isHushMessage_Payload {
 	return nil
 }
 
-func (m *HushMessage) GetDhPubkeyAttestations() *HushMessage_DHPubkeyAttestations {
-	if x, ok := m.GetPayload().(*HushMessage_DhPubkeyAttestations); ok {
-		return x.DhPubkeyAttestations
-	}
-	return nil
-}
-
-func (m *HushMessage) GetProposeIndividualSession() *HushMessage_ProposeIndividualSession {
-	if x, ok := m.GetPayload().(*HushMessage_ProposeIndividualSession_); ok {
-		return x.ProposeIndividualSession
-	}
-	return nil
-}
-
-func (m *HushMessage) GetRespondToIndividualSessionProposal() *HushMessage_RespondToIndividualSessionProposal {
-	if x, ok := m.GetPayload().(*HushMessage_RespondToIndividualSessionProposal_); ok {
-		return x.RespondToIndividualSessionProposal
-	}
-	return nil
-}
-
-func (m *HushMessage) GetSendIndividualMessage() *HushMessage_SendIndividualMessage {
-	if x, ok := m.GetPayload().(*HushMessage_SendIndividualMessage_); ok {
-		return x.SendIndividualMessage
-	}
-	return nil
-}
-
-func (m *HushMessage) GetSendGroupMessage() *HushMessage_SendGroupMessage {
-	if x, ok := m.GetPayload().(*HushMessage_SendGroupMessage_); ok {
-		return x.SendGroupMessage
+func (m *HushMessage) GetPubkeyBundles() *HushMessage_PubkeyBundles {
+	if x, ok := m.GetPayload().(*HushMessage_PubkeyBundles_); ok {
+		return x.PubkeyBundles
 	}
 	return nil
 }
@@ -445,29 +658,25 @@ func (m *HushMessage) GetSendGroupMessage() *HushMessage_SendGroupMessage {
 // XXX_OneofWrappers is for the internal use of the proto package.
 func (*HushMessage) XXX_OneofWrappers() []interface{} {
 	return []interface{}{
-		(*HushMessage_DhPubkeyAttestations)(nil),
-		(*HushMessage_ProposeIndividualSession_)(nil),
-		(*HushMessage_RespondToIndividualSessionProposal_)(nil),
-		(*HushMessage_SendIndividualMessage_)(nil),
-		(*HushMessage_SendGroupMessage_)(nil),
+		(*HushMessage_PubkeyBundles_)(nil),
 	}
 }
 
-type HushMessage_DHPubkeyAttestations struct {
-	Attestations []pb1.DHPubkeyAttestation `protobuf:"bytes,1,rep,name=attestations,proto3" json:"attestations"`
+type HushMessage_PubkeyBundles struct {
+	Bundles []pb1.PubkeyBundle `protobuf:"bytes,1,rep,name=bundles,proto3" json:"bundles"`
 }
 
-func (m *HushMessage_DHPubkeyAttestations) Reset()      { *m = HushMessage_DHPubkeyAttestations{} }
-func (*HushMessage_DHPubkeyAttestations) ProtoMessage() {}
-func (*HushMessage_DHPubkeyAttestations) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cad2813fa2bf04bd, []int{1, 0}
+func (m *HushMessage_PubkeyBundles) Reset()      { *m = HushMessage_PubkeyBundles{} }
+func (*HushMessage_PubkeyBundles) ProtoMessage() {}
+func (*HushMessage_PubkeyBundles) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{2, 0}
 }
-func (m *HushMessage_DHPubkeyAttestations) XXX_Unmarshal(b []byte) error {
+func (m *HushMessage_PubkeyBundles) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *HushMessage_DHPubkeyAttestations) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *HushMessage_PubkeyBundles) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_HushMessage_DHPubkeyAttestations.Marshal(b, m, deterministic)
+		return xxx_messageInfo_HushMessage_PubkeyBundles.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -477,40 +686,46 @@ func (m *HushMessage_DHPubkeyAttestations) XXX_Marshal(b []byte, deterministic b
 		return b[:n], nil
 	}
 }
-func (m *HushMessage_DHPubkeyAttestations) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_HushMessage_DHPubkeyAttestations.Merge(m, src)
+func (m *HushMessage_PubkeyBundles) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HushMessage_PubkeyBundles.Merge(m, src)
 }
-func (m *HushMessage_DHPubkeyAttestations) XXX_Size() int {
+func (m *HushMessage_PubkeyBundles) XXX_Size() int {
 	return m.Size()
 }
-func (m *HushMessage_DHPubkeyAttestations) XXX_DiscardUnknown() {
-	xxx_messageInfo_HushMessage_DHPubkeyAttestations.DiscardUnknown(m)
+func (m *HushMessage_PubkeyBundles) XXX_DiscardUnknown() {
+	xxx_messageInfo_HushMessage_PubkeyBundles.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_HushMessage_DHPubkeyAttestations proto.InternalMessageInfo
+var xxx_messageInfo_HushMessage_PubkeyBundles proto.InternalMessageInfo
 
-func (m *HushMessage_DHPubkeyAttestations) GetAttestations() []pb1.DHPubkeyAttestation {
+func (m *HushMessage_PubkeyBundles) GetBundles() []pb1.PubkeyBundle {
 	if m != nil {
-		return m.Attestations
+		return m.Bundles
 	}
 	return nil
 }
 
-type HushMessage_ProposeIndividualSession struct {
-	EncryptedProposal []byte `protobuf:"bytes,1,opt,name=encryptedProposal,proto3" json:"encryptedProposal,omitempty"`
+type TreeMessage struct {
+	// Types that are valid to be assigned to Payload:
+	//	*TreeMessage_Tx
+	//	*TreeMessage_EncryptedTx_
+	//	*TreeMessage_Subscribe_
+	//	*TreeMessage_Ack_
+	//	*TreeMessage_AnnounceP2PStateURI_
+	Payload isTreeMessage_Payload `protobuf_oneof:"payload"`
 }
 
-func (m *HushMessage_ProposeIndividualSession) Reset()      { *m = HushMessage_ProposeIndividualSession{} }
-func (*HushMessage_ProposeIndividualSession) ProtoMessage() {}
-func (*HushMessage_ProposeIndividualSession) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cad2813fa2bf04bd, []int{1, 1}
+func (m *TreeMessage) Reset()      { *m = TreeMessage{} }
+func (*TreeMessage) ProtoMessage() {}
+func (*TreeMessage) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{3}
 }
-func (m *HushMessage_ProposeIndividualSession) XXX_Unmarshal(b []byte) error {
+func (m *TreeMessage) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *HushMessage_ProposeIndividualSession) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *TreeMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_HushMessage_ProposeIndividualSession.Marshal(b, m, deterministic)
+		return xxx_messageInfo_TreeMessage.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -520,42 +735,114 @@ func (m *HushMessage_ProposeIndividualSession) XXX_Marshal(b []byte, determinist
 		return b[:n], nil
 	}
 }
-func (m *HushMessage_ProposeIndividualSession) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_HushMessage_ProposeIndividualSession.Merge(m, src)
+func (m *TreeMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TreeMessage.Merge(m, src)
 }
-func (m *HushMessage_ProposeIndividualSession) XXX_Size() int {
+func (m *TreeMessage) XXX_Size() int {
 	return m.Size()
 }
-func (m *HushMessage_ProposeIndividualSession) XXX_DiscardUnknown() {
-	xxx_messageInfo_HushMessage_ProposeIndividualSession.DiscardUnknown(m)
+func (m *TreeMessage) XXX_DiscardUnknown() {
+	xxx_messageInfo_TreeMessage.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_HushMessage_ProposeIndividualSession proto.InternalMessageInfo
+var xxx_messageInfo_TreeMessage proto.InternalMessageInfo
 
-func (m *HushMessage_ProposeIndividualSession) GetEncryptedProposal() []byte {
+type isTreeMessage_Payload interface {
+	isTreeMessage_Payload()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type TreeMessage_Tx struct {
+	Tx *pb2.Tx `protobuf:"bytes,1,opt,name=tx,proto3,oneof" json:"tx,omitempty"`
+}
+type TreeMessage_EncryptedTx_ struct {
+	EncryptedTx *TreeMessage_EncryptedTx `protobuf:"bytes,2,opt,name=encryptedTx,proto3,oneof" json:"encryptedTx,omitempty"`
+}
+type TreeMessage_Subscribe_ struct {
+	Subscribe *TreeMessage_Subscribe `protobuf:"bytes,3,opt,name=subscribe,proto3,oneof" json:"subscribe,omitempty"`
+}
+type TreeMessage_Ack_ struct {
+	Ack *TreeMessage_Ack `protobuf:"bytes,4,opt,name=ack,proto3,oneof" json:"ack,omitempty"`
+}
+type TreeMessage_AnnounceP2PStateURI_ struct {
+	AnnounceP2PStateURI *TreeMessage_AnnounceP2PStateURI `protobuf:"bytes,5,opt,name=announceP2PStateURI,proto3,oneof" json:"announceP2PStateURI,omitempty"`
+}
+
+func (*TreeMessage_Tx) isTreeMessage_Payload()                   {}
+func (*TreeMessage_EncryptedTx_) isTreeMessage_Payload()         {}
+func (*TreeMessage_Subscribe_) isTreeMessage_Payload()           {}
+func (*TreeMessage_Ack_) isTreeMessage_Payload()                 {}
+func (*TreeMessage_AnnounceP2PStateURI_) isTreeMessage_Payload() {}
+
+func (m *TreeMessage) GetPayload() isTreeMessage_Payload {
 	if m != nil {
-		return m.EncryptedProposal
+		return m.Payload
 	}
 	return nil
 }
 
-type HushMessage_RespondToIndividualSessionProposal struct {
-	Response *pb1.IndividualSessionResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
+func (m *TreeMessage) GetTx() *pb2.Tx {
+	if x, ok := m.GetPayload().(*TreeMessage_Tx); ok {
+		return x.Tx
+	}
+	return nil
 }
 
-func (m *HushMessage_RespondToIndividualSessionProposal) Reset() {
-	*m = HushMessage_RespondToIndividualSessionProposal{}
+func (m *TreeMessage) GetEncryptedTx() *TreeMessage_EncryptedTx {
+	if x, ok := m.GetPayload().(*TreeMessage_EncryptedTx_); ok {
+		return x.EncryptedTx
+	}
+	return nil
 }
-func (*HushMessage_RespondToIndividualSessionProposal) ProtoMessage() {}
-func (*HushMessage_RespondToIndividualSessionProposal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cad2813fa2bf04bd, []int{1, 2}
+
+func (m *TreeMessage) GetSubscribe() *TreeMessage_Subscribe {
+	if x, ok := m.GetPayload().(*TreeMessage_Subscribe_); ok {
+		return x.Subscribe
+	}
+	return nil
 }
-func (m *HushMessage_RespondToIndividualSessionProposal) XXX_Unmarshal(b []byte) error {
+
+func (m *TreeMessage) GetAck() *TreeMessage_Ack {
+	if x, ok := m.GetPayload().(*TreeMessage_Ack_); ok {
+		return x.Ack
+	}
+	return nil
+}
+
+func (m *TreeMessage) GetAnnounceP2PStateURI() *TreeMessage_AnnounceP2PStateURI {
+	if x, ok := m.GetPayload().(*TreeMessage_AnnounceP2PStateURI_); ok {
+		return x.AnnounceP2PStateURI
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*TreeMessage) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*TreeMessage_Tx)(nil),
+		(*TreeMessage_EncryptedTx_)(nil),
+		(*TreeMessage_Subscribe_)(nil),
+		(*TreeMessage_Ack_)(nil),
+		(*TreeMessage_AnnounceP2PStateURI_)(nil),
+	}
+}
+
+type TreeMessage_EncryptedTx struct {
+	EncryptedTx pb1.GroupMessage `protobuf:"bytes,1,opt,name=encryptedTx,proto3" json:"encryptedTx"`
+}
+
+func (m *TreeMessage_EncryptedTx) Reset()      { *m = TreeMessage_EncryptedTx{} }
+func (*TreeMessage_EncryptedTx) ProtoMessage() {}
+func (*TreeMessage_EncryptedTx) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{3, 0}
+}
+func (m *TreeMessage_EncryptedTx) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *HushMessage_RespondToIndividualSessionProposal) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *TreeMessage_EncryptedTx) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_HushMessage_RespondToIndividualSessionProposal.Marshal(b, m, deterministic)
+		return xxx_messageInfo_TreeMessage_EncryptedTx.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -565,40 +852,40 @@ func (m *HushMessage_RespondToIndividualSessionProposal) XXX_Marshal(b []byte, d
 		return b[:n], nil
 	}
 }
-func (m *HushMessage_RespondToIndividualSessionProposal) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_HushMessage_RespondToIndividualSessionProposal.Merge(m, src)
+func (m *TreeMessage_EncryptedTx) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TreeMessage_EncryptedTx.Merge(m, src)
 }
-func (m *HushMessage_RespondToIndividualSessionProposal) XXX_Size() int {
+func (m *TreeMessage_EncryptedTx) XXX_Size() int {
 	return m.Size()
 }
-func (m *HushMessage_RespondToIndividualSessionProposal) XXX_DiscardUnknown() {
-	xxx_messageInfo_HushMessage_RespondToIndividualSessionProposal.DiscardUnknown(m)
+func (m *TreeMessage_EncryptedTx) XXX_DiscardUnknown() {
+	xxx_messageInfo_TreeMessage_EncryptedTx.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_HushMessage_RespondToIndividualSessionProposal proto.InternalMessageInfo
+var xxx_messageInfo_TreeMessage_EncryptedTx proto.InternalMessageInfo
 
-func (m *HushMessage_RespondToIndividualSessionProposal) GetResponse() *pb1.IndividualSessionResponse {
+func (m *TreeMessage_EncryptedTx) GetEncryptedTx() pb1.GroupMessage {
 	if m != nil {
-		return m.Response
+		return m.EncryptedTx
 	}
-	return nil
+	return pb1.GroupMessage{}
 }
 
-type HushMessage_SendIndividualMessage struct {
-	Message *pb1.IndividualMessage `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+type TreeMessage_Subscribe struct {
+	StateURI string `protobuf:"bytes,1,opt,name=stateURI,proto3" json:"stateURI,omitempty"`
 }
 
-func (m *HushMessage_SendIndividualMessage) Reset()      { *m = HushMessage_SendIndividualMessage{} }
-func (*HushMessage_SendIndividualMessage) ProtoMessage() {}
-func (*HushMessage_SendIndividualMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cad2813fa2bf04bd, []int{1, 3}
+func (m *TreeMessage_Subscribe) Reset()      { *m = TreeMessage_Subscribe{} }
+func (*TreeMessage_Subscribe) ProtoMessage() {}
+func (*TreeMessage_Subscribe) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{3, 1}
 }
-func (m *HushMessage_SendIndividualMessage) XXX_Unmarshal(b []byte) error {
+func (m *TreeMessage_Subscribe) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *HushMessage_SendIndividualMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *TreeMessage_Subscribe) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_HushMessage_SendIndividualMessage.Marshal(b, m, deterministic)
+		return xxx_messageInfo_TreeMessage_Subscribe.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -608,40 +895,43 @@ func (m *HushMessage_SendIndividualMessage) XXX_Marshal(b []byte, deterministic 
 		return b[:n], nil
 	}
 }
-func (m *HushMessage_SendIndividualMessage) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_HushMessage_SendIndividualMessage.Merge(m, src)
+func (m *TreeMessage_Subscribe) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TreeMessage_Subscribe.Merge(m, src)
 }
-func (m *HushMessage_SendIndividualMessage) XXX_Size() int {
+func (m *TreeMessage_Subscribe) XXX_Size() int {
 	return m.Size()
 }
-func (m *HushMessage_SendIndividualMessage) XXX_DiscardUnknown() {
-	xxx_messageInfo_HushMessage_SendIndividualMessage.DiscardUnknown(m)
+func (m *TreeMessage_Subscribe) XXX_DiscardUnknown() {
+	xxx_messageInfo_TreeMessage_Subscribe.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_HushMessage_SendIndividualMessage proto.InternalMessageInfo
+var xxx_messageInfo_TreeMessage_Subscribe proto.InternalMessageInfo
 
-func (m *HushMessage_SendIndividualMessage) GetMessage() *pb1.IndividualMessage {
+func (m *TreeMessage_Subscribe) GetStateURI() string {
 	if m != nil {
-		return m.Message
+		return m.StateURI
 	}
-	return nil
+	return ""
 }
 
-type HushMessage_SendGroupMessage struct {
-	Message *pb1.GroupMessage `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+type TreeMessage_SubscriptionMsg struct {
+	// Types that are valid to be assigned to Payload:
+	//	*TreeMessage_SubscriptionMsg_Tx
+	//	*TreeMessage_SubscriptionMsg_EncryptedTx
+	Payload isTreeMessage_SubscriptionMsg_Payload `protobuf_oneof:"payload"`
 }
 
-func (m *HushMessage_SendGroupMessage) Reset()      { *m = HushMessage_SendGroupMessage{} }
-func (*HushMessage_SendGroupMessage) ProtoMessage() {}
-func (*HushMessage_SendGroupMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cad2813fa2bf04bd, []int{1, 4}
+func (m *TreeMessage_SubscriptionMsg) Reset()      { *m = TreeMessage_SubscriptionMsg{} }
+func (*TreeMessage_SubscriptionMsg) ProtoMessage() {}
+func (*TreeMessage_SubscriptionMsg) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{3, 2}
 }
-func (m *HushMessage_SendGroupMessage) XXX_Unmarshal(b []byte) error {
+func (m *TreeMessage_SubscriptionMsg) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *HushMessage_SendGroupMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *TreeMessage_SubscriptionMsg) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_HushMessage_SendGroupMessage.Marshal(b, m, deterministic)
+		return xxx_messageInfo_TreeMessage_SubscriptionMsg.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -651,1217 +941,437 @@ func (m *HushMessage_SendGroupMessage) XXX_Marshal(b []byte, deterministic bool)
 		return b[:n], nil
 	}
 }
-func (m *HushMessage_SendGroupMessage) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_HushMessage_SendGroupMessage.Merge(m, src)
+func (m *TreeMessage_SubscriptionMsg) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TreeMessage_SubscriptionMsg.Merge(m, src)
 }
-func (m *HushMessage_SendGroupMessage) XXX_Size() int {
+func (m *TreeMessage_SubscriptionMsg) XXX_Size() int {
 	return m.Size()
 }
-func (m *HushMessage_SendGroupMessage) XXX_DiscardUnknown() {
-	xxx_messageInfo_HushMessage_SendGroupMessage.DiscardUnknown(m)
+func (m *TreeMessage_SubscriptionMsg) XXX_DiscardUnknown() {
+	xxx_messageInfo_TreeMessage_SubscriptionMsg.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_HushMessage_SendGroupMessage proto.InternalMessageInfo
+var xxx_messageInfo_TreeMessage_SubscriptionMsg proto.InternalMessageInfo
 
-func (m *HushMessage_SendGroupMessage) GetMessage() *pb1.GroupMessage {
+type isTreeMessage_SubscriptionMsg_Payload interface {
+	isTreeMessage_SubscriptionMsg_Payload()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type TreeMessage_SubscriptionMsg_Tx struct {
+	Tx *pb2.Tx `protobuf:"bytes,1,opt,name=tx,proto3,oneof" json:"tx,omitempty"`
+}
+type TreeMessage_SubscriptionMsg_EncryptedTx struct {
+	EncryptedTx *pb1.GroupMessage `protobuf:"bytes,2,opt,name=encryptedTx,proto3,oneof" json:"encryptedTx,omitempty"`
+}
+
+func (*TreeMessage_SubscriptionMsg_Tx) isTreeMessage_SubscriptionMsg_Payload()          {}
+func (*TreeMessage_SubscriptionMsg_EncryptedTx) isTreeMessage_SubscriptionMsg_Payload() {}
+
+func (m *TreeMessage_SubscriptionMsg) GetPayload() isTreeMessage_SubscriptionMsg_Payload {
 	if m != nil {
-		return m.Message
+		return m.Payload
 	}
 	return nil
 }
+
+func (m *TreeMessage_SubscriptionMsg) GetTx() *pb2.Tx {
+	if x, ok := m.GetPayload().(*TreeMessage_SubscriptionMsg_Tx); ok {
+		return x.Tx
+	}
+	return nil
+}
+
+func (m *TreeMessage_SubscriptionMsg) GetEncryptedTx() *pb1.GroupMessage {
+	if x, ok := m.GetPayload().(*TreeMessage_SubscriptionMsg_EncryptedTx); ok {
+		return x.EncryptedTx
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*TreeMessage_SubscriptionMsg) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*TreeMessage_SubscriptionMsg_Tx)(nil),
+		(*TreeMessage_SubscriptionMsg_EncryptedTx)(nil),
+	}
+}
+
+type TreeMessage_Ack struct {
+	StateURI string                    `protobuf:"bytes,1,opt,name=stateURI,proto3" json:"stateURI,omitempty"`
+	TxID     redwood_dev_state.Version `protobuf:"bytes,2,opt,name=txID,proto3,customtype=redwood.dev/state.Version" json:"txID"`
+}
+
+func (m *TreeMessage_Ack) Reset()      { *m = TreeMessage_Ack{} }
+func (*TreeMessage_Ack) ProtoMessage() {}
+func (*TreeMessage_Ack) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{3, 3}
+}
+func (m *TreeMessage_Ack) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TreeMessage_Ack) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_TreeMessage_Ack.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *TreeMessage_Ack) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TreeMessage_Ack.Merge(m, src)
+}
+func (m *TreeMessage_Ack) XXX_Size() int {
+	return m.Size()
+}
+func (m *TreeMessage_Ack) XXX_DiscardUnknown() {
+	xxx_messageInfo_TreeMessage_Ack.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TreeMessage_Ack proto.InternalMessageInfo
+
+func (m *TreeMessage_Ack) GetStateURI() string {
+	if m != nil {
+		return m.StateURI
+	}
+	return ""
+}
+
+type TreeMessage_AnnounceP2PStateURI struct {
+	StateURI string `protobuf:"bytes,1,opt,name=stateURI,proto3" json:"stateURI,omitempty"`
+}
+
+func (m *TreeMessage_AnnounceP2PStateURI) Reset()      { *m = TreeMessage_AnnounceP2PStateURI{} }
+func (*TreeMessage_AnnounceP2PStateURI) ProtoMessage() {}
+func (*TreeMessage_AnnounceP2PStateURI) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{3, 4}
+}
+func (m *TreeMessage_AnnounceP2PStateURI) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TreeMessage_AnnounceP2PStateURI) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_TreeMessage_AnnounceP2PStateURI.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *TreeMessage_AnnounceP2PStateURI) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TreeMessage_AnnounceP2PStateURI.Merge(m, src)
+}
+func (m *TreeMessage_AnnounceP2PStateURI) XXX_Size() int {
+	return m.Size()
+}
+func (m *TreeMessage_AnnounceP2PStateURI) XXX_DiscardUnknown() {
+	xxx_messageInfo_TreeMessage_AnnounceP2PStateURI.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TreeMessage_AnnounceP2PStateURI proto.InternalMessageInfo
+
+func (m *TreeMessage_AnnounceP2PStateURI) GetStateURI() string {
+	if m != nil {
+		return m.StateURI
+	}
+	return ""
+}
+
+type PeerMessage struct {
+	// Types that are valid to be assigned to Payload:
+	//	*PeerMessage_AnnouncePeers_
+	Payload isPeerMessage_Payload `protobuf_oneof:"payload"`
+}
+
+func (m *PeerMessage) Reset()      { *m = PeerMessage{} }
+func (*PeerMessage) ProtoMessage() {}
+func (*PeerMessage) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{4}
+}
+func (m *PeerMessage) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PeerMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PeerMessage.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PeerMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PeerMessage.Merge(m, src)
+}
+func (m *PeerMessage) XXX_Size() int {
+	return m.Size()
+}
+func (m *PeerMessage) XXX_DiscardUnknown() {
+	xxx_messageInfo_PeerMessage.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PeerMessage proto.InternalMessageInfo
+
+type isPeerMessage_Payload interface {
+	isPeerMessage_Payload()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type PeerMessage_AnnouncePeers_ struct {
+	AnnouncePeers *PeerMessage_AnnouncePeers `protobuf:"bytes,1,opt,name=announcePeers,proto3,oneof" json:"announcePeers,omitempty"`
+}
+
+func (*PeerMessage_AnnouncePeers_) isPeerMessage_Payload() {}
+
+func (m *PeerMessage) GetPayload() isPeerMessage_Payload {
+	if m != nil {
+		return m.Payload
+	}
+	return nil
+}
+
+func (m *PeerMessage) GetAnnouncePeers() *PeerMessage_AnnouncePeers {
+	if x, ok := m.GetPayload().(*PeerMessage_AnnouncePeers_); ok {
+		return x.AnnouncePeers
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*PeerMessage) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*PeerMessage_AnnouncePeers_)(nil),
+	}
+}
+
+type PeerMessage_AnnouncePeers struct {
+	DialInfos []redwood_dev_swarm.PeerDialInfo `protobuf:"bytes,1,rep,name=dialInfos,proto3,customtype=redwood.dev/swarm.PeerDialInfo" json:"dialInfos,omitempty"`
+}
+
+func (m *PeerMessage_AnnouncePeers) Reset()      { *m = PeerMessage_AnnouncePeers{} }
+func (*PeerMessage_AnnouncePeers) ProtoMessage() {}
+func (*PeerMessage_AnnouncePeers) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cad2813fa2bf04bd, []int{4, 0}
+}
+func (m *PeerMessage_AnnouncePeers) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PeerMessage_AnnouncePeers) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PeerMessage_AnnouncePeers.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PeerMessage_AnnouncePeers) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PeerMessage_AnnouncePeers.Merge(m, src)
+}
+func (m *PeerMessage_AnnouncePeers) XXX_Size() int {
+	return m.Size()
+}
+func (m *PeerMessage_AnnouncePeers) XXX_DiscardUnknown() {
+	xxx_messageInfo_PeerMessage_AnnouncePeers.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PeerMessage_AnnouncePeers proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterType((*AuthMessage)(nil), "Redwood.swarm.libp2p.AuthMessage")
+	proto.RegisterType((*AuthMessage_ChallengeRequest)(nil), "Redwood.swarm.libp2p.AuthMessage.ChallengeRequest")
+	proto.RegisterType((*AuthMessage_Challenge)(nil), "Redwood.swarm.libp2p.AuthMessage.Challenge")
+	proto.RegisterType((*AuthMessage_Signatures)(nil), "Redwood.swarm.libp2p.AuthMessage.Signatures")
+	proto.RegisterType((*AuthMessage_Ucan)(nil), "Redwood.swarm.libp2p.AuthMessage.Ucan")
 	proto.RegisterType((*BlobMessage)(nil), "Redwood.swarm.libp2p.BlobMessage")
 	proto.RegisterType((*BlobMessage_FetchManifest)(nil), "Redwood.swarm.libp2p.BlobMessage.FetchManifest")
 	proto.RegisterType((*BlobMessage_SendManifest)(nil), "Redwood.swarm.libp2p.BlobMessage.SendManifest")
 	proto.RegisterType((*BlobMessage_FetchChunk)(nil), "Redwood.swarm.libp2p.BlobMessage.FetchChunk")
 	proto.RegisterType((*BlobMessage_SendChunk)(nil), "Redwood.swarm.libp2p.BlobMessage.SendChunk")
 	proto.RegisterType((*HushMessage)(nil), "Redwood.swarm.libp2p.HushMessage")
-	proto.RegisterType((*HushMessage_DHPubkeyAttestations)(nil), "Redwood.swarm.libp2p.HushMessage.DHPubkeyAttestations")
-	proto.RegisterType((*HushMessage_ProposeIndividualSession)(nil), "Redwood.swarm.libp2p.HushMessage.ProposeIndividualSession")
-	proto.RegisterType((*HushMessage_RespondToIndividualSessionProposal)(nil), "Redwood.swarm.libp2p.HushMessage.RespondToIndividualSessionProposal")
-	proto.RegisterType((*HushMessage_SendIndividualMessage)(nil), "Redwood.swarm.libp2p.HushMessage.SendIndividualMessage")
-	proto.RegisterType((*HushMessage_SendGroupMessage)(nil), "Redwood.swarm.libp2p.HushMessage.SendGroupMessage")
+	proto.RegisterType((*HushMessage_PubkeyBundles)(nil), "Redwood.swarm.libp2p.HushMessage.PubkeyBundles")
+	proto.RegisterType((*TreeMessage)(nil), "Redwood.swarm.libp2p.TreeMessage")
+	proto.RegisterType((*TreeMessage_EncryptedTx)(nil), "Redwood.swarm.libp2p.TreeMessage.EncryptedTx")
+	proto.RegisterType((*TreeMessage_Subscribe)(nil), "Redwood.swarm.libp2p.TreeMessage.Subscribe")
+	proto.RegisterType((*TreeMessage_SubscriptionMsg)(nil), "Redwood.swarm.libp2p.TreeMessage.SubscriptionMsg")
+	proto.RegisterType((*TreeMessage_Ack)(nil), "Redwood.swarm.libp2p.TreeMessage.Ack")
+	proto.RegisterType((*TreeMessage_AnnounceP2PStateURI)(nil), "Redwood.swarm.libp2p.TreeMessage.AnnounceP2PStateURI")
+	proto.RegisterType((*PeerMessage)(nil), "Redwood.swarm.libp2p.PeerMessage")
+	proto.RegisterType((*PeerMessage_AnnouncePeers)(nil), "Redwood.swarm.libp2p.PeerMessage.AnnouncePeers")
 }
 
 func init() { proto.RegisterFile("libp2p.proto", fileDescriptor_cad2813fa2bf04bd) }
 
 var fileDescriptor_cad2813fa2bf04bd = []byte{
-	// 746 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x95, 0xcf, 0x4e, 0xeb, 0x46,
-	0x14, 0xc6, 0xc7, 0x25, 0x84, 0x70, 0x08, 0x15, 0x1d, 0x05, 0x14, 0xb9, 0xed, 0x50, 0x45, 0xaa,
-	0x54, 0x51, 0xea, 0x48, 0x41, 0x6a, 0x69, 0x37, 0x15, 0x69, 0xd4, 0x3a, 0xaa, 0x40, 0x68, 0x82,
-	0x5a, 0xa9, 0x52, 0x25, 0xec, 0x78, 0x88, 0x2d, 0x12, 0x8f, 0x95, 0xb1, 0xf9, 0xb3, 0xeb, 0x23,
-	0x74, 0xd5, 0x67, 0xe8, 0x23, 0xdc, 0xe5, 0x5d, 0xb2, 0xcc, 0x92, 0x15, 0x22, 0x66, 0x73, 0x97,
-	0x2c, 0x59, 0x5e, 0x79, 0xec, 0x18, 0x87, 0x38, 0x4a, 0x56, 0xce, 0xf8, 0x9c, 0xef, 0x77, 0x8e,
-	0xe7, 0x3b, 0x33, 0x81, 0x72, 0xdf, 0x31, 0xbd, 0x86, 0xa7, 0x79, 0x43, 0xee, 0x73, 0x5c, 0xa1,
-	0xcc, 0xba, 0xe6, 0xdc, 0xd2, 0xc4, 0xb5, 0x31, 0x1c, 0x68, 0x71, 0x4c, 0xfd, 0xae, 0xe7, 0xf8,
-	0x76, 0x60, 0x6a, 0x5d, 0x3e, 0xa8, 0xf7, 0x78, 0x8f, 0xd7, 0x65, 0xb2, 0x19, 0x5c, 0xc8, 0x95,
-	0x5c, 0xc8, 0x5f, 0x31, 0x44, 0xc5, 0x66, 0x9f, 0x9b, 0x75, 0xcf, 0xac, 0x47, 0xcf, 0xe4, 0xdd,
-	0x97, 0x12, 0x18, 0x0b, 0xed, 0x40, 0xd8, 0x51, 0x38, 0x7a, 0xc6, 0xe1, 0xda, 0x4b, 0x01, 0x36,
-	0x9a, 0x7d, 0x6e, 0x1e, 0x33, 0x21, 0x8c, 0x1e, 0xc3, 0x7f, 0xc2, 0xe6, 0x05, 0xf3, 0xbb, 0xf6,
-	0xb1, 0xe1, 0x3a, 0x17, 0x4c, 0xf8, 0x55, 0xe5, 0x2b, 0xe5, 0x9b, 0x8d, 0x46, 0x5d, 0xcb, 0xeb,
-	0x4f, 0xcb, 0x28, 0xb5, 0x5f, 0xb3, 0x32, 0x1d, 0xd1, 0x69, 0x0e, 0x3e, 0x83, 0xb2, 0x60, 0xae,
-	0x95, 0x72, 0x3f, 0x91, 0x5c, 0x6d, 0x31, 0xb7, 0x93, 0x51, 0xe9, 0x88, 0x4e, 0x51, 0xf0, 0x09,
-	0x80, 0x2c, 0xf3, 0x8b, 0x1d, 0xb8, 0x97, 0xd5, 0x15, 0xc9, 0xdc, 0x5f, 0xb2, 0x57, 0xa9, 0xd1,
-	0x11, 0xcd, 0x10, 0xf0, 0xef, 0xb0, 0x1e, 0xf1, 0x63, 0x5c, 0x41, 0xe2, 0xbe, 0x5d, 0xae, 0xc5,
-	0x09, 0xed, 0x55, 0xaf, 0xb6, 0x61, 0x73, 0x6a, 0x53, 0xf0, 0x21, 0x14, 0x23, 0x67, 0xda, 0xad,
-	0x64, 0x57, 0xb7, 0x52, 0xb4, 0x34, 0xac, 0xdd, 0x6a, 0x7e, 0x7a, 0xf7, 0xb0, 0x8b, 0xc2, 0x87,
-	0xdd, 0x62, 0x53, 0xe6, 0xd1, 0x24, 0x5f, 0x3d, 0x87, 0x72, 0x76, 0x1f, 0xf0, 0x21, 0x94, 0x06,
-	0xd3, 0x0e, 0xed, 0x4c, 0xb3, 0x26, 0x99, 0xcd, 0x42, 0x44, 0xa4, 0x69, 0x36, 0xde, 0x81, 0x22,
-	0xbb, 0x71, 0x84, 0x2f, 0xa4, 0x03, 0x25, 0x9a, 0xac, 0xd4, 0x3d, 0x80, 0xd7, 0x5d, 0xc1, 0x5f,
-	0x40, 0x41, 0xd8, 0xc6, 0x81, 0x64, 0x97, 0x9b, 0xa5, 0xf0, 0x61, 0xb7, 0xd0, 0xd1, 0x8f, 0x0e,
-	0xa8, 0x7c, 0xab, 0xfe, 0x08, 0xeb, 0xe9, 0x27, 0xe3, 0x0a, 0xac, 0x76, 0xe5, 0x76, 0xc9, 0x5c,
-	0x1a, 0x2f, 0xe6, 0x95, 0x69, 0xae, 0xc3, 0x9a, 0x67, 0xdc, 0xf6, 0xb9, 0x61, 0xd5, 0x46, 0x25,
-	0xd8, 0xd0, 0x03, 0x61, 0x4f, 0x46, 0xaf, 0x0f, 0x15, 0xcb, 0x3e, 0x0d, 0xcc, 0x4b, 0x76, 0x7b,
-	0xe4, 0xfb, 0x4c, 0xf8, 0x86, 0xef, 0x70, 0x57, 0x24, 0xdf, 0xf7, 0x7d, 0xbe, 0x0d, 0x19, 0x80,
-	0xd6, 0xd2, 0x67, 0xd5, 0x3a, 0xa2, 0xb9, 0x54, 0x7c, 0x03, 0x55, 0x6f, 0xc8, 0x3d, 0x2e, 0x58,
-	0xdb, 0xb5, 0x9c, 0x2b, 0xc7, 0x0a, 0x8c, 0x7e, 0x87, 0x09, 0xe1, 0x70, 0x37, 0x99, 0xcd, 0x9f,
-	0x16, 0x57, 0x3c, 0x9d, 0x43, 0xd0, 0x11, 0x9d, 0x4b, 0xc7, 0xff, 0x29, 0x50, 0x1b, 0x32, 0xe1,
-	0x71, 0xd7, 0x3a, 0xe3, 0x33, 0xe1, 0x18, 0x69, 0xf4, 0x93, 0x61, 0x6e, 0x2d, 0x6e, 0x82, 0x2e,
-	0x64, 0xe9, 0x88, 0x2e, 0x51, 0x11, 0x73, 0xd8, 0x8e, 0x86, 0xf7, 0x35, 0x21, 0xa9, 0x90, 0x1c,
-	0x84, 0x1f, 0x16, 0xb7, 0xd2, 0xc9, 0x93, 0xeb, 0x88, 0xe6, 0x73, 0xf1, 0x39, 0x6c, 0x45, 0x81,
-	0xdf, 0x86, 0x3c, 0xf0, 0x26, 0xb5, 0x56, 0x65, 0xad, 0xc6, 0x72, 0xb5, 0xb2, 0x4a, 0x1d, 0xd1,
-	0x19, 0x9a, 0xea, 0x42, 0x25, 0x6f, 0x2a, 0xf0, 0x1f, 0x50, 0x36, 0xa6, 0x67, 0x6c, 0x25, 0xe7,
-	0xe6, 0x48, 0x2f, 0xcd, 0xbc, 0xd1, 0x4a, 0x4e, 0xd6, 0x14, 0x47, 0xd5, 0xa1, 0x3a, 0x6f, 0x26,
-	0xf0, 0x3e, 0x7c, 0xc6, 0xdc, 0xee, 0xf0, 0xd6, 0xf3, 0x99, 0x95, 0xba, 0x1c, 0x1f, 0x9a, 0xd9,
-	0x80, 0xea, 0x43, 0x6d, 0xb1, 0xb1, 0xf8, 0x04, 0x4a, 0xb1, 0xb1, 0x82, 0x25, 0xe7, 0xa4, 0x31,
-	0xf7, 0x1b, 0x66, 0x28, 0x34, 0x51, 0xd2, 0x94, 0xa1, 0xfe, 0x0d, 0xdb, 0xb9, 0x1e, 0xe2, 0x16,
-	0xac, 0x0d, 0x12, 0x87, 0xe2, 0x3a, 0x7b, 0x4b, 0xd4, 0x49, 0xc4, 0x74, 0x22, 0x55, 0x3b, 0xb0,
-	0xf5, 0xd6, 0x36, 0xfc, 0xf3, 0x5b, 0xf2, 0xd7, 0x73, 0xc9, 0x59, 0x5d, 0x0a, 0xcd, 0x5c, 0x29,
-	0x4d, 0x63, 0x34, 0x26, 0xe8, 0x7e, 0x4c, 0xd0, 0xe3, 0x98, 0x28, 0xcf, 0x63, 0xa2, 0xbc, 0x8c,
-	0x89, 0xf2, 0x4f, 0x48, 0x94, 0xff, 0x43, 0xa2, 0xbc, 0x0b, 0x09, 0x7a, 0x1f, 0x12, 0xe5, 0x2e,
-	0x24, 0xca, 0x28, 0x24, 0xca, 0x63, 0x48, 0x94, 0x0f, 0x21, 0x41, 0xcf, 0x21, 0x51, 0xfe, 0x7d,
-	0x22, 0x68, 0xf4, 0x44, 0xd0, 0xfd, 0x13, 0x41, 0x7f, 0x7d, 0x3e, 0x4c, 0xea, 0x5b, 0xec, 0xaa,
-	0x1e, 0xff, 0x7d, 0xc6, 0xf3, 0x57, 0xf7, 0x4c, 0xb3, 0x28, 0xdb, 0x39, 0xf8, 0x18, 0x00, 0x00,
-	0xff, 0xff, 0xfa, 0x5a, 0x97, 0x6b, 0xbf, 0x07, 0x00, 0x00,
+	// 1060 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x95, 0xcf, 0x8f, 0xdb, 0x44,
+	0x14, 0xc7, 0xed, 0xdd, 0x74, 0xbb, 0x79, 0xc9, 0x96, 0xd5, 0xb4, 0xaa, 0x82, 0x29, 0xce, 0xb2,
+	0xa2, 0xb4, 0xa2, 0xd4, 0x11, 0x59, 0x55, 0x6a, 0x25, 0x0e, 0x24, 0xcd, 0x52, 0x47, 0x10, 0x94,
+	0x4e, 0xb6, 0x05, 0x21, 0x0e, 0xb5, 0x9d, 0xd9, 0xc4, 0xda, 0xac, 0x6d, 0xfc, 0x83, 0x66, 0x6f,
+	0xdc, 0xb9, 0xf0, 0x47, 0x70, 0xe0, 0x4f, 0xe0, 0xc8, 0x01, 0xa4, 0x72, 0xdb, 0x63, 0xb5, 0x87,
+	0xa8, 0xf1, 0x5e, 0xe0, 0xd6, 0x63, 0x8f, 0x68, 0xc6, 0xbf, 0xc6, 0x49, 0x48, 0xb6, 0xa7, 0x64,
+	0xc6, 0xef, 0xfb, 0x99, 0x79, 0xef, 0x7d, 0x9f, 0x0d, 0xe5, 0x91, 0xa9, 0x3b, 0x75, 0x47, 0x71,
+	0x5c, 0xdb, 0xb7, 0xd1, 0x35, 0x4c, 0xfa, 0xcf, 0x6d, 0xbb, 0xaf, 0x78, 0xcf, 0x35, 0xf7, 0x58,
+	0x89, 0x9e, 0x49, 0x77, 0x07, 0xa6, 0x3f, 0x0c, 0x74, 0xc5, 0xb0, 0x8f, 0x6b, 0x03, 0x7b, 0x60,
+	0xd7, 0x58, 0xb0, 0x1e, 0x1c, 0xb2, 0x15, 0x5b, 0xb0, 0x7f, 0x11, 0x44, 0x42, 0xfa, 0xc8, 0xd6,
+	0x6b, 0x8e, 0x5e, 0xa3, 0xbf, 0xf1, 0xde, 0xb6, 0xef, 0x12, 0x42, 0xf7, 0xfc, 0x71, 0xbc, 0xf3,
+	0x3e, 0x3b, 0x22, 0x42, 0x0d, 0x03, 0x6f, 0x48, 0x1f, 0xd2, 0xdf, 0xe8, 0xf1, 0xee, 0x5f, 0x97,
+	0xa0, 0xd4, 0x08, 0xfc, 0x61, 0x87, 0x78, 0x9e, 0x36, 0x20, 0xe8, 0x19, 0x6c, 0x1b, 0x43, 0x6d,
+	0x34, 0x22, 0xd6, 0x80, 0x60, 0xf2, 0x43, 0x40, 0x3c, 0xbf, 0x22, 0xee, 0x88, 0xb7, 0x4b, 0xf5,
+	0xba, 0xb2, 0xe8, 0xd2, 0x0a, 0x27, 0x56, 0x1e, 0xce, 0x28, 0x55, 0x01, 0xcf, 0xd1, 0xd0, 0x97,
+	0x50, 0x4c, 0xf7, 0x2a, 0x6b, 0x0c, 0x7d, 0xe7, 0x2d, 0xd0, 0xaa, 0x80, 0x33, 0x3d, 0xfa, 0x1a,
+	0xc0, 0x33, 0x07, 0x96, 0xe6, 0x07, 0x2e, 0xf1, 0x2a, 0xeb, 0x8c, 0xf6, 0xc9, 0x6a, 0x5a, 0x2f,
+	0xd5, 0xa8, 0x02, 0xe6, 0x08, 0xe8, 0x33, 0x28, 0x04, 0x86, 0x66, 0x55, 0x0a, 0x8c, 0xf4, 0xd1,
+	0x6a, 0xd2, 0x13, 0x43, 0xb3, 0x54, 0x01, 0x33, 0x95, 0x84, 0x60, 0x7b, 0xb6, 0x04, 0x12, 0x86,
+	0x62, 0xba, 0x87, 0xf6, 0xf9, 0xdc, 0x69, 0x59, 0xcb, 0xcd, 0x5b, 0x2f, 0x26, 0x55, 0xe1, 0x6c,
+	0x52, 0xad, 0xba, 0xf1, 0x51, 0x7d, 0xf2, 0x63, 0xcd, 0x70, 0x4f, 0x1c, 0xdf, 0xce, 0x92, 0xee,
+	0x78, 0x03, 0x2e, 0x6b, 0xe9, 0x5f, 0x11, 0x20, 0x4b, 0x01, 0x3d, 0x02, 0x48, 0x9f, 0x79, 0x15,
+	0x71, 0x67, 0xfd, 0x6d, 0xb0, 0x9c, 0x14, 0xb5, 0x72, 0xd5, 0x5c, 0x63, 0xa0, 0x0f, 0x63, 0xd0,
+	0x8d, 0x05, 0xa0, 0xf4, 0x0e, 0xb9, 0x1a, 0x7e, 0x05, 0x57, 0x34, 0xef, 0xe4, 0x78, 0xdf, 0x32,
+	0xba, 0x81, 0x7e, 0x44, 0x4e, 0x68, 0x5f, 0x18, 0xe9, 0x6c, 0x52, 0xdd, 0x59, 0x40, 0x69, 0xf0,
+	0xc1, 0x78, 0x46, 0x2b, 0x49, 0x50, 0xa0, 0x35, 0x46, 0x28, 0xee, 0x0c, 0xad, 0x5a, 0x31, 0xaa,
+	0x77, 0xb3, 0x08, 0x97, 0x1d, 0xed, 0x64, 0x64, 0x6b, 0xfd, 0xdd, 0x37, 0x05, 0x28, 0x35, 0x47,
+	0xb6, 0x9e, 0xf8, 0xf8, 0x1b, 0xd8, 0x3a, 0x24, 0xbe, 0x31, 0xec, 0x68, 0x96, 0x79, 0x98, 0x99,
+	0xb8, 0xb6, 0xb8, 0xa3, 0x9c, 0x52, 0xf9, 0x82, 0x97, 0xa9, 0x02, 0xce, 0x73, 0xd0, 0x01, 0x94,
+	0x3d, 0x62, 0xf5, 0x53, 0x6e, 0xe4, 0x60, 0x65, 0x35, 0xb7, 0xc7, 0xa9, 0x54, 0x01, 0xe7, 0x28,
+	0xd4, 0xc7, 0xec, 0x98, 0x87, 0xc3, 0xc0, 0x3a, 0x5a, 0xee, 0xe3, 0xb9, 0xbb, 0x32, 0x0d, 0xf5,
+	0x71, 0x46, 0xa0, 0x43, 0x46, 0xf9, 0x11, 0xae, 0xb0, 0x6c, 0xc8, 0x66, 0xaf, 0x98, 0xd0, 0x32,
+	0xbd, 0xd4, 0x86, 0xad, 0x5c, 0x51, 0xd0, 0x7d, 0xd8, 0xa0, 0xef, 0x9c, 0x76, 0x2b, 0xae, 0xea,
+	0x76, 0x8a, 0x66, 0xaf, 0xa2, 0x76, 0xab, 0x79, 0x85, 0xba, 0x26, 0x9c, 0x54, 0x37, 0x9a, 0x2c,
+	0x0e, 0xc7, 0xf1, 0xd2, 0x33, 0x28, 0xf3, 0x75, 0x40, 0xf7, 0x61, 0xf3, 0x38, 0xdf, 0xa1, 0xeb,
+	0x79, 0x56, 0x12, 0xd9, 0x2c, 0x50, 0x22, 0x4e, 0xa3, 0xd1, 0x75, 0xd8, 0x20, 0x63, 0xd3, 0xf3,
+	0x3d, 0xd6, 0x81, 0x4d, 0x1c, 0xaf, 0xa4, 0x8f, 0x01, 0xb2, 0xaa, 0xa0, 0x1b, 0x50, 0xf0, 0x86,
+	0xda, 0x5e, 0x3c, 0x6b, 0x9b, 0xe1, 0xa4, 0x5a, 0xe8, 0xa9, 0x8d, 0x3d, 0xcc, 0x76, 0xa5, 0x07,
+	0x50, 0x4c, 0x53, 0x46, 0xd7, 0xe0, 0x92, 0xc1, 0xca, 0xc5, 0x62, 0x71, 0xb4, 0xf8, 0xbf, 0x63,
+	0x78, 0xeb, 0xfd, 0x2d, 0x42, 0x49, 0x0d, 0xbc, 0x21, 0x67, 0x3d, 0x87, 0x99, 0xb7, 0x19, 0x58,
+	0xfd, 0x11, 0x9b, 0xc8, 0x25, 0xd6, 0xe3, 0x94, 0x4a, 0x97, 0x97, 0x51, 0xeb, 0xe5, 0x38, 0xd2,
+	0x53, 0xd8, 0xca, 0x45, 0xa0, 0x7d, 0xb8, 0xac, 0xa7, 0x67, 0xac, 0xdf, 0x2e, 0xd5, 0x6f, 0xce,
+	0x9c, 0x91, 0xbe, 0xf5, 0x73, 0xe8, 0xb8, 0x96, 0x89, 0x96, 0xcf, 0xe5, 0xd7, 0x0d, 0x28, 0x1d,
+	0xb8, 0x84, 0x24, 0xb9, 0xec, 0xc2, 0x9a, 0x3f, 0x9e, 0xeb, 0x32, 0xfd, 0xc8, 0x28, 0x07, 0x63,
+	0x55, 0xc0, 0x6b, 0xfe, 0x18, 0x3d, 0x86, 0x12, 0xb1, 0xd8, 0x2c, 0x93, 0xfe, 0xc1, 0x38, 0x1e,
+	0x88, 0xbb, 0x8b, 0xb3, 0xe5, 0xd8, 0xca, 0x7e, 0x26, 0x52, 0x05, 0xcc, 0x33, 0x98, 0x7d, 0x03,
+	0xdd, 0x33, 0x5c, 0x53, 0x27, 0xf1, 0x34, 0xdc, 0x59, 0x0d, 0xec, 0x25, 0x12, 0x66, 0xdf, 0x64,
+	0x81, 0x1e, 0xc0, 0xba, 0x66, 0x24, 0x53, 0x70, 0x73, 0x35, 0xa6, 0x61, 0x50, 0xff, 0x53, 0x0d,
+	0x32, 0xe1, 0xaa, 0x66, 0x59, 0x76, 0x60, 0x19, 0xa4, 0x5b, 0xef, 0xf6, 0x7c, 0xcd, 0x27, 0x4f,
+	0x70, 0xbb, 0x72, 0x89, 0xa1, 0xee, 0x5d, 0x00, 0x35, 0x2f, 0x56, 0x05, 0xbc, 0x88, 0x29, 0x7d,
+	0x0f, 0x25, 0xae, 0x20, 0xa8, 0x93, 0x2f, 0xaa, 0xb8, 0xf0, 0xf2, 0x59, 0x7b, 0x1f, 0xb9, 0x76,
+	0xe0, 0xc4, 0xa7, 0xc6, 0xed, 0xe5, 0xf5, 0xd2, 0x2d, 0x28, 0xa6, 0xd5, 0x41, 0x12, 0x6c, 0x7a,
+	0x49, 0x2a, 0xd1, 0xeb, 0x34, 0x5d, 0x4b, 0x3f, 0x8b, 0xf0, 0x4e, 0x1c, 0xe9, 0xf8, 0xa6, 0x6d,
+	0x75, 0xbc, 0xc1, 0x85, 0x4c, 0xd0, 0x5e, 0x64, 0x82, 0x8b, 0xdd, 0x77, 0xa6, 0xf9, 0x9c, 0x1d,
+	0xa5, 0x6f, 0x61, 0xbd, 0x61, 0x1c, 0x2d, 0xbb, 0x30, 0xba, 0x07, 0x05, 0x7f, 0xdc, 0x6e, 0xb1,
+	0x13, 0xcb, 0xcd, 0x0f, 0xe2, 0xaf, 0xd5, 0xbb, 0xfc, 0x77, 0x86, 0xc5, 0x2a, 0x4f, 0x89, 0xeb,
+	0x99, 0xb6, 0x85, 0x59, 0xb8, 0xf4, 0x29, 0x5c, 0x5d, 0xd0, 0x9c, 0x65, 0x27, 0xf1, 0x63, 0xf2,
+	0xa7, 0x08, 0xa5, 0x2e, 0x21, 0x2e, 0x37, 0xf2, 0x69, 0x4f, 0x09, 0x71, 0x57, 0x8c, 0x3c, 0xa7,
+	0xcc, 0x1c, 0x42, 0x65, 0x74, 0xe4, 0x73, 0x1c, 0xe9, 0x31, 0x6c, 0xe5, 0x22, 0xd0, 0xe7, 0x50,
+	0xec, 0x9b, 0xda, 0xa8, 0x6d, 0x1d, 0xda, 0xc9, 0xa7, 0x7e, 0xf7, 0x6c, 0x52, 0x95, 0x73, 0xf9,
+	0xb2, 0xc3, 0x68, 0x7c, 0x2b, 0x0e, 0xc5, 0x99, 0x88, 0x4b, 0xa3, 0xa9, 0x9d, 0x4e, 0x65, 0xe1,
+	0xe5, 0x54, 0x16, 0x5e, 0x4d, 0x65, 0xe1, 0xf5, 0x54, 0x16, 0xdf, 0x4c, 0x65, 0xf1, 0xa7, 0x50,
+	0x16, 0x7f, 0x0b, 0x65, 0xe1, 0xf7, 0x50, 0x16, 0xfe, 0x08, 0x65, 0xf1, 0x45, 0x28, 0x8b, 0xa7,
+	0xa1, 0x2c, 0xbe, 0x0a, 0x65, 0xf1, 0x9f, 0x50, 0x16, 0x5e, 0x87, 0xb2, 0xf8, 0xcb, 0xb9, 0x2c,
+	0x9c, 0x9e, 0xcb, 0xc2, 0xcb, 0x73, 0x59, 0xf8, 0xee, 0xbd, 0xb9, 0xb3, 0x6b, 0x51, 0xa2, 0x35,
+	0x47, 0xd7, 0x37, 0x58, 0xcf, 0xf7, 0xfe, 0x0b, 0x00, 0x00, 0xff, 0xff, 0x3a, 0x8b, 0x62, 0x91,
+	0x00, 0x0b, 0x00, 0x00,
 }
 
-func (this *BlobMessage) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
+func (this *AuthMessage) GoString() string {
+	if this == nil {
+		return "nil"
 	}
-
-	that1, ok := that.(*BlobMessage)
-	if !ok {
-		that2, ok := that.(BlobMessage)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *BlobMessage")
-		}
+	s := make([]string, 0, 8)
+	s = append(s, "&pb.AuthMessage{")
+	if this.Payload != nil {
+		s = append(s, "Payload: "+fmt.Sprintf("%#v", this.Payload)+",\n")
 	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *BlobMessage but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *BlobMessage but is not nil && this == nil")
-	}
-	if that1.Payload == nil {
-		if this.Payload != nil {
-			return fmt.Errorf("this.Payload != nil && that1.Payload == nil")
-		}
-	} else if this.Payload == nil {
-		return fmt.Errorf("this.Payload == nil && that1.Payload != nil")
-	} else if err := this.Payload.VerboseEqual(that1.Payload); err != nil {
-		return err
-	}
-	return nil
+	s = append(s, "}")
+	return strings.Join(s, "")
 }
-func (this *BlobMessage_FetchManifest_) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
+func (this *AuthMessage_ChallengeRequest_) GoString() string {
+	if this == nil {
+		return "nil"
 	}
-
-	that1, ok := that.(*BlobMessage_FetchManifest_)
-	if !ok {
-		that2, ok := that.(BlobMessage_FetchManifest_)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *BlobMessage_FetchManifest_")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *BlobMessage_FetchManifest_ but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *BlobMessage_FetchManifest_ but is not nil && this == nil")
-	}
-	if !this.FetchManifest.Equal(that1.FetchManifest) {
-		return fmt.Errorf("FetchManifest this(%v) Not Equal that(%v)", this.FetchManifest, that1.FetchManifest)
-	}
-	return nil
+	s := strings.Join([]string{`&pb.AuthMessage_ChallengeRequest_{` +
+		`ChallengeRequest:` + fmt.Sprintf("%#v", this.ChallengeRequest) + `}`}, ", ")
+	return s
 }
-func (this *BlobMessage_SendManifest_) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
+func (this *AuthMessage_Challenge_) GoString() string {
+	if this == nil {
+		return "nil"
 	}
-
-	that1, ok := that.(*BlobMessage_SendManifest_)
-	if !ok {
-		that2, ok := that.(BlobMessage_SendManifest_)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *BlobMessage_SendManifest_")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *BlobMessage_SendManifest_ but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *BlobMessage_SendManifest_ but is not nil && this == nil")
-	}
-	if !this.SendManifest.Equal(that1.SendManifest) {
-		return fmt.Errorf("SendManifest this(%v) Not Equal that(%v)", this.SendManifest, that1.SendManifest)
-	}
-	return nil
+	s := strings.Join([]string{`&pb.AuthMessage_Challenge_{` +
+		`Challenge:` + fmt.Sprintf("%#v", this.Challenge) + `}`}, ", ")
+	return s
 }
-func (this *BlobMessage_FetchChunk_) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
+func (this *AuthMessage_Signatures_) GoString() string {
+	if this == nil {
+		return "nil"
 	}
-
-	that1, ok := that.(*BlobMessage_FetchChunk_)
-	if !ok {
-		that2, ok := that.(BlobMessage_FetchChunk_)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *BlobMessage_FetchChunk_")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *BlobMessage_FetchChunk_ but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *BlobMessage_FetchChunk_ but is not nil && this == nil")
-	}
-	if !this.FetchChunk.Equal(that1.FetchChunk) {
-		return fmt.Errorf("FetchChunk this(%v) Not Equal that(%v)", this.FetchChunk, that1.FetchChunk)
-	}
-	return nil
+	s := strings.Join([]string{`&pb.AuthMessage_Signatures_{` +
+		`Signatures:` + fmt.Sprintf("%#v", this.Signatures) + `}`}, ", ")
+	return s
 }
-func (this *BlobMessage_SendChunk_) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
+func (this *AuthMessage_Ucan_) GoString() string {
+	if this == nil {
+		return "nil"
 	}
-
-	that1, ok := that.(*BlobMessage_SendChunk_)
-	if !ok {
-		that2, ok := that.(BlobMessage_SendChunk_)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *BlobMessage_SendChunk_")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *BlobMessage_SendChunk_ but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *BlobMessage_SendChunk_ but is not nil && this == nil")
-	}
-	if !this.SendChunk.Equal(that1.SendChunk) {
-		return fmt.Errorf("SendChunk this(%v) Not Equal that(%v)", this.SendChunk, that1.SendChunk)
-	}
-	return nil
+	s := strings.Join([]string{`&pb.AuthMessage_Ucan_{` +
+		`Ucan:` + fmt.Sprintf("%#v", this.Ucan) + `}`}, ", ")
+	return s
 }
-func (this *BlobMessage) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
+func (this *AuthMessage_ChallengeRequest) GoString() string {
+	if this == nil {
+		return "nil"
 	}
-
-	that1, ok := that.(*BlobMessage)
-	if !ok {
-		that2, ok := that.(BlobMessage)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if that1.Payload == nil {
-		if this.Payload != nil {
-			return false
-		}
-	} else if this.Payload == nil {
-		return false
-	} else if !this.Payload.Equal(that1.Payload) {
-		return false
-	}
-	return true
+	s := make([]string, 0, 4)
+	s = append(s, "&pb.AuthMessage_ChallengeRequest{")
+	s = append(s, "}")
+	return strings.Join(s, "")
 }
-func (this *BlobMessage_FetchManifest_) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
+func (this *AuthMessage_Challenge) GoString() string {
+	if this == nil {
+		return "nil"
 	}
-
-	that1, ok := that.(*BlobMessage_FetchManifest_)
-	if !ok {
-		that2, ok := that.(BlobMessage_FetchManifest_)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.FetchManifest.Equal(that1.FetchManifest) {
-		return false
-	}
-	return true
+	s := make([]string, 0, 5)
+	s = append(s, "&pb.AuthMessage_Challenge{")
+	s = append(s, "Challenge: "+fmt.Sprintf("%#v", this.Challenge)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
 }
-func (this *BlobMessage_SendManifest_) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
+func (this *AuthMessage_Signatures) GoString() string {
+	if this == nil {
+		return "nil"
 	}
-
-	that1, ok := that.(*BlobMessage_SendManifest_)
-	if !ok {
-		that2, ok := that.(BlobMessage_SendManifest_)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.SendManifest.Equal(that1.SendManifest) {
-		return false
-	}
-	return true
+	s := make([]string, 0, 7)
+	s = append(s, "&pb.AuthMessage_Signatures{")
+	s = append(s, "Challenges: "+fmt.Sprintf("%#v", this.Challenges)+",\n")
+	s = append(s, "Signatures: "+fmt.Sprintf("%#v", this.Signatures)+",\n")
+	s = append(s, "AsymEncPubkeys: "+fmt.Sprintf("%#v", this.AsymEncPubkeys)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
 }
-func (this *BlobMessage_FetchChunk_) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*BlobMessage_FetchChunk_)
-	if !ok {
-		that2, ok := that.(BlobMessage_FetchChunk_)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.FetchChunk.Equal(that1.FetchChunk) {
-		return false
-	}
-	return true
-}
-func (this *BlobMessage_SendChunk_) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*BlobMessage_SendChunk_)
-	if !ok {
-		that2, ok := that.(BlobMessage_SendChunk_)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.SendChunk.Equal(that1.SendChunk) {
-		return false
-	}
-	return true
-}
-func (this *BlobMessage_FetchManifest) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*BlobMessage_FetchManifest)
-	if !ok {
-		that2, ok := that.(BlobMessage_FetchManifest)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *BlobMessage_FetchManifest")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *BlobMessage_FetchManifest but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *BlobMessage_FetchManifest but is not nil && this == nil")
-	}
-	if !this.BlobID.Equal(&that1.BlobID) {
-		return fmt.Errorf("BlobID this(%v) Not Equal that(%v)", this.BlobID, that1.BlobID)
-	}
-	return nil
-}
-func (this *BlobMessage_FetchManifest) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*BlobMessage_FetchManifest)
-	if !ok {
-		that2, ok := that.(BlobMessage_FetchManifest)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.BlobID.Equal(&that1.BlobID) {
-		return false
-	}
-	return true
-}
-func (this *BlobMessage_SendManifest) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*BlobMessage_SendManifest)
-	if !ok {
-		that2, ok := that.(BlobMessage_SendManifest)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *BlobMessage_SendManifest")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *BlobMessage_SendManifest but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *BlobMessage_SendManifest but is not nil && this == nil")
-	}
-	if !this.Manifest.Equal(&that1.Manifest) {
-		return fmt.Errorf("Manifest this(%v) Not Equal that(%v)", this.Manifest, that1.Manifest)
-	}
-	if this.Exists != that1.Exists {
-		return fmt.Errorf("Exists this(%v) Not Equal that(%v)", this.Exists, that1.Exists)
-	}
-	return nil
-}
-func (this *BlobMessage_SendManifest) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*BlobMessage_SendManifest)
-	if !ok {
-		that2, ok := that.(BlobMessage_SendManifest)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.Manifest.Equal(&that1.Manifest) {
-		return false
-	}
-	if this.Exists != that1.Exists {
-		return false
-	}
-	return true
-}
-func (this *BlobMessage_FetchChunk) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*BlobMessage_FetchChunk)
-	if !ok {
-		that2, ok := that.(BlobMessage_FetchChunk)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *BlobMessage_FetchChunk")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *BlobMessage_FetchChunk but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *BlobMessage_FetchChunk but is not nil && this == nil")
-	}
-	if !bytes.Equal(this.SHA3, that1.SHA3) {
-		return fmt.Errorf("SHA3 this(%v) Not Equal that(%v)", this.SHA3, that1.SHA3)
-	}
-	return nil
-}
-func (this *BlobMessage_FetchChunk) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*BlobMessage_FetchChunk)
-	if !ok {
-		that2, ok := that.(BlobMessage_FetchChunk)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !bytes.Equal(this.SHA3, that1.SHA3) {
-		return false
-	}
-	return true
-}
-func (this *BlobMessage_SendChunk) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*BlobMessage_SendChunk)
-	if !ok {
-		that2, ok := that.(BlobMessage_SendChunk)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *BlobMessage_SendChunk")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *BlobMessage_SendChunk but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *BlobMessage_SendChunk but is not nil && this == nil")
-	}
-	if !bytes.Equal(this.Chunk, that1.Chunk) {
-		return fmt.Errorf("Chunk this(%v) Not Equal that(%v)", this.Chunk, that1.Chunk)
-	}
-	if this.Exists != that1.Exists {
-		return fmt.Errorf("Exists this(%v) Not Equal that(%v)", this.Exists, that1.Exists)
-	}
-	return nil
-}
-func (this *BlobMessage_SendChunk) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*BlobMessage_SendChunk)
-	if !ok {
-		that2, ok := that.(BlobMessage_SendChunk)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !bytes.Equal(this.Chunk, that1.Chunk) {
-		return false
-	}
-	if this.Exists != that1.Exists {
-		return false
-	}
-	return true
-}
-func (this *HushMessage) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*HushMessage)
-	if !ok {
-		that2, ok := that.(HushMessage)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *HushMessage")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *HushMessage but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage but is not nil && this == nil")
-	}
-	if that1.Payload == nil {
-		if this.Payload != nil {
-			return fmt.Errorf("this.Payload != nil && that1.Payload == nil")
-		}
-	} else if this.Payload == nil {
-		return fmt.Errorf("this.Payload == nil && that1.Payload != nil")
-	} else if err := this.Payload.VerboseEqual(that1.Payload); err != nil {
-		return err
-	}
-	return nil
-}
-func (this *HushMessage_DhPubkeyAttestations) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*HushMessage_DhPubkeyAttestations)
-	if !ok {
-		that2, ok := that.(HushMessage_DhPubkeyAttestations)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *HushMessage_DhPubkeyAttestations")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *HushMessage_DhPubkeyAttestations but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_DhPubkeyAttestations but is not nil && this == nil")
-	}
-	if !this.DhPubkeyAttestations.Equal(that1.DhPubkeyAttestations) {
-		return fmt.Errorf("DhPubkeyAttestations this(%v) Not Equal that(%v)", this.DhPubkeyAttestations, that1.DhPubkeyAttestations)
-	}
-	return nil
-}
-func (this *HushMessage_ProposeIndividualSession_) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*HushMessage_ProposeIndividualSession_)
-	if !ok {
-		that2, ok := that.(HushMessage_ProposeIndividualSession_)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *HushMessage_ProposeIndividualSession_")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *HushMessage_ProposeIndividualSession_ but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_ProposeIndividualSession_ but is not nil && this == nil")
-	}
-	if !this.ProposeIndividualSession.Equal(that1.ProposeIndividualSession) {
-		return fmt.Errorf("ProposeIndividualSession this(%v) Not Equal that(%v)", this.ProposeIndividualSession, that1.ProposeIndividualSession)
-	}
-	return nil
-}
-func (this *HushMessage_RespondToIndividualSessionProposal_) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*HushMessage_RespondToIndividualSessionProposal_)
-	if !ok {
-		that2, ok := that.(HushMessage_RespondToIndividualSessionProposal_)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *HushMessage_RespondToIndividualSessionProposal_")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSessionProposal_ but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSessionProposal_ but is not nil && this == nil")
-	}
-	if !this.RespondToIndividualSessionProposal.Equal(that1.RespondToIndividualSessionProposal) {
-		return fmt.Errorf("RespondToIndividualSessionProposal this(%v) Not Equal that(%v)", this.RespondToIndividualSessionProposal, that1.RespondToIndividualSessionProposal)
-	}
-	return nil
-}
-func (this *HushMessage_SendIndividualMessage_) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*HushMessage_SendIndividualMessage_)
-	if !ok {
-		that2, ok := that.(HushMessage_SendIndividualMessage_)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *HushMessage_SendIndividualMessage_")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *HushMessage_SendIndividualMessage_ but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_SendIndividualMessage_ but is not nil && this == nil")
-	}
-	if !this.SendIndividualMessage.Equal(that1.SendIndividualMessage) {
-		return fmt.Errorf("SendIndividualMessage this(%v) Not Equal that(%v)", this.SendIndividualMessage, that1.SendIndividualMessage)
-	}
-	return nil
-}
-func (this *HushMessage_SendGroupMessage_) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*HushMessage_SendGroupMessage_)
-	if !ok {
-		that2, ok := that.(HushMessage_SendGroupMessage_)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *HushMessage_SendGroupMessage_")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *HushMessage_SendGroupMessage_ but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_SendGroupMessage_ but is not nil && this == nil")
-	}
-	if !this.SendGroupMessage.Equal(that1.SendGroupMessage) {
-		return fmt.Errorf("SendGroupMessage this(%v) Not Equal that(%v)", this.SendGroupMessage, that1.SendGroupMessage)
-	}
-	return nil
-}
-func (this *HushMessage) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HushMessage)
-	if !ok {
-		that2, ok := that.(HushMessage)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if that1.Payload == nil {
-		if this.Payload != nil {
-			return false
-		}
-	} else if this.Payload == nil {
-		return false
-	} else if !this.Payload.Equal(that1.Payload) {
-		return false
-	}
-	return true
-}
-func (this *HushMessage_DhPubkeyAttestations) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HushMessage_DhPubkeyAttestations)
-	if !ok {
-		that2, ok := that.(HushMessage_DhPubkeyAttestations)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.DhPubkeyAttestations.Equal(that1.DhPubkeyAttestations) {
-		return false
-	}
-	return true
-}
-func (this *HushMessage_ProposeIndividualSession_) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HushMessage_ProposeIndividualSession_)
-	if !ok {
-		that2, ok := that.(HushMessage_ProposeIndividualSession_)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.ProposeIndividualSession.Equal(that1.ProposeIndividualSession) {
-		return false
-	}
-	return true
-}
-func (this *HushMessage_RespondToIndividualSessionProposal_) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HushMessage_RespondToIndividualSessionProposal_)
-	if !ok {
-		that2, ok := that.(HushMessage_RespondToIndividualSessionProposal_)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.RespondToIndividualSessionProposal.Equal(that1.RespondToIndividualSessionProposal) {
-		return false
-	}
-	return true
-}
-func (this *HushMessage_SendIndividualMessage_) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HushMessage_SendIndividualMessage_)
-	if !ok {
-		that2, ok := that.(HushMessage_SendIndividualMessage_)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.SendIndividualMessage.Equal(that1.SendIndividualMessage) {
-		return false
-	}
-	return true
-}
-func (this *HushMessage_SendGroupMessage_) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HushMessage_SendGroupMessage_)
-	if !ok {
-		that2, ok := that.(HushMessage_SendGroupMessage_)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.SendGroupMessage.Equal(that1.SendGroupMessage) {
-		return false
-	}
-	return true
-}
-func (this *HushMessage_DHPubkeyAttestations) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*HushMessage_DHPubkeyAttestations)
-	if !ok {
-		that2, ok := that.(HushMessage_DHPubkeyAttestations)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *HushMessage_DHPubkeyAttestations")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *HushMessage_DHPubkeyAttestations but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_DHPubkeyAttestations but is not nil && this == nil")
-	}
-	if len(this.Attestations) != len(that1.Attestations) {
-		return fmt.Errorf("Attestations this(%v) Not Equal that(%v)", len(this.Attestations), len(that1.Attestations))
-	}
-	for i := range this.Attestations {
-		if !this.Attestations[i].Equal(&that1.Attestations[i]) {
-			return fmt.Errorf("Attestations this[%v](%v) Not Equal that[%v](%v)", i, this.Attestations[i], i, that1.Attestations[i])
-		}
-	}
-	return nil
-}
-func (this *HushMessage_DHPubkeyAttestations) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HushMessage_DHPubkeyAttestations)
-	if !ok {
-		that2, ok := that.(HushMessage_DHPubkeyAttestations)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if len(this.Attestations) != len(that1.Attestations) {
-		return false
-	}
-	for i := range this.Attestations {
-		if !this.Attestations[i].Equal(&that1.Attestations[i]) {
-			return false
-		}
-	}
-	return true
-}
-func (this *HushMessage_ProposeIndividualSession) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*HushMessage_ProposeIndividualSession)
-	if !ok {
-		that2, ok := that.(HushMessage_ProposeIndividualSession)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *HushMessage_ProposeIndividualSession")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *HushMessage_ProposeIndividualSession but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_ProposeIndividualSession but is not nil && this == nil")
-	}
-	if !bytes.Equal(this.EncryptedProposal, that1.EncryptedProposal) {
-		return fmt.Errorf("EncryptedProposal this(%v) Not Equal that(%v)", this.EncryptedProposal, that1.EncryptedProposal)
-	}
-	return nil
-}
-func (this *HushMessage_ProposeIndividualSession) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HushMessage_ProposeIndividualSession)
-	if !ok {
-		that2, ok := that.(HushMessage_ProposeIndividualSession)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !bytes.Equal(this.EncryptedProposal, that1.EncryptedProposal) {
-		return false
-	}
-	return true
-}
-func (this *HushMessage_RespondToIndividualSessionProposal) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*HushMessage_RespondToIndividualSessionProposal)
-	if !ok {
-		that2, ok := that.(HushMessage_RespondToIndividualSessionProposal)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *HushMessage_RespondToIndividualSessionProposal")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSessionProposal but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_RespondToIndividualSessionProposal but is not nil && this == nil")
-	}
-	if !this.Response.Equal(that1.Response) {
-		return fmt.Errorf("Response this(%v) Not Equal that(%v)", this.Response, that1.Response)
-	}
-	return nil
-}
-func (this *HushMessage_RespondToIndividualSessionProposal) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HushMessage_RespondToIndividualSessionProposal)
-	if !ok {
-		that2, ok := that.(HushMessage_RespondToIndividualSessionProposal)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.Response.Equal(that1.Response) {
-		return false
-	}
-	return true
-}
-func (this *HushMessage_SendIndividualMessage) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*HushMessage_SendIndividualMessage)
-	if !ok {
-		that2, ok := that.(HushMessage_SendIndividualMessage)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *HushMessage_SendIndividualMessage")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *HushMessage_SendIndividualMessage but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_SendIndividualMessage but is not nil && this == nil")
-	}
-	if !this.Message.Equal(that1.Message) {
-		return fmt.Errorf("Message this(%v) Not Equal that(%v)", this.Message, that1.Message)
-	}
-	return nil
-}
-func (this *HushMessage_SendIndividualMessage) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HushMessage_SendIndividualMessage)
-	if !ok {
-		that2, ok := that.(HushMessage_SendIndividualMessage)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.Message.Equal(that1.Message) {
-		return false
-	}
-	return true
-}
-func (this *HushMessage_SendGroupMessage) VerboseEqual(that interface{}) error {
-	if that == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that == nil && this != nil")
-	}
-
-	that1, ok := that.(*HushMessage_SendGroupMessage)
-	if !ok {
-		that2, ok := that.(HushMessage_SendGroupMessage)
-		if ok {
-			that1 = &that2
-		} else {
-			return fmt.Errorf("that is not of type *HushMessage_SendGroupMessage")
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return nil
-		}
-		return fmt.Errorf("that is type *HushMessage_SendGroupMessage but is nil && this != nil")
-	} else if this == nil {
-		return fmt.Errorf("that is type *HushMessage_SendGroupMessage but is not nil && this == nil")
-	}
-	if !this.Message.Equal(that1.Message) {
-		return fmt.Errorf("Message this(%v) Not Equal that(%v)", this.Message, that1.Message)
-	}
-	return nil
-}
-func (this *HushMessage_SendGroupMessage) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HushMessage_SendGroupMessage)
-	if !ok {
-		that2, ok := that.(HushMessage_SendGroupMessage)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.Message.Equal(that1.Message) {
-		return false
-	}
-	return true
+func (this *AuthMessage_Ucan) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&pb.AuthMessage_Ucan{")
+	s = append(s, "Ucan: "+fmt.Sprintf("%#v", this.Ucan)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
 }
 func (this *BlobMessage) GoString() string {
 	if this == nil {
@@ -1953,7 +1463,7 @@ func (this *HushMessage) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 9)
+	s := make([]string, 0, 5)
 	s = append(s, "&pb.HushMessage{")
 	if this.Payload != nil {
 		s = append(s, "Payload: "+fmt.Sprintf("%#v", this.Payload)+",\n")
@@ -1961,105 +1471,178 @@ func (this *HushMessage) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *HushMessage_DhPubkeyAttestations) GoString() string {
+func (this *HushMessage_PubkeyBundles_) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&pb.HushMessage_DhPubkeyAttestations{` +
-		`DhPubkeyAttestations:` + fmt.Sprintf("%#v", this.DhPubkeyAttestations) + `}`}, ", ")
+	s := strings.Join([]string{`&pb.HushMessage_PubkeyBundles_{` +
+		`PubkeyBundles:` + fmt.Sprintf("%#v", this.PubkeyBundles) + `}`}, ", ")
 	return s
 }
-func (this *HushMessage_ProposeIndividualSession_) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&pb.HushMessage_ProposeIndividualSession_{` +
-		`ProposeIndividualSession:` + fmt.Sprintf("%#v", this.ProposeIndividualSession) + `}`}, ", ")
-	return s
-}
-func (this *HushMessage_RespondToIndividualSessionProposal_) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&pb.HushMessage_RespondToIndividualSessionProposal_{` +
-		`RespondToIndividualSessionProposal:` + fmt.Sprintf("%#v", this.RespondToIndividualSessionProposal) + `}`}, ", ")
-	return s
-}
-func (this *HushMessage_SendIndividualMessage_) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&pb.HushMessage_SendIndividualMessage_{` +
-		`SendIndividualMessage:` + fmt.Sprintf("%#v", this.SendIndividualMessage) + `}`}, ", ")
-	return s
-}
-func (this *HushMessage_SendGroupMessage_) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&pb.HushMessage_SendGroupMessage_{` +
-		`SendGroupMessage:` + fmt.Sprintf("%#v", this.SendGroupMessage) + `}`}, ", ")
-	return s
-}
-func (this *HushMessage_DHPubkeyAttestations) GoString() string {
+func (this *HushMessage_PubkeyBundles) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 5)
-	s = append(s, "&pb.HushMessage_DHPubkeyAttestations{")
-	if this.Attestations != nil {
-		vs := make([]pb1.DHPubkeyAttestation, len(this.Attestations))
+	s = append(s, "&pb.HushMessage_PubkeyBundles{")
+	if this.Bundles != nil {
+		vs := make([]pb1.PubkeyBundle, len(this.Bundles))
 		for i := range vs {
-			vs[i] = this.Attestations[i]
+			vs[i] = this.Bundles[i]
 		}
-		s = append(s, "Attestations: "+fmt.Sprintf("%#v", vs)+",\n")
+		s = append(s, "Bundles: "+fmt.Sprintf("%#v", vs)+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *HushMessage_ProposeIndividualSession) GoString() string {
+func (this *TreeMessage) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 5)
-	s = append(s, "&pb.HushMessage_ProposeIndividualSession{")
-	s = append(s, "EncryptedProposal: "+fmt.Sprintf("%#v", this.EncryptedProposal)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *HushMessage_RespondToIndividualSessionProposal) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 5)
-	s = append(s, "&pb.HushMessage_RespondToIndividualSessionProposal{")
-	if this.Response != nil {
-		s = append(s, "Response: "+fmt.Sprintf("%#v", this.Response)+",\n")
+	s := make([]string, 0, 9)
+	s = append(s, "&pb.TreeMessage{")
+	if this.Payload != nil {
+		s = append(s, "Payload: "+fmt.Sprintf("%#v", this.Payload)+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *HushMessage_SendIndividualMessage) GoString() string {
+func (this *TreeMessage_Tx) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&pb.TreeMessage_Tx{` +
+		`Tx:` + fmt.Sprintf("%#v", this.Tx) + `}`}, ", ")
+	return s
+}
+func (this *TreeMessage_EncryptedTx_) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&pb.TreeMessage_EncryptedTx_{` +
+		`EncryptedTx:` + fmt.Sprintf("%#v", this.EncryptedTx) + `}`}, ", ")
+	return s
+}
+func (this *TreeMessage_Subscribe_) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&pb.TreeMessage_Subscribe_{` +
+		`Subscribe:` + fmt.Sprintf("%#v", this.Subscribe) + `}`}, ", ")
+	return s
+}
+func (this *TreeMessage_Ack_) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&pb.TreeMessage_Ack_{` +
+		`Ack:` + fmt.Sprintf("%#v", this.Ack) + `}`}, ", ")
+	return s
+}
+func (this *TreeMessage_AnnounceP2PStateURI_) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&pb.TreeMessage_AnnounceP2PStateURI_{` +
+		`AnnounceP2PStateURI:` + fmt.Sprintf("%#v", this.AnnounceP2PStateURI) + `}`}, ", ")
+	return s
+}
+func (this *TreeMessage_EncryptedTx) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 5)
-	s = append(s, "&pb.HushMessage_SendIndividualMessage{")
-	if this.Message != nil {
-		s = append(s, "Message: "+fmt.Sprintf("%#v", this.Message)+",\n")
+	s = append(s, "&pb.TreeMessage_EncryptedTx{")
+	s = append(s, "EncryptedTx: "+strings.Replace(this.EncryptedTx.GoString(), `&`, ``, 1)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *TreeMessage_Subscribe) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&pb.TreeMessage_Subscribe{")
+	s = append(s, "StateURI: "+fmt.Sprintf("%#v", this.StateURI)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *TreeMessage_SubscriptionMsg) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 6)
+	s = append(s, "&pb.TreeMessage_SubscriptionMsg{")
+	if this.Payload != nil {
+		s = append(s, "Payload: "+fmt.Sprintf("%#v", this.Payload)+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *HushMessage_SendGroupMessage) GoString() string {
+func (this *TreeMessage_SubscriptionMsg_Tx) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&pb.TreeMessage_SubscriptionMsg_Tx{` +
+		`Tx:` + fmt.Sprintf("%#v", this.Tx) + `}`}, ", ")
+	return s
+}
+func (this *TreeMessage_SubscriptionMsg_EncryptedTx) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&pb.TreeMessage_SubscriptionMsg_EncryptedTx{` +
+		`EncryptedTx:` + fmt.Sprintf("%#v", this.EncryptedTx) + `}`}, ", ")
+	return s
+}
+func (this *TreeMessage_Ack) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 6)
+	s = append(s, "&pb.TreeMessage_Ack{")
+	s = append(s, "StateURI: "+fmt.Sprintf("%#v", this.StateURI)+",\n")
+	s = append(s, "TxID: "+fmt.Sprintf("%#v", this.TxID)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *TreeMessage_AnnounceP2PStateURI) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 5)
-	s = append(s, "&pb.HushMessage_SendGroupMessage{")
-	if this.Message != nil {
-		s = append(s, "Message: "+fmt.Sprintf("%#v", this.Message)+",\n")
+	s = append(s, "&pb.TreeMessage_AnnounceP2PStateURI{")
+	s = append(s, "StateURI: "+fmt.Sprintf("%#v", this.StateURI)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *PeerMessage) GoString() string {
+	if this == nil {
+		return "nil"
 	}
+	s := make([]string, 0, 5)
+	s = append(s, "&pb.PeerMessage{")
+	if this.Payload != nil {
+		s = append(s, "Payload: "+fmt.Sprintf("%#v", this.Payload)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *PeerMessage_AnnouncePeers_) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&pb.PeerMessage_AnnouncePeers_{` +
+		`AnnouncePeers:` + fmt.Sprintf("%#v", this.AnnouncePeers) + `}`}, ", ")
+	return s
+}
+func (this *PeerMessage_AnnouncePeers) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&pb.PeerMessage_AnnouncePeers{")
+	s = append(s, "DialInfos: "+fmt.Sprintf("%#v", this.DialInfos)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -2071,6 +1654,273 @@ func valueToGoStringLibp2P(v interface{}, typ string) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("func(v %v) *%v { return &v } ( %#v )", typ, typ, pv)
 }
+func (m *AuthMessage) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AuthMessage) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AuthMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Payload != nil {
+		{
+			size := m.Payload.Size()
+			i -= size
+			if _, err := m.Payload.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *AuthMessage_ChallengeRequest_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AuthMessage_ChallengeRequest_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.ChallengeRequest != nil {
+		{
+			size, err := m.ChallengeRequest.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLibp2P(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+func (m *AuthMessage_Challenge_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AuthMessage_Challenge_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Challenge != nil {
+		{
+			size, err := m.Challenge.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLibp2P(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	return len(dAtA) - i, nil
+}
+func (m *AuthMessage_Signatures_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AuthMessage_Signatures_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Signatures != nil {
+		{
+			size, err := m.Signatures.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLibp2P(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	return len(dAtA) - i, nil
+}
+func (m *AuthMessage_Ucan_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AuthMessage_Ucan_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Ucan != nil {
+		{
+			size, err := m.Ucan.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLibp2P(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	return len(dAtA) - i, nil
+}
+func (m *AuthMessage_ChallengeRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AuthMessage_ChallengeRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AuthMessage_ChallengeRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *AuthMessage_Challenge) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AuthMessage_Challenge) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AuthMessage_Challenge) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size := m.Challenge.Size()
+		i -= size
+		if _, err := m.Challenge.MarshalTo(dAtA[i:]); err != nil {
+			return 0, err
+		}
+		i = encodeVarintLibp2P(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *AuthMessage_Signatures) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AuthMessage_Signatures) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AuthMessage_Signatures) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.AsymEncPubkeys) > 0 {
+		for iNdEx := len(m.AsymEncPubkeys) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size := m.AsymEncPubkeys[iNdEx].Size()
+				i -= size
+				if _, err := m.AsymEncPubkeys[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+					return 0, err
+				}
+				i = encodeVarintLibp2P(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if len(m.Signatures) > 0 {
+		for iNdEx := len(m.Signatures) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size := m.Signatures[iNdEx].Size()
+				i -= size
+				if _, err := m.Signatures[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+					return 0, err
+				}
+				i = encodeVarintLibp2P(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if len(m.Challenges) > 0 {
+		for iNdEx := len(m.Challenges) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size := m.Challenges[iNdEx].Size()
+				i -= size
+				if _, err := m.Challenges[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+					return 0, err
+				}
+				i = encodeVarintLibp2P(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *AuthMessage_Ucan) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AuthMessage_Ucan) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AuthMessage_Ucan) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Ucan) > 0 {
+		i -= len(m.Ucan)
+		copy(dAtA[i:], m.Ucan)
+		i = encodeVarintLibp2P(dAtA, i, uint64(len(m.Ucan)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *BlobMessage) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -2365,16 +2215,16 @@ func (m *HushMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *HushMessage_DhPubkeyAttestations) MarshalTo(dAtA []byte) (int, error) {
+func (m *HushMessage_PubkeyBundles_) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HushMessage_DhPubkeyAttestations) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *HushMessage_PubkeyBundles_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
-	if m.DhPubkeyAttestations != nil {
+	if m.PubkeyBundles != nil {
 		{
-			size, err := m.DhPubkeyAttestations.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.PubkeyBundles.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -2386,91 +2236,7 @@ func (m *HushMessage_DhPubkeyAttestations) MarshalToSizedBuffer(dAtA []byte) (in
 	}
 	return len(dAtA) - i, nil
 }
-func (m *HushMessage_ProposeIndividualSession_) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *HushMessage_ProposeIndividualSession_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.ProposeIndividualSession != nil {
-		{
-			size, err := m.ProposeIndividualSession.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintLibp2P(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x12
-	}
-	return len(dAtA) - i, nil
-}
-func (m *HushMessage_RespondToIndividualSessionProposal_) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *HushMessage_RespondToIndividualSessionProposal_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.RespondToIndividualSessionProposal != nil {
-		{
-			size, err := m.RespondToIndividualSessionProposal.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintLibp2P(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x1a
-	}
-	return len(dAtA) - i, nil
-}
-func (m *HushMessage_SendIndividualMessage_) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *HushMessage_SendIndividualMessage_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.SendIndividualMessage != nil {
-		{
-			size, err := m.SendIndividualMessage.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintLibp2P(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x22
-	}
-	return len(dAtA) - i, nil
-}
-func (m *HushMessage_SendGroupMessage_) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *HushMessage_SendGroupMessage_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.SendGroupMessage != nil {
-		{
-			size, err := m.SendGroupMessage.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintLibp2P(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x2a
-	}
-	return len(dAtA) - i, nil
-}
-func (m *HushMessage_DHPubkeyAttestations) Marshal() (dAtA []byte, err error) {
+func (m *HushMessage_PubkeyBundles) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2480,20 +2246,20 @@ func (m *HushMessage_DHPubkeyAttestations) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *HushMessage_DHPubkeyAttestations) MarshalTo(dAtA []byte) (int, error) {
+func (m *HushMessage_PubkeyBundles) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HushMessage_DHPubkeyAttestations) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *HushMessage_PubkeyBundles) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Attestations) > 0 {
-		for iNdEx := len(m.Attestations) - 1; iNdEx >= 0; iNdEx-- {
+	if len(m.Bundles) > 0 {
+		for iNdEx := len(m.Bundles) - 1; iNdEx >= 0; iNdEx-- {
 			{
-				size, err := m.Attestations[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				size, err := m.Bundles[iNdEx].MarshalToSizedBuffer(dAtA[:i])
 				if err != nil {
 					return 0, err
 				}
@@ -2507,7 +2273,7 @@ func (m *HushMessage_DHPubkeyAttestations) MarshalToSizedBuffer(dAtA []byte) (in
 	return len(dAtA) - i, nil
 }
 
-func (m *HushMessage_ProposeIndividualSession) Marshal() (dAtA []byte, err error) {
+func (m *TreeMessage) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2517,49 +2283,38 @@ func (m *HushMessage_ProposeIndividualSession) Marshal() (dAtA []byte, err error
 	return dAtA[:n], nil
 }
 
-func (m *HushMessage_ProposeIndividualSession) MarshalTo(dAtA []byte) (int, error) {
+func (m *TreeMessage) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HushMessage_ProposeIndividualSession) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *TreeMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.EncryptedProposal) > 0 {
-		i -= len(m.EncryptedProposal)
-		copy(dAtA[i:], m.EncryptedProposal)
-		i = encodeVarintLibp2P(dAtA, i, uint64(len(m.EncryptedProposal)))
-		i--
-		dAtA[i] = 0xa
+	if m.Payload != nil {
+		{
+			size := m.Payload.Size()
+			i -= size
+			if _, err := m.Payload.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
 	}
 	return len(dAtA) - i, nil
 }
 
-func (m *HushMessage_RespondToIndividualSessionProposal) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *HushMessage_RespondToIndividualSessionProposal) MarshalTo(dAtA []byte) (int, error) {
+func (m *TreeMessage_Tx) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HushMessage_RespondToIndividualSessionProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *TreeMessage_Tx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.Response != nil {
+	if m.Tx != nil {
 		{
-			size, err := m.Response.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.Tx.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -2571,8 +2326,91 @@ func (m *HushMessage_RespondToIndividualSessionProposal) MarshalToSizedBuffer(dA
 	}
 	return len(dAtA) - i, nil
 }
+func (m *TreeMessage_EncryptedTx_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
 
-func (m *HushMessage_SendIndividualMessage) Marshal() (dAtA []byte, err error) {
+func (m *TreeMessage_EncryptedTx_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.EncryptedTx != nil {
+		{
+			size, err := m.EncryptedTx.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLibp2P(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	return len(dAtA) - i, nil
+}
+func (m *TreeMessage_Subscribe_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TreeMessage_Subscribe_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Subscribe != nil {
+		{
+			size, err := m.Subscribe.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLibp2P(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	return len(dAtA) - i, nil
+}
+func (m *TreeMessage_Ack_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TreeMessage_Ack_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Ack != nil {
+		{
+			size, err := m.Ack.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLibp2P(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	return len(dAtA) - i, nil
+}
+func (m *TreeMessage_AnnounceP2PStateURI_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TreeMessage_AnnounceP2PStateURI_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.AnnounceP2PStateURI != nil {
+		{
+			size, err := m.AnnounceP2PStateURI.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLibp2P(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x2a
+	}
+	return len(dAtA) - i, nil
+}
+func (m *TreeMessage_EncryptedTx) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2582,19 +2420,101 @@ func (m *HushMessage_SendIndividualMessage) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *HushMessage_SendIndividualMessage) MarshalTo(dAtA []byte) (int, error) {
+func (m *TreeMessage_EncryptedTx) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HushMessage_SendIndividualMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *TreeMessage_EncryptedTx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Message != nil {
+	{
+		size, err := m.EncryptedTx.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLibp2P(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *TreeMessage_Subscribe) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TreeMessage_Subscribe) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TreeMessage_Subscribe) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.StateURI) > 0 {
+		i -= len(m.StateURI)
+		copy(dAtA[i:], m.StateURI)
+		i = encodeVarintLibp2P(dAtA, i, uint64(len(m.StateURI)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *TreeMessage_SubscriptionMsg) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TreeMessage_SubscriptionMsg) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TreeMessage_SubscriptionMsg) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Payload != nil {
 		{
-			size, err := m.Message.MarshalToSizedBuffer(dAtA[:i])
+			size := m.Payload.Size()
+			i -= size
+			if _, err := m.Payload.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *TreeMessage_SubscriptionMsg_Tx) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TreeMessage_SubscriptionMsg_Tx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Tx != nil {
+		{
+			size, err := m.Tx.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -2606,8 +2526,28 @@ func (m *HushMessage_SendIndividualMessage) MarshalToSizedBuffer(dAtA []byte) (i
 	}
 	return len(dAtA) - i, nil
 }
+func (m *TreeMessage_SubscriptionMsg_EncryptedTx) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
 
-func (m *HushMessage_SendGroupMessage) Marshal() (dAtA []byte, err error) {
+func (m *TreeMessage_SubscriptionMsg_EncryptedTx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.EncryptedTx != nil {
+		{
+			size, err := m.EncryptedTx.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLibp2P(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	return len(dAtA) - i, nil
+}
+func (m *TreeMessage_Ack) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2617,19 +2557,108 @@ func (m *HushMessage_SendGroupMessage) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *HushMessage_SendGroupMessage) MarshalTo(dAtA []byte) (int, error) {
+func (m *TreeMessage_Ack) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HushMessage_SendGroupMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *TreeMessage_Ack) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Message != nil {
+	{
+		size := m.TxID.Size()
+		i -= size
+		if _, err := m.TxID.MarshalTo(dAtA[i:]); err != nil {
+			return 0, err
+		}
+		i = encodeVarintLibp2P(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	if len(m.StateURI) > 0 {
+		i -= len(m.StateURI)
+		copy(dAtA[i:], m.StateURI)
+		i = encodeVarintLibp2P(dAtA, i, uint64(len(m.StateURI)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *TreeMessage_AnnounceP2PStateURI) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TreeMessage_AnnounceP2PStateURI) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TreeMessage_AnnounceP2PStateURI) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.StateURI) > 0 {
+		i -= len(m.StateURI)
+		copy(dAtA[i:], m.StateURI)
+		i = encodeVarintLibp2P(dAtA, i, uint64(len(m.StateURI)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PeerMessage) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PeerMessage) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PeerMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Payload != nil {
 		{
-			size, err := m.Message.MarshalToSizedBuffer(dAtA[:i])
+			size := m.Payload.Size()
+			i -= size
+			if _, err := m.Payload.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PeerMessage_AnnouncePeers_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PeerMessage_AnnouncePeers_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.AnnouncePeers != nil {
+		{
+			size, err := m.AnnouncePeers.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -2638,6 +2667,42 @@ func (m *HushMessage_SendGroupMessage) MarshalToSizedBuffer(dAtA []byte) (int, e
 		}
 		i--
 		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+func (m *PeerMessage_AnnouncePeers) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PeerMessage_AnnouncePeers) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PeerMessage_AnnouncePeers) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.DialInfos) > 0 {
+		for iNdEx := len(m.DialInfos) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size := m.DialInfos[iNdEx].Size()
+				i -= size
+				if _, err := m.DialInfos[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+					return 0, err
+				}
+				i = encodeVarintLibp2P(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
 	}
 	return len(dAtA) - i, nil
 }
@@ -2653,6 +2718,93 @@ func encodeVarintLibp2P(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+func NewPopulatedAuthMessage(r randyLibp2P, easy bool) *AuthMessage {
+	this := &AuthMessage{}
+	oneofNumber_Payload := []int32{1, 2, 3, 4}[r.Intn(4)]
+	switch oneofNumber_Payload {
+	case 1:
+		this.Payload = NewPopulatedAuthMessage_ChallengeRequest_(r, easy)
+	case 2:
+		this.Payload = NewPopulatedAuthMessage_Challenge_(r, easy)
+	case 3:
+		this.Payload = NewPopulatedAuthMessage_Signatures_(r, easy)
+	case 4:
+		this.Payload = NewPopulatedAuthMessage_Ucan_(r, easy)
+	}
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedAuthMessage_ChallengeRequest_(r randyLibp2P, easy bool) *AuthMessage_ChallengeRequest_ {
+	this := &AuthMessage_ChallengeRequest_{}
+	this.ChallengeRequest = NewPopulatedAuthMessage_ChallengeRequest(r, easy)
+	return this
+}
+func NewPopulatedAuthMessage_Challenge_(r randyLibp2P, easy bool) *AuthMessage_Challenge_ {
+	this := &AuthMessage_Challenge_{}
+	this.Challenge = NewPopulatedAuthMessage_Challenge(r, easy)
+	return this
+}
+func NewPopulatedAuthMessage_Signatures_(r randyLibp2P, easy bool) *AuthMessage_Signatures_ {
+	this := &AuthMessage_Signatures_{}
+	this.Signatures = NewPopulatedAuthMessage_Signatures(r, easy)
+	return this
+}
+func NewPopulatedAuthMessage_Ucan_(r randyLibp2P, easy bool) *AuthMessage_Ucan_ {
+	this := &AuthMessage_Ucan_{}
+	this.Ucan = NewPopulatedAuthMessage_Ucan(r, easy)
+	return this
+}
+func NewPopulatedAuthMessage_ChallengeRequest(r randyLibp2P, easy bool) *AuthMessage_ChallengeRequest {
+	this := &AuthMessage_ChallengeRequest{}
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedAuthMessage_Challenge(r randyLibp2P, easy bool) *AuthMessage_Challenge {
+	this := &AuthMessage_Challenge{}
+	v1 := redwood_dev_crypto.NewPopulatedChallengeMsg(r)
+	this.Challenge = *v1
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedAuthMessage_Signatures(r randyLibp2P, easy bool) *AuthMessage_Signatures {
+	this := &AuthMessage_Signatures{}
+	v2 := r.Intn(10)
+	this.Challenges = make([]redwood_dev_crypto.ChallengeMsg, v2)
+	for i := 0; i < v2; i++ {
+		v3 := redwood_dev_crypto.NewPopulatedChallengeMsg(r)
+		this.Challenges[i] = *v3
+	}
+	v4 := r.Intn(10)
+	this.Signatures = make([]redwood_dev_crypto.Signature, v4)
+	for i := 0; i < v4; i++ {
+		v5 := redwood_dev_crypto.NewPopulatedSignature(r)
+		this.Signatures[i] = *v5
+	}
+	v6 := r.Intn(10)
+	this.AsymEncPubkeys = make([]redwood_dev_crypto.AsymEncPubkey, v6)
+	for i := 0; i < v6; i++ {
+		v7 := redwood_dev_crypto.NewPopulatedAsymEncPubkey(r)
+		this.AsymEncPubkeys[i] = *v7
+	}
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedAuthMessage_Ucan(r randyLibp2P, easy bool) *AuthMessage_Ucan {
+	this := &AuthMessage_Ucan{}
+	this.Ucan = string(randStringLibp2P(r))
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
 func NewPopulatedBlobMessage(r randyLibp2P, easy bool) *BlobMessage {
 	this := &BlobMessage{}
 	oneofNumber_Payload := []int32{1, 2, 3, 4}[r.Intn(4)]
@@ -2693,8 +2845,8 @@ func NewPopulatedBlobMessage_SendChunk_(r randyLibp2P, easy bool) *BlobMessage_S
 }
 func NewPopulatedBlobMessage_FetchManifest(r randyLibp2P, easy bool) *BlobMessage_FetchManifest {
 	this := &BlobMessage_FetchManifest{}
-	v1 := pb.NewPopulatedID(r, easy)
-	this.BlobID = *v1
+	v8 := pb.NewPopulatedID(r, easy)
+	this.BlobID = *v8
 	if !easy && r.Intn(10) != 0 {
 	}
 	return this
@@ -2702,8 +2854,8 @@ func NewPopulatedBlobMessage_FetchManifest(r randyLibp2P, easy bool) *BlobMessag
 
 func NewPopulatedBlobMessage_SendManifest(r randyLibp2P, easy bool) *BlobMessage_SendManifest {
 	this := &BlobMessage_SendManifest{}
-	v2 := pb.NewPopulatedManifest(r, easy)
-	this.Manifest = *v2
+	v9 := pb.NewPopulatedManifest(r, easy)
+	this.Manifest = *v9
 	this.Exists = bool(bool(r.Intn(2) == 0))
 	if !easy && r.Intn(10) != 0 {
 	}
@@ -2712,9 +2864,9 @@ func NewPopulatedBlobMessage_SendManifest(r randyLibp2P, easy bool) *BlobMessage
 
 func NewPopulatedBlobMessage_FetchChunk(r randyLibp2P, easy bool) *BlobMessage_FetchChunk {
 	this := &BlobMessage_FetchChunk{}
-	v3 := r.Intn(100)
-	this.SHA3 = make([]byte, v3)
-	for i := 0; i < v3; i++ {
+	v10 := r.Intn(100)
+	this.SHA3 = make([]byte, v10)
+	for i := 0; i < v10; i++ {
 		this.SHA3[i] = byte(r.Intn(256))
 	}
 	if !easy && r.Intn(10) != 0 {
@@ -2724,9 +2876,9 @@ func NewPopulatedBlobMessage_FetchChunk(r randyLibp2P, easy bool) *BlobMessage_F
 
 func NewPopulatedBlobMessage_SendChunk(r randyLibp2P, easy bool) *BlobMessage_SendChunk {
 	this := &BlobMessage_SendChunk{}
-	v4 := r.Intn(100)
-	this.Chunk = make([]byte, v4)
-	for i := 0; i < v4; i++ {
+	v11 := r.Intn(100)
+	this.Chunk = make([]byte, v11)
+	for i := 0; i < v11; i++ {
 		this.Chunk[i] = byte(r.Intn(256))
 	}
 	this.Exists = bool(bool(r.Intn(2) == 0))
@@ -2737,57 +2889,29 @@ func NewPopulatedBlobMessage_SendChunk(r randyLibp2P, easy bool) *BlobMessage_Se
 
 func NewPopulatedHushMessage(r randyLibp2P, easy bool) *HushMessage {
 	this := &HushMessage{}
-	oneofNumber_Payload := []int32{1, 2, 3, 4, 5}[r.Intn(5)]
+	oneofNumber_Payload := []int32{1}[r.Intn(1)]
 	switch oneofNumber_Payload {
 	case 1:
-		this.Payload = NewPopulatedHushMessage_DhPubkeyAttestations(r, easy)
-	case 2:
-		this.Payload = NewPopulatedHushMessage_ProposeIndividualSession_(r, easy)
-	case 3:
-		this.Payload = NewPopulatedHushMessage_RespondToIndividualSessionProposal_(r, easy)
-	case 4:
-		this.Payload = NewPopulatedHushMessage_SendIndividualMessage_(r, easy)
-	case 5:
-		this.Payload = NewPopulatedHushMessage_SendGroupMessage_(r, easy)
+		this.Payload = NewPopulatedHushMessage_PubkeyBundles_(r, easy)
 	}
 	if !easy && r.Intn(10) != 0 {
 	}
 	return this
 }
 
-func NewPopulatedHushMessage_DhPubkeyAttestations(r randyLibp2P, easy bool) *HushMessage_DhPubkeyAttestations {
-	this := &HushMessage_DhPubkeyAttestations{}
-	this.DhPubkeyAttestations = NewPopulatedHushMessage_DHPubkeyAttestations(r, easy)
+func NewPopulatedHushMessage_PubkeyBundles_(r randyLibp2P, easy bool) *HushMessage_PubkeyBundles_ {
+	this := &HushMessage_PubkeyBundles_{}
+	this.PubkeyBundles = NewPopulatedHushMessage_PubkeyBundles(r, easy)
 	return this
 }
-func NewPopulatedHushMessage_ProposeIndividualSession_(r randyLibp2P, easy bool) *HushMessage_ProposeIndividualSession_ {
-	this := &HushMessage_ProposeIndividualSession_{}
-	this.ProposeIndividualSession = NewPopulatedHushMessage_ProposeIndividualSession(r, easy)
-	return this
-}
-func NewPopulatedHushMessage_RespondToIndividualSessionProposal_(r randyLibp2P, easy bool) *HushMessage_RespondToIndividualSessionProposal_ {
-	this := &HushMessage_RespondToIndividualSessionProposal_{}
-	this.RespondToIndividualSessionProposal = NewPopulatedHushMessage_RespondToIndividualSessionProposal(r, easy)
-	return this
-}
-func NewPopulatedHushMessage_SendIndividualMessage_(r randyLibp2P, easy bool) *HushMessage_SendIndividualMessage_ {
-	this := &HushMessage_SendIndividualMessage_{}
-	this.SendIndividualMessage = NewPopulatedHushMessage_SendIndividualMessage(r, easy)
-	return this
-}
-func NewPopulatedHushMessage_SendGroupMessage_(r randyLibp2P, easy bool) *HushMessage_SendGroupMessage_ {
-	this := &HushMessage_SendGroupMessage_{}
-	this.SendGroupMessage = NewPopulatedHushMessage_SendGroupMessage(r, easy)
-	return this
-}
-func NewPopulatedHushMessage_DHPubkeyAttestations(r randyLibp2P, easy bool) *HushMessage_DHPubkeyAttestations {
-	this := &HushMessage_DHPubkeyAttestations{}
+func NewPopulatedHushMessage_PubkeyBundles(r randyLibp2P, easy bool) *HushMessage_PubkeyBundles {
+	this := &HushMessage_PubkeyBundles{}
 	if r.Intn(5) != 0 {
-		v5 := r.Intn(5)
-		this.Attestations = make([]pb1.DHPubkeyAttestation, v5)
-		for i := 0; i < v5; i++ {
-			v6 := pb1.NewPopulatedDHPubkeyAttestation(r, easy)
-			this.Attestations[i] = *v6
+		v12 := r.Intn(5)
+		this.Bundles = make([]pb1.PubkeyBundle, v12)
+		for i := 0; i < v12; i++ {
+			v13 := pb1.NewPopulatedPubkeyBundle(r, easy)
+			this.Bundles[i] = *v13
 		}
 	}
 	if !easy && r.Intn(10) != 0 {
@@ -2795,42 +2919,134 @@ func NewPopulatedHushMessage_DHPubkeyAttestations(r randyLibp2P, easy bool) *Hus
 	return this
 }
 
-func NewPopulatedHushMessage_ProposeIndividualSession(r randyLibp2P, easy bool) *HushMessage_ProposeIndividualSession {
-	this := &HushMessage_ProposeIndividualSession{}
-	v7 := r.Intn(100)
-	this.EncryptedProposal = make([]byte, v7)
-	for i := 0; i < v7; i++ {
-		this.EncryptedProposal[i] = byte(r.Intn(256))
+func NewPopulatedTreeMessage(r randyLibp2P, easy bool) *TreeMessage {
+	this := &TreeMessage{}
+	oneofNumber_Payload := []int32{1, 2, 3, 4, 5}[r.Intn(5)]
+	switch oneofNumber_Payload {
+	case 1:
+		this.Payload = NewPopulatedTreeMessage_Tx(r, easy)
+	case 2:
+		this.Payload = NewPopulatedTreeMessage_EncryptedTx_(r, easy)
+	case 3:
+		this.Payload = NewPopulatedTreeMessage_Subscribe_(r, easy)
+	case 4:
+		this.Payload = NewPopulatedTreeMessage_Ack_(r, easy)
+	case 5:
+		this.Payload = NewPopulatedTreeMessage_AnnounceP2PStateURI_(r, easy)
 	}
 	if !easy && r.Intn(10) != 0 {
 	}
 	return this
 }
 
-func NewPopulatedHushMessage_RespondToIndividualSessionProposal(r randyLibp2P, easy bool) *HushMessage_RespondToIndividualSessionProposal {
-	this := &HushMessage_RespondToIndividualSessionProposal{}
-	if r.Intn(5) != 0 {
-		this.Response = pb1.NewPopulatedIndividualSessionResponse(r, easy)
+func NewPopulatedTreeMessage_Tx(r randyLibp2P, easy bool) *TreeMessage_Tx {
+	this := &TreeMessage_Tx{}
+	this.Tx = pb2.NewPopulatedTx(r, easy)
+	return this
+}
+func NewPopulatedTreeMessage_EncryptedTx_(r randyLibp2P, easy bool) *TreeMessage_EncryptedTx_ {
+	this := &TreeMessage_EncryptedTx_{}
+	this.EncryptedTx = NewPopulatedTreeMessage_EncryptedTx(r, easy)
+	return this
+}
+func NewPopulatedTreeMessage_Subscribe_(r randyLibp2P, easy bool) *TreeMessage_Subscribe_ {
+	this := &TreeMessage_Subscribe_{}
+	this.Subscribe = NewPopulatedTreeMessage_Subscribe(r, easy)
+	return this
+}
+func NewPopulatedTreeMessage_Ack_(r randyLibp2P, easy bool) *TreeMessage_Ack_ {
+	this := &TreeMessage_Ack_{}
+	this.Ack = NewPopulatedTreeMessage_Ack(r, easy)
+	return this
+}
+func NewPopulatedTreeMessage_AnnounceP2PStateURI_(r randyLibp2P, easy bool) *TreeMessage_AnnounceP2PStateURI_ {
+	this := &TreeMessage_AnnounceP2PStateURI_{}
+	this.AnnounceP2PStateURI = NewPopulatedTreeMessage_AnnounceP2PStateURI(r, easy)
+	return this
+}
+func NewPopulatedTreeMessage_EncryptedTx(r randyLibp2P, easy bool) *TreeMessage_EncryptedTx {
+	this := &TreeMessage_EncryptedTx{}
+	v14 := pb1.NewPopulatedGroupMessage(r, easy)
+	this.EncryptedTx = *v14
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedTreeMessage_Subscribe(r randyLibp2P, easy bool) *TreeMessage_Subscribe {
+	this := &TreeMessage_Subscribe{}
+	this.StateURI = string(randStringLibp2P(r))
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedTreeMessage_SubscriptionMsg(r randyLibp2P, easy bool) *TreeMessage_SubscriptionMsg {
+	this := &TreeMessage_SubscriptionMsg{}
+	oneofNumber_Payload := []int32{1, 2}[r.Intn(2)]
+	switch oneofNumber_Payload {
+	case 1:
+		this.Payload = NewPopulatedTreeMessage_SubscriptionMsg_Tx(r, easy)
+	case 2:
+		this.Payload = NewPopulatedTreeMessage_SubscriptionMsg_EncryptedTx(r, easy)
 	}
 	if !easy && r.Intn(10) != 0 {
 	}
 	return this
 }
 
-func NewPopulatedHushMessage_SendIndividualMessage(r randyLibp2P, easy bool) *HushMessage_SendIndividualMessage {
-	this := &HushMessage_SendIndividualMessage{}
-	if r.Intn(5) != 0 {
-		this.Message = pb1.NewPopulatedIndividualMessage(r, easy)
+func NewPopulatedTreeMessage_SubscriptionMsg_Tx(r randyLibp2P, easy bool) *TreeMessage_SubscriptionMsg_Tx {
+	this := &TreeMessage_SubscriptionMsg_Tx{}
+	this.Tx = pb2.NewPopulatedTx(r, easy)
+	return this
+}
+func NewPopulatedTreeMessage_SubscriptionMsg_EncryptedTx(r randyLibp2P, easy bool) *TreeMessage_SubscriptionMsg_EncryptedTx {
+	this := &TreeMessage_SubscriptionMsg_EncryptedTx{}
+	this.EncryptedTx = pb1.NewPopulatedGroupMessage(r, easy)
+	return this
+}
+func NewPopulatedTreeMessage_Ack(r randyLibp2P, easy bool) *TreeMessage_Ack {
+	this := &TreeMessage_Ack{}
+	this.StateURI = string(randStringLibp2P(r))
+	v15 := redwood_dev_state.NewPopulatedVersion(r)
+	this.TxID = *v15
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedTreeMessage_AnnounceP2PStateURI(r randyLibp2P, easy bool) *TreeMessage_AnnounceP2PStateURI {
+	this := &TreeMessage_AnnounceP2PStateURI{}
+	this.StateURI = string(randStringLibp2P(r))
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedPeerMessage(r randyLibp2P, easy bool) *PeerMessage {
+	this := &PeerMessage{}
+	oneofNumber_Payload := []int32{1}[r.Intn(1)]
+	switch oneofNumber_Payload {
+	case 1:
+		this.Payload = NewPopulatedPeerMessage_AnnouncePeers_(r, easy)
 	}
 	if !easy && r.Intn(10) != 0 {
 	}
 	return this
 }
 
-func NewPopulatedHushMessage_SendGroupMessage(r randyLibp2P, easy bool) *HushMessage_SendGroupMessage {
-	this := &HushMessage_SendGroupMessage{}
-	if r.Intn(5) != 0 {
-		this.Message = pb1.NewPopulatedGroupMessage(r, easy)
+func NewPopulatedPeerMessage_AnnouncePeers_(r randyLibp2P, easy bool) *PeerMessage_AnnouncePeers_ {
+	this := &PeerMessage_AnnouncePeers_{}
+	this.AnnouncePeers = NewPopulatedPeerMessage_AnnouncePeers(r, easy)
+	return this
+}
+func NewPopulatedPeerMessage_AnnouncePeers(r randyLibp2P, easy bool) *PeerMessage_AnnouncePeers {
+	this := &PeerMessage_AnnouncePeers{}
+	v16 := r.Intn(10)
+	this.DialInfos = make([]redwood_dev_swarm.PeerDialInfo, v16)
+	for i := 0; i < v16; i++ {
+		v17 := redwood_dev_swarm.NewPopulatedPeerDialInfo(r)
+		this.DialInfos[i] = *v17
 	}
 	if !easy && r.Intn(10) != 0 {
 	}
@@ -2856,9 +3072,9 @@ func randUTF8RuneLibp2P(r randyLibp2P) rune {
 	return rune(ru + 61)
 }
 func randStringLibp2P(r randyLibp2P) string {
-	v8 := r.Intn(100)
-	tmps := make([]rune, v8)
-	for i := 0; i < v8; i++ {
+	v18 := r.Intn(100)
+	tmps := make([]rune, v18)
+	for i := 0; i < v18; i++ {
 		tmps[i] = randUTF8RuneLibp2P(r)
 	}
 	return string(tmps)
@@ -2880,11 +3096,11 @@ func randFieldLibp2P(dAtA []byte, r randyLibp2P, fieldNumber int, wire int) []by
 	switch wire {
 	case 0:
 		dAtA = encodeVarintPopulateLibp2P(dAtA, uint64(key))
-		v9 := r.Int63()
+		v19 := r.Int63()
 		if r.Intn(2) == 0 {
-			v9 *= -1
+			v19 *= -1
 		}
-		dAtA = encodeVarintPopulateLibp2P(dAtA, uint64(v9))
+		dAtA = encodeVarintPopulateLibp2P(dAtA, uint64(v19))
 	case 1:
 		dAtA = encodeVarintPopulateLibp2P(dAtA, uint64(key))
 		dAtA = append(dAtA, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
@@ -2909,6 +3125,126 @@ func encodeVarintPopulateLibp2P(dAtA []byte, v uint64) []byte {
 	dAtA = append(dAtA, uint8(v))
 	return dAtA
 }
+func (m *AuthMessage) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Payload != nil {
+		n += m.Payload.Size()
+	}
+	return n
+}
+
+func (m *AuthMessage_ChallengeRequest_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.ChallengeRequest != nil {
+		l = m.ChallengeRequest.Size()
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *AuthMessage_Challenge_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Challenge != nil {
+		l = m.Challenge.Size()
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *AuthMessage_Signatures_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Signatures != nil {
+		l = m.Signatures.Size()
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *AuthMessage_Ucan_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Ucan != nil {
+		l = m.Ucan.Size()
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *AuthMessage_ChallengeRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *AuthMessage_Challenge) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.Challenge.Size()
+	n += 1 + l + sovLibp2P(uint64(l))
+	return n
+}
+
+func (m *AuthMessage_Signatures) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Challenges) > 0 {
+		for _, e := range m.Challenges {
+			l = e.Size()
+			n += 1 + l + sovLibp2P(uint64(l))
+		}
+	}
+	if len(m.Signatures) > 0 {
+		for _, e := range m.Signatures {
+			l = e.Size()
+			n += 1 + l + sovLibp2P(uint64(l))
+		}
+	}
+	if len(m.AsymEncPubkeys) > 0 {
+		for _, e := range m.AsymEncPubkeys {
+			l = e.Size()
+			n += 1 + l + sovLibp2P(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *AuthMessage_Ucan) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Ucan)
+	if l > 0 {
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+
 func (m *BlobMessage) Size() (n int) {
 	if m == nil {
 		return 0
@@ -3035,74 +3371,26 @@ func (m *HushMessage) Size() (n int) {
 	return n
 }
 
-func (m *HushMessage_DhPubkeyAttestations) Size() (n int) {
+func (m *HushMessage_PubkeyBundles_) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.DhPubkeyAttestations != nil {
-		l = m.DhPubkeyAttestations.Size()
+	if m.PubkeyBundles != nil {
+		l = m.PubkeyBundles.Size()
 		n += 1 + l + sovLibp2P(uint64(l))
 	}
 	return n
 }
-func (m *HushMessage_ProposeIndividualSession_) Size() (n int) {
+func (m *HushMessage_PubkeyBundles) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.ProposeIndividualSession != nil {
-		l = m.ProposeIndividualSession.Size()
-		n += 1 + l + sovLibp2P(uint64(l))
-	}
-	return n
-}
-func (m *HushMessage_RespondToIndividualSessionProposal_) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.RespondToIndividualSessionProposal != nil {
-		l = m.RespondToIndividualSessionProposal.Size()
-		n += 1 + l + sovLibp2P(uint64(l))
-	}
-	return n
-}
-func (m *HushMessage_SendIndividualMessage_) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.SendIndividualMessage != nil {
-		l = m.SendIndividualMessage.Size()
-		n += 1 + l + sovLibp2P(uint64(l))
-	}
-	return n
-}
-func (m *HushMessage_SendGroupMessage_) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.SendGroupMessage != nil {
-		l = m.SendGroupMessage.Size()
-		n += 1 + l + sovLibp2P(uint64(l))
-	}
-	return n
-}
-func (m *HushMessage_DHPubkeyAttestations) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if len(m.Attestations) > 0 {
-		for _, e := range m.Attestations {
+	if len(m.Bundles) > 0 {
+		for _, e := range m.Bundles {
 			l = e.Size()
 			n += 1 + l + sovLibp2P(uint64(l))
 		}
@@ -3110,54 +3398,201 @@ func (m *HushMessage_DHPubkeyAttestations) Size() (n int) {
 	return n
 }
 
-func (m *HushMessage_ProposeIndividualSession) Size() (n int) {
+func (m *TreeMessage) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	l = len(m.EncryptedProposal)
+	if m.Payload != nil {
+		n += m.Payload.Size()
+	}
+	return n
+}
+
+func (m *TreeMessage_Tx) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Tx != nil {
+		l = m.Tx.Size()
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *TreeMessage_EncryptedTx_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.EncryptedTx != nil {
+		l = m.EncryptedTx.Size()
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *TreeMessage_Subscribe_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Subscribe != nil {
+		l = m.Subscribe.Size()
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *TreeMessage_Ack_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Ack != nil {
+		l = m.Ack.Size()
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *TreeMessage_AnnounceP2PStateURI_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.AnnounceP2PStateURI != nil {
+		l = m.AnnounceP2PStateURI.Size()
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *TreeMessage_EncryptedTx) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.EncryptedTx.Size()
+	n += 1 + l + sovLibp2P(uint64(l))
+	return n
+}
+
+func (m *TreeMessage_Subscribe) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.StateURI)
 	if l > 0 {
 		n += 1 + l + sovLibp2P(uint64(l))
 	}
 	return n
 }
 
-func (m *HushMessage_RespondToIndividualSessionProposal) Size() (n int) {
+func (m *TreeMessage_SubscriptionMsg) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.Response != nil {
-		l = m.Response.Size()
+	if m.Payload != nil {
+		n += m.Payload.Size()
+	}
+	return n
+}
+
+func (m *TreeMessage_SubscriptionMsg_Tx) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Tx != nil {
+		l = m.Tx.Size()
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *TreeMessage_SubscriptionMsg_EncryptedTx) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.EncryptedTx != nil {
+		l = m.EncryptedTx.Size()
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *TreeMessage_Ack) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.StateURI)
+	if l > 0 {
+		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	l = m.TxID.Size()
+	n += 1 + l + sovLibp2P(uint64(l))
+	return n
+}
+
+func (m *TreeMessage_AnnounceP2PStateURI) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.StateURI)
+	if l > 0 {
 		n += 1 + l + sovLibp2P(uint64(l))
 	}
 	return n
 }
 
-func (m *HushMessage_SendIndividualMessage) Size() (n int) {
+func (m *PeerMessage) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.Message != nil {
-		l = m.Message.Size()
-		n += 1 + l + sovLibp2P(uint64(l))
+	if m.Payload != nil {
+		n += m.Payload.Size()
 	}
 	return n
 }
 
-func (m *HushMessage_SendGroupMessage) Size() (n int) {
+func (m *PeerMessage_AnnouncePeers_) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.Message != nil {
-		l = m.Message.Size()
+	if m.AnnouncePeers != nil {
+		l = m.AnnouncePeers.Size()
 		n += 1 + l + sovLibp2P(uint64(l))
+	}
+	return n
+}
+func (m *PeerMessage_AnnouncePeers) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.DialInfos) > 0 {
+		for _, e := range m.DialInfos {
+			l = e.Size()
+			n += 1 + l + sovLibp2P(uint64(l))
+		}
 	}
 	return n
 }
@@ -3167,6 +3602,97 @@ func sovLibp2P(x uint64) (n int) {
 }
 func sozLibp2P(x uint64) (n int) {
 	return sovLibp2P(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (this *AuthMessage) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&AuthMessage{`,
+		`Payload:` + fmt.Sprintf("%v", this.Payload) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *AuthMessage_ChallengeRequest_) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&AuthMessage_ChallengeRequest_{`,
+		`ChallengeRequest:` + strings.Replace(fmt.Sprintf("%v", this.ChallengeRequest), "AuthMessage_ChallengeRequest", "AuthMessage_ChallengeRequest", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *AuthMessage_Challenge_) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&AuthMessage_Challenge_{`,
+		`Challenge:` + strings.Replace(fmt.Sprintf("%v", this.Challenge), "AuthMessage_Challenge", "AuthMessage_Challenge", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *AuthMessage_Signatures_) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&AuthMessage_Signatures_{`,
+		`Signatures:` + strings.Replace(fmt.Sprintf("%v", this.Signatures), "AuthMessage_Signatures", "AuthMessage_Signatures", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *AuthMessage_Ucan_) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&AuthMessage_Ucan_{`,
+		`Ucan:` + strings.Replace(fmt.Sprintf("%v", this.Ucan), "AuthMessage_Ucan", "AuthMessage_Ucan", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *AuthMessage_ChallengeRequest) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&AuthMessage_ChallengeRequest{`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *AuthMessage_Challenge) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&AuthMessage_Challenge{`,
+		`Challenge:` + fmt.Sprintf("%v", this.Challenge) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *AuthMessage_Signatures) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&AuthMessage_Signatures{`,
+		`Challenges:` + fmt.Sprintf("%v", this.Challenges) + `,`,
+		`Signatures:` + fmt.Sprintf("%v", this.Signatures) + `,`,
+		`AsymEncPubkeys:` + fmt.Sprintf("%v", this.AsymEncPubkeys) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *AuthMessage_Ucan) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&AuthMessage_Ucan{`,
+		`Ucan:` + fmt.Sprintf("%v", this.Ucan) + `,`,
+		`}`,
+	}, "")
+	return s
 }
 func (this *BlobMessage) String() string {
 	if this == nil {
@@ -3270,107 +3796,188 @@ func (this *HushMessage) String() string {
 	}, "")
 	return s
 }
-func (this *HushMessage_DhPubkeyAttestations) String() string {
+func (this *HushMessage_PubkeyBundles_) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_DhPubkeyAttestations{`,
-		`DhPubkeyAttestations:` + strings.Replace(fmt.Sprintf("%v", this.DhPubkeyAttestations), "HushMessage_DHPubkeyAttestations", "HushMessage_DHPubkeyAttestations", 1) + `,`,
+	s := strings.Join([]string{`&HushMessage_PubkeyBundles_{`,
+		`PubkeyBundles:` + strings.Replace(fmt.Sprintf("%v", this.PubkeyBundles), "HushMessage_PubkeyBundles", "HushMessage_PubkeyBundles", 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *HushMessage_ProposeIndividualSession_) String() string {
+func (this *HushMessage_PubkeyBundles) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_ProposeIndividualSession_{`,
-		`ProposeIndividualSession:` + strings.Replace(fmt.Sprintf("%v", this.ProposeIndividualSession), "HushMessage_ProposeIndividualSession", "HushMessage_ProposeIndividualSession", 1) + `,`,
+	repeatedStringForBundles := "[]PubkeyBundle{"
+	for _, f := range this.Bundles {
+		repeatedStringForBundles += fmt.Sprintf("%v", f) + ","
+	}
+	repeatedStringForBundles += "}"
+	s := strings.Join([]string{`&HushMessage_PubkeyBundles{`,
+		`Bundles:` + repeatedStringForBundles + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *HushMessage_RespondToIndividualSessionProposal_) String() string {
+func (this *TreeMessage) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_RespondToIndividualSessionProposal_{`,
-		`RespondToIndividualSessionProposal:` + strings.Replace(fmt.Sprintf("%v", this.RespondToIndividualSessionProposal), "HushMessage_RespondToIndividualSessionProposal", "HushMessage_RespondToIndividualSessionProposal", 1) + `,`,
+	s := strings.Join([]string{`&TreeMessage{`,
+		`Payload:` + fmt.Sprintf("%v", this.Payload) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *HushMessage_SendIndividualMessage_) String() string {
+func (this *TreeMessage_Tx) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_SendIndividualMessage_{`,
-		`SendIndividualMessage:` + strings.Replace(fmt.Sprintf("%v", this.SendIndividualMessage), "HushMessage_SendIndividualMessage", "HushMessage_SendIndividualMessage", 1) + `,`,
+	s := strings.Join([]string{`&TreeMessage_Tx{`,
+		`Tx:` + strings.Replace(fmt.Sprintf("%v", this.Tx), "Tx", "pb2.Tx", 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *HushMessage_SendGroupMessage_) String() string {
+func (this *TreeMessage_EncryptedTx_) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_SendGroupMessage_{`,
-		`SendGroupMessage:` + strings.Replace(fmt.Sprintf("%v", this.SendGroupMessage), "HushMessage_SendGroupMessage", "HushMessage_SendGroupMessage", 1) + `,`,
+	s := strings.Join([]string{`&TreeMessage_EncryptedTx_{`,
+		`EncryptedTx:` + strings.Replace(fmt.Sprintf("%v", this.EncryptedTx), "TreeMessage_EncryptedTx", "TreeMessage_EncryptedTx", 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *HushMessage_DHPubkeyAttestations) String() string {
+func (this *TreeMessage_Subscribe_) String() string {
 	if this == nil {
 		return "nil"
 	}
-	repeatedStringForAttestations := "[]DHPubkeyAttestation{"
-	for _, f := range this.Attestations {
-		repeatedStringForAttestations += fmt.Sprintf("%v", f) + ","
-	}
-	repeatedStringForAttestations += "}"
-	s := strings.Join([]string{`&HushMessage_DHPubkeyAttestations{`,
-		`Attestations:` + repeatedStringForAttestations + `,`,
+	s := strings.Join([]string{`&TreeMessage_Subscribe_{`,
+		`Subscribe:` + strings.Replace(fmt.Sprintf("%v", this.Subscribe), "TreeMessage_Subscribe", "TreeMessage_Subscribe", 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *HushMessage_ProposeIndividualSession) String() string {
+func (this *TreeMessage_Ack_) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_ProposeIndividualSession{`,
-		`EncryptedProposal:` + fmt.Sprintf("%v", this.EncryptedProposal) + `,`,
+	s := strings.Join([]string{`&TreeMessage_Ack_{`,
+		`Ack:` + strings.Replace(fmt.Sprintf("%v", this.Ack), "TreeMessage_Ack", "TreeMessage_Ack", 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *HushMessage_RespondToIndividualSessionProposal) String() string {
+func (this *TreeMessage_AnnounceP2PStateURI_) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_RespondToIndividualSessionProposal{`,
-		`Response:` + strings.Replace(fmt.Sprintf("%v", this.Response), "IndividualSessionResponse", "pb1.IndividualSessionResponse", 1) + `,`,
+	s := strings.Join([]string{`&TreeMessage_AnnounceP2PStateURI_{`,
+		`AnnounceP2PStateURI:` + strings.Replace(fmt.Sprintf("%v", this.AnnounceP2PStateURI), "TreeMessage_AnnounceP2PStateURI", "TreeMessage_AnnounceP2PStateURI", 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *HushMessage_SendIndividualMessage) String() string {
+func (this *TreeMessage_EncryptedTx) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_SendIndividualMessage{`,
-		`Message:` + strings.Replace(fmt.Sprintf("%v", this.Message), "IndividualMessage", "pb1.IndividualMessage", 1) + `,`,
+	s := strings.Join([]string{`&TreeMessage_EncryptedTx{`,
+		`EncryptedTx:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.EncryptedTx), "GroupMessage", "pb1.GroupMessage", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *HushMessage_SendGroupMessage) String() string {
+func (this *TreeMessage_Subscribe) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&HushMessage_SendGroupMessage{`,
-		`Message:` + strings.Replace(fmt.Sprintf("%v", this.Message), "GroupMessage", "pb1.GroupMessage", 1) + `,`,
+	s := strings.Join([]string{`&TreeMessage_Subscribe{`,
+		`StateURI:` + fmt.Sprintf("%v", this.StateURI) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *TreeMessage_SubscriptionMsg) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&TreeMessage_SubscriptionMsg{`,
+		`Payload:` + fmt.Sprintf("%v", this.Payload) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *TreeMessage_SubscriptionMsg_Tx) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&TreeMessage_SubscriptionMsg_Tx{`,
+		`Tx:` + strings.Replace(fmt.Sprintf("%v", this.Tx), "Tx", "pb2.Tx", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *TreeMessage_SubscriptionMsg_EncryptedTx) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&TreeMessage_SubscriptionMsg_EncryptedTx{`,
+		`EncryptedTx:` + strings.Replace(fmt.Sprintf("%v", this.EncryptedTx), "GroupMessage", "pb1.GroupMessage", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *TreeMessage_Ack) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&TreeMessage_Ack{`,
+		`StateURI:` + fmt.Sprintf("%v", this.StateURI) + `,`,
+		`TxID:` + fmt.Sprintf("%v", this.TxID) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *TreeMessage_AnnounceP2PStateURI) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&TreeMessage_AnnounceP2PStateURI{`,
+		`StateURI:` + fmt.Sprintf("%v", this.StateURI) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *PeerMessage) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&PeerMessage{`,
+		`Payload:` + fmt.Sprintf("%v", this.Payload) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *PeerMessage_AnnouncePeers_) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&PeerMessage_AnnouncePeers_{`,
+		`AnnouncePeers:` + strings.Replace(fmt.Sprintf("%v", this.AnnouncePeers), "PeerMessage_AnnouncePeers", "PeerMessage_AnnouncePeers", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *PeerMessage_AnnouncePeers) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&PeerMessage_AnnouncePeers{`,
+		`DialInfos:` + fmt.Sprintf("%v", this.DialInfos) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -3382,6 +3989,566 @@ func valueToStringLibp2P(v interface{}) string {
 	}
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("*%v", pv)
+}
+func (m *AuthMessage) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLibp2P
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AuthMessage: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AuthMessage: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChallengeRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &AuthMessage_ChallengeRequest{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Payload = &AuthMessage_ChallengeRequest_{v}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Challenge", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &AuthMessage_Challenge{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Payload = &AuthMessage_Challenge_{v}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Signatures", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &AuthMessage_Signatures{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Payload = &AuthMessage_Signatures_{v}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ucan", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &AuthMessage_Ucan{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Payload = &AuthMessage_Ucan_{v}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLibp2P(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AuthMessage_ChallengeRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLibp2P
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ChallengeRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ChallengeRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLibp2P(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AuthMessage_Challenge) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLibp2P
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Challenge: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Challenge: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Challenge", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Challenge.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLibp2P(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AuthMessage_Signatures) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLibp2P
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Signatures: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Signatures: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Challenges", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var v redwood_dev_crypto.ChallengeMsg
+			m.Challenges = append(m.Challenges, v)
+			if err := m.Challenges[len(m.Challenges)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Signatures", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var v redwood_dev_crypto.Signature
+			m.Signatures = append(m.Signatures, v)
+			if err := m.Signatures[len(m.Signatures)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AsymEncPubkeys", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var v redwood_dev_crypto.AsymEncPubkey
+			m.AsymEncPubkeys = append(m.AsymEncPubkeys, v)
+			if err := m.AsymEncPubkeys[len(m.AsymEncPubkeys)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLibp2P(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AuthMessage_Ucan) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLibp2P
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Ucan: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Ucan: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ucan", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Ucan = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLibp2P(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *BlobMessage) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -3978,7 +5145,7 @@ func (m *HushMessage) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DhPubkeyAttestations", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PubkeyBundles", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4005,15 +5172,184 @@ func (m *HushMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &HushMessage_DHPubkeyAttestations{}
+			v := &HushMessage_PubkeyBundles{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Payload = &HushMessage_DhPubkeyAttestations{v}
+			m.Payload = &HushMessage_PubkeyBundles_{v}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLibp2P(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *HushMessage_PubkeyBundles) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLibp2P
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PubkeyBundles: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PubkeyBundles: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Bundles", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Bundles = append(m.Bundles, pb1.PubkeyBundle{})
+			if err := m.Bundles[len(m.Bundles)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLibp2P(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TreeMessage) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLibp2P
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TreeMessage: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TreeMessage: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Tx", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &pb2.Tx{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Payload = &TreeMessage_Tx{v}
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ProposeIndividualSession", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field EncryptedTx", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4040,15 +5376,15 @@ func (m *HushMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &HushMessage_ProposeIndividualSession{}
+			v := &TreeMessage_EncryptedTx{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Payload = &HushMessage_ProposeIndividualSession_{v}
+			m.Payload = &TreeMessage_EncryptedTx_{v}
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RespondToIndividualSessionProposal", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Subscribe", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4075,15 +5411,15 @@ func (m *HushMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &HushMessage_RespondToIndividualSessionProposal{}
+			v := &TreeMessage_Subscribe{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Payload = &HushMessage_RespondToIndividualSessionProposal_{v}
+			m.Payload = &TreeMessage_Subscribe_{v}
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SendIndividualMessage", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Ack", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4110,15 +5446,15 @@ func (m *HushMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &HushMessage_SendIndividualMessage{}
+			v := &TreeMessage_Ack{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Payload = &HushMessage_SendIndividualMessage_{v}
+			m.Payload = &TreeMessage_Ack_{v}
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SendGroupMessage", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field AnnounceP2PStateURI", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4145,11 +5481,11 @@ func (m *HushMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &HushMessage_SendGroupMessage{}
+			v := &TreeMessage_AnnounceP2PStateURI{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Payload = &HushMessage_SendGroupMessage_{v}
+			m.Payload = &TreeMessage_AnnounceP2PStateURI_{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4172,7 +5508,7 @@ func (m *HushMessage) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *HushMessage_DHPubkeyAttestations) Unmarshal(dAtA []byte) error {
+func (m *TreeMessage_EncryptedTx) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -4195,15 +5531,15 @@ func (m *HushMessage_DHPubkeyAttestations) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: DHPubkeyAttestations: wiretype end group for non-group")
+			return fmt.Errorf("proto: EncryptedTx: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: DHPubkeyAttestations: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: EncryptedTx: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attestations", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field EncryptedTx", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4230,8 +5566,7 @@ func (m *HushMessage_DHPubkeyAttestations) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Attestations = append(m.Attestations, pb1.DHPubkeyAttestation{})
-			if err := m.Attestations[len(m.Attestations)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.EncryptedTx.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4256,7 +5591,7 @@ func (m *HushMessage_DHPubkeyAttestations) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *HushMessage_ProposeIndividualSession) Unmarshal(dAtA []byte) error {
+func (m *TreeMessage_Subscribe) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -4279,15 +5614,249 @@ func (m *HushMessage_ProposeIndividualSession) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: ProposeIndividualSession: wiretype end group for non-group")
+			return fmt.Errorf("proto: Subscribe: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ProposeIndividualSession: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Subscribe: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EncryptedProposal", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field StateURI", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.StateURI = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLibp2P(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TreeMessage_SubscriptionMsg) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLibp2P
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SubscriptionMsg: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SubscriptionMsg: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Tx", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &pb2.Tx{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Payload = &TreeMessage_SubscriptionMsg_Tx{v}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EncryptedTx", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &pb1.GroupMessage{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Payload = &TreeMessage_SubscriptionMsg_EncryptedTx{v}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLibp2P(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TreeMessage_Ack) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLibp2P
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Ack: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Ack: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StateURI", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.StateURI = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TxID", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -4314,9 +5883,8 @@ func (m *HushMessage_ProposeIndividualSession) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.EncryptedProposal = append(m.EncryptedProposal[:0], dAtA[iNdEx:postIndex]...)
-			if m.EncryptedProposal == nil {
-				m.EncryptedProposal = []byte{}
+			if err := m.TxID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		default:
@@ -4340,7 +5908,7 @@ func (m *HushMessage_ProposeIndividualSession) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *HushMessage_RespondToIndividualSessionProposal) Unmarshal(dAtA []byte) error {
+func (m *TreeMessage_AnnounceP2PStateURI) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -4363,15 +5931,97 @@ func (m *HushMessage_RespondToIndividualSessionProposal) Unmarshal(dAtA []byte) 
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: RespondToIndividualSessionProposal: wiretype end group for non-group")
+			return fmt.Errorf("proto: AnnounceP2PStateURI: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RespondToIndividualSessionProposal: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: AnnounceP2PStateURI: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Response", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field StateURI", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLibp2P
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.StateURI = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLibp2P(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLibp2P
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PeerMessage) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLibp2P
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PeerMessage: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PeerMessage: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AnnouncePeers", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4398,12 +6048,11 @@ func (m *HushMessage_RespondToIndividualSessionProposal) Unmarshal(dAtA []byte) 
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Response == nil {
-				m.Response = &pb1.IndividualSessionResponse{}
-			}
-			if err := m.Response.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			v := &PeerMessage_AnnouncePeers{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			m.Payload = &PeerMessage_AnnouncePeers_{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4426,7 +6075,7 @@ func (m *HushMessage_RespondToIndividualSessionProposal) Unmarshal(dAtA []byte) 
 	}
 	return nil
 }
-func (m *HushMessage_SendIndividualMessage) Unmarshal(dAtA []byte) error {
+func (m *PeerMessage_AnnouncePeers) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -4449,17 +6098,17 @@ func (m *HushMessage_SendIndividualMessage) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: SendIndividualMessage: wiretype end group for non-group")
+			return fmt.Errorf("proto: AnnouncePeers: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SendIndividualMessage: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: AnnouncePeers: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Message", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field DialInfos", wireType)
 			}
-			var msglen int
+			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowLibp2P
@@ -4469,111 +6118,24 @@ func (m *HushMessage_SendIndividualMessage) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= int(b&0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if msglen < 0 {
+			if byteLen < 0 {
 				return ErrInvalidLengthLibp2P
 			}
-			postIndex := iNdEx + msglen
+			postIndex := iNdEx + byteLen
 			if postIndex < 0 {
 				return ErrInvalidLengthLibp2P
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Message == nil {
-				m.Message = &pb1.IndividualMessage{}
-			}
-			if err := m.Message.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipLibp2P(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthLibp2P
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *HushMessage_SendGroupMessage) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowLibp2P
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: SendGroupMessage: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SendGroupMessage: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Message", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLibp2P
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthLibp2P
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthLibp2P
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Message == nil {
-				m.Message = &pb1.GroupMessage{}
-			}
-			if err := m.Message.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			var v redwood_dev_swarm.PeerDialInfo
+			m.DialInfos = append(m.DialInfos, v)
+			if err := m.DialInfos[len(m.DialInfos)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

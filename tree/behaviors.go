@@ -12,7 +12,7 @@ import (
 
 type Resolver interface {
 	ResolveState(node state.Node, blobStore blob.Store, sender types.Address, txID state.Version, parents []state.Version, patches []Patch) error
-	InternalState() map[string]interface{}
+	InternalState() map[string]any
 }
 
 type Validator interface {
@@ -23,7 +23,7 @@ type Indexer interface {
 	IndexNode(relKeypath state.Keypath, node state.Node) (state.Keypath, state.Node, error)
 }
 
-type ResolverConstructor func(config state.Node, internalState map[string]interface{}) (Resolver, error)
+type ResolverConstructor func(config state.Node, internalState map[string]any) (Resolver, error)
 type ValidatorConstructor func(config state.Node) (Validator, error)
 type IndexerConstructor func(config state.Node) (Indexer, error)
 
@@ -31,6 +31,7 @@ var resolverRegistry = map[string]ResolverConstructor{
 	"resolver/dumb": NewDumbResolver,
 	"resolver/lua":  NewLuaResolver,
 	"resolver/js":   NewJSResolver,
+	"resolver/wasm": NewWASMResolver,
 	// "resolver/git":  NewGitResolver,
 	//"resolver/stack": NewStackResolver,
 }

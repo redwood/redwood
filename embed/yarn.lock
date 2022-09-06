@@ -350,10 +350,10 @@
     "@ethersproject/properties" "^5.6.0"
     "@ethersproject/strings" "^5.6.0"
 
-"@redwood.dev/client@0.3.12":
-  "integrity" "sha512-4hEm6eR9Ownsbt1PgySmOJWFIvSldHwl59Ab9+CjQ/1wm4Rqoy9Sz9V6HE1Vwl/M2gAXvn4h6ejd2XsiLQPBAw=="
-  "resolved" "https://registry.npmjs.org/@redwood.dev/client/-/client-0.3.12.tgz"
-  "version" "0.3.12"
+"@redwood.dev/client@0.3.13":
+  "integrity" "sha512-21TQyH33FUHHPLx3BRfZyRDbNiWEXDSnXXhiAuD0gBp1afCMpmJYKls1J9oj4mknxRXpogWCZC9xLA1F6eyebw=="
+  "resolved" "https://registry.npmjs.org/@redwood.dev/client/-/client-0.3.13.tgz"
+  "version" "0.3.13"
   dependencies:
     "@babel/polyfill" "^7.12.1"
     "@types/json-stable-stringify" "^1.0.32"

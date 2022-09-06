@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/brynbellomy/klog"
+	"github.com/fatih/color"
 )
 
 // Logger abstracts basic logging functions.
@@ -12,23 +13,23 @@ type Logger interface {
 	SetLogLabel(inLabel string)
 	GetLogLabel() string
 	GetLogPrefix() string
-	Debug(args ...interface{})
-	Debugf(inFormat string, args ...interface{})
-	Debugw(inFormat string, fields Fields)
-	Success(args ...interface{})
-	Successf(inFormat string, args ...interface{})
-	Successw(inFormat string, fields Fields)
+	Debug(args ...any)
+	Debugf(inFormat string, args ...any)
+	Debugw(inFormat string, fields ...any)
+	Success(args ...any)
+	Successf(inFormat string, args ...any)
+	Successw(inFormat string, fields ...any)
 	LogV(inVerboseLevel int32) bool
-	Info(inVerboseLevel int32, args ...interface{})
-	Infof(inVerboseLevel int32, inFormat string, args ...interface{})
-	Infow(inFormat string, fields Fields)
-	Warn(args ...interface{})
-	Warnf(inFormat string, args ...interface{})
-	Warnw(inFormat string, fields Fields)
-	Error(args ...interface{})
-	Errorf(inFormat string, args ...interface{})
-	Errorw(inFormat string, fields Fields)
-	Fatalf(inFormat string, args ...interface{})
+	Info(args ...any)
+	Infof(inFormat string, args ...any)
+	Infow(inFormat string, fields ...any)
+	Warn(args ...any)
+	Warnf(inFormat string, args ...any)
+	Warnw(inFormat string, fields ...any)
+	Error(args ...any)
+	Errorf(inFormat string, args ...any)
+	Errorw(inFormat string, fields ...any)
+	Fatalf(inFormat string, args ...any)
 }
 
 type logger struct {
@@ -49,7 +50,7 @@ func NewLogger(label string) Logger {
 }
 
 // Fatalf -- see Fatalf (above)
-func Fatalf(inFormat string, args ...interface{}) {
+func Fatalf(inFormat string, args ...any) {
 	gLogger.Fatalf(inFormat, args...)
 }
 
@@ -82,7 +83,7 @@ func (l *logger) LogV(inVerboseLevel int32) bool {
 	return bool(klog.V(klog.Level(inVerboseLevel)))
 }
 
-func (l *logger) Debug(args ...interface{}) {
+func (l *logger) Debug(args ...any) {
 	if l.hasPrefix {
 		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
 		klog.DebugDepth(1, l.logPrefix, padding, fmt.Sprint(args...))
@@ -91,7 +92,7 @@ func (l *logger) Debug(args ...interface{}) {
 	}
 }
 
-func (l *logger) Debugf(inFormat string, args ...interface{}) {
+func (l *logger) Debugf(inFormat string, args ...any) {
 	if l.hasPrefix {
 		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
 		klog.DebugDepth(1, l.logPrefix, padding, fmt.Sprintf(inFormat, args...))
@@ -100,16 +101,25 @@ func (l *logger) Debugf(inFormat string, args ...interface{}) {
 	}
 }
 
-func (l *logger) Debugw(msg string, fields Fields) {
+func (l *logger) Debugw(msg string, fields ...any) {
+	if len(fields)%2 == 1 {
+		fields = append(fields, "<MISSING>")
+	}
+	var fieldsStr string
+	for i := 0; i < len(fields); i += 2 {
+		d := color.New(color.Faint)
+		fieldsStr += fmt.Sprintf("%v%v", d.Sprintf("%v=", fields[i]), fields[i+1]) + " "
+	}
+
 	if l.hasPrefix {
 		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
-		klog.DebugDepth(1, l.logPrefix, padding, fmt.Sprintf(msg+" %v", fields))
+		klog.DebugDepth(1, l.logPrefix, padding, fmt.Sprintf(msg+" %v", fieldsStr[:len(fieldsStr)-1]))
 	} else {
-		klog.DebugDepth(1, fmt.Sprintf(msg+" %v", fields))
+		klog.DebugDepth(1, fmt.Sprintf(msg+" %v", fieldsStr[:len(fieldsStr)-1]))
 	}
 }
 
-func (l *logger) Success(args ...interface{}) {
+func (l *logger) Success(args ...any) {
 	if l.hasPrefix {
 		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
 		klog.SuccessDepth(1, l.logPrefix, padding, fmt.Sprint(args...))
@@ -118,7 +128,7 @@ func (l *logger) Success(args ...interface{}) {
 	}
 }
 
-func (l *logger) Successf(inFormat string, args ...interface{}) {
+func (l *logger) Successf(inFormat string, args ...any) {
 	if l.hasPrefix {
 		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
 		klog.SuccessDepth(1, l.logPrefix, padding, fmt.Sprintf(inFormat, args...))
@@ -127,12 +137,21 @@ func (l *logger) Successf(inFormat string, args ...interface{}) {
 	}
 }
 
-func (l *logger) Successw(msg string, fields Fields) {
+func (l *logger) Successw(msg string, fields ...any) {
+	if len(fields)%2 == 1 {
+		fields = append(fields, "<MISSING>")
+	}
+	var fieldsStr string
+	for i := 0; i < len(fields); i += 2 {
+		d := color.New(color.Faint)
+		fieldsStr += fmt.Sprintf("%v%v", d.Sprintf("%v=", fields[i]), fields[i+1]) + " "
+	}
+
 	if l.hasPrefix {
 		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
-		klog.SuccessDepth(1, l.logPrefix, padding, fmt.Sprintf(msg+" %v", fields))
+		klog.SuccessDepth(1, l.logPrefix, padding, fmt.Sprintf(msg+" %v", fieldsStr[:len(fieldsStr)-1]))
 	} else {
-		klog.SuccessDepth(1, fmt.Sprintf(msg+" %v", fields))
+		klog.SuccessDepth(1, fmt.Sprintf(msg+" %v", fieldsStr[:len(fieldsStr)-1]))
 	}
 }
 
@@ -143,19 +162,12 @@ func (l *logger) Successw(msg string, fields Fields) {
 //   0. Enabled during production and field deployment.  Use this for important high-level info.
 //   1. Enabled during testing and development. Use for high-level changes in state, mode, or connection.
 //   2. Enabled during low-level debugging and troubleshooting.
-func (l *logger) Info(inVerboseLevel int32, args ...interface{}) {
-	logIt := true
-	if inVerboseLevel > 0 {
-		logIt = bool(klog.V(klog.Level(inVerboseLevel)))
-	}
-
-	if logIt {
-		if l.hasPrefix {
-			padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
-			klog.InfoDepth(1, l.logPrefix, padding, fmt.Sprint(args...))
-		} else {
-			klog.InfoDepth(1, args...)
-		}
+func (l *logger) Info(args ...any) {
+	if l.hasPrefix {
+		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+		klog.InfoDepth(1, l.logPrefix, padding, fmt.Sprint(args...))
+	} else {
+		klog.InfoDepth(1, args...)
 	}
 }
 
@@ -163,28 +175,30 @@ func (l *logger) Info(inVerboseLevel int32, args ...interface{}) {
 // Arguments are handled like fmt.Printf(); a newline is appended if missing.
 //
 // See comments above for Info() for guidelines for inVerboseLevel.
-func (l *logger) Infof(inVerboseLevel int32, inFormat string, args ...interface{}) {
-	logIt := true
-	if inVerboseLevel > 0 {
-		logIt = bool(klog.V(klog.Level(inVerboseLevel)))
-	}
-
-	if logIt {
-		if l.hasPrefix {
-			padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
-			klog.InfoDepth(1, l.logPrefix, padding, fmt.Sprintf(inFormat, args...))
-		} else {
-			klog.InfoDepth(1, fmt.Sprintf(inFormat, args...))
-		}
+func (l *logger) Infof(inFormat string, args ...any) {
+	if l.hasPrefix {
+		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
+		klog.InfoDepth(1, l.logPrefix, padding, fmt.Sprintf(inFormat, args...))
+	} else {
+		klog.InfoDepth(1, fmt.Sprintf(inFormat, args...))
 	}
 }
 
-func (l *logger) Infow(msg string, fields Fields) {
+func (l *logger) Infow(msg string, fields ...any) {
+	if len(fields)%2 == 1 {
+		fields = append(fields, "<MISSING>")
+	}
+	var fieldsStr string
+	for i := 0; i < len(fields); i += 2 {
+		d := color.New(color.Faint)
+		fieldsStr += fmt.Sprintf("%v%v", d.Sprintf("%v=", fields[i]), fields[i+1]) + " "
+	}
+
 	if l.hasPrefix {
 		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
-		klog.InfoDepth(1, l.logPrefix, padding, fmt.Sprintf(msg+" %v", fields))
+		klog.InfoDepth(1, l.logPrefix, padding, fmt.Sprintf(msg+" %v", fieldsStr[:len(fieldsStr)-1]))
 	} else {
-		klog.InfoDepth(1, fmt.Sprintf(msg+" %v", fields))
+		klog.InfoDepth(1, fmt.Sprintf(msg+" %v", fieldsStr[:len(fieldsStr)-1]))
 	}
 }
 
@@ -193,7 +207,7 @@ func (l *logger) Infow(msg string, fields Fields) {
 //
 // Warnings are reserved for situations that indicate an inconsistency or an error that
 // won't result in a departure of specifications, correctness, or expected behavior.
-func (l *logger) Warn(args ...interface{}) {
+func (l *logger) Warn(args ...any) {
 	if l.hasPrefix {
 		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
 		klog.WarningDepth(1, l.logPrefix, padding, fmt.Sprint(args...))
@@ -206,7 +220,7 @@ func (l *logger) Warn(args ...interface{}) {
 // Arguments are handled like fmt.Printf(); a newline is appended if missing.
 //
 // See comments above for Warn() for guidelines on errors vs warnings.
-func (l *logger) Warnf(inFormat string, args ...interface{}) {
+func (l *logger) Warnf(inFormat string, args ...any) {
 	if l.hasPrefix {
 		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
 		klog.WarningDepth(1, l.logPrefix, padding, fmt.Sprintf(inFormat, args...))
@@ -215,12 +229,21 @@ func (l *logger) Warnf(inFormat string, args ...interface{}) {
 	}
 }
 
-func (l *logger) Warnw(msg string, fields Fields) {
+func (l *logger) Warnw(msg string, fields ...any) {
+	if len(fields)%2 == 1 {
+		fields = append(fields, "<MISSING>")
+	}
+	var fieldsStr string
+	for i := 0; i < len(fields); i += 2 {
+		d := color.New(color.Faint)
+		fieldsStr += fmt.Sprintf("%v%v", d.Sprintf("%v=", fields[i]), fields[i+1]) + " "
+	}
+
 	if l.hasPrefix {
 		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
-		klog.WarningDepth(1, l.logPrefix, padding, fmt.Sprintf(msg+" %v", fields))
+		klog.WarningDepth(1, l.logPrefix, padding, fmt.Sprintf(msg+" %v", fieldsStr[:len(fieldsStr)-1]))
 	} else {
-		klog.WarningDepth(1, fmt.Sprintf(msg+" %v", fields))
+		klog.WarningDepth(1, fmt.Sprintf(msg+" %v", fieldsStr[:len(fieldsStr)-1]))
 	}
 }
 
@@ -230,7 +253,7 @@ func (l *logger) Warnw(msg string, fields Fields) {
 // Errors are reserved for situations that indicate an implementation deficiency, a
 // corruption of data or resources, or an issue that if not addressed could spiral into deeper issues.
 // Logging an error reflects that correctness or expected behavior is either broken or under threat.
-func (l *logger) Error(args ...interface{}) {
+func (l *logger) Error(args ...any) {
 	{
 		if l.hasPrefix {
 			padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
@@ -245,7 +268,7 @@ func (l *logger) Error(args ...interface{}) {
 // Arguments are handled like fmt.Print; a newline is appended if missing.
 //
 // See comments above for Error() for guidelines on errors vs warnings.
-func (l *logger) Errorf(inFormat string, args ...interface{}) {
+func (l *logger) Errorf(inFormat string, args ...any) {
 	{
 		if l.hasPrefix {
 			padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
@@ -256,18 +279,27 @@ func (l *logger) Errorf(inFormat string, args ...interface{}) {
 	}
 }
 
-func (l *logger) Errorw(msg string, fields Fields) {
+func (l *logger) Errorw(msg string, fields ...any) {
+	if len(fields)%2 == 1 {
+		fields = append(fields, "<MISSING>")
+	}
+	var fieldsStr string
+	for i := 0; i < len(fields); i += 2 {
+		d := color.New(color.Faint)
+		fieldsStr += fmt.Sprintf("%v%v", d.Sprintf("%v=", fields[i]), fields[i+1]) + " "
+	}
+
 	if l.hasPrefix {
 		padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))
-		klog.ErrorDepth(1, l.logPrefix, padding, fmt.Sprintf(msg+" %v", fields))
+		klog.ErrorDepth(1, l.logPrefix, padding, fmt.Sprintf(msg+" %v", fieldsStr[:len(fieldsStr)-1]))
 	} else {
-		klog.ErrorDepth(1, fmt.Sprintf(msg+" %v", fields))
+		klog.ErrorDepth(1, fmt.Sprintf(msg+" %v", fieldsStr[:len(fieldsStr)-1]))
 	}
 }
 
 // Fatalf logs to the FATAL, ERROR, WARNING, and INFO logs,
 // Arguments are handled like fmt.Printf(); a newline is appended if missing.
-func (l *logger) Fatalf(inFormat string, args ...interface{}) {
+func (l *logger) Fatalf(inFormat string, args ...any) {
 	{
 		if l.hasPrefix {
 			padding := strings.Repeat(" ", longestLabel-len(l.logPrefix))

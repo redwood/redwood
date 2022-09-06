@@ -7,17 +7,17 @@ import (
 
 	"redwood.dev/log"
 	"redwood.dev/utils"
+	. "redwood.dev/utils/generics"
 )
 
 type Process struct {
 	log.Logger
 
-	name     string
-	mu       sync.RWMutex
-	children map[Spawnable]struct{}
-	state    State
-
-	goroutines map[*goroutine]struct{}
+	name       string
+	mu         sync.RWMutex
+	children   map[Spawnable]struct{}
+	goroutines Set[*goroutine]
+	state      State
 
 	closeOnce   sync.Once
 	doneOnce    sync.Once
@@ -62,7 +62,7 @@ func New(name string) *Process {
 	return &Process{
 		name:       name,
 		children:   make(map[Spawnable]struct{}),
-		goroutines: make(map[*goroutine]struct{}),
+		goroutines: NewSet[*goroutine](nil),
 		chStop:     make(chan struct{}),
 		chDone:     make(chan struct{}),
 		Logger:     log.NewLogger(""),
@@ -83,7 +83,7 @@ func (p *Process) Start() error {
 
 func (p *Process) Close() error {
 	p.closeOnce.Do(func() {
-		// p.Infof(0, p.name+" shutting down...")
+		// p.Infof(p.name+" shutting down...")
 		func() {
 			p.mu.Lock()
 			defer p.mu.Unlock()
@@ -156,7 +156,7 @@ func (p *Process) ProcessTree() map[string]interface{} {
 
 func (p *Process) NewChild(ctx context.Context, name string) *Process {
 	child := New(name)
-	_ = p.SpawnChild(ctx, child)
+	_ = p.SpawnChild(ctx, child) // @@TODO: probably should return this error
 	return child
 }
 
@@ -171,6 +171,7 @@ func (p *Process) SpawnChild(ctx context.Context, child Spawnable) error {
 
 	if p.state == Unstarted {
 		panic(p.name + " can't spawn children; not started")
+
 	} else if p.state == Closed {
 		return nil
 	}
@@ -216,14 +217,19 @@ func (p *Process) Go(ctx context.Context, name string, fn func(ctx context.Conte
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.state != Started {
+	chDone := make(chan struct{})
+
+	if p.state == Unstarted {
+		panic(p.name + " can't spawn goroutines; not started")
+
+	} else if p.state == Closed {
 		ch := make(chan struct{})
 		close(ch)
 		return ch
 	}
 
-	g := &goroutine{name: name + " #" + utils.RandomNumberString(), chDone: make(chan struct{})}
-	p.goroutines[g] = struct{}{}
+	g := &goroutine{name: name + " #" + utils.RandomNumberString(), chDone: chDone}
+	p.goroutines.Add(g)
 
 	p.wg.Add(1)
 	go func() {
@@ -231,7 +237,7 @@ func (p *Process) Go(ctx context.Context, name string, fn func(ctx context.Conte
 			p.wg.Done()
 			p.mu.Lock()
 			defer p.mu.Unlock()
-			delete(p.goroutines, g)
+			p.goroutines.Remove(g)
 			close(g.chDone)
 		}()
 

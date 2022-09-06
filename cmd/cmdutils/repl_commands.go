@@ -1,8 +1,10 @@
 package cmdutils
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"sort"
 	"strconv"
@@ -18,6 +20,7 @@ import (
 	"redwood.dev/tree"
 	"redwood.dev/types"
 	"redwood.dev/utils"
+	"redwood.dev/vault"
 )
 
 type REPLHandler interface {
@@ -127,11 +130,22 @@ var defaultREPLCommands = REPLCommands{
 			"dumpstore": CmdPeerStoreDebugPrint,
 		},
 	},
+	"vaults": REPLCommand{
+		HelpText: "manage remote vaults",
+		Subcommands: REPLCommands{
+			"list":   CmdVaultsList,
+			"add":    CmdVaultsAdd,
+			"remove": CmdVaultsRemove,
+			"sync":   CmdVaultsSync,
+			"items":  CmdVaultsItems,
+			"fetch":  CmdVaultsFetch,
+			"store":  CmdVaultsStore,
+		},
+	},
 	"hush": REPLCommand{
 		HelpText: "interact with the hush protocol",
 		Subcommands: REPLCommands{
 			"dumpstore": CmdHushStoreDebugPrint,
-			"send":      CmdHushSendIndividualMessage,
 			"sendgroup": CmdHushSendGroupMessage,
 		},
 	},
@@ -151,6 +165,7 @@ var defaultREPLCommands = REPLCommands{
 			"subscribe": CmdSubscribe,
 			"dumpstore": CmdTreeStoreDebugPrint,
 			"dumptree":  CmdControllerDebugPrint,
+			"dumpall":   CmdControllerHubDebugPrintAll,
 		},
 	},
 	"blob": REPLCommand{
@@ -158,7 +173,7 @@ var defaultREPLCommands = REPLCommands{
 		Subcommands: REPLCommands{
 			"list": CmdBlobs,
 			"set": REPLCommand{
-				HelpText: "configure the blob protocol",
+				HelpText: "configure blob protocol parameters",
 				Subcommands: REPLCommands{
 					"maxfetchconns": CmdSetBlobMaxFetchConns,
 				},
@@ -170,7 +185,7 @@ var defaultREPLCommands = REPLCommands{
 		Subcommands: REPLCommands{
 			"id": CmdLibp2pPeerID,
 			"relay": REPLCommand{
-				HelpText: "interact with the libp2p transport",
+				HelpText: "manage libp2p static relays",
 				Subcommands: REPLCommands{
 					"add":  CmdLibp2pRelayAdd,
 					"rm":   CmdLibp2pRelayRemove,
@@ -239,7 +254,7 @@ var (
 			} else if len(args) < 1 {
 				return errors.New("requires 1 argument: libp2p relay add <multiaddress>")
 			}
-			return app.Libp2pTransport.AddStaticRelay(args[0])
+			return app.Libp2pTransport.AddRelay(args[0])
 		},
 	}
 
@@ -251,7 +266,7 @@ var (
 			} else if len(args) < 1 {
 				return errors.New("requires 1 argument: libp2p relay rm <multiaddress>")
 			}
-			return app.Libp2pTransport.RemoveStaticRelay(args[0])
+			return app.Libp2pTransport.RemoveRelay(args[0])
 		},
 	}
 
@@ -261,9 +276,39 @@ var (
 			if app.Libp2pTransport == nil {
 				return errors.New("libp2p is disabled")
 			}
-			for _, relay := range app.Libp2pTransport.StaticRelays().Slice() {
-				fmt.Println(" -", relay)
+
+			var rows [][]string
+
+			for _, relayAndRes := range app.Libp2pTransport.RelayReservations() {
+				for _, multiaddr := range relayAndRes.AddrInfo.Addrs {
+					if relayAndRes.Reservation != nil {
+						rows = append(rows, []string{
+							relayAndRes.AddrInfo.ID.Pretty(),
+							multiaddr.String(),
+							"in " + relayAndRes.Reservation.Expiration.Sub(time.Now()).Round(time.Second).String(),
+							relayAndRes.Reservation.LimitDuration.String(),
+							fmt.Sprintf("%v", relayAndRes.Reservation.LimitData),
+						})
+					} else {
+						rows = append(rows, []string{
+							relayAndRes.AddrInfo.ID.Pretty(),
+							multiaddr.String(),
+							"",
+							"",
+							"",
+						})
+					}
+				}
 			}
+
+			table := tablewriter.NewWriter(os.Stdout)
+			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
+			table.SetCenterSeparator("|")
+			table.SetRowLine(true)
+			table.SetAutoMergeCellsByColumnIndex([]int{0, 1, 2, 3, 4})
+			table.SetHeader([]string{"PeerID", "Addr", "Expiration", "Duration limit", "Data limit"})
+			table.AppendBulk(rows)
+			table.Render()
 			return nil
 		},
 	}
@@ -421,7 +466,7 @@ var (
 				return err
 			}
 			for _, leaf := range leaves {
-				app.Infof(0, "- %v", leaf.Hex())
+				app.Infof("- %v", leaf.Hex())
 			}
 			return nil
 		},
@@ -608,22 +653,27 @@ var (
 		},
 	}
 
-	CmdHushSendIndividualMessage = REPLCommand{
-		HelpText: "send a 1:1 Hush message",
-		Handler: func(args []string, app *App) error {
-			if len(args) < 2 {
-				return errors.New("requires 2 arguments: hushmsg <recipient address> <message>")
-			}
+	// CmdHushSendIndividualMessage = REPLCommand{
+	// 	HelpText: "send a 1:1 Hush message",
+	// 	Handler: func(args []string, app *App) error {
+	// 		if len(args) < 2 {
+	// 			return errors.New("requires 2 arguments: hushmsg <recipient address> <message>")
+	// 		}
 
-			recipient, err := types.AddressFromHex(args[0])
-			if err != nil {
-				return err
-			}
-			msg := strings.Join(args[1:], " ")
+	// 		recipient, err := types.AddressFromHex(args[0])
+	// 		if err != nil {
+	// 			return err
+	// 		}
+	// 		msg := strings.Join(args[1:], " ")
 
-			return app.HushProto.EncryptIndividualMessage("foo", recipient, []byte(msg))
-		},
-	}
+	// 		ident, err := app.KeyStore.DefaultPublicIdentity()
+	// 		if err != nil {
+	// 			return err
+	// 		}
+
+	// 		return app.HushProto.EncryptIndividualMessage("foo", ident.Address(), recipient, []byte(msg))
+	// 	},
+	// }
 
 	CmdHushSendGroupMessage = REPLCommand{
 		HelpText: "send a group Hush message",
@@ -644,8 +694,160 @@ var (
 
 			msg := strings.Join(args[1:], " ")
 
+			ident, err := app.KeyStore.DefaultPublicIdentity()
+			if err != nil {
+				return err
+			}
+
 			id := types.RandomID()
-			return app.HushProto.EncryptGroupMessage("foo", id.Hex(), recipients, []byte(msg))
+			return app.HushProto.EncryptGroupMessage("foo", id.Hex(), ident.Address(), recipients, []byte(msg))
+		},
+	}
+
+	CmdVaultsAdd = REPLCommand{
+		HelpText: "add a remote vault",
+		Handler: func(args []string, app *App) error {
+			if len(args) < 1 {
+				return errors.New("requires 1 argument: vaults add <hostname:port>")
+			}
+			err := app.HushProto.AddVault(args[0])
+			if err != nil {
+				return err
+			}
+			err = app.TreeProto.AddVault(args[0])
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+
+	CmdVaultsRemove = REPLCommand{
+		HelpText: "remove a remote vault",
+		Handler: func(args []string, app *App) error {
+			if len(args) < 1 {
+				return errors.New("requires 1 argument: vaults remove <hostname:port>")
+			}
+			err := app.HushProto.RemoveVault(args[0])
+			if err != nil {
+				return err
+			}
+			err = app.TreeProto.RemoveVault(args[0])
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+
+	CmdVaultsSync = REPLCommand{
+		Handler: func(args []string, app *App) error {
+			err := app.HushProto.SyncWithAllVaults()
+			if err != nil {
+				return err
+			}
+			err = app.TreeProto.SyncWithAllVaults()
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+
+	CmdVaultsItems = REPLCommand{
+		Handler: func(args []string, app *App) error {
+			if len(args) < 2 {
+				return errors.New("requires 2 arguments: vaults items <hostname:port> <collection>")
+			}
+
+			identity, err := app.KeyStore.DefaultPublicIdentity()
+			if err != nil {
+				return err
+			}
+			c := vault.NewClient(args[0], identity, nil)
+			err = c.Dial(context.Background())
+			if err != nil {
+				return err
+			}
+			items, err := c.Items(context.Background(), args[1], time.Time{})
+			if err != nil {
+				return err
+			}
+			for _, item := range items {
+				app.Infof("- %v", item)
+			}
+			return nil
+		},
+	}
+
+	CmdVaultsFetch = REPLCommand{
+		Handler: func(args []string, app *App) error {
+			if len(args) < 3 {
+				return errors.New("requires 3 arguments: vaults fetch <hostname:port> <collection> <item>")
+			}
+
+			identity, err := app.KeyStore.DefaultPublicIdentity()
+			if err != nil {
+				return err
+			}
+
+			c := vault.NewClient(args[0], identity, nil)
+
+			err = c.Dial(context.Background())
+			if err != nil {
+				return err
+			}
+
+			item, err := c.Fetch(context.Background(), args[1], args[2])
+			if err != nil {
+				return err
+			}
+			defer item.Close()
+
+			bs, err := ioutil.ReadAll(item)
+			if err != nil {
+				return err
+			}
+
+			app.Infof("UTF-8:\n%v\n", string(bs))
+			app.Infof("Hex:\n%0x\n", bs)
+			return nil
+		},
+	}
+
+	CmdVaultsStore = REPLCommand{
+		Handler: func(args []string, app *App) error {
+			if len(args) < 4 {
+				return errors.New("requires 4 arguments: vaults store <hostname:port> <collection> <item> <data>")
+			}
+
+			identity, err := app.KeyStore.DefaultPublicIdentity()
+			if err != nil {
+				return err
+			}
+
+			c := vault.NewClient(args[0], identity, nil)
+
+			err = c.Dial(context.Background())
+			if err != nil {
+				return err
+			}
+
+			err = c.Store(context.Background(), args[1], args[2], bytes.NewReader([]byte(strings.Join(args[3:], " "))))
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+
+	CmdVaultsList = REPLCommand{
+		HelpText: "list all remote vaults",
+		Handler: func(args []string, app *App) error {
+			for vault := range app.HushProto.Vaults() {
+				app.Infof("- %v", vault)
+			}
+			return nil
 		},
 	}
 
@@ -676,6 +878,14 @@ var (
 		},
 	}
 
+	CmdControllerHubDebugPrintAll = REPLCommand{
+		HelpText: "print the contents of all state DBs",
+		Handler: func(args []string, app *App) error {
+			app.ControllerHub.DebugPrintAll()
+			return nil
+		},
+	}
+
 	CmdPeerStoreDebugPrint = REPLCommand{
 		HelpText: "print the contents of the peer store",
 		Handler: func(args []string, app *App) error {
@@ -687,7 +897,7 @@ var (
 	CmdProcessTree = REPLCommand{
 		HelpText: "display the current process tree",
 		Handler: func(args []string, app *App) error {
-			app.Infof(0, "processes:\n%v", utils.PrettyJSON(app.ProcessTree()))
+			app.Infof("processes:\n%v", utils.PrettyJSON(app.ProcessTree()))
 			return nil
 		},
 	}

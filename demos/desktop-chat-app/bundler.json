@@ -8,8 +8,21 @@
   },
   "ldflags":{"linkmode":["internal"]},
   "environments": [
-    {"arch": "amd64", "os": "linux"},
-    {"arch": "amd64", "os": "windows"},
-    {"arch": "amd64", "os": "darwin"}
+    {
+        "arch": "amd64",
+        "os": "linux",
+        "env": {
+            "CGO_ENABLED": "1"
+        }
+    },
+    {
+        "arch": "amd64",
+        "os": "windows",
+        "env": {
+            "CC": "x86_64-w64-mingw32-gcc",
+            "CXX": "x86_64-w64-mingw32-g++",
+            "CGO_ENABLED": "1"
+        }
+    }
   ]
 }

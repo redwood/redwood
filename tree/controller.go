@@ -3,8 +3,6 @@ package tree
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +14,6 @@ import (
 	"redwood.dev/state"
 	"redwood.dev/tree/nelson"
 	"redwood.dev/utils"
-	"redwood.dev/utils/badgerutils"
 )
 
 type Controller interface {
@@ -34,19 +31,14 @@ type controller struct {
 	process.Process
 	log.Logger
 
-	stateURI        string
-	stateDBRootPath string
-	badgerOpts      badgerutils.OptsBuilder
+	stateURI     string
+	behaviorTree *behaviorTree
+	states       *VersionedDBTree
 
 	controllerHub  ControllerHub
 	txStore        TxStore
 	blobStore      blob.Store
 	nelsonResolver nelson.Resolver
-
-	behaviorTree *behaviorTree
-
-	states  *state.VersionedDBTree
-	indices *state.VersionedDBTree
 
 	newStateListeners   []NewStateCallback
 	newStateListenersMu sync.RWMutex
@@ -64,25 +56,22 @@ var (
 
 func NewController(
 	stateURI string,
-	stateDBRootPath string,
-	badgerOpts badgerutils.OptsBuilder,
+	tree *VersionedDBTree,
 	controllerHub ControllerHub,
 	txStore TxStore,
 	blobStore blob.Store,
 ) (Controller, error) {
-	c := &controller{
-		Process:         *process.New("controller " + stateURI),
-		Logger:          log.NewLogger("controller"),
-		stateURI:        stateURI,
-		stateDBRootPath: stateDBRootPath,
-		badgerOpts:      badgerOpts,
-		controllerHub:   controllerHub,
-		txStore:         txStore,
-		blobStore:       blobStore,
-		nelsonResolver:  nelson.NewResolver(controllerHub, blobStore, nil),
-		behaviorTree:    newBehaviorTree(),
-	}
-	return c, nil
+	return &controller{
+		Process:        *process.New("controller " + stateURI),
+		Logger:         log.NewLogger("controller"),
+		stateURI:       stateURI,
+		controllerHub:  controllerHub,
+		txStore:        txStore,
+		blobStore:      blobStore,
+		nelsonResolver: nelson.NewResolver(controllerHub, blobStore, nil),
+		states:         tree,
+		behaviorTree:   newBehaviorTree(),
+	}, nil
 }
 
 func (c *controller) Start() (err error) {
@@ -97,21 +86,31 @@ func (c *controller) Start() (err error) {
 		return err
 	}
 
-	stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(c.stateURI)
-	states, err := state.NewVersionedDBTree(c.badgerOpts.ForPath(filepath.Join(c.stateDBRootPath, stateURIClean)))
-	if err != nil {
-		return err
-	}
-	c.states = states
-
-	indices, err := state.NewVersionedDBTree(c.badgerOpts.ForPath(filepath.Join(c.stateDBRootPath, stateURIClean+"_indices")))
-	if err != nil {
-		return err
-	}
-	c.indices = indices
-
-	// Add root resolver
+	// Add default root resolver (overridable if one is explicitly set)
 	c.behaviorTree.addResolver(state.Keypath(nil), &dumbResolver{})
+
+	// Attach added resolvers and validators
+	node := c.states.StateAtVersion(nil, false)
+	iter := node.Iterator(nil, false, 0)
+	defer iter.Close()
+
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		keypath := iter.Node().Keypath()
+		_, key := keypath.Pop()
+		switch {
+		case key.Equals(MergeTypeKeypath):
+			err := c.initializeResolver(c.behaviorTree, node, keypath)
+			if err != nil {
+				return err
+			}
+
+		case key.Equals(ValidatorKeypath):
+			err := c.initializeValidator(c.behaviorTree, node, keypath)
+			if err != nil {
+				return err
+			}
+		}
+	}
 
 	// Start mempool
 	c.mempool = NewMempool(c.processMempoolTx)
@@ -153,24 +152,6 @@ func (c *controller) Start() (err error) {
 	return nil
 }
 
-func (c *controller) Close() error {
-	if c.states != nil {
-		err := c.states.Close()
-		if err != nil {
-			c.Errorf("error closing state db: %v", err)
-		}
-	}
-
-	if c.indices != nil {
-		err := c.indices.Close()
-		if err != nil {
-			c.Errorf("error closing index db: %v", err)
-		}
-	}
-
-	return c.Process.Close()
-}
-
 func (c *controller) StateAtVersion(version *state.Version) state.Node {
 	return c.states.StateAtVersion(version, false)
 }
@@ -188,11 +169,11 @@ func (c *controller) AddTx(tx Tx) error {
 	if err != nil {
 		return err
 	} else if exists {
-		c.Infof(0, "already know tx %v %v, skipping", c.stateURI, tx.ID.Pretty())
+		c.Infof("already know tx %v %v, skipping", c.stateURI, tx.ID.Pretty())
 		return nil
 	}
 
-	c.Infof(0, "new tx %v %v", c.stateURI, tx.ID.Pretty())
+	c.Infof("new tx %v %v", c.stateURI, tx.ID.Pretty())
 
 	// Store the tx (so we can ignore txs we've seen before)
 	tx.Status = TxStatusInMempool
@@ -224,7 +205,7 @@ func (c *controller) processMempoolTx(tx Tx) processTxOutcome {
 	err := c.tryApplyTx(tx)
 
 	if err == nil {
-		c.Successf("tx added to chain (%v) %v %v", tx.StateURI, tx.ID.Pretty(), utils.PrettyJSON(tx))
+		c.Successf("tx added to time dag (%v) %v %v", tx.StateURI, tx.ID.Pretty(), utils.PrettyJSON(tx))
 		node := c.states.StateAtVersion(nil, false)
 		defer node.Close()
 		return processTxOutcome_Succeeded
@@ -236,7 +217,7 @@ func (c *controller) processMempoolTx(tx Tx) processTxOutcome {
 		return processTxOutcome_Failed
 
 	case ErrPendingParent, ErrMissingCriticalBlobs, ErrNoParentYet:
-		c.Infof(0, "readding to mempool %v (%v)", tx.ID.Pretty(), err)
+		c.Infof("readding to mempool %v (%v)", tx.ID.Pretty(), err)
 		return processTxOutcome_Retry
 
 	default:
@@ -414,12 +395,12 @@ func (c *controller) tryApplyTx(tx Tx) (err error) {
 		return err
 	}
 
-	if tx.Checkpoint {
-		err = c.states.CopyVersion(tx.ID, state.CurrentVersion)
-		if err != nil {
-			return err
-		}
-	}
+	// if tx.Checkpoint {
+	// 	err = c.states.CopyVersion(tx.ID, state.CurrentVersion)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	// Unmark parents as leaves
 	for _, parentID := range tx.Parents {
@@ -517,9 +498,6 @@ func (c *controller) updateBehaviorTree(root state.Node) error {
 			c.behaviorTree.removeResolver(parentKeypath)
 		case key.Equals(ValidatorKeypath):
 			c.behaviorTree.removeValidator(parentKeypath)
-		case parentKeypath.Part(-1).Equals(state.Keypath("Indices")):
-			//indicesKeypath, _ := parentKeypath.Pop()
-			//c.behaviorTree.removeIndexer()
 		}
 
 		for parentKeypath != nil {
@@ -604,7 +582,7 @@ func (c *controller) initializeResolver(behaviorTree *behaviorTree, root state.N
 	if err != nil {
 		return err
 	} else if contentType == "" {
-		return errors.New("cannot initialize validator without a 'Content-Type' key")
+		return errors.New("cannot initialize resolver without a 'Content-Type' key")
 	}
 
 	ctor, exists := resolverRegistry[contentType]
@@ -797,5 +775,5 @@ func (c *controller) notifyNewStateListeners(tx Tx, root state.Node, leaves []st
 func (c *controller) DebugPrint() {
 	node := c.states.StateAtVersion(nil, false)
 	defer node.Close()
-	node.DebugPrint(func(msg string, args ...interface{}) { fmt.Printf(msg, args...) }, true, 0)
+	node.DebugPrint(utils.PrintfDebugPrinter, true, 0)
 }

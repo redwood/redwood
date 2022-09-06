@@ -10,6 +10,45 @@ import (
 	"redwood.dev/swarm/protohush"
 )
 
+func TestBadgerStore_DHKeypairs(t *testing.T) {
+	db := testutils.SetupDBTree(t)
+	defer db.Close()
+
+	store := protohush.NewStore(db)
+
+	dhPair0, err := store.EnsureDHPair()
+	require.NoError(t, err)
+	require.Equal(t, uint64(0), dhPair0.Epoch)
+	require.Equal(t, false, dhPair0.Revoked)
+
+	got, err := store.DHPairByPubkey(dhPair0.Public)
+	require.NoError(t, err)
+	require.Equal(t, dhPair0, got)
+
+	got, err = store.EnsureDHPair()
+	require.NoError(t, err)
+	require.Equal(t, dhPair0, got)
+
+	err = store.RevokeDHKeypairByPubkey(dhPair0.Public)
+	require.NoError(t, err)
+
+	got, err = store.DHPairByPubkey(dhPair0.Public)
+	require.NoError(t, err)
+	require.Equal(t, dhPair0.Public, got.Public)
+	require.Equal(t, dhPair0.Private, got.Private)
+	require.Equal(t, dhPair0.Epoch, got.Epoch)
+	require.Equal(t, true, got.Revoked)
+
+	dhPair1, err := store.EnsureDHPair()
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), dhPair1.Epoch)
+	require.Equal(t, false, dhPair1.Revoked)
+
+	got, err = store.EnsureDHPair()
+	require.NoError(t, err)
+	require.Equal(t, dhPair1, got)
+}
+
 func TestBadgerStore_RatchetSessionStore(t *testing.T) {
 	dbA := testutils.SetupDBTree(t)
 	defer dbA.Close()

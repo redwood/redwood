@@ -1,6 +1,7 @@
 BootstrapPeers: []
 DataRoot: ./node1_data
 DNSOverHTTPSURL: ""
+PprofPort: 6060
 Nurse:
     Enabled: false
 Libp2pTransport:

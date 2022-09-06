@@ -56,7 +56,7 @@ func newApp(password, mnemonic, profileRoot, profileName, configPath string, dev
 	cfg.DevMode = devMode
 	cfg.DataRoot = filepath.Join(profileRoot, profileName)
 
-	app.Infof(0, "profile: %v", cfg.DataRoot)
+	app.Infof("profile: %v", cfg.DataRoot)
 
 	cfg.KeyStore = cmdutils.KeyStoreConfig{
 		Password:             password,
@@ -82,7 +82,7 @@ func newApp(password, mnemonic, profileRoot, profileName, configPath string, dev
 
 	app.app = cmdutils.NewApp("hush", cfg)
 
-	app.Info(0, utils.PrettyJSON(cfg))
+	app.Info(utils.PrettyJSON(cfg))
 
 	return app, nil
 }
@@ -101,7 +101,6 @@ func (app *App) Start() error {
 	app.addDefaultRelays()
 	app.initializeLocalState()
 	app.monitorForDMs()
-
 	return nil
 }
 
@@ -118,7 +117,10 @@ func (app *App) addDefaultRelays() {
 	}
 
 	for _, relay := range relays {
-		app.app.Libp2pStore.AddStaticRelay(relay)
+		err := app.app.Libp2pTransport.AddRelay(relay)
+		if err != nil {
+			app.Errorw("could not add libp2p relay", "err", err, "relay", relay)
+		}
 	}
 }
 
@@ -146,8 +148,8 @@ func (app *App) monitorForDMs() {
 				continue
 			}
 
-			if strings.HasPrefix(stateURI, "chat.p2p/private-") {
-				roomName := stateURI[len("chat.p2p/"):]
+			if strings.HasPrefix(string(stateURI), "chat.p2p/private-") {
+				roomName := string(stateURI[len("chat.p2p/"):])
 				roomKeypath := state.Keypath("rooms").Pushs(roomName)
 				var found bool
 				func() {

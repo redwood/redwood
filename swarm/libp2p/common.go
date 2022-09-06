@@ -1,13 +1,11 @@
 package libp2p
 
 import (
-	"sort"
 	"sync"
 
 	cid "github.com/ipfs/go-cid"
 	cryptop2p "github.com/libp2p/go-libp2p-core/crypto"
 	corepeer "github.com/libp2p/go-libp2p-core/peer"
-	peerstoreaddr "github.com/libp2p/go-libp2p-peerstore/addr"
 	ma "github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
 	"go.uber.org/multierr"
@@ -15,7 +13,7 @@ import (
 	"redwood.dev/blob"
 	"redwood.dev/errors"
 	"redwood.dev/swarm"
-	"redwood.dev/types"
+	. "redwood.dev/utils/generics"
 )
 
 var (
@@ -88,7 +86,7 @@ func (set *PeerSet) RemoveString(s string) error {
 		return err
 	}
 	if existing, exists := set.set[addrInfo.ID]; exists {
-		toDelete := types.NewSet[string](nil)
+		toDelete := NewSet[string](nil)
 		for _, addr := range addrInfo.Addrs {
 			toDelete.Add(addr.String())
 		}
@@ -211,7 +209,7 @@ func multiaddrsFromPeerInfo(pinfo corepeer.AddrInfo) []ma.Multiaddr {
 		multiaddrs = append(multiaddrs, addr)
 	}
 	multiaddrs = filterUselessMultiaddrs(multiaddrs)
-	sort.Sort(peerstoreaddr.AddrList(multiaddrs))
+	// sort.Sort(peerstoreaddr.AddrList(multiaddrs))
 	return multiaddrs
 }
 
@@ -284,6 +282,14 @@ func peerIDFromMultiaddr(multiaddr ma.Multiaddr) (peerID corepeer.ID, ok bool) {
 	return
 }
 
+func addrInfoFromMultiaddr(multiaddr ma.Multiaddr) (corepeer.AddrInfo, bool) {
+	peerID, ok := peerIDFromMultiaddr(multiaddr)
+	if !ok {
+		return corepeer.AddrInfo{}, false
+	}
+	return corepeer.AddrInfo{ID: peerID, Addrs: []ma.Multiaddr{multiaddr}}, true
+}
+
 func splitRelayAndPeer(multiaddr ma.Multiaddr) (relay, peer ma.Multiaddr) {
 	relay, peer = ma.SplitFunc(multiaddr, func(c ma.Component) bool {
 		return c.Protocol().Code == ma.P_CIRCUIT
@@ -321,7 +327,7 @@ func multiaddrHasTerminatingPeerID(multiaddr ma.Multiaddr) (is bool) {
 
 func dedupeMultiaddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
 	var uniqueAddrs []ma.Multiaddr
-	strs := types.NewSet[string](nil)
+	strs := NewSet[string](nil)
 	for _, addr := range addrs {
 		if strs.Contains(addr.String()) {
 			continue

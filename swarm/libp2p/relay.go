@@ -22,10 +22,9 @@ import (
 	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	"github.com/libp2p/go-libp2p-peerstore/pstoremem"
 	routing "github.com/libp2p/go-libp2p-routing"
-	mdns "github.com/libp2p/go-libp2p/p2p/discovery/mdns_legacy"
-	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
-
+	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	rhost "github.com/libp2p/go-libp2p/p2p/host/routed"
+	relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	ma "github.com/multiformats/go-multiaddr"
 	madns "github.com/multiformats/go-multiaddr-dns"
 
@@ -35,7 +34,7 @@ import (
 	"redwood.dev/state"
 )
 
-type BootstrapNode interface {
+type Relay interface {
 	process.Interface
 	log.Logger
 	Libp2pHost() p2phost.Host
@@ -45,17 +44,17 @@ type BootstrapNode interface {
 	Peerstore() corepeerstore.Peerstore
 }
 
-type bootstrapNode struct {
+type relay struct {
 	process.Process
 	log.Logger
 
 	libp2pHost    p2phost.Host
 	dht           *dht.IpfsDHT
+	mdns          mdns.Service
 	datastorePath string
 	// datastore         *badgerds.Datastore
 	peerstore         corepeerstore.Peerstore
 	encryptionConfig  state.EncryptionConfig
-	mdns              mdns.Service
 	peerID            peer.ID
 	port              uint
 	p2pKey            cryptop2p.PrivKey
@@ -64,17 +63,17 @@ type bootstrapNode struct {
 	*metrics.BandwidthCounter
 }
 
-func NewBootstrapNode(
+func NewRelay(
 	port uint,
 	bootstrapPeers []string,
 	p2pKey cryptop2p.PrivKey,
 	dohDNSResolverURL string,
 	datastorePath string,
 	encryptionConfig state.EncryptionConfig,
-) *bootstrapNode {
-	return &bootstrapNode{
-		Process:           *process.New("bootstrap"),
-		Logger:            log.NewLogger("bootstrap"),
+) *relay {
+	return &relay{
+		Process:           *process.New("relay"),
+		Logger:            log.NewLogger("relay"),
 		port:              port,
 		bootstrapPeers:    bootstrapPeers,
 		p2pKey:            p2pKey,
@@ -86,43 +85,43 @@ func NewBootstrapNode(
 
 const dhtTTL = 5 * time.Minute
 
-func (bn *bootstrapNode) Start() error {
-	err := bn.Process.Start()
+func (r *relay) Start() error {
+	err := r.Process.Start()
 	if err != nil {
 		return err
 	}
 
-	bn.Infof(0, "opening libp2p on port %v", bn.port)
+	r.Infof("opening libp2p on port %v", r.port)
 
-	peerID, err := peer.IDFromPublicKey(bn.p2pKey.GetPublic())
+	peerID, err := peer.IDFromPublicKey(r.p2pKey.GetPublic())
 	if err != nil {
 		return err
 	}
-	bn.peerID = peerID
+	r.peerID = peerID
 
-	bn.BandwidthCounter = metrics.NewBandwidthCounter()
+	r.BandwidthCounter = metrics.NewBandwidthCounter()
 
 	// opts := badgerds.DefaultOptions
-	// opts.Options.EncryptionKey = bn.encryptionConfig.Key
-	// opts.Options.EncryptionKeyRotationDuration = bn.encryptionConfig.KeyRotationInterval
+	// opts.Options.EncryptionKey = r.encryptionConfig.Key
+	// opts.Options.EncryptionKeyRotationDuration = r.encryptionConfig.KeyRotationInterval
 	// opts.Options.IndexCacheSize = 100 << 20 // @@TODO: make configurable
 	// opts.Options.KeepL0InMemory = true      // @@TODO: make configurable
 	// opts.GcDiscardRatio = 0.5
 	// opts.GcInterval = 5 * time.Minute
-	// datastore, err := badgerds.NewDatastore(bn.datastorePath, &opts)
+	// datastore, err := badgerds.NewDatastore(r.datastorePath, &opts)
 	// if err != nil {
 	// 	return err
 	// }
-	// bn.datastore = datastore
+	// r.datastore = datastore
 
-	// bn.peerstore, err = pstoreds.NewPeerstore(bn.Process.Ctx(), datastore.NewMapDatastore(), pstoreds.DefaultOpts())
+	// r.peerstore, err = pstoreds.NewPeerstore(r.Process.Ctx(), datastore.NewMapDatastore(), pstoreds.DefaultOpts())
 	// if err != nil {
 	// 	return err
 	// }
 
 	var innerResolver madns.BasicResolver
-	if bn.dohDNSResolverURL != "" {
-		innerResolver = dohp2p.NewResolver(bn.dohDNSResolverURL)
+	if r.dohDNSResolverURL != "" {
+		innerResolver = dohp2p.NewResolver(r.dohDNSResolverURL)
 	} else {
 		innerResolver = net.DefaultResolver
 	}
@@ -131,9 +130,9 @@ func (bn *bootstrapNode) Start() error {
 		return err
 	}
 
-	bootstrapPeers, err := addrInfosFromStrings(bn.bootstrapPeers)
+	bootstrapPeers, err := addrInfosFromStrings(r.bootstrapPeers)
 	if err != nil {
-		bn.Warnf("while decoding bootstrap peers: %v", err)
+		r.Warnf("while decoding bootstrap peers: %v", err)
 	}
 
 	peerStore, err := pstoremem.NewPeerstore()
@@ -141,26 +140,30 @@ func (bn *bootstrapNode) Start() error {
 		return err
 	}
 
-	autorelay.AdvertiseBootDelay = 10 * time.Second
+	// autorelay.AdvertiseBootDelay = 10 * time.Second
+
+	relayResources := relayv2.DefaultResources()
+	relayResources.ReservationTTL = 30 * time.Minute
 
 	// Initialize the libp2p host
 	libp2pHost, err := libp2p.New(
 		libp2p.ListenAddrStrings(
-			fmt.Sprintf("/ip4/0.0.0.0/tcp/%v", bn.port),
-			fmt.Sprintf("/ip6/::/tcp/%v", bn.port),
+			fmt.Sprintf("/ip4/0.0.0.0/tcp/%v", r.port),
+			fmt.Sprintf("/ip6/::/tcp/%v", r.port),
 		),
-		libp2p.Identity(bn.p2pKey),
-		libp2p.BandwidthReporter(bn.BandwidthCounter),
+		libp2p.Identity(r.p2pKey),
+		libp2p.BandwidthReporter(r.BandwidthCounter),
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
-		libp2p.EnableRelay(),
-		libp2p.EnableAutoRelay(
+		// libp2p.EnableRelay(),
+		libp2p.DisableRelay(),
+		// libp2p.EnableAutoRelay(
 		// autorelay.WithStaticRelays(static),
 		// autorelay.WithDiscoverer(discover discovery.Discoverer)
-		),
+		// ),
 		libp2p.EnableRelayService(
-		// relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
-		//     WithResources(rc Resources)
+			// relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
+			relayv2.WithResources(relayResources),
 		//     WithLimit(limit *RelayLimit)
 		//     WithACL(acl ACLFilter)
 		),
@@ -172,7 +175,7 @@ func (bn *bootstrapNode) Start() error {
 		libp2p.Security(noisep2p.ID, noisep2p.New),
 		libp2p.MultiaddrResolver(dnsResolver),
 		libp2p.Routing(func(host corehost.Host) (routing.PeerRouting, error) {
-			bn.dht, err = dht.New(bn.Process.Ctx(), host,
+			r.dht, err = dht.New(r.Process.Ctx(), host,
 				dht.BootstrapPeers(bootstrapPeers...),
 				dht.Mode(dht.ModeServer),
 				dht.Datastore(datastore.NewMapDatastore()),
@@ -182,29 +185,29 @@ func (bn *bootstrapNode) Start() error {
 			if err != nil {
 				return nil, err
 			}
-			return bn.dht, nil
+			return r.dht, nil
 		}),
 	)
 	if err != nil {
 		return errors.Wrap(err, "could not initialize libp2p host")
 	}
 
-	bn.libp2pHost = rhost.Wrap(libp2pHost, bn.dht)
-	bn.libp2pHost.Network().Notify(bn) // Register for libp2p connect/disconnect notifications
+	r.libp2pHost = rhost.Wrap(libp2pHost, r.dht)
+	r.libp2pHost.Network().Notify(r) // Register for libp2p connect/disconnect notifications
 
-	err = bn.dht.Bootstrap(bn.Process.Ctx())
+	err = r.dht.Bootstrap(r.Process.Ctx())
 	if err != nil {
 		return errors.Wrap(err, "could not bootstrap DHT")
 	}
 
 	// Set up DHT discovery
-	routingDiscovery := discovery.NewRoutingDiscovery(bn.dht)
-	discovery.Advertise(bn.Process.Ctx(), routingDiscovery, "redwood")
+	routingDiscovery := discovery.NewRoutingDiscovery(r.dht)
+	discovery.Advertise(r.Process.Ctx(), routingDiscovery, "redwood")
 
-	// Attempt to connect to peers we find through the DHT. The bootstrap node will only log that
+	// Attempt to connect to peers we find through the DHT. The relay node will only log that
 	// it has found a peer once per `dhtTTL` (to avoid log spam). However, it will repeatedly attempt
 	// to connect until `dhtTTL` elapses (silently).
-	bn.Process.Go(nil, "find peers", func(ctx context.Context) {
+	r.Process.Go(nil, "find peers", func(ctx context.Context) {
 		lastLogged := make(map[peer.ID]time.Time)
 		for {
 			select {
@@ -219,27 +222,27 @@ func (bn *bootstrapNode) Start() error {
 
 				chPeers, err := routingDiscovery.FindPeers(ctx, "redwood")
 				if err != nil {
-					bn.Errorf("error finding peers: %v", err)
+					r.Errorf("error finding peers: %v", err)
 					return
 				}
 				for pinfo := range chPeers {
-					if pinfo.ID == bn.peerID {
+					if pinfo.ID == r.peerID {
 						continue
-					} else if len(bn.libp2pHost.Network().ConnsToPeer(pinfo.ID)) > 0 {
+					} else if len(r.libp2pHost.Network().ConnsToPeer(pinfo.ID)) > 0 {
 						continue
 					}
 
 					// Try to avoid log spam after a peer disconnects. Only log once during the DHT entry TTL window.
 					if time.Now().Sub(lastLogged[pinfo.ID]) > dhtTTL {
-						bn.Debugf("DHT peer found: %v", pinfo.ID.Pretty())
+						r.Debugf("DHT peer found: %v", pinfo.ID.Pretty())
 						lastLogged[pinfo.ID] = time.Now()
 					}
 
 					pinfo := pinfo
-					bn.Process.Go(nil, fmt.Sprintf("connect to %v", pinfo.ID.Pretty()), func(ctx context.Context) {
-						err := bn.libp2pHost.Connect(ctx, pinfo)
+					r.Process.Go(nil, fmt.Sprintf("connect to %v", pinfo.ID.Pretty()), func(ctx context.Context) {
+						err := r.libp2pHost.Connect(ctx, pinfo)
 						if err != nil {
-							// bn.Errorf("could not connect to %v: %v", pinfo.ID, err)
+							// r.Errorf("could not connect to %v: %v", pinfo.ID, err)
 						}
 					})
 				}
@@ -249,80 +252,80 @@ func (bn *bootstrapNode) Start() error {
 	})
 
 	// Set up mDNS discovery
-	bn.mdns, err = mdns.NewMdnsService(bn.Process.Ctx(), libp2pHost, 30*time.Second, "redwood")
+	r.mdns = mdns.NewMdnsService(r.libp2pHost, "redwood", r)
+	err = r.mdns.Start()
 	if err != nil {
 		return err
 	}
-	bn.mdns.RegisterNotifee(bn)
 
-	bn.Infof(0, "libp2p peer ID is %v", bn.Libp2pPeerID())
+	r.Infof("libp2p peer ID is %v", r.Libp2pPeerID())
 
 	return nil
 }
 
-func (bn *bootstrapNode) Close() error {
-	err := bn.mdns.Close()
+func (r *relay) Close() error {
+	err := r.mdns.Close()
 	if err != nil {
-		bn.Errorf("error closing libp2p mDNS service: %v", err)
+		r.Errorf("error closing libp2p mDNS service: %v", err)
 	}
-	err = bn.dht.Close()
+	err = r.dht.Close()
 	if err != nil {
-		bn.Errorf("error closing libp2p dht: %v", err)
+		r.Errorf("error closing libp2p dht: %v", err)
 	}
-	err = bn.libp2pHost.Close()
+	err = r.libp2pHost.Close()
 	if err != nil {
-		bn.Errorf("error closing libp2p host: %v", err)
+		r.Errorf("error closing libp2p host: %v", err)
 	}
-	return bn.Process.Close()
+	return r.Process.Close()
 }
 
-func (bn *bootstrapNode) Libp2pPeerID() string {
-	return bn.libp2pHost.ID().Pretty()
+func (r *relay) Libp2pPeerID() string {
+	return r.libp2pHost.ID().Pretty()
 }
 
-func (bn *bootstrapNode) Libp2pHost() p2phost.Host {
-	return bn.libp2pHost
+func (r *relay) Libp2pHost() p2phost.Host {
+	return r.libp2pHost
 }
-func (bn *bootstrapNode) DHT() *dht.IpfsDHT {
-	return bn.dht
-}
-
-func (bn *bootstrapNode) Peers() []peer.AddrInfo {
-	return peerstore.PeerInfos(bn.libp2pHost.Peerstore(), bn.libp2pHost.Peerstore().Peers())
+func (r *relay) DHT() *dht.IpfsDHT {
+	return r.dht
 }
 
-func (bn *bootstrapNode) Peerstore() corepeerstore.Peerstore {
-	return bn.peerstore
+func (r *relay) Peers() []peer.AddrInfo {
+	return peerstore.PeerInfos(r.libp2pHost.Peerstore(), r.libp2pHost.Peerstore().Peers())
 }
 
-func (bn *bootstrapNode) Listen(network netp2p.Network, multiaddr ma.Multiaddr)      {}
-func (bn *bootstrapNode) ListenClose(network netp2p.Network, multiaddr ma.Multiaddr) {}
+func (r *relay) Peerstore() corepeerstore.Peerstore {
+	return r.peerstore
+}
 
-func (bn *bootstrapNode) Connected(network netp2p.Network, conn netp2p.Conn) {
+func (r *relay) Listen(network netp2p.Network, multiaddr ma.Multiaddr)      {}
+func (r *relay) ListenClose(network netp2p.Network, multiaddr ma.Multiaddr) {}
+
+func (r *relay) Connected(network netp2p.Network, conn netp2p.Conn) {
 	addr := conn.RemoteMultiaddr().String() + "/p2p/" + conn.RemotePeer().Pretty()
-	bn.Debugf("libp2p connected: %v", addr)
+	r.Debugf("libp2p connected: %v", addr)
 }
 
-func (bn *bootstrapNode) Disconnected(network netp2p.Network, conn netp2p.Conn) {
+func (r *relay) Disconnected(network netp2p.Network, conn netp2p.Conn) {
 	addr := conn.RemoteMultiaddr().String() + "/p2p/" + conn.RemotePeer().Pretty()
-	bn.Debugf("libp2p disconnected: %v", addr)
+	r.Debugf("libp2p disconnected: %v", addr)
 }
 
-func (bn *bootstrapNode) OpenedStream(network netp2p.Network, stream netp2p.Stream) {}
-func (bn *bootstrapNode) ClosedStream(network netp2p.Network, stream netp2p.Stream) {}
+func (r *relay) OpenedStream(network netp2p.Network, stream netp2p.Stream) {}
+func (r *relay) ClosedStream(network netp2p.Network, stream netp2p.Stream) {}
 
 // HandlePeerFound is the libp2p mDNS peer discovery callback
-func (bn *bootstrapNode) HandlePeerFound(pinfo peer.AddrInfo) {
-	if pinfo.ID == bn.peerID {
+func (r *relay) HandlePeerFound(pinfo peer.AddrInfo) {
+	if pinfo.ID == r.peerID {
 		return
-	} else if len(bn.libp2pHost.Network().ConnsToPeer(pinfo.ID)) > 0 {
+	} else if len(r.libp2pHost.Network().ConnsToPeer(pinfo.ID)) > 0 {
 		return
 	}
 
-	bn.Debugf("mDNS peer found: %v", pinfo.ID.Pretty())
+	r.Debugf("mDNS peer found: %v", pinfo.ID.Pretty())
 
-	err := bn.libp2pHost.Connect(bn.Process.Ctx(), pinfo)
+	err := r.libp2pHost.Connect(r.Process.Ctx(), pinfo)
 	if err != nil {
-		// bn.Errorf("could not connect to %v: %v", pinfo.ID, err)
+		// r.Errorf("could not connect to %v: %v", pinfo.ID, err)
 	}
 }

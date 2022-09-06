@@ -1,0 +1,116 @@
+
+syntax = "proto3";
+
+package Redwood.vault;
+option go_package = "vault";
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option (gogoproto.gostring_all) = true;
+option (gogoproto.equal_all) = true;
+option (gogoproto.verbose_equal_all) = true;
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.stringer_all) =  true;
+option (gogoproto.populate_all) = true;
+option (gogoproto.testgen_all) = false;
+option (gogoproto.benchgen_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+service VaultRPC {
+    rpc Authorize(stream AuthorizeMsg) returns (stream AuthorizeMsg);
+    rpc Items(ItemsReq) returns (ItemsResp);
+    rpc Fetch(FetchReq) returns (stream FetchResp);
+    rpc Store(stream StoreReq) returns (StoreResp);
+    rpc Delete(DeleteReq) returns (DeleteResp);
+    rpc SetUserCapabilities(SetUserCapabilitiesReq) returns (SetUserCapabilitiesResp);
+}
+
+message AuthorizeMsg {
+    message Challenge {
+        bytes challenge = 1;
+    }
+
+    message SignedChallenge {
+        bytes signature = 1 [(gogoproto.customtype) = "redwood.dev/crypto.Signature", (gogoproto.nullable) = false];
+    }
+
+    message Response {
+        string token = 1;
+    }
+
+    oneof msg {
+        Challenge challenge = 1;
+        SignedChallenge signedChallenge = 2;
+        Response response = 3;
+    }
+}
+
+message ItemsReq {
+    string jwt = 1             [(gogoproto.customname) = "JWT"];
+    string collectionID = 2;
+    uint64 oldestMtime = 3;
+    uint64 start = 4;
+    uint64 end = 5;
+}
+
+message ItemsResp {
+    repeated string itemIDs = 1;
+}
+
+message FetchReq {
+    string jwt = 1             [(gogoproto.customname) = "JWT"];
+    string collectionID = 2;
+    string itemID = 3;
+}
+
+message FetchResp {
+    bytes  data = 1;
+    uint64 mtime = 2;
+    bool   end = 3;
+}
+
+message StoreReq {
+    message Header {
+        string jwt = 1              [(gogoproto.customname) = "JWT"];
+        string collectionID = 2;
+        string itemID = 3;
+    }
+
+    message Payload {
+        bytes data = 1;
+        bool end = 2;
+    }
+
+    oneof msg {
+        Header header = 1;
+        Payload payload = 2;
+    }
+}
+
+message StoreResp {}
+
+message DeleteReq {
+    string jwt = 1                          [(gogoproto.customname) = "JWT"];
+    string collectionID = 2;
+    string itemID = 3;
+}
+
+message DeleteResp {}
+
+enum Capability {
+    Forbidden = 0 [(gogoproto.enumvalue_customname) = "Capability_Forbidden"];
+    Fetch = 1     [(gogoproto.enumvalue_customname) = "Capability_Fetch"];
+    Store = 2     [(gogoproto.enumvalue_customname) = "Capability_Store"];
+    Delete = 3    [(gogoproto.enumvalue_customname) = "Capability_Delete"];
+    Admin = 4     [(gogoproto.enumvalue_customname) = "Capability_Admin"];
+}
+
+message SetUserCapabilitiesReq {
+    string jwt = 1                          [(gogoproto.customname) = "JWT"];
+    bytes address = 2                       [(gogoproto.customtype) = "redwood.dev/types.Address", (gogoproto.nullable) = false];
+    repeated Capability capabilities = 3;
+}
+
+message SetUserCapabilitiesResp {}

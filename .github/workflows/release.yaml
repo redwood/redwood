@@ -127,8 +127,10 @@ jobs:
                   asset_path: cmd/redwood/${{ matrix.zip_name }}
                   asset_content_type: application/zip
 
+
+
     build_hush:
-        name: Build Hush
+        name: Build Hush (Linux/Windows)
         needs: create_release
         strategy:
             fail-fast: false
@@ -141,6 +143,9 @@ jobs:
             - uses: actions/setup-go@v2
               with:
                 go-version: '^1.18.x'
+
+            - name: Install gcc-mingw-w64-x86-64
+              run:  sudo apt install -y gcc-mingw-w64-x86-64
 
             - name: Set GOPATH
               run:  echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
@@ -206,10 +211,6 @@ jobs:
               run:  zip -qq -r hush-linux.zip ./output/linux-amd64/Hush
               working-directory: demos/desktop-chat-app
 
-            - name: Zip (macOS)
-              run:  zip -qq -r hush-macos.zip ./output/darwin-amd64/Hush.app
-              working-directory: demos/desktop-chat-app
-
             - name: Zip (Windows)
               run:  zip -qq -r hush-windows.zip ./output/windows-amd64/Hush.exe
               working-directory: demos/desktop-chat-app
@@ -219,12 +220,6 @@ jobs:
               with:
                   name: hush-linux.zip
                   path: demos/desktop-chat-app/hush-linux.zip
-
-            - name: Upload artifacts (macOS)
-              uses: actions/upload-artifact@v2
-              with:
-                  name: hush-macos.zip
-                  path: demos/desktop-chat-app/hush-macos.zip
 
             - name: Upload artifacts (Windows)
               uses: actions/upload-artifact@v2
@@ -242,16 +237,6 @@ jobs:
                   asset_path: demos/desktop-chat-app/hush-linux.zip
                   asset_content_type: application/zip
 
-            - name: Upload release assets (macOS)
-              uses: actions/upload-release-asset@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ needs.create_release.outputs.upload_url }}
-                  asset_name: hush-macos.zip
-                  asset_path: demos/desktop-chat-app/hush-macos.zip
-                  asset_content_type: application/zip
-
             - name: Upload release assets (Windows)
               uses: actions/upload-release-asset@v1
               env:
@@ -262,143 +247,120 @@ jobs:
                   asset_path: demos/desktop-chat-app/hush-windows.zip
                   asset_content_type: application/zip
 
-    # build_hush:
-    #     name: Build Hush
-    #     needs: create_release
-    #     strategy:
-    #         fail-fast: false
-    #         matrix:
-    #             platform: [ubuntu-latest, macos-11, macos-10.15, windows-latest]
-    #             include:
-    #                 - platform:    ubuntu-latest
-    #                   app_name:    hush
-    #                   zip_name:    hush-ubuntu.zip
-    #                   go_exe:      go
-    #                   build_flags:
-    #                 - platform:    macos-11
-    #                   app_name:    Hush.app/
-    #                   zip_name:    hush-macos-11.zip
-    #                   go_exe:      go
-    #                   build_flags:
-    #                 - platform:    macos-10.15
-    #                   app_name:    Hush.app/
-    #                   zip_name:    hush-macos-10.15.zip
-    #                   go_exe:      go
-    #                   build_flags:
-    #                 - platform:    windows-latest
-    #                   app_name:    Hush.exe
-    #                   zip_name:    hush-windows-latest.zip
-    #                   go_exe:      go
-    #                   build_flags: --tags otto -ldflags="-H windowsgui"
 
-    #     runs-on: ${{ matrix.platform }}
-    #     steps:
-    #         - name: Checkout the repo
-    #           uses: actions/checkout@v2
+    build_hush_macos:
+        name: Build Hush (macOS)
+        needs: create_release
+        strategy:
+            fail-fast: false
 
-    #         - uses: actions/setup-go@v2
-    #           with:
-    #             go-version: '^1.18.x'
+        runs-on: macos-latest
+        steps:
+            - name: Checkout the repo
+              uses: actions/checkout@v2
 
-    #         - name: Set GOPATH
-    #           run:  echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
-    #           if:   ${{ matrix.platform == 'ubuntu-latest' || matrix.platform == 'macos-10.15' || matrix.platform == 'macos-11' }}
+            - uses: actions/setup-go@v2
+              with:
+                go-version: '^1.18.x'
 
-    #         - name: Set GOPATH
-    #           run:  echo "GOPATH=$(go env GOPATH)" >> $env:GITHUB_ENV
-    #           if:   ${{ matrix.platform == 'windows-latest' }}
+            - name: Set GOPATH
+              run:  echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
 
-    #         - name: Cache Go vendor packages
-    #           uses: actions/cache@v2
-    #           with:
-    #               path: ${{ env.GOPATH }}
-    #               key: go-mod-${{ hashFiles('demos/desktop-chat-app/go.mod') }}
-    #               restore-keys: |
-    #                 go-mod-${{ hashFiles('demos/desktop-chat-app/go.mod') }}
-    #                 go-mod-
+            - name: Cache Go vendor packages
+              uses: actions/cache@v2
+              with:
+                  path: ${{ env.GOPATH }}
+                  key: go-mod-${{ hashFiles('demos/desktop-chat-app/go.mod') }}
+                  restore-keys: |
+                    go-mod-${{ hashFiles('demos/desktop-chat-app/go.mod') }}
+                    go-mod-
 
-    #         - name: Download Go vendor packages
-    #           run:  ${{ matrix.go_exe }} mod download
-    #           working-directory: demos/desktop-chat-app
+            - name: Download Go vendor packages
+              run:  ${{ matrix.go_exe }} mod download
+              working-directory: demos/desktop-chat-app
 
-    #         - name: Install system dependencies
-    #           run:  sudo apt update && sudo apt install -y libwebkit2gtk-4.0-dev
-    #           if:   ${{ matrix.platform == 'ubuntu-latest' }}
+            - name: Get Yarn cache directory path
+              id:   yarn-cache-dir-path
+              run:  echo "::set-output name=dir::$(yarn cache dir)"
 
-    #         - name: Get Yarn cache directory path
-    #           id:   yarn-cache-dir-path
-    #           run:  echo "::set-output name=dir::$(yarn cache dir)"
+            - name: Cache redwood.js dependencies
+              uses: actions/cache@v2
+              with:
+                  path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+                  key: yarn-redwood.js-${{ hashFiles('./embed/yarn.lock') }}
+                  restore-keys: |
+                    yarn-redwood.js-${{ hashFiles('./embed/yarn.lock') }}
+                    yarn-redwood.js-
 
-    #         - name: Cache redwood.js dependencies
-    #           uses: actions/cache@v2
-    #           with:
-    #               path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-    #               key: yarn-redwood.js-${{ hashFiles('./embed/yarn.lock') }}
-    #               restore-keys: |
-    #                 yarn-redwood.js-${{ hashFiles('./embed/yarn.lock') }}
-    #                 yarn-redwood.js-
+            - name: Download redwood.js
+              run: yarn
+              working-directory: embed
 
-    #         - name: Download redwood.js
-    #           run: yarn
-    #           working-directory: embed
+            - name: Cache desktop-chat-app/frontend dependencies
+              uses: actions/cache@v2
+              with:
+                  path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+                  key: yarn-hush-${{ hashFiles('./demos/desktop-chat-app/frontend/yarn.lock') }}
+                  restore-keys: |
+                    yarn-hush-${{ hashFiles('./demos/desktop-chat-app/frontend/yarn.lock') }}
+                    yarn-hush-
 
-    #         - name: Cache desktop-chat-app/frontend dependencies
-    #           uses: actions/cache@v2
-    #           with:
-    #               path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-    #               key: yarn-hush-${{ hashFiles('./demos/desktop-chat-app/frontend/yarn.lock') }}
-    #               restore-keys: |
-    #                 yarn-hush-${{ hashFiles('./demos/desktop-chat-app/frontend/yarn.lock') }}
-    #                 yarn-hush-
+            - name: Install desktop-chat-app/frontend dependencies
+              run:  yarn install --frozen-lockfile --prefer-offline
+              working-directory: demos/desktop-chat-app/frontend
 
-    #         - name: Install desktop-chat-app/frontend dependencies
-    #           run:  yarn install --frozen-lockfile --prefer-offline
-    #           working-directory: demos/desktop-chat-app/frontend
+            - name: Build frontend
+              run:  yarn build
+              working-directory: demos/desktop-chat-app/frontend
 
-    #         - name: Build frontend
-    #           run:  yarn build
-    #           working-directory: demos/desktop-chat-app/frontend
+            - name: Install go-astilectron-bundler
+              run:  go get -u github.com/asticode/go-astilectron-bundler/... && go install github.com/asticode/go-astilectron-bundler/astilectron-bundler
 
-    #         - name: Install go-astilectron-bundler
-    #           run:  go get -u github.com/asticode/go-astilectron-bundler/... && go install github.com/asticode/go-astilectron-bundler/astilectron-bundler
+            - name: go mod tidy
+              run:  go mod tidy
 
-    #         - name: Build Hush
-    #           run:  astilectron-bundler
-    #           working-directory: demos/desktop-chat-app
+            - name: Build Hush
+              run:  astilectron-bundler -c bundler-macos.json
+              working-directory: demos/desktop-chat-app
 
-    #         # - name: Package macOS app
-    #         #   run:  mkdir -p ./packaging/Hush.app/Contents/MacOS && mv ./hush ./packaging/Hush.app/Contents/MacOS/Hush && chmod +x ./packaging/Hush.app/Contents/MacOS/Hush && mv ./packaging/Hush.app .
-    #         #   if:   ${{ matrix.platform == 'macos-11' || matrix.platform == 'macos-10.15' }}
-    #         #   working-directory: demos/desktop-chat-app
+            - name: Zip (macOS amd64)
+              run:  zip -qq -r hush-macos-amd64.zip ./output/darwin-amd64/Hush.app
+              working-directory: demos/desktop-chat-app
 
-    #         # - name: Package Windows app
-    #         #   # run:  mv ${{ matrix.app_name }} ./packaging/windows && mv ./packaging/windows .
-    #         #   run:  mv hush ${{ matrix.app_name }}
-    #         #   if:   ${{ matrix.platform == 'windows-latest' }}
-    #         #   working-directory: demos/desktop-chat-app
+            - name: Zip (macOS arm64)
+              run:  zip -qq -r hush-macos-arm64.zip ./output/darwin-arm64/Hush.app
+              working-directory: demos/desktop-chat-app
 
-    #         - name: Zip (Linux + macOS)
-    #           run:  zip -qq -r ${{ matrix.zip_name }} ${{ matrix.app_name }}
-    #           if:   ${{ matrix.platform == 'macos-11' || matrix.platform == 'macos-10.15' || matrix.platform == 'ubuntu-latest' }}
-    #           working-directory: demos/desktop-chat-app
+            - name: Upload artifacts (macOS amd64)
+              uses: actions/upload-artifact@v2
+              with:
+                  name: hush-macos-amd64.zip
+                  path: demos/desktop-chat-app/hush-macos-amd64.zip
 
-    #         - name: Zip (Windows)
-    #           run: Compress-Archive -LiteralPath ${{ matrix.app_name }} -DestinationPath ${{ matrix.zip_name }}
-    #           if:   ${{ matrix.platform == 'windows-latest' }}
-    #           working-directory: demos/desktop-chat-app
+            - name: Upload artifacts (macOS arm64)
+              uses: actions/upload-artifact@v2
+              with:
+                  name: hush-macos-arm64.zip
+                  path: demos/desktop-chat-app/hush-macos-arm64.zip
 
-    #         - name: Upload artifacts
-    #           uses: actions/upload-artifact@v2
-    #           with:
-    #               name: ${{ matrix.zip_name }}
-    #               path: demos/desktop-chat-app/${{ matrix.zip_name }}
+            - name: Upload release assets (macOS amd64)
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ needs.create_release.outputs.upload_url }}
+                  asset_name: hush-macos-amd64.zip
+                  asset_path: demos/desktop-chat-app/hush-macos-amd64.zip
+                  asset_content_type: application/zip
 
-    #         - name: Upload release assets
-    #           uses: actions/upload-release-asset@v1
-    #           env:
-    #               GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    #           with:
-    #               upload_url: ${{ needs.create_release.outputs.upload_url }}
-    #               asset_name: ${{ matrix.zip_name }}
-    #               asset_path: demos/desktop-chat-app/${{ matrix.zip_name }}
-    #               asset_content_type: application/zip
+            - name: Upload release assets (macOS arm64)
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ needs.create_release.outputs.upload_url }}
+                  asset_name: hush-macos-arm64.zip
+                  asset_path: demos/desktop-chat-app/hush-macos-arm64.zip
+                  asset_content_type: application/zip
+
+

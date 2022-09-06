@@ -9,8 +9,10 @@ import (
 	"redwood.dev/log"
 	"redwood.dev/process"
 	"redwood.dev/swarm"
+	"redwood.dev/swarm/protohush"
 	"redwood.dev/types"
 	"redwood.dev/utils"
+	. "redwood.dev/utils/generics"
 )
 
 //go:generate mockery --name BlobProtocol --output ./mocks/ --case=underscore
@@ -23,7 +25,7 @@ type BlobProtocol interface {
 type BlobTransport interface {
 	swarm.Transport
 	ProvidersOfBlob(ctx context.Context, blobID blob.ID) (<-chan BlobPeerConn, error)
-	AnnounceBlobs(ctx context.Context, blobIDs types.Set[blob.ID])
+	AnnounceBlobs(ctx context.Context, blobIDs Set[blob.ID])
 	OnBlobManifestRequest(handler func(blobID blob.ID, peer BlobPeerConn))
 	OnBlobChunkRequest(handler func(sha3 types.Hash, peer BlobPeerConn))
 }
@@ -31,19 +33,20 @@ type BlobTransport interface {
 //go:generate mockery --name BlobPeerConn --output ./mocks/ --case=underscore
 type BlobPeerConn interface {
 	swarm.PeerConn
-	FetchBlobManifest(blobID blob.ID) (blob.Manifest, error)
-	SendBlobManifest(m blob.Manifest, exists bool) error
-	FetchBlobChunk(sha3 types.Hash) ([]byte, error)
-	SendBlobChunk(chunk []byte, exists bool) error
+	FetchBlobManifest(ctx context.Context, blobID blob.ID) (blob.Manifest, error)
+	SendBlobManifest(ctx context.Context, m blob.Manifest, exists bool) error
+	FetchBlobChunk(ctx context.Context, sha3 types.Hash) ([]byte, error)
+	SendBlobChunk(ctx context.Context, chunk []byte, exists bool) error
 }
 
 type blobProtocol struct {
 	swarm.BaseProtocol[BlobTransport, BlobPeerConn]
 
 	blobStore         blob.Store
-	transports        map[string]BlobTransport
 	blobsNeeded       *utils.Mailbox[[]blob.ID]
-	blobsBeingFetched types.SyncSet[blob.ID]
+	blobsBeingFetched SyncSet[blob.ID]
+
+	hushProto protohush.HushProtocol
 
 	// fetchBlobsTask    *fetchBlobsTask
 	announceBlobsTask *announceBlobsTask
@@ -53,7 +56,7 @@ const (
 	ProtocolName = "protoblob"
 )
 
-func NewBlobProtocol(transports []swarm.Transport, blobStore blob.Store) *blobProtocol {
+func NewBlobProtocol(transports []swarm.Transport, blobStore blob.Store, hushProto protohush.HushProtocol) *blobProtocol {
 	transportsMap := make(map[string]BlobTransport)
 	for _, tpt := range transports {
 		if tpt, is := tpt.(BlobTransport); is {
@@ -67,9 +70,9 @@ func NewBlobProtocol(transports []swarm.Transport, blobStore blob.Store) *blobPr
 			Transports: transportsMap,
 		},
 		blobStore:         blobStore,
-		transports:        transportsMap,
 		blobsNeeded:       utils.NewMailbox[[]blob.ID](0),
-		blobsBeingFetched: types.NewSyncSet[blob.ID](nil),
+		blobsBeingFetched: NewSyncSet[blob.ID](nil),
+		hushProto:         hushProto,
 	}
 
 	// bp.fetchBlobsTask = NewFetchBlobsTask(15*time.Second, bp)
@@ -83,11 +86,14 @@ func NewBlobProtocol(transports []swarm.Transport, blobStore blob.Store) *blobPr
 		bp.announceBlobsTask.Enqueue()
 	})
 
-	for _, tpt := range bp.transports {
-		bp.Infof(0, "registering %v", tpt.Name())
+	for _, tpt := range bp.Transports {
+		bp.Infof("registering %v", tpt.Name())
 		tpt.OnBlobManifestRequest(bp.handleBlobManifestRequest)
 		tpt.OnBlobChunkRequest(bp.handleBlobChunkRequest)
 	}
+
+	// bp.hushProto.OnGroupMessageEncrypted(ProtocolName, bp.handleBlobEncrypted)
+	// bp.hushProto.OnGroupMessageDecrypted(ProtocolName, bp.handleBlobDecrypted)
 
 	return bp
 }
@@ -119,7 +125,7 @@ func (bp *blobProtocol) Start() error {
 }
 
 func (bp *blobProtocol) Close() error {
-	bp.Infof(0, "blob protocol shutting down")
+	bp.Infof("blob protocol shutting down")
 	return bp.Process.Close()
 }
 
@@ -131,7 +137,7 @@ func (bp *blobProtocol) ProvidersOfBlob(ctx context.Context, blobID blob.ID) <-c
 		close(ch)
 	})
 
-	for _, tpt := range bp.transports {
+	for _, tpt := range bp.Transports {
 		innerCh, err := tpt.ProvidersOfBlob(ctx, blobID)
 		if err != nil {
 			bp.Warnf("transport %v could not fetch providers of blob %v", tpt.Name(), blobID)
@@ -231,9 +237,12 @@ func (bp *blobProtocol) handleBlobManifestRequest(blobID blob.ID, peer BlobPeerC
 
 	bp.Debugf("incoming blob manifest request for %v from %v", blobID, peer.DialInfo())
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	manifest, err := bp.blobStore.Manifest(blobID)
 	if errors.Cause(err) == errors.Err404 {
-		err := peer.SendBlobManifest(blob.Manifest{}, false)
+		err := peer.SendBlobManifest(ctx, blob.Manifest{}, false)
 		if err != nil {
 			bp.Errorf("while responding to manifest request (blobID: %v, peer: %v): %v", blobID, peer.DialInfo(), err)
 			return
@@ -243,7 +252,7 @@ func (bp *blobProtocol) handleBlobManifestRequest(blobID blob.ID, peer BlobPeerC
 		return
 	}
 
-	err = peer.SendBlobManifest(manifest, true)
+	err = peer.SendBlobManifest(ctx, manifest, true)
 	if err != nil {
 		bp.Errorf("while responding to manifest request (blobID: %v, peer: %v): %v", blobID, peer.DialInfo(), err)
 		return
@@ -257,9 +266,12 @@ func (bp *blobProtocol) handleBlobChunkRequest(sha3 types.Hash, peer BlobPeerCon
 
 	bp.Debugf("incoming blob chunk request for %v from %v", sha3.Hex(), peer.DialInfo())
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	chunkBytes, err := bp.blobStore.Chunk(sha3)
 	if errors.Cause(err) == errors.Err404 {
-		err := peer.SendBlobChunk(nil, false)
+		err := peer.SendBlobChunk(ctx, nil, false)
 		if err != nil {
 			bp.Errorf("while sending blob chunk response: %v", err)
 			return
@@ -270,12 +282,16 @@ func (bp *blobProtocol) handleBlobChunkRequest(sha3 types.Hash, peer BlobPeerCon
 		return
 	}
 
-	err = peer.SendBlobChunk(chunkBytes, true)
+	err = peer.SendBlobChunk(ctx, chunkBytes, true)
 	if err != nil {
 		bp.Errorf("while sending blob chunk response: %v", err)
 		return
 	}
 }
+
+// func (bp *blobProtocol) handleBlobEncrypted(messageID string, encryptedTx protohush.GroupMessage) {
+//     bp.vaultClient.StoreEncryptedBlob(encryptedTx)
+// }
 
 type announceBlobsTask struct {
 	process.PeriodicTask
@@ -309,9 +325,15 @@ func (t *announceBlobsTask) announceBlobs(ctx context.Context) {
 		return
 	}
 
-	blobIDs := types.NewSet[blob.ID](append(sha1s, sha3s...))
+	blobIDs := NewSet[blob.ID](nil)
+	blobIDs.AddAll(sha1s...)
+	blobIDs.AddAll(sha3s...)
 
 	for _, tpt := range t.blobProto.Transports {
+		ok := <-tpt.AwaitReady(ctx)
+		if !ok {
+			continue
+		}
 		tpt.AnnounceBlobs(ctx, blobIDs)
 	}
 }

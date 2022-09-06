@@ -27,7 +27,7 @@ message Tx {
     repeated bytes parents = 2    [(gogoproto.customtype) = "redwood.dev/state.Version",   (gogoproto.nullable) = false];
     repeated bytes children = 3   [(gogoproto.customtype) = "redwood.dev/state.Version",   (gogoproto.nullable) = false];
     bytes from = 4                [(gogoproto.customtype) = "redwood.dev/types.Address",   (gogoproto.nullable) = false];
-    bytes sig = 5                 [(gogoproto.customtype) = "redwood.dev/types.Signature", (gogoproto.nullable) = false];
+    bytes sig = 5                 [(gogoproto.customtype) = "redwood.dev/crypto.Signature", (gogoproto.nullable) = false];
     string stateURI = 6;
     repeated Patch patches = 7    [(gogoproto.nullable) = false];
     bool checkpoint = 8;

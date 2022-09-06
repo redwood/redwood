@@ -8,12 +8,15 @@ import (
 	"redwood.dev/state"
 	"redwood.dev/tree"
 	"redwood.dev/types"
+	. "redwood.dev/utils/generics"
 )
 
 type ACL interface {
 	TypeOf(stateURI string) StateURIType
-	MembersOf(stateURI string) (types.Set[types.Address], error)
-	HasReadAccess(stateURI string, keypath state.Keypath, addresses types.Set[types.Address]) (bool, error)
+	MembersOf(stateURI string) (Set[types.Address], error)
+	HasReadAccess(stateURI string, keypath state.Keypath, addresses Set[types.Address]) (bool, error)
+	MembersAdded(diff *state.Diff) Set[types.Address]
+	MembersRemoved(diff *state.Diff) Set[types.Address]
 }
 
 type StateURIType int
@@ -68,8 +71,8 @@ func (acl DefaultACL) TypeOf(stateURI string) StateURIType {
 	}
 }
 
-func (acl DefaultACL) MembersOf(stateURI string) (types.Set[types.Address], error) {
-	addrs := types.NewSet[types.Address](nil)
+func (acl DefaultACL) MembersOf(stateURI string) (Set[types.Address], error) {
+	addrs := NewSet[types.Address](nil)
 
 	state, err := acl.ControllerHub.StateAtVersion(stateURI, nil)
 	if errors.Cause(err) == errors.Err404 {
@@ -94,7 +97,21 @@ func (acl DefaultACL) MembersOf(stateURI string) (types.Set[types.Address], erro
 	return addrs, nil
 }
 
-func (acl DefaultACL) HasReadAccess(stateURI string, keypath state.Keypath, addresses types.Set[types.Address]) (bool, error) {
+func (acl DefaultACL) MembersAdded(diff *state.Diff) Set[types.Address] {
+	keypaths := Filter(diff.AddedList, func(kp state.Keypath) bool {
+		return kp.NumParts() == 2 && kp.Part(0).Equals(DefaultACLMembersKeypath)
+	})
+	addrs, _ := MapWithError(keypaths, func(kp state.Keypath) (types.Address, error) { return types.AddressFromHex(kp.Part(1).String()) })
+	return NewSet(addrs)
+}
+
+func (acl DefaultACL) MembersRemoved(diff *state.Diff) Set[types.Address] {
+	keypaths := Filter(diff.RemovedList, func(kp state.Keypath) bool { return kp.NumParts() == 2 && kp.Part(0).Equals(DefaultACLMembersKeypath) })
+	addrs, _ := MapWithError(keypaths, func(kp state.Keypath) (types.Address, error) { return types.AddressFromHex(kp.String()) })
+	return NewSet(addrs)
+}
+
+func (acl DefaultACL) HasReadAccess(stateURI string, keypath state.Keypath, addresses Set[types.Address]) (bool, error) {
 	switch acl.TypeOf(stateURI) {
 	case StateURIType_Invalid:
 		return false, errors.Errorf(`bad state URI: "%v"`, stateURI)
@@ -110,7 +127,7 @@ func (acl DefaultACL) HasReadAccess(stateURI string, keypath state.Keypath, addr
 	}
 }
 
-func (acl DefaultACL) isMemberOfPrivateStateURI(stateURI string, addresses types.Set[types.Address]) (bool, error) {
+func (acl DefaultACL) isMemberOfPrivateStateURI(stateURI string, addresses Set[types.Address]) (bool, error) {
 	state, err := acl.ControllerHub.StateAtVersion(stateURI, nil)
 	if err != nil {
 		return false, err

@@ -23,6 +23,12 @@ func (p BaseProtocol[T, P]) PeerInfosToPeerConns(ctx context.Context, peerInfos 
 			if !exists {
 				continue
 			}
+
+			ok := <-tpt.AwaitReady(ctx)
+			if !ok {
+				continue
+			}
+
 			peerConn, err := tpt.NewPeerConn(ctx, dialInfo.DialAddr)
 			if err != nil {
 				continue

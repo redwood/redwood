@@ -12,7 +12,9 @@ import (
 	"redwood.dev/process"
 	"redwood.dev/state"
 	"redwood.dev/types"
+	"redwood.dev/utils"
 	"redwood.dev/utils/badgerutils"
+	. "redwood.dev/utils/generics"
 )
 
 type ControllerHub interface {
@@ -22,17 +24,17 @@ type ControllerHub interface {
 	FetchTx(stateURI string, txID state.Version) (Tx, error)
 	FetchValidTxsOrdered(stateURI string, fromTxID state.Version) TxIterator
 
-	StateURIsWithData() (types.Set[string], error)
+	StateURIsWithData() (Set[string], error)
 	IsStateURIWithData(stateURI string) (bool, error)
 	OnNewStateURIWithData(fn NewStateURIWithDataCallback)
 	StateAtVersion(stateURI string, version *state.Version) (state.Node, error)
-	// QueryIndex(stateURI string, version *state.Version, keypath state.Keypath, indexName state.Keypath, queryParam state.Keypath, rng *state.Range) (state.Node, error)
 	Leaves(stateURI string) ([]state.Version, error)
 
 	BlobReader(refID blob.ID, rng *types.Range) (io.ReadCloser, int64, error)
 
 	OnNewState(fn NewStateCallback)
 	DebugPrint(stateURI string)
+	DebugPrintAll()
 }
 
 type controllerHub struct {
@@ -45,6 +47,8 @@ type controllerHub struct {
 	blobStore     blob.Store
 	dbRootPath    string
 	badgerOpts    badgerutils.OptsBuilder
+
+	dbTree *state.DBTree
 
 	newStateListeners   []NewStateCallback
 	newStateListenersMu sync.RWMutex
@@ -74,6 +78,12 @@ func (m *controllerHub) Start() (err error) {
 		return err
 	}
 
+	dbTree, err := state.NewDBTree(m.badgerOpts.ForPath(m.dbRootPath))
+	if err != nil {
+		return err
+	}
+	m.dbTree = dbTree
+
 	stateURIs, err := m.txStore.StateURIsWithData()
 	if err != nil {
 		return err
@@ -89,6 +99,14 @@ func (m *controllerHub) Start() (err error) {
 	return nil
 }
 
+func (m *controllerHub) Close() error {
+	err := m.dbTree.Close()
+	if err != nil {
+		return err
+	}
+	return m.Process.Close()
+}
+
 func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
 	m.controllersMu.Lock()
 	defer m.controllersMu.Unlock()
@@ -96,8 +114,10 @@ func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
 	ctrl := m.controllers[stateURI]
 	if ctrl == nil {
 		// Set up the controller
+		// stateURIClean := strings.NewReplacer(":", "_", "/", "_").Replace(stateURI)
+
 		var err error
-		ctrl, err = NewController(stateURI, m.dbRootPath, m.badgerOpts, m, m.txStore, m.blobStore)
+		ctrl, err = NewController(stateURI, &VersionedDBTree{m.dbTree, StateURI(stateURI)}, m, m.txStore, m.blobStore)
 		if err != nil {
 			return nil, err
 		}
@@ -115,7 +135,7 @@ func (m *controllerHub) ensureController(stateURI string) (Controller, error) {
 	return ctrl, nil
 }
 
-func (m *controllerHub) StateURIsWithData() (types.Set[string], error) {
+func (m *controllerHub) StateURIsWithData() (Set[string], error) {
 	return m.txStore.StateURIsWithData()
 }
 
@@ -204,4 +224,8 @@ func (m *controllerHub) DebugPrint(stateURI string) {
 		return
 	}
 	m.controllers[stateURI].DebugPrint()
+}
+
+func (m *controllerHub) DebugPrintAll() {
+	m.dbTree.DebugPrint(utils.PrintfDebugPrinter, true, 0)
 }

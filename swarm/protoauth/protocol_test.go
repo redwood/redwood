@@ -33,9 +33,9 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		)
 
 		http.On("Name").Return("http")
-		http.On("OnChallengeIdentity", mock.Anything).Return()
+		http.On("OnIncomingIdentityChallenge", mock.Anything).Return()
 		libp2p.On("Name").Return("libp2p")
-		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
+		libp2p.On("OnIncomingIdentityChallenge", mock.Anything).Return()
 
 		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return()
 		peerStore.On("AllDialInfos").Return(nil).Maybe()
@@ -105,9 +105,9 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		)
 
 		http.On("Name").Return("http")
-		http.On("OnChallengeIdentity", mock.Anything).Return()
+		http.On("OnIncomingIdentityChallenge", mock.Anything).Return()
 		libp2p.On("Name").Return("libp2p")
-		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
+		libp2p.On("OnIncomingIdentityChallenge", mock.Anything).Return()
 
 		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return().Maybe()
 		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil).Maybe()
@@ -147,9 +147,9 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		)
 
 		http.On("Name").Return("http")
-		http.On("OnChallengeIdentity", mock.Anything).Return()
+		http.On("OnIncomingIdentityChallenge", mock.Anything).Return()
 		libp2p.On("Name").Return("libp2p")
-		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
+		libp2p.On("OnIncomingIdentityChallenge", mock.Anything).Return()
 
 		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return().Maybe()
 		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil).Maybe()
@@ -190,9 +190,9 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		)
 
 		http.On("Name").Return("http")
-		http.On("OnChallengeIdentity", mock.Anything).Return()
+		http.On("OnIncomingIdentityChallenge", mock.Anything).Return()
 		libp2p.On("Name").Return("libp2p")
-		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
+		libp2p.On("OnIncomingIdentityChallenge", mock.Anything).Return()
 
 		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return().Maybe()
 		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil).Maybe()
@@ -234,9 +234,9 @@ func TestAuthProtocol_ChallengePeerIdentity(t *testing.T) {
 		)
 
 		http.On("Name").Return("http")
-		http.On("OnChallengeIdentity", mock.Anything).Return()
+		http.On("OnIncomingIdentityChallenge", mock.Anything).Return()
 		libp2p.On("Name").Return("libp2p")
-		libp2p.On("OnChallengeIdentity", mock.Anything).Return()
+		libp2p.On("OnIncomingIdentityChallenge", mock.Anything).Return()
 
 		peerStore.On("OnNewUnverifiedPeer", mock.Anything).Return().Maybe()
 		peerStore.On("UnverifiedPeers", mock.Anything).Return(nil).Maybe()

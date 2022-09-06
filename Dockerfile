@@ -30,6 +30,7 @@ ADD ./swarm /build/swarm/
 ADD ./tree /build/tree/
 ADD ./types /build/types/
 ADD ./utils /build/utils/
+ADD ./vault /build/vault/
 
 COPY --from=embed /build/embed/node_modules /build/embed/node_modules
 
@@ -40,7 +41,8 @@ RUN go build -o /redwood .
 
 
 
-FROM golang:1.18.0-buster
+# FROM golang:1.18.0-buster
+FROM ubuntu:latest
 
 COPY --from=build /redwood /redwood
 WORKDIR /

@@ -2,9 +2,46 @@ package pb
 
 import (
 	"redwood.dev/blob"
+	"redwood.dev/crypto"
+	"redwood.dev/state"
+	"redwood.dev/swarm"
 	"redwood.dev/swarm/protohush"
+	"redwood.dev/swarm/prototree"
+	"redwood.dev/tree"
 	"redwood.dev/types"
 )
+
+func MakeAuthProtobuf_ChallengeRequest() *AuthMessage {
+	return &AuthMessage{
+		Payload: &AuthMessage_ChallengeRequest_{
+			ChallengeRequest: &AuthMessage_ChallengeRequest{},
+		},
+	}
+}
+
+func MakeAuthProtobuf_Challenge(challenge crypto.ChallengeMsg) *AuthMessage {
+	return &AuthMessage{
+		Payload: &AuthMessage_Challenge_{
+			Challenge: &AuthMessage_Challenge{Challenge: challenge},
+		},
+	}
+}
+
+func MakeAuthProtobuf_Signatures(challenges []crypto.ChallengeMsg, signatures []crypto.Signature, asymEncPubkeys []crypto.AsymEncPubkey) *AuthMessage {
+	return &AuthMessage{
+		Payload: &AuthMessage_Signatures_{
+			Signatures: &AuthMessage_Signatures{Challenges: challenges, Signatures: signatures, AsymEncPubkeys: asymEncPubkeys},
+		},
+	}
+}
+
+func MakeAuthProtobuf_Ucan(ucan string) *AuthMessage {
+	return &AuthMessage{
+		Payload: &AuthMessage_Ucan_{
+			Ucan: &AuthMessage_Ucan{Ucan: ucan},
+		},
+	}
+}
 
 func MakeBlobProtobuf_FetchManifest(blobID blob.ID) *BlobMessage {
 	return &BlobMessage{
@@ -38,50 +75,78 @@ func MakeBlobProtobuf_SendChunk(chunk []byte, exists bool) *BlobMessage {
 	}
 }
 
-func MakeHushProtobuf_DHPubkeyAttestations(attestations []protohush.DHPubkeyAttestation) *HushMessage {
+func MakeHushProtobuf_PubkeyBundles(bundles []protohush.PubkeyBundle) *HushMessage {
 	return &HushMessage{
-		Payload: &HushMessage_DhPubkeyAttestations{
-			DhPubkeyAttestations: &HushMessage_DHPubkeyAttestations{Attestations: attestations},
+		Payload: &HushMessage_PubkeyBundles_{
+			PubkeyBundles: &HushMessage_PubkeyBundles{Bundles: bundles},
 		},
 	}
 }
 
-func MakeHushProtobuf_ProposeIndividualSession(encryptedProposal []byte) *HushMessage {
-	return &HushMessage{
-		Payload: &HushMessage_ProposeIndividualSession_{
-			ProposeIndividualSession: &HushMessage_ProposeIndividualSession{
-				EncryptedProposal: encryptedProposal,
-			},
+func MakeTreeProtobuf_Subscribe(stateURI string) *TreeMessage {
+	return &TreeMessage{
+		Payload: &TreeMessage_Subscribe_{
+			Subscribe: &TreeMessage_Subscribe{StateURI: stateURI},
 		},
 	}
 }
 
-func MakeHushProtobuf_RespondToIndividualSessionProposal(response protohush.IndividualSessionResponse) *HushMessage {
-	return &HushMessage{
-		Payload: &HushMessage_RespondToIndividualSessionProposal_{
-			RespondToIndividualSessionProposal: &HushMessage_RespondToIndividualSessionProposal{
-				Response: &response,
-			},
+func MakeTreeProtobuf_Tx(tx tree.Tx) *TreeMessage {
+	return &TreeMessage{
+		Payload: &TreeMessage_Tx{
+			Tx: &tx,
 		},
 	}
 }
 
-func MakeHushProtobuf_SendIndividualMessage(msg protohush.IndividualMessage) *HushMessage {
-	return &HushMessage{
-		Payload: &HushMessage_SendIndividualMessage_{
-			SendIndividualMessage: &HushMessage_SendIndividualMessage{
-				Message: &msg,
-			},
+func MakeTreeProtobuf_EncryptedTx(tx prototree.EncryptedTx) *TreeMessage {
+	return &TreeMessage{
+		Payload: &TreeMessage_EncryptedTx_{
+			EncryptedTx: &TreeMessage_EncryptedTx{EncryptedTx: tx},
 		},
 	}
 }
 
-func MakeHushProtobuf_SendGroupMessage(msg protohush.GroupMessage) *HushMessage {
-	return &HushMessage{
-		Payload: &HushMessage_SendGroupMessage_{
-			SendGroupMessage: &HushMessage_SendGroupMessage{
-				Message: &msg,
-			},
+func MakeTreeProtobuf_Ack(stateURI string, txID state.Version) *TreeMessage {
+	return &TreeMessage{
+		Payload: &TreeMessage_Ack_{
+			Ack: &TreeMessage_Ack{StateURI: stateURI, TxID: txID},
 		},
 	}
 }
+
+func MakeTreeProtobuf_AnnounceP2PStateURI(stateURI string) *TreeMessage {
+	return &TreeMessage{
+		Payload: &TreeMessage_AnnounceP2PStateURI_{
+			AnnounceP2PStateURI: &TreeMessage_AnnounceP2PStateURI{StateURI: stateURI},
+		},
+	}
+}
+
+func MakePeerProtobuf_AnnouncePeers(dialInfos []swarm.PeerDialInfo) *PeerMessage {
+	return &PeerMessage{
+		Payload: &PeerMessage_AnnouncePeers_{
+			AnnouncePeers: &PeerMessage_AnnouncePeers{DialInfos: dialInfos},
+		},
+	}
+}
+
+// func MakeHushProtobuf_SendIndividualMessage(msg protohush.IndividualMessage) *HushMessage {
+// 	return &HushMessage{
+// 		Payload: &HushMessage_SendIndividualMessage_{
+// 			SendIndividualMessage: &HushMessage_SendIndividualMessage{
+// 				Message: &msg,
+// 			},
+// 		},
+// 	}
+// }
+
+// func MakeHushProtobuf_SendGroupMessage(msg protohush.GroupMessage) *HushMessage {
+// 	return &HushMessage{
+// 		Payload: &HushMessage_SendGroupMessage_{
+// 			SendGroupMessage: &HushMessage_SendGroupMessage{
+// 				Message: &msg,
+// 			},
+// 		},
+// 	}
+// }

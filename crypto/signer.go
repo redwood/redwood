@@ -1,8 +1,11 @@
 package crypto
 
 import (
+	"bytes"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 
 	"github.com/btcsuite/btcd/chaincfg"
@@ -30,7 +33,7 @@ type (
 	}
 )
 
-func (pubkey *SigningPublicKey) VerifySignature(hash types.Hash, signature []byte) bool {
+func (pubkey *SigningPublicKey) VerifySignature(hash types.Hash, signature Signature) bool {
 	signatureNoRecoverID := signature[:len(signature)-1] // remove recovery id
 	return crypto.VerifySignature(pubkey.Bytes(), hash[:], signatureNoRecoverID)
 }
@@ -87,12 +90,12 @@ func (pubkey SigningPublicKey) MarshalStateBytes() ([]byte, error) {
 	return pubkey.MarshalText()
 }
 
-func (privkey *SigningPrivateKey) SignHash(hash types.Hash) ([]byte, error) {
+func (privkey *SigningPrivateKey) SignHash(hash types.Hash) (Signature, error) {
 	sig, err := crypto.Sign(hash[:], privkey.PrivateKey)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	return sig, nil
+	return Signature(sig), nil
 }
 
 func (privkey *SigningPrivateKey) Bytes() []byte {
@@ -135,8 +138,8 @@ func SigningPublicKeyFromBytes(bs []byte) (*SigningPublicKey, error) {
 	return &sigpubkey, err
 }
 
-func RecoverSigningPubkey(hash types.Hash, signature []byte) (*SigningPublicKey, error) {
-	ecdsaPubkey, err := crypto.SigToPub(hash[:], signature)
+func RecoverSigningPubkey(hash types.Hash, signature Signature) (*SigningPublicKey, error) {
+	ecdsaPubkey, err := crypto.SigToPub(hash[:], []byte(signature))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -203,4 +206,206 @@ func derivePrivateKey(masterKey *hdkeychain.ExtendedKey, path accounts.Derivatio
 		}
 	}
 	return key, nil
+}
+
+type ChallengeMsg []byte
+
+const challengeMsgLength = 128
+
+func GenerateChallengeMsg() (ChallengeMsg, error) {
+	challengeMsg := make([]byte, challengeMsgLength)
+	n, err := rand.Read(challengeMsg)
+	if err != nil {
+		return nil, err
+	} else if n < challengeMsgLength {
+		return nil, errors.Errorf("could not read enough entropy")
+	}
+	return ChallengeMsg(challengeMsg), nil
+}
+
+func (challenge ChallengeMsg) String() string {
+	return challenge.Hex()
+}
+
+func (challenge ChallengeMsg) Bytes() []byte {
+	return []byte(challenge.Copy())
+}
+
+func (challenge ChallengeMsg) Hex() string {
+	return hex.EncodeToString(challenge)
+}
+
+func (challenge ChallengeMsg) Hash() types.Hash {
+	return types.HashBytes([]byte(challenge))
+}
+
+func (challenge ChallengeMsg) Copy() ChallengeMsg {
+	cp := make(ChallengeMsg, len(challenge))
+	copy(cp, challenge)
+	return cp
+}
+
+func (challenge ChallengeMsg) Marshal() ([]byte, error) {
+	return challenge.Copy().Bytes(), nil
+}
+
+func (challenge *ChallengeMsg) MarshalTo(data []byte) (n int, err error) {
+	if len(data) < challengeMsgLength {
+		return 0, errors.Errorf("bad length for crypto.ChallengeMsg (%v)", len(data))
+	}
+	return copy(data, *challenge), nil
+}
+
+func (challenge *ChallengeMsg) Unmarshal(data []byte) error {
+	if len(data) != challengeMsgLength {
+		return errors.Errorf("bad length for crypto.ChallengeMsg (%v)", len(data))
+	}
+	*challenge = make(ChallengeMsg, len(data))
+	copy(*challenge, data)
+	return nil
+}
+
+func (challenge *ChallengeMsg) UnmarshalText(bs []byte) error {
+	bytes, err := hex.DecodeString(string(bs))
+	if err != nil {
+		return err
+	}
+	return challenge.Unmarshal(bytes)
+}
+
+func (challenge ChallengeMsg) MarshalText() ([]byte, error) {
+	return []byte(challenge.Hex()), nil
+}
+
+func (challenge ChallengeMsg) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + challenge.Hex() + `"`), nil
+}
+func (challenge *ChallengeMsg) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+	return challenge.UnmarshalText([]byte(s))
+}
+
+func (challenge ChallengeMsg) Compare(other ChallengeMsg) int {
+	return bytes.Compare(challenge[:], other[:])
+}
+
+func (challenge ChallengeMsg) Equal(other ChallengeMsg) bool {
+	return bytes.Equal(challenge[:], other[:])
+}
+
+func (challenge ChallengeMsg) Length() int { return len(challenge) }
+
+func (challenge *ChallengeMsg) Size() int { return len(*challenge) }
+
+func (challenge *ChallengeMsg) UnmarshalHTTPHeader(header string) error {
+	return challenge.UnmarshalText([]byte(header))
+}
+
+type Signature []byte
+
+func SignatureFromBytes(bs []byte) (Signature, error) {
+	return Signature(bs).Copy(), nil
+}
+
+func SignatureFromHex(hx string) (Signature, error) {
+	bs, err := hex.DecodeString(hx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return SignatureFromBytes(bs)
+}
+
+func (sig Signature) String() string {
+	return sig.Hex()
+}
+
+func (sig Signature) Hex() string {
+	return hex.EncodeToString(sig)
+}
+
+func (sig Signature) Copy() Signature {
+	cp := make(Signature, len(sig))
+	copy(cp, sig)
+	return cp
+}
+
+func (sig Signature) Marshal() ([]byte, error) {
+	return []byte(sig.Copy()), nil
+}
+
+func (sig *Signature) MarshalTo(data []byte) (n int, err error) {
+	return copy(data, *sig), nil
+}
+
+func (sig *Signature) Unmarshal(data []byte) (err error) {
+	*sig, err = SignatureFromBytes(data)
+	return err
+}
+
+func (sig *Signature) UnmarshalText(bs []byte) error {
+	bytes, err := hex.DecodeString(string(bs))
+	if err != nil {
+		return err
+	}
+	return sig.Unmarshal(bytes)
+}
+
+func (sig Signature) Length() int { return len(sig) }
+
+func (sig *Signature) Size() int { return len(*sig) }
+
+func (sig Signature) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + sig.Hex() + `"`), nil
+}
+
+func (sig *Signature) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+	*sig, err = SignatureFromHex(s)
+	return err
+}
+
+func (sig Signature) Compare(other Signature) int { return bytes.Compare(sig[:], other[:]) }
+
+func (sig Signature) Equal(other Signature) bool { return bytes.Equal(sig[:], other[:]) }
+
+func (sig *Signature) UnmarshalHTTPHeader(header string) error {
+	bs, err := hex.DecodeString(header)
+	if err != nil {
+		return err
+	}
+	*sig = Signature(bs)
+	return nil
+}
+
+type gogoprotobufTest interface {
+	Float32() float32
+	Float64() float64
+	Int63() int64
+	Int31() int32
+	Uint32() uint32
+	Intn(n int) int
+}
+
+func NewPopulatedChallengeMsg(_ gogoprotobufTest) *ChallengeMsg {
+	challenge, err := GenerateChallengeMsg()
+	if err != nil {
+		panic(err)
+	}
+	return &challenge
+}
+
+func NewPopulatedSignature(_ gogoprotobufTest) *Signature {
+	sig, err := SignatureFromBytes(types.RandomBytes(32))
+	if err != nil {
+		panic(err)
+	}
+	return &sig
 }

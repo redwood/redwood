@@ -3,6 +3,7 @@ DataRoot: ./node1_data
 DNSOverHTTPSURL: ""
 Nurse:
     Enabled: false
+PprofPort: 6060
 Libp2pTransport:
     Enabled: true
     ListenAddr: 0.0.0.0
