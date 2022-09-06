@@ -144,8 +144,8 @@ jobs:
               with:
                 go-version: '^1.18.x'
 
-            - name: Install mingw-64
-              run:  sudo apt install -y gcc-mingw32 mingw32-binutils mingw-w64
+            - name: Install gcc-mingw-w64-x86-64
+              run:  sudo apt install -y gcc-mingw-w64-x86-64
 
             - name: Set GOPATH
               run:  echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
