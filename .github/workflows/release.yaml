@@ -363,3 +363,4 @@ jobs:
                   asset_path: demos/desktop-chat-app/hush-macos-arm64.zip
                   asset_content_type: application/zip
 
+
