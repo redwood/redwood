@@ -133,7 +133,7 @@ jobs:
         strategy:
             fail-fast: false
 
-        runs-on: ubuntu-latest
+        runs-on: macos-latest
         steps:
             - name: Checkout the repo
               uses: actions/checkout@v2
