@@ -317,7 +317,7 @@ jobs:
               run:  go mod tidy
 
             - name: Build Hush
-              run:  astilectron-bundler
+              run:  astilectron-bundler -c bundler-macos.json
               working-directory: demos/desktop-chat-app
 
             - name: Zip (macOS amd64)
