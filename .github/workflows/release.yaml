@@ -144,6 +144,9 @@ jobs:
               with:
                 go-version: '^1.18.x'
 
+            - name: Install mingw-64
+              run:  apt install -y gcc-mingw32 mingw32-binutils mingw-w64
+
             - name: Set GOPATH
               run:  echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
 
@@ -340,16 +343,6 @@ jobs:
                   name: hush-macos-arm64.zip
                   path: demos/desktop-chat-app/hush-macos-arm64.zip
 
-            - name: Upload release assets (Linux)
-              uses: actions/upload-release-asset@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ needs.create_release.outputs.upload_url }}
-                  asset_name: hush-linux.zip
-                  asset_path: demos/desktop-chat-app/hush-linux.zip
-                  asset_content_type: application/zip
-
             - name: Upload release assets (macOS amd64)
               uses: actions/upload-release-asset@v1
               env:
@@ -368,15 +361,5 @@ jobs:
                   upload_url: ${{ needs.create_release.outputs.upload_url }}
                   asset_name: hush-macos-arm64.zip
                   asset_path: demos/desktop-chat-app/hush-macos-arm64.zip
-                  asset_content_type: application/zip
-
-            - name: Upload release assets (Windows)
-              uses: actions/upload-release-asset@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ needs.create_release.outputs.upload_url }}
-                  asset_name: hush-windows.zip
-                  asset_path: demos/desktop-chat-app/hush-windows.zip
                   asset_content_type: application/zip
 
