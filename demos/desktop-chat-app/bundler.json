@@ -6,7 +6,7 @@
   "build_flags": {
     "tags": "otto"
   },
-  "ldflags":{"linkmode":["internal"], "s": [], "w": []},
+  "ldflags":{"linkmode":["external"], "s": [], "w": []},
   "environments": [
     {
         "os": "darwin",
