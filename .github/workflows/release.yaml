@@ -138,8 +138,8 @@ jobs:
             - name: brew --prefix llvm@14
               run:  brew --prefix llvm@14
 
-            - name: xcrun --sdk macosx11.1 --show-sdk-path
-              run:  xcrun --sdk macosx11.1 --show-sdk-path
+            - name: xcrun --show-sdk-path
+              run:  xcrun --show-sdk-path
 
             - name: Checkout the repo
               uses: actions/checkout@v2

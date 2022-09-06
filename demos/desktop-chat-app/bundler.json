@@ -13,7 +13,8 @@
         "arch": "arm64",
         "env": {
             "CGO_ENABLED": "1",
-            "CC": "gcc-11"
+            "CC": "/usr/local/opt/llvm/bin/clang",
+            "CXX": "/usr/local/opt/llvm/bin/clang++"
         }
     },
     {
@@ -21,7 +22,8 @@
         "arch": "amd64",
         "env": {
             "CGO_ENABLED": "1",
-            "CC": "gcc-11"
+            "CC": "/usr/local/opt/llvm/bin/clang",
+            "CXX": "/usr/local/opt/llvm/bin/clang++"
         }
     }
   ]
